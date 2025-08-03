@@ -2778,6 +2778,7 @@ dependencies = [
  "criterion",
  "edn-format",
  "eyre",
+ "fast-counter",
  "fjall",
  "flume",
  "gdt-cpus",

@@ -36,6 +36,7 @@ use moor_common::util::PerfCounter;
 use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_db::db_counters;
+use moor_db::prop_cache::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS};
 use moor_var::VarType::TYPE_STR;
 use moor_var::{
     E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_arc_string,
@@ -1182,6 +1183,52 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("log_cache_stats() does not take any arguments"),
+        ));
+    }
+
+    if !bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_PERM.msg("Only wizards may call log_cache_stats()"),
+        ));
+    }
+
+    // Log cache statistics in a format similar to LambdaMOO
+    info!(
+        "Property cache: {} hits, {} misses, {} flushes ({:.1}% hit rate)",
+        PROP_CACHE_STATS.hit_count(),
+        PROP_CACHE_STATS.miss_count(),
+        PROP_CACHE_STATS.flush_count(),
+        PROP_CACHE_STATS.hit_rate()
+    );
+
+    info!(
+        "Verb cache: {} hits, {} misses, {} flushes ({:.1}% hit rate)",
+        VERB_CACHE_STATS.hit_count(),
+        VERB_CACHE_STATS.miss_count(),
+        VERB_CACHE_STATS.flush_count(),
+        VERB_CACHE_STATS.hit_rate()
+    );
+
+    info!(
+        "Ancestry cache: {} hits, {} misses, {} flushes ({:.1}% hit rate)",
+        ANCESTRY_CACHE_STATS.hit_count(),
+        ANCESTRY_CACHE_STATS.miss_count(),
+        ANCESTRY_CACHE_STATS.flush_count(),
+        ANCESTRY_CACHE_STATS.hit_rate()
+    );
+
+    Ok(RetNil)
+}
+
 fn bf_function_info_to_list(bf: &Builtin) -> Var {
     let min_args = match bf.min_args {
         ArgCount::Q(q) => v_int(q as i64),
@@ -1906,6 +1953,92 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+fn make_cache_stats_list(cache_stats: &moor_db::prop_cache::CacheStats) -> Var {
+    // Return a LambdaMOO-compatible list: [hits, negative_hits, misses, generation, histogram]
+    // For our implementation:
+    // - hits: direct cache hits
+    // - negative_hits: 0 (we don't track this separately)
+    // - misses: cache misses
+    // - generation: flush count (closest analog)
+    // - histogram: simplified - just [0, total_entries] since we don't track chain depths
+
+    let hits = cache_stats.hit_count() as i64;
+    let misses = cache_stats.miss_count() as i64;
+    let flushes = cache_stats.flush_count() as i64;
+    let total_entries = hits + misses;
+
+    // Create histogram - simplified to just show total cache entries
+    let histogram = v_list(&[v_int(0), v_int(total_entries)]);
+
+    v_list(&[
+        v_int(hits),    // hits
+        v_int(0),       // negative hits (not tracked separately)
+        v_int(misses),  // misses
+        v_int(flushes), // generation (using flush count)
+        histogram,      // histogram
+    ])
+}
+
+fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("verb_cache_stats() does not take any arguments"),
+        ));
+    }
+    if !bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_PERM.msg("Only wizards may call verb_cache_stats()"),
+        ));
+    }
+
+    Ok(Ret(make_cache_stats_list(&VERB_CACHE_STATS)))
+}
+
+fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("property_cache_stats() does not take any arguments"),
+        ));
+    }
+    if !bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_PERM.msg("Only wizards may call property_cache_stats()"),
+        ));
+    }
+
+    Ok(Ret(make_cache_stats_list(&PROP_CACHE_STATS)))
+}
+
+fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("ancestry_cache_stats() does not take any arguments"),
+        ));
+    }
+    if !bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_PERM.msg("Only wizards may call ancestry_cache_stats()"),
+        ));
+    }
+
+    Ok(Ret(make_cache_stats_list(&ANCESTRY_CACHE_STATS)))
+}
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
     builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
@@ -1947,6 +2080,10 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("bf_counters")] = Box::new(bf_bf_counters);
     builtins[offset_for_builtin("db_counters")] = Box::new(bf_db_counters);
     builtins[offset_for_builtin("sched_counters")] = Box::new(bf_sched_counters);
+    builtins[offset_for_builtin("log_cache_stats")] = Box::new(bf_log_cache_stats);
+    builtins[offset_for_builtin("verb_cache_stats")] = Box::new(bf_verb_cache_stats);
+    builtins[offset_for_builtin("property_cache_stats")] = Box::new(bf_property_cache_stats);
+    builtins[offset_for_builtin("ancestry_cache_stats")] = Box::new(bf_ancestry_cache_stats);
     builtins[offset_for_builtin("force_input")] = Box::new(bf_force_input);
     builtins[offset_for_builtin("wait_task")] = Box::new(bf_wait_task);
     builtins[offset_for_builtin("commit")] = Box::new(bf_commit);

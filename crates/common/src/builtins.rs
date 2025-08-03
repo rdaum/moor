@@ -74,8 +74,10 @@ fn mk_builtin(
 fn mk_builtin_table() -> Vec<Builtin> {
     vec![
         mk_builtin("disassemble", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
-        mk_builtin("log_cache_stats", Q(0), Q(0), vec![], false),
-        mk_builtin("verb_cache_stats", Q(0), Q(0), vec![], false),
+        mk_builtin("log_cache_stats", Q(0), Q(0), vec![], true),
+        mk_builtin("verb_cache_stats", Q(0), Q(0), vec![], true),
+        mk_builtin("property_cache_stats", Q(0), Q(0), vec![], true),
+        mk_builtin("ancestry_cache_stats", Q(0), Q(0), vec![], true),
         mk_builtin("call_function", Q(1), U, vec![Typed(TYPE_STR)], true),
         mk_builtin("raise", Q(1), Q(3), vec![Any, Typed(TYPE_STR), Any], true),
         mk_builtin("suspend", Q(0), Q(1), vec![Typed(TYPE_INT)], true),

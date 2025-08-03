@@ -57,6 +57,7 @@ tracing.workspace = true
 
 # Utilities & Helpers
 byteview.workspace = true
+fast-counter.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true
 paste.workspace = true

@@ -17,6 +17,8 @@ use moor_var::{Obj, Symbol};
 use std::hash::BuildHasherDefault;
 use std::sync::Mutex;
 
+use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
+
 pub struct VerbResolutionCache {
     inner: Mutex<Inner>,
 }
@@ -82,7 +84,15 @@ impl VerbResolutionCache {
     pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.lock().unwrap();
         let entry = inner.entries.get(&(*obj, *verb));
-        entry.cloned()
+        let result = entry.cloned();
+
+        if result.is_some() {
+            VERB_CACHE_STATS.hit();
+        } else {
+            VERB_CACHE_STATS.miss();
+        }
+
+        result
     }
 
     pub fn flush(&self) {
@@ -91,6 +101,7 @@ impl VerbResolutionCache {
         inner.version += 1;
         inner.entries.clear();
         inner.first_parent_with_verbs_cache.clear();
+        VERB_CACHE_STATS.flush();
     }
 
     pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
@@ -146,7 +157,15 @@ impl AncestryCache {
     }
     pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(obj).cloned()
+        let result = inner.entries.get(obj).cloned();
+
+        if result.is_some() {
+            ANCESTRY_CACHE_STATS.hit();
+        } else {
+            ANCESTRY_CACHE_STATS.miss();
+        }
+
+        result
     }
 
     pub fn flush(&self) {
@@ -154,6 +173,7 @@ impl AncestryCache {
         inner.flushed = true;
         inner.version += 1;
         inner.entries.clear();
+        ANCESTRY_CACHE_STATS.flush();
     }
 
     pub fn fill(&self, obj: &Obj, ancestors: &[Obj]) {

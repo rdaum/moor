@@ -12,10 +12,75 @@
 //
 
 use ahash::AHasher;
+use fast_counter::ConcurrentCounter;
+use lazy_static::lazy_static;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
 use std::hash::BuildHasherDefault;
 use std::sync::Mutex;
+
+/// Unified cache statistics structure
+pub struct CacheStats {
+    hits: ConcurrentCounter,
+    misses: ConcurrentCounter,
+    flushes: ConcurrentCounter,
+}
+
+impl Default for CacheStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CacheStats {
+    pub fn new() -> Self {
+        Self {
+            hits: ConcurrentCounter::new(0),
+            misses: ConcurrentCounter::new(0),
+            flushes: ConcurrentCounter::new(0),
+        }
+    }
+
+    pub fn hit(&self) {
+        self.hits.add(1);
+    }
+    pub fn miss(&self) {
+        self.misses.add(1);
+    }
+    pub fn flush(&self) {
+        self.flushes.add(1);
+    }
+
+    pub fn hit_count(&self) -> isize {
+        self.hits.sum()
+    }
+    pub fn miss_count(&self) -> isize {
+        self.misses.sum()
+    }
+    pub fn flush_count(&self) -> isize {
+        self.flushes.sum()
+    }
+
+    pub fn hit_rate(&self) -> f64 {
+        let hits = self.hits.sum() as f64;
+        let misses = self.misses.sum() as f64;
+        let total = hits + misses;
+        if total > 0.0 {
+            (hits / total) * 100.0
+        } else {
+            0.0
+        }
+    }
+}
+
+lazy_static! {
+    /// Global cache statistics for property lookups
+    pub static ref PROP_CACHE_STATS: CacheStats = CacheStats::new();
+    /// Global cache statistics for verb lookups
+    pub static ref VERB_CACHE_STATS: CacheStats = CacheStats::new();
+    /// Global cache statistics for ancestry lookups
+    pub static ref ANCESTRY_CACHE_STATS: CacheStats = CacheStats::new();
+}
 
 pub(crate) struct PropResolutionCache {
     inner: Mutex<Inner>,
@@ -64,7 +129,15 @@ impl PropResolutionCache {
 
     pub(crate) fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(&(*obj, *prop)).cloned()
+        let result = inner.entries.get(&(*obj, *prop)).cloned();
+
+        if result.is_some() {
+            PROP_CACHE_STATS.hit();
+        } else {
+            PROP_CACHE_STATS.miss();
+        }
+
+        result
     }
 
     pub(crate) fn flush(&self) {
@@ -73,6 +146,7 @@ impl PropResolutionCache {
         inner.version += 1;
         inner.entries.clear();
         inner.first_parent_with_props_cache.clear();
+        PROP_CACHE_STATS.flush();
     }
 
     pub(crate) fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {

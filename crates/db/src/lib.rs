@@ -38,7 +38,7 @@ use crate::db_worldstate::DbWorldState;
 use crate::moor_db::{Caches, MoorDB, WorkingSets};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
-mod prop_cache;
+pub mod prop_cache;
 mod snapshot_loader;
 mod tx_management;
 mod utils;
