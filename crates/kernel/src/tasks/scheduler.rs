@@ -51,12 +51,14 @@ use moor_common::tasks::{
 };
 use moor_common::tasks::{Session, SessionFactory, SystemControl};
 use moor_common::util::PerfTimerGuard;
+use moor_objdef::{collect_object, dump_object};
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
 use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool_int, v_error};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
+use std::collections::HashMap;
 
 /// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
 // TODO: we could also look into some exponential-ish backoff
@@ -975,6 +977,12 @@ impl Scheduler {
                     error!(?e, "Could not send switch player reply to requester");
                 }
             }
+            TaskControlMsg::DumpObject { obj, reply } => {
+                let result = self.handle_dump_object(obj);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send dump object reply to requester");
+                }
+            }
         }
     }
 
@@ -1013,6 +1021,26 @@ impl Scheduler {
         task.player = new_player;
 
         Ok(())
+    }
+
+    fn handle_dump_object(&self, obj: Obj) -> Result<Vec<String>, moor_var::Error> {
+        // Create a snapshot to avoid blocking ongoing operations
+        let snapshot = self.database.create_snapshot().map_err(|e| {
+            moor_var::E_INVARG.with_msg(|| format!("Failed to create database snapshot: {e:?}"))
+        })?;
+
+        // Collect the object definition
+        let (_, _, _, object_def) = collect_object(snapshot.as_ref(), &obj).map_err(|e| {
+            moor_var::E_INVARG.with_msg(|| format!("Failed to collect object {obj}: {e:?}"))
+        })?;
+
+        // Dump to objdef format
+        let index_names = HashMap::new(); // Empty index for now, keeping simple
+        let lines = dump_object(&index_names, &object_def).map_err(|e| {
+            moor_var::E_INVARG.with_msg(|| format!("Failed to dump object {obj}: {e:?}"))
+        })?;
+
+        Ok(lines)
     }
 
     fn handle_immediate_wake(&mut self, task_id: TaskId) {

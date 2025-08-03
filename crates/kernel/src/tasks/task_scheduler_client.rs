@@ -327,6 +327,16 @@ impl TaskSchedulerClient {
             .recv()
             .expect("Could not receive switch player reply -- scheduler shut down?")
     }
+
+    pub fn dump_object(&self, obj: Obj) -> Result<Vec<String>, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((self.task_id, TaskControlMsg::DumpObject { obj, reply }))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive dump object reply -- scheduler shut down?")
+    }
 }
 
 pub type ActiveTaskDescriptions = Vec<(TaskId, Obj, TaskStart)>;
@@ -417,6 +427,11 @@ pub enum TaskControlMsg {
     SwitchPlayer {
         new_player: Obj,
         reply: oneshot::Sender<Result<(), Error>>,
+    },
+    /// Request to dump an object to objdef format
+    DumpObject {
+        obj: Obj,
+        reply: oneshot::Sender<Result<Vec<String>, Error>>,
     },
 }
 

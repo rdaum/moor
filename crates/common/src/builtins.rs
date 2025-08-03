@@ -584,6 +584,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             ],
             true,
         ),
+        mk_builtin(
+            "dump_object",
+            Q(1),
+            Q(2),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_MAP)],
+            true,
+        ),
     ]
 }
 

@@ -19,7 +19,7 @@ use moor_common::model::WorldStateError;
 use moor_common::model::{ObjFlag, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_sym};
+use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_str, v_sym};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
@@ -1026,6 +1026,58 @@ fn bf_owned_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&owned_objects)))
 }
 
+/*
+Function: list dump_object(obj object [, map options])
+Returns a list of strings representing the object definition in objdef format.
+The caller must own the object or be a wizard. Options are currently ignored (keeping simple for phase 1).
+*/
+fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("dump_object() takes 1 or 2 arguments"),
+        ));
+    }
+
+    let Some(obj) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("dump_object() first argument must be an object"),
+        ));
+    };
+
+    // Validate options argument if provided (currently ignored but must be a map)
+    if bf_args.args.len() == 2 && bf_args.args[1].as_map().is_none() {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("dump_object() second argument must be a map"),
+        ));
+    }
+    // Options are currently ignored for phase 1 simplicity
+
+    // Check that object is valid
+    if !bf_args
+        .world_state
+        .valid(&obj)
+        .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("dump_object() argument must be a valid object"),
+        ));
+    }
+
+    // Check permissions: wizard only (object dumps can expose properties owned by others)
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms.check_wizard().map_err(world_state_bf_err)?;
+
+    // Use the task scheduler client to request the dump from the scheduler
+    let lines = bf_args
+        .task_scheduler_client
+        .dump_object(obj)
+        .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to dump object: {e}"))))?;
+
+    // Convert to MOO list of strings
+    let string_vars: Vec<_> = lines.iter().map(|line| v_str(line)).collect();
+    Ok(Ret(v_list(&string_vars)))
+}
+
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
     builtins[offset_for_builtin("valid")] = Box::new(bf_valid);
@@ -1044,4 +1096,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("players")] = Box::new(bf_players);
     builtins[offset_for_builtin("locations")] = Box::new(bf_locations);
     builtins[offset_for_builtin("owned_objects")] = Box::new(bf_owned_objects);
+    builtins[offset_for_builtin("dump_object")] = Box::new(bf_dump_object);
 }

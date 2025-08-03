@@ -31,18 +31,20 @@ use tracing::info;
 pub enum ObjectDumpError {
     #[error("Worldstate error: {0}")]
     WorldState(#[from] moor_common::model::WorldStateError),
-    
+
     #[error("Failed to decompile verb binary for {obj}")]
     DecompileError { obj: Obj },
-    
+
     #[error("Failed to unparse verb binary for {obj}")]
     UnparseError { obj: Obj },
-    
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }
 
-pub fn collect_object_definitions(loader: &dyn SnapshotInterface) -> Result<Vec<ObjectDefinition>, ObjectDumpError> {
+pub fn collect_object_definitions(
+    loader: &dyn SnapshotInterface,
+) -> Result<Vec<ObjectDefinition>, ObjectDumpError> {
     let mut object_defs = vec![];
 
     // Find all the ids
@@ -317,7 +319,10 @@ fn collect_nested_constants(
     visited.remove(&current_obj.oid);
 }
 
-fn generate_constants_file(index_names: &HashMap<Obj, String>, directory_path: &Path) -> Result<(), ObjectDumpError> {
+fn generate_constants_file(
+    index_names: &HashMap<Obj, String>,
+    directory_path: &Path,
+) -> Result<(), ObjectDumpError> {
     let mut lines = Vec::new();
     // Sort incrementally by object id.
     let mut objects: Vec<_> = index_names.iter().collect();
@@ -332,7 +337,10 @@ fn generate_constants_file(index_names: &HashMap<Obj, String>, directory_path: &
     Ok(())
 }
 
-pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path: &Path) -> Result<(), ObjectDumpError> {
+pub fn dump_object_definitions(
+    object_defs: &[ObjectDefinition],
+    directory_path: &Path,
+) -> Result<(), ObjectDumpError> {
     // Find #0 in the object_defs, and look at its properties to find $names for certain objects
     // we'll use those for filenames when we can
     // TODO: this doesn't help with nested values
@@ -366,7 +374,10 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
     Ok(())
 }
 
-pub fn dump_object(index_names: &HashMap<Obj, String>, o: &ObjectDefinition) -> Result<Vec<String>, ObjectDumpError> {
+pub fn dump_object(
+    index_names: &HashMap<Obj, String>,
+    o: &ObjectDefinition,
+) -> Result<Vec<String>, ObjectDumpError> {
     let mut lines = Vec::new();
     let indent = "  ";
     lines.push(format!("object {}", canon_name(&o.oid, index_names)));
@@ -436,7 +447,12 @@ fn dump_object_header(
     header_lines
 }
 
-fn dump_verb(index_names: &HashMap<Obj, String>, indent: &str, v: &ObjVerbDef, obj: &Obj) -> Result<Vec<String>, ObjectDumpError> {
+fn dump_verb(
+    index_names: &HashMap<Obj, String>,
+    indent: &str,
+    v: &ObjVerbDef,
+    obj: &Obj,
+) -> Result<Vec<String>, ObjectDumpError> {
     let mut verb_lines = vec![];
     let owner = canon_name(&v.owner, index_names);
     let vflags = verb_perms_string(v.flags);
@@ -475,7 +491,8 @@ fn dump_verb(index_names: &HashMap<Obj, String>, indent: &str, v: &ObjVerbDef, o
 
     // decompile the verb
     let ProgramType::MooR(program) = &v.program;
-    let decompiled = program_to_tree(program).map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
+    let decompiled =
+        program_to_tree(program).map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
     let unparsed = unparse(&decompiled).map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?;
 
     verb_lines.push(format!(
