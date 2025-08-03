@@ -21,6 +21,12 @@ pub struct VerbResolutionCache {
     inner: Mutex<Inner>,
 }
 
+impl Default for VerbResolutionCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VerbResolutionCache {
     pub fn new() -> Self {
         Self {

@@ -757,13 +757,13 @@ impl WorldStateTransaction {
         let Some(verbdefs) = verbdefs.with_updated(uuid, |ov| {
             let names = match &verb_attrs.names {
                 None => ov.names(),
-                Some(new_names) => new_names.clone(),
+                Some(new_names) => new_names.as_slice(),
             };
             VerbDef::new(
                 ov.uuid(),
                 ov.location(),
                 verb_attrs.owner.unwrap_or(ov.owner()),
-                &names,
+                names,
                 verb_attrs.flags.unwrap_or(ov.flags()),
                 verb_attrs.args_spec.unwrap_or(ov.args()),
             )

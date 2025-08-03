@@ -25,7 +25,7 @@ pub trait HasUuid {
 
 pub trait Named {
     fn matches_name(&self, name: Symbol) -> bool;
-    fn names(&self) -> Vec<Symbol>;
+    fn names(&self) -> &[Symbol];
 }
 
 /// A container for verb or property defs.

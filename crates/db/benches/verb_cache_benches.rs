@@ -20,6 +20,7 @@ use uuid::Uuid;
 // Small cache context - simulates light usage
 struct SmallCacheContext {
     verb_cache: Box<VerbResolutionCache>,
+    #[allow(dead_code)]
     ancestry_cache: Box<AncestryCache>,
     test_objs: Vec<Obj>,
     test_verbs: Vec<Symbol>,
@@ -32,7 +33,7 @@ impl BenchContext for SmallCacheContext {
         let ancestry_cache = Box::new(AncestryCache::default());
 
         // Create test data - small set
-        let test_objs: Vec<Obj> = (1..=10).map(|i| Obj::mk_id(i)).collect();
+        let test_objs: Vec<Obj> = (1..=10).map(Obj::mk_id).collect();
         let test_verbs: Vec<Symbol> = ["look", "get", "drop", "give", "examine"]
             .iter()
             .map(|&s| Symbol::mk(s))
@@ -41,7 +42,7 @@ impl BenchContext for SmallCacheContext {
         let test_verbdefs: Vec<VerbDef> = test_verbs
             .iter()
             .enumerate()
-            .map(|(i, verb)| {
+            .map(|(_i, verb)| {
                 VerbDef::new(
                     Uuid::new_v4(),
                     test_objs[0],
@@ -66,6 +67,7 @@ impl BenchContext for SmallCacheContext {
 // Large cache context - simulates heavy usage with many objects/verbs
 struct LargeCacheContext {
     verb_cache: Box<VerbResolutionCache>,
+    #[allow(dead_code)]
     ancestry_cache: Box<AncestryCache>,
     test_objs: Vec<Obj>,
     test_verbs: Vec<Symbol>,
@@ -78,7 +80,7 @@ impl BenchContext for LargeCacheContext {
         let ancestry_cache = Box::new(AncestryCache::default());
 
         // Create larger test data set
-        let test_objs: Vec<Obj> = (1..=1000).map(|i| Obj::mk_id(i)).collect();
+        let test_objs: Vec<Obj> = (1..=1000).map(Obj::mk_id).collect();
         let test_verbs: Vec<Symbol> = [
             "look",
             "get",
@@ -118,7 +120,7 @@ impl BenchContext for LargeCacheContext {
         let test_verbdefs: Vec<VerbDef> = test_verbs
             .iter()
             .enumerate()
-            .map(|(i, verb)| {
+            .map(|(_i, verb)| {
                 VerbDef::new(
                     Uuid::new_v4(),
                     test_objs[i % test_objs.len()],
@@ -153,7 +155,7 @@ impl BenchContext for PopulatedCacheContext {
         let verb_cache = Box::new(VerbResolutionCache::new());
         let ancestry_cache = Box::new(AncestryCache::default());
 
-        let test_objs: Vec<Obj> = (1..=100).map(|i| Obj::mk_id(i)).collect();
+        let test_objs: Vec<Obj> = (1..=100).map(Obj::mk_id).collect();
         let test_verbs: Vec<Symbol> = [
             "look",
             "get",
@@ -230,7 +232,7 @@ impl BenchContext for ConcurrentCacheContext {
             caches.push(caches[0].fork());
         }
 
-        let test_objs: Vec<Obj> = (1..=50).map(|i| Obj::mk_id(i)).collect();
+        let test_objs: Vec<Obj> = (1..=50).map(Obj::mk_id).collect();
         let test_verbs: Vec<Symbol> = ["look", "get", "drop", "give", "examine", "inventory"]
             .iter()
             .map(|&s| Symbol::mk(s))

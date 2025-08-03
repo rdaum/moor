@@ -20,10 +20,16 @@ use bincode::{Decode, Encode};
 use moor_var::BincodeAsByteBufferExt;
 use moor_var::Obj;
 use moor_var::Symbol;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct VerbDef {
+    inner: Arc<VerbDefInner>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+struct VerbDefInner {
     #[bincode(with_serde)]
     uuid: Uuid,
     location: Obj,
@@ -44,32 +50,34 @@ impl VerbDef {
         args: VerbArgsSpec,
     ) -> Self {
         Self {
-            uuid,
-            location,
-            owner,
-            flags,
-            args,
-            names: names.to_vec(),
+            inner: Arc::new(VerbDefInner {
+                uuid,
+                location,
+                owner,
+                flags,
+                args,
+                names: names.to_vec(),
+            }),
         }
     }
 
     #[must_use]
     pub fn location(&self) -> Obj {
-        self.location
+        self.inner.location
     }
 
     #[must_use]
     pub fn owner(&self) -> Obj {
-        self.owner
+        self.inner.owner
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<VerbFlag> {
-        self.flags
+        self.inner.flags
     }
 
     #[must_use]
     pub fn args(&self) -> VerbArgsSpec {
-        self.args
+        self.inner.args
     }
 
     pub fn matches_spec(
@@ -97,14 +105,14 @@ impl Named for VerbDef {
             .any(|verb| verbcasecmp(&verb.as_arc_str(), &name.as_arc_str()))
     }
 
-    fn names(&self) -> Vec<Symbol> {
-        self.names.clone()
+    fn names(&self) -> &[Symbol] {
+        &self.inner.names
     }
 }
 
 impl HasUuid for VerbDef {
     fn uuid(&self) -> Uuid {
-        self.uuid
+        self.inner.uuid
     }
 }
 

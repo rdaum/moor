@@ -350,7 +350,7 @@ fn main() -> Result<(), eyre::Report> {
                 for verb in verbs.iter() {
                     for name in verb.names() {
                         if name.as_arc_string().starts_with("test_") {
-                            unit_tests.push((o, name));
+                            unit_tests.push((o, *name));
                         }
                     }
                 }

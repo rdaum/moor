@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_bench_utils::{BenchContext, NoContext, black_box};
+use moor_bench_utils::{BenchContext, black_box};
 use moor_common::util::verbcasecmp;
 
 // Context for exact match benchmarks

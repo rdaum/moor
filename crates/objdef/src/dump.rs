@@ -61,7 +61,7 @@ pub fn collect_object_definitions(loader: &dyn SnapshotInterface) -> Vec<ObjectD
                 .get_verb_program(&o, v.uuid())
                 .expect("Failed to get verb binary");
             let ov = ObjVerbDef {
-                names: v.names(),
+                names: v.names().to_vec(),
                 argspec: v.args(),
                 owner: v.owner(),
                 flags: v.flags(),

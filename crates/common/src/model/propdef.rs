@@ -58,8 +58,8 @@ impl Named for PropDef {
         self.name() == name
     }
 
-    fn names(&self) -> Vec<Symbol> {
-        vec![self.name()]
+    fn names(&self) -> &[Symbol] {
+        std::slice::from_ref(&self.name)
     }
 }
 

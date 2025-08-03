@@ -1046,7 +1046,7 @@ impl RpcMessageHandler {
                             VerbInfo {
                                 location: verbdef.location(),
                                 owner: verbdef.owner(),
-                                names: verbdef.names(),
+                                names: verbdef.names().to_vec(),
                                 r: verbdef.flags().contains(VerbFlag::Read),
                                 w: verbdef.flags().contains(VerbFlag::Write),
                                 x: verbdef.flags().contains(VerbFlag::Exec),
@@ -1142,7 +1142,7 @@ impl RpcMessageHandler {
                     .map(|v| VerbInfo {
                         location: v.location(),
                         owner: v.owner(),
-                        names: v.names(),
+                        names: v.names().to_vec(),
                         r: v.flags().contains(VerbFlag::Read),
                         w: v.flags().contains(VerbFlag::Write),
                         x: v.flags().contains(VerbFlag::Exec),
