@@ -351,7 +351,7 @@ impl SuspensionQ {
         let now = Instant::now();
 
         // Add to appropriate storage based on wake condition
-        match &wake_condition {
+        let should_persist = match &wake_condition {
             WakeCondition::Time(wake_time) => {
                 if *wake_time > now {
                     let delay = wake_time.duration_since(now);
@@ -367,26 +367,31 @@ impl SuspensionQ {
                     // Past deadline - add to immediate queue
                     self.immediate_wake_queue.push_back(task_id);
                 }
+                true
             }
             WakeCondition::Immedate => {
                 self.immediate_wake_queue.push_back(task_id);
+                false // Skip database persistence for immediate wake
             }
             WakeCondition::Task(dependency_task_id) => {
                 self.task_dependencies
                     .entry(*dependency_task_id)
                     .or_default()
                     .push(task_id);
+                true
             }
             WakeCondition::Input(input_request_id) => {
                 self.input_requests.insert(*input_request_id, task_id);
+                // TODO No point in saving, because we'll probably never get the input, I think. But we
+                //  could re-evaluate this
+                false
             }
             WakeCondition::Worker(worker_request_id) => {
                 self.worker_requests.insert(*worker_request_id, task_id);
+                true
             }
-            WakeCondition::Never => {
-                //
-            }
-        }
+            WakeCondition::Never => true,
+        };
 
         let sr = SuspendedTask {
             wake_condition,
@@ -394,9 +399,13 @@ impl SuspensionQ {
             session,
             result_sender,
         };
-        if let Err(e) = self.tasks_database.save_task(&sr) {
-            error!(?e, "Could not save suspended task");
+
+        if should_persist {
+            if let Err(e) = self.tasks_database.save_task(&sr) {
+                error!(?e, "Could not save suspended task");
+            }
         }
+
         self.tasks.insert(task_id, sr);
     }
 
@@ -440,9 +449,8 @@ impl SuspensionQ {
                 }
             }
 
-            if let Err(e) = self.tasks_database.delete_task(task_id) {
-                error!(?e, "Could not delete suspended task from tasks database");
-            }
+            // Try to delete from database - will be a no-op for tasks that were never persisted
+            let _ = self.tasks_database.delete_task(task_id);
         }
         task
     }
