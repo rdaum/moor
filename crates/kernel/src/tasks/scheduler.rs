@@ -1122,9 +1122,18 @@ impl Scheduler {
             .spawn(move || {
                 if dirdump {
                     info!("Collecting objects for dump...");
-                    let objects = collect_object_definitions(loader_client.as_ref());
+                    let objects = match collect_object_definitions(loader_client.as_ref()) {
+                        Ok(objects) => objects,
+                        Err(e) => {
+                            error!(?e, "Failed to collect objects for dump");
+                            return;
+                        }
+                    };
                     info!("Dumping objects to {textdump_path:?}");
-                    dump_object_definitions(&objects, &textdump_path);
+                    if let Err(e) = dump_object_definitions(&objects, &textdump_path) {
+                        error!(?e, "Failed to dump objects");
+                        return;
+                    }
                     // Now that the dump has been written, strip the in-progress suffix.
                     let final_path = textdump_path.with_extension("moo");
                     if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
@@ -1211,9 +1220,18 @@ impl Scheduler {
             .spawn(move || {
                 if dirdump {
                     info!("Collecting objects for dump...");
-                    let objects = collect_object_definitions(loader_client.as_ref());
+                    let objects = match collect_object_definitions(loader_client.as_ref()) {
+                        Ok(objects) => objects,
+                        Err(e) => {
+                            error!(?e, "Failed to collect objects for dump");
+                            return;
+                        }
+                    };
                     info!("Dumping objects to {textdump_path:?}");
-                    dump_object_definitions(&objects, &textdump_path);
+                    if let Err(e) = dump_object_definitions(&objects, &textdump_path) {
+                        error!(?e, "Failed to dump objects");
+                        return;
+                    }
                     // Now that the dump has been written, strip the in-progress suffix.
                     let final_path = textdump_path.with_extension("moo");
                     if let Err(e) = std::fs::rename(&textdump_path, &final_path) {

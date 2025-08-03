@@ -302,9 +302,9 @@ fn main() -> Result<(), eyre::Report> {
         };
 
         info!("Collecting objects for dump...");
-        let objects = collect_object_definitions(loader_interface.as_ref());
+        let objects = collect_object_definitions(loader_interface.as_ref())?;
         info!("Dumping objects to {dirdump_path:?}");
-        dump_object_definitions(&objects, &dirdump_path);
+        dump_object_definitions(&objects, &dirdump_path)?;
 
         info!(?dirdump_path, "Objdefdump written.");
     }

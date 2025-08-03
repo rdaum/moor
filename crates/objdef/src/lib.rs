@@ -21,7 +21,7 @@ use moor_var::{Obj, Symbol};
 use std::io;
 use std::path::PathBuf;
 
-pub use dump::{collect_object_definitions, dump_object_definitions};
+pub use dump::{collect_object, collect_object_definitions, dump_object, dump_object_definitions};
 pub use load::ObjectDefinitionLoader;
 
 #[derive(Debug, thiserror::Error)]

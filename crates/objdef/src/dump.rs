@@ -24,106 +24,40 @@ use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_arc_string, v_str, v_strin
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+use thiserror::Error;
 use tracing::info;
 
-pub fn collect_object_definitions(loader: &dyn SnapshotInterface) -> Vec<ObjectDefinition> {
+#[derive(Error, Debug)]
+pub enum ObjectDumpError {
+    #[error("Worldstate error: {0}")]
+    WorldState(#[from] moor_common::model::WorldStateError),
+    
+    #[error("Failed to decompile verb binary for {obj}")]
+    DecompileError { obj: Obj },
+    
+    #[error("Failed to unparse verb binary for {obj}")]
+    UnparseError { obj: Obj },
+    
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+pub fn collect_object_definitions(loader: &dyn SnapshotInterface) -> Result<Vec<ObjectDefinition>, ObjectDumpError> {
     let mut object_defs = vec![];
 
     // Find all the ids
-    let object_ids = loader.get_objects().expect("Failed to get objects");
+    let object_ids = loader.get_objects()?;
 
     let mut num_verbdefs = 0;
     let mut num_propdefs = 0;
     let mut num_propoverrides = 0;
 
     for o in object_ids.iter() {
-        let obj_attrs = loader
-            .get_object(&o)
-            .expect("Failed to get object attributes");
-
-        let mut od = ObjectDefinition {
-            oid: o,
-            name: obj_attrs.name().unwrap_or("".to_string()),
-            parent: obj_attrs.parent().unwrap_or(NOTHING),
-            owner: obj_attrs.owner().unwrap_or(NOTHING),
-            location: obj_attrs.location().unwrap_or(NOTHING),
-            flags: obj_attrs.flags(),
-            verbs: vec![],
-            property_definitions: vec![],
-            property_overrides: vec![],
-        };
-
-        let verbs = loader
-            .get_object_verbs(&o)
-            .expect("Failed to get object verbs");
-        for v in verbs.iter() {
-            let binary = loader
-                .get_verb_program(&o, v.uuid())
-                .expect("Failed to get verb binary");
-            let ov = ObjVerbDef {
-                names: v.names().to_vec(),
-                argspec: v.args(),
-                owner: v.owner(),
-                flags: v.flags(),
-                program: binary,
-            };
-            od.verbs.push(ov);
-            num_verbdefs += 1;
-        }
-
-        let propdefs = loader
-            .get_all_property_values(&o)
-            .expect("Failed to get property values/definitions");
-        for (p, (value, perms)) in propdefs.iter() {
-            if p.definer() == o {
-                let pd = ObjPropDef {
-                    name: p.name(),
-                    perms: perms.clone(),
-                    value: value.clone(),
-                };
-                od.property_definitions.push(pd);
-                num_propdefs += 1;
-            } else {
-                // We only need do a perms update if the perms actually different from the definer's
-                // So let's resolve the property to its parent and see if it's different
-                let mut perms_update = Some(perms.clone());
-                let mut override_value = value.clone();
-
-                if let Ok((definer_value, definer_perms)) =
-                    loader.get_property_value(&p.definer(), p.uuid())
-                {
-                    if perms.eq(&definer_perms)
-                        || definer_perms.flags().contains(PropFlag::Chown)
-                            && perms.owner() == obj_attrs.owner().unwrap_or(NOTHING)
-                    {
-                        perms_update = None;
-                    }
-
-                    if value.eq(&definer_value) {
-                        override_value = None;
-                    }
-                }
-
-                // Just inheriting?  Move on.
-                if perms_update.is_none() && override_value.is_none() {
-                    continue;
-                }
-
-                let ps = ObjPropOverride {
-                    name: p.name(),
-                    perms_update,
-                    value: override_value,
-                };
-                od.property_overrides.push(ps);
-                num_propoverrides += 1;
-            }
-        }
-
-        // Alphabetize properties. Verbs should remain in their original order.
-        od.property_definitions.sort_by(|a, b| a.name.cmp(&b.name));
-        od.property_overrides.sort_by(|a, b| a.name.cmp(&b.name));
-
+        let (verbdefs, propdefs, overrides, od) = collect_object(loader, &o)?;
         object_defs.push(od);
+        num_verbdefs += verbdefs;
+        num_propdefs += propdefs;
+        num_propoverrides += overrides;
     }
 
     info!(
@@ -133,7 +67,95 @@ pub fn collect_object_definitions(loader: &dyn SnapshotInterface) -> Vec<ObjectD
         num_propdefs,
         num_propoverrides
     );
-    object_defs
+    Ok(object_defs)
+}
+
+pub fn collect_object(
+    loader: &dyn SnapshotInterface,
+    o: &Obj,
+) -> Result<(usize, usize, usize, ObjectDefinition), ObjectDumpError> {
+    let mut num_verbdefs = 0;
+    let mut num_propdefs = 0;
+    let mut num_propoverrides = 0;
+
+    let obj_attrs = loader.get_object(o)?;
+
+    let mut od = ObjectDefinition {
+        oid: *o,
+        name: obj_attrs.name().unwrap_or("".to_string()),
+        parent: obj_attrs.parent().unwrap_or(NOTHING),
+        owner: obj_attrs.owner().unwrap_or(NOTHING),
+        location: obj_attrs.location().unwrap_or(NOTHING),
+        flags: obj_attrs.flags(),
+        verbs: vec![],
+        property_definitions: vec![],
+        property_overrides: vec![],
+    };
+
+    let verbs = loader.get_object_verbs(o)?;
+    for v in verbs.iter() {
+        let binary = loader.get_verb_program(o, v.uuid())?;
+        let ov = ObjVerbDef {
+            names: v.names().to_vec(),
+            argspec: v.args(),
+            owner: v.owner(),
+            flags: v.flags(),
+            program: binary,
+        };
+        od.verbs.push(ov);
+        num_verbdefs += 1;
+    }
+
+    let propdefs = loader.get_all_property_values(o)?;
+    for (p, (value, perms)) in propdefs.iter() {
+        if p.definer().eq(o) {
+            let pd = ObjPropDef {
+                name: p.name(),
+                perms: perms.clone(),
+                value: value.clone(),
+            };
+            od.property_definitions.push(pd);
+            num_propdefs += 1;
+        } else {
+            // We only need do a perms update if the perms actually different from the definer's
+            // So let's resolve the property to its parent and see if it's different
+            let mut perms_update = Some(perms.clone());
+            let mut override_value = value.clone();
+
+            if let Ok((definer_value, definer_perms)) =
+                loader.get_property_value(&p.definer(), p.uuid())
+            {
+                if perms.eq(&definer_perms)
+                    || definer_perms.flags().contains(PropFlag::Chown)
+                        && perms.owner() == obj_attrs.owner().unwrap_or(NOTHING)
+                {
+                    perms_update = None;
+                }
+
+                if value.eq(&definer_value) {
+                    override_value = None;
+                }
+            }
+
+            // Just inheriting?  Move on.
+            if perms_update.is_none() && override_value.is_none() {
+                continue;
+            }
+
+            let ps = ObjPropOverride {
+                name: p.name(),
+                perms_update,
+                value: override_value,
+            };
+            od.property_overrides.push(ps);
+            num_propoverrides += 1;
+        }
+    }
+
+    // Alphabetize properties. Verbs should remain in their original order.
+    od.property_definitions.sort_by(|a, b| a.name.cmp(&b.name));
+    od.property_overrides.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok((num_verbdefs, num_propdefs, num_propoverrides, od))
 }
 
 // Return the object number and if this is $nameable thing, put a // $comment
@@ -295,20 +317,22 @@ fn collect_nested_constants(
     visited.remove(&current_obj.oid);
 }
 
-fn generate_constants_file(index_names: &HashMap<Obj, String>, directory_path: &Path) {
-    let mut constants = String::new();
+fn generate_constants_file(index_names: &HashMap<Obj, String>, directory_path: &Path) -> Result<(), ObjectDumpError> {
+    let mut lines = Vec::new();
     // Sort incrementally by object id.
     let mut objects: Vec<_> = index_names.iter().collect();
     objects.sort_by(|a, b| a.0.id().0.cmp(&b.0.id().0));
     for i in objects {
-        constants.push_str(&format!("define {} = {};\n", i.1.to_ascii_uppercase(), i.0));
+        lines.push(format!("define {} = {};", i.1.to_ascii_uppercase(), i.0));
     }
+    let constants = lines.join("\n");
     let constants_file = directory_path.join("constants.moo");
-    let mut constants_file = std::fs::File::create(constants_file).unwrap();
-    constants_file.write_all(constants.as_bytes()).unwrap();
+    let mut constants_file = std::fs::File::create(constants_file)?;
+    constants_file.write_all(constants.as_bytes())?;
+    Ok(())
 }
 
-pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path: &Path) {
+pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path: &Path) -> Result<(), ObjectDumpError> {
     // Find #0 in the object_defs, and look at its properties to find $names for certain objects
     // we'll use those for filenames when we can
     // TODO: this doesn't help with nested values
@@ -316,19 +340,14 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 
     // We will generate one file per object.
     // Otherwise for large cores it just gets insane.
-    // In the future we could support other user configurable modes.
+    // In the future we could support other user configurable modes (multiple objects in a file,
+    // or split large objects up into a directory with verb per file, etc.)
 
     // Create the directory.
+    std::fs::create_dir_all(directory_path)?;
 
-    if let Err(e) = std::fs::create_dir_all(directory_path) {
-        panic!(
-            "Failed to create directory {}: {}",
-            directory_path.display(),
-            e
-        );
-    }
-
-    generate_constants_file(&index_names, directory_path);
+    // Constants index, for friendlier names
+    generate_constants_file(&index_names, directory_path)?;
 
     for o in object_defs {
         // Pick a file name.
@@ -337,144 +356,176 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             None => format!("object_{}.moo", o.oid.id().0),
         };
         let file_path = directory_path.join(file_name);
-        let mut file = std::fs::File::create(file_path).unwrap();
+        let mut file = std::fs::File::create(file_path)?;
 
-        let mut objstr = String::new();
-
-        let parent = canon_name(&o.parent, &index_names);
-        let location = canon_name(&o.location, &index_names);
-        let owner = canon_name(&o.owner, &index_names);
-
-        let name = v_str(&o.name);
-        let indent = "  ";
-
-        objstr.push_str(&format!("object {}\n", canon_name(&o.oid, &index_names)));
-        objstr.push_str(&format!("{indent}name: {}\n", to_literal(&name)));
-        if o.parent != NOTHING {
-            objstr.push_str(&format!("{indent}parent: {parent}\n"));
-        }
-        if o.location != NOTHING {
-            objstr.push_str(&format!("{indent}location: {location}\n"));
-        }
-        objstr.push_str(&format!("{indent}owner: {owner}\n"));
-        if o.flags.contains(ObjFlag::User) {
-            objstr.push_str(&format!("{indent}player: true\n"));
-        }
-        if o.flags.contains(ObjFlag::Wizard) {
-            objstr.push_str(&format!("{indent}wizard: true\n"));
-        }
-        if o.flags.contains(ObjFlag::Programmer) {
-            objstr.push_str(&format!("{indent}programmer: true\n"));
-        }
-        if o.flags.contains(ObjFlag::Fertile) {
-            objstr.push_str(&format!("{indent}fertile: true\n"));
-        }
-        if o.flags.contains(ObjFlag::Read) {
-            objstr.push_str(&format!("{indent}readable: true\n"));
-        }
-        if o.flags.contains(ObjFlag::Write) {
-            objstr.push_str(&format!("{indent}writeable: true\n"));
-        }
-
-        if !o.property_definitions.is_empty() {
-            objstr.push('\n');
-        }
-        for pd in &o.property_definitions {
-            let owner = canon_name(&pd.perms.owner(), &index_names);
-            let flags = prop_flags_string(pd.perms.flags());
-
-            // If the name contains funny business, use string literal form.
-            let name = propname(pd.name);
-
-            let mut base = format!("{indent}property {name} (owner: {owner}, flags: \"{flags}\")");
-            if let Some(value) = &pd.value {
-                let value = to_literal_objsub(value, &index_names, 2);
-                base.push_str(&format!(" = {value}"));
-            }
-            base.push_str(";\n");
-            objstr.push_str(&base);
-        }
-
-        if !o.property_overrides.is_empty() {
-            objstr.push('\n');
-        }
-        for ps in &o.property_overrides {
-            let name = propname(ps.name);
-            let mut base = format!("{indent}override {name}");
-            if let Some(perms) = &ps.perms_update {
-                let flags = prop_flags_string(perms.flags());
-                let owner = canon_name(&perms.owner(), &index_names);
-                base.push_str(&format!(" (owner: {owner}, flags: \"{flags}\")"));
-            }
-            if let Some(value) = &ps.value {
-                let value = to_literal_objsub(value, &index_names, 2);
-                base.push_str(&format!(" = {value}"));
-            }
-            base.push_str(";\n");
-            objstr.push_str(&base);
-        }
-
-        for v in &o.verbs {
-            objstr.push('\n');
-            let owner = canon_name(&v.owner, &index_names);
-            let vflags = verb_perms_string(v.flags);
-
-            let prepspec = match v.argspec.prep {
-                PrepSpec::Any => "any".to_string(),
-                PrepSpec::None => "none".to_string(),
-                PrepSpec::Other(p) => p.to_string_single().to_string(),
-            };
-            let verbargsspec = format!(
-                "{} {} {}",
-                v.argspec.dobj.to_string(),
-                prepspec,
-                v.argspec.iobj.to_string(),
-            );
-
-            // If there's only a single name, and it doesn't contain any funky characters, we can
-            // output just it, without any escaping. Otherwise, use a standard string literal.
-            let names = if v.names.len() == 1
-                && v.names[0]
-                    .to_string()
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
-            {
-                (*v.names[0].as_arc_string()).clone()
-            } else {
-                let names = v
-                    .names
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ");
-                let names = v_string(names);
-                to_literal(&names)
-            };
-
-            // decompile the verb
-            #[allow(irrefutable_let_patterns)]
-            let ProgramType::MooR(program) = &v.program else {
-                panic!("Verb program is not Moo");
-            };
-            let decompiled = program_to_tree(program).expect("Failed to decompile verb binary");
-            let unparsed = unparse(&decompiled).expect("Failed to unparse verb binary");
-            let mut body = String::new();
-            for line in unparsed {
-                body.push_str(indent);
-                body.push_str(indent);
-                body.push_str(&line);
-                body.push('\n');
-            }
-            let body = body.trim_end().to_string();
-            let decl = format!(
-                "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\"\n{body}\n{indent}endverb\n"
-            );
-            objstr.push_str(&decl);
-        }
-        objstr.push_str("endobject\n");
-        file.write_all(objstr.as_bytes()).unwrap();
+        let lines = dump_object(&index_names, o)?;
+        let objstr = lines.join("\n");
+        file.write_all(objstr.as_bytes())?;
     }
     info!("Dumped {} objects", object_defs.len());
+    Ok(())
+}
+
+pub fn dump_object(index_names: &HashMap<Obj, String>, o: &ObjectDefinition) -> Result<Vec<String>, ObjectDumpError> {
+    let mut lines = Vec::new();
+    let indent = "  ";
+    lines.push(format!("object {}", canon_name(&o.oid, index_names)));
+    let header_lines = dump_object_header(index_names, o, indent);
+    lines.extend_from_slice(&header_lines);
+    if !o.property_definitions.is_empty() {
+        lines.push(String::new());
+    }
+    for pd in &o.property_definitions {
+        let base = dump_property_definition(index_names, indent, pd);
+        lines.push(base);
+    }
+    if !o.property_overrides.is_empty() {
+        lines.push(String::new());
+    }
+    for ps in &o.property_overrides {
+        let base = dump_property_override(index_names, indent, ps);
+        lines.push(base);
+    }
+
+    for v in &o.verbs {
+        lines.push(String::new());
+        let verb_lines = dump_verb(index_names, indent, v, &o.oid)?;
+        lines.extend_from_slice(&verb_lines);
+    }
+    lines.push("endobject".to_string());
+    Ok(lines)
+}
+
+fn dump_object_header(
+    index_names: &HashMap<Obj, String>,
+    o: &ObjectDefinition,
+    indent: &str,
+) -> Vec<String> {
+    let mut header_lines = Vec::with_capacity(8);
+    let parent = canon_name(&o.parent, index_names);
+    let location = canon_name(&o.location, index_names);
+    let owner = canon_name(&o.owner, index_names);
+    let name = v_str(&o.name);
+
+    header_lines.push(format!("{indent}name: {}", to_literal(&name)));
+    if o.parent != NOTHING {
+        header_lines.push(format!("{indent}parent: {parent}"));
+    }
+    if o.location != NOTHING {
+        header_lines.push(format!("{indent}location: {location}"));
+    }
+    header_lines.push(format!("{indent}owner: {owner}"));
+    if o.flags.contains(ObjFlag::User) {
+        header_lines.push(format!("{indent}player: true"));
+    }
+    if o.flags.contains(ObjFlag::Wizard) {
+        header_lines.push(format!("{indent}wizard: true"));
+    }
+    if o.flags.contains(ObjFlag::Programmer) {
+        header_lines.push(format!("{indent}programmer: true"));
+    }
+    if o.flags.contains(ObjFlag::Fertile) {
+        header_lines.push(format!("{indent}fertile: true"));
+    }
+    if o.flags.contains(ObjFlag::Read) {
+        header_lines.push(format!("{indent}readable: true"));
+    }
+    if o.flags.contains(ObjFlag::Write) {
+        header_lines.push(format!("{indent}writeable: true"));
+    }
+    header_lines
+}
+
+fn dump_verb(index_names: &HashMap<Obj, String>, indent: &str, v: &ObjVerbDef, obj: &Obj) -> Result<Vec<String>, ObjectDumpError> {
+    let mut verb_lines = vec![];
+    let owner = canon_name(&v.owner, index_names);
+    let vflags = verb_perms_string(v.flags);
+
+    let prepspec = match v.argspec.prep {
+        PrepSpec::Any => "any".to_string(),
+        PrepSpec::None => "none".to_string(),
+        PrepSpec::Other(p) => p.to_string_single().to_string(),
+    };
+    let verbargsspec = format!(
+        "{} {} {}",
+        v.argspec.dobj.to_string(),
+        prepspec,
+        v.argspec.iobj.to_string(),
+    );
+
+    // If there's only a single name, and it doesn't contain any funky characters, we can
+    // output just it, without any escaping. Otherwise, use a standard string literal.
+    let names = if v.names.len() == 1
+        && v.names[0]
+            .to_string()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        (*v.names[0].as_arc_string()).clone()
+    } else {
+        let names = v
+            .names
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join(" ");
+        let names = v_string(names);
+        to_literal(&names)
+    };
+
+    // decompile the verb
+    let ProgramType::MooR(program) = &v.program;
+    let decompiled = program_to_tree(program).map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
+    let unparsed = unparse(&decompiled).map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?;
+
+    verb_lines.push(format!(
+        "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\""
+    ));
+    for line in unparsed {
+        verb_lines.push(format!("{indent}{indent}{line}"));
+    }
+    verb_lines.push(format!("{indent}endverb"));
+    Ok(verb_lines)
+}
+
+fn dump_property_definition(
+    index_names: &HashMap<Obj, String>,
+    indent: &str,
+    pd: &ObjPropDef,
+) -> String {
+    let owner = canon_name(&pd.perms.owner(), index_names);
+    let flags = prop_flags_string(pd.perms.flags());
+
+    // If the name contains funny business, use string literal form.
+    let name = propname(pd.name);
+
+    let mut base = format!("{indent}property {name} (owner: {owner}, flags: \"{flags}\")");
+    if let Some(value) = &pd.value {
+        let value = to_literal_objsub(value, index_names, 2);
+        base.push_str(&format!(" = {value}"));
+    }
+    base.push(';');
+    base
+}
+
+fn dump_property_override(
+    index_names: &HashMap<Obj, String>,
+    indent: &str,
+    ps: &ObjPropOverride,
+) -> String {
+    let name = propname(ps.name);
+    let mut base = format!("{indent}override {name}");
+    if let Some(perms) = &ps.perms_update {
+        let flags = prop_flags_string(perms.flags());
+        let owner = canon_name(&perms.owner(), index_names);
+        base.push_str(&format!(" (owner: {owner}, flags: \"{flags}\")"));
+    }
+    if let Some(value) = &ps.value {
+        let value = to_literal_objsub(value, index_names, 2);
+        base.push_str(&format!(" = {value}"));
+    }
+    base.push(';');
+    base
 }
 
 #[cfg(test)]
@@ -521,8 +572,8 @@ mod tests {
 
             // Make a tmpdir & dump objdefs into it
             let snapshot = db.clone().create_snapshot().unwrap();
-            let object_defs = collect_object_definitions(snapshot.as_ref());
-            dump_object_definitions(&object_defs, tmpdir_path);
+            let object_defs = collect_object_definitions(snapshot.as_ref()).unwrap();
+            dump_object_definitions(&object_defs, tmpdir_path).unwrap();
         }
 
         let (db, _) = TxDB::open(None, DatabaseConfig::default());
@@ -630,8 +681,8 @@ mod tests {
         // Dump to objdef format
         {
             let snapshot = db1.create_snapshot().unwrap();
-            let object_defs = collect_object_definitions(snapshot.as_ref());
-            dump_object_definitions(&object_defs, tmpdir_path);
+            let object_defs = collect_object_definitions(snapshot.as_ref()).unwrap();
+            dump_object_definitions(&object_defs, tmpdir_path).unwrap();
         }
 
         // Read the generated objdef file to verify lambda syntax
