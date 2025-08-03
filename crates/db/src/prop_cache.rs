@@ -82,12 +82,18 @@ lazy_static! {
     pub static ref ANCESTRY_CACHE_STATS: CacheStats = CacheStats::new();
 }
 
-pub(crate) struct PropResolutionCache {
+pub struct PropResolutionCache {
     inner: Mutex<Inner>,
 }
 
+impl Default for PropResolutionCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PropResolutionCache {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             inner: Mutex::new(Inner {
                 version: 0,
@@ -112,7 +118,7 @@ struct Inner {
 }
 
 impl PropResolutionCache {
-    pub(crate) fn fork(&self) -> Box<Self> {
+    pub fn fork(&self) -> Box<Self> {
         let inner = self.inner.lock().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
@@ -122,12 +128,12 @@ impl PropResolutionCache {
         })
     }
 
-    pub(crate) fn has_changed(&self) -> bool {
+    pub fn has_changed(&self) -> bool {
         let inner = self.inner.lock().unwrap();
         inner.version > inner.orig_version
     }
 
-    pub(crate) fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
+    pub fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let inner = self.inner.lock().unwrap();
         let result = inner.entries.get(&(*obj, *prop)).cloned();
 
@@ -140,7 +146,7 @@ impl PropResolutionCache {
         result
     }
 
-    pub(crate) fn flush(&self) {
+    pub fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
@@ -149,25 +155,25 @@ impl PropResolutionCache {
         PROP_CACHE_STATS.flush();
     }
 
-    pub(crate) fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
+    pub fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
 
         inner.entries.insert((*obj, *prop), Some(propd.clone()));
     }
 
-    pub(crate) fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
+    pub fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.entries.insert((*obj, *prop), None);
     }
 
-    pub(crate) fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
+    pub fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
         let inner = self.inner.lock().unwrap();
         inner.first_parent_with_props_cache.get(obj).cloned()
     }
 
-    pub(crate) fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
+    pub fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.first_parent_with_props_cache.insert(*obj, parent);

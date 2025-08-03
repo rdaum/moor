@@ -16,10 +16,16 @@ use bincode::{Decode, Encode};
 use moor_var::BincodeAsByteBufferExt;
 use moor_var::Obj;
 use moor_var::Symbol;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Eq, PartialEq, Hash, Encode, Decode, Clone)]
 pub struct PropDef {
+    inner: Arc<PropDefInner>,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash, Encode, Decode, Clone)]
+struct PropDefInner {
     #[bincode(with_serde)]
     uuid: Uuid,
     definer: Obj,
@@ -31,41 +37,43 @@ impl PropDef {
     #[must_use]
     pub fn new(uuid: Uuid, definer: Obj, location: Obj, name: Symbol) -> Self {
         Self {
-            uuid,
-            definer,
-            location,
-            name,
+            inner: Arc::new(PropDefInner {
+                uuid,
+                definer,
+                location,
+                name,
+            }),
         }
     }
 
     #[must_use]
     pub fn definer(&self) -> Obj {
-        self.definer
+        self.inner.definer
     }
     #[must_use]
     pub fn location(&self) -> Obj {
-        self.location
+        self.inner.location
     }
 
     #[must_use]
     pub fn name(&self) -> Symbol {
-        self.name
+        self.inner.name
     }
 }
 
 impl Named for PropDef {
     fn matches_name(&self, name: Symbol) -> bool {
-        self.name() == name
+        self.inner.name == name
     }
 
     fn names(&self) -> &[Symbol] {
-        std::slice::from_ref(&self.name)
+        std::slice::from_ref(&self.inner.name)
     }
 }
 
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
-        self.uuid
+        self.inner.uuid
     }
 }
 

@@ -19,6 +19,10 @@ harness = false
 name = "verb_cache_benches"
 harness = false
 
+[[bench]]
+name = "prop_cache_benches"
+harness = false
+
 [dev-dependencies]
 criterion.workspace = true
 edn-format.workspace = true
