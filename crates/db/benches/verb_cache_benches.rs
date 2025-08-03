@@ -41,8 +41,7 @@ impl BenchContext for SmallCacheContext {
 
         let test_verbdefs: Vec<VerbDef> = test_verbs
             .iter()
-            .enumerate()
-            .map(|(_i, verb)| {
+            .map(|verb| {
                 VerbDef::new(
                     Uuid::new_v4(),
                     test_objs[0],
@@ -120,7 +119,7 @@ impl BenchContext for LargeCacheContext {
         let test_verbdefs: Vec<VerbDef> = test_verbs
             .iter()
             .enumerate()
-            .map(|(_i, verb)| {
+            .map(|(i, verb)| {
                 VerbDef::new(
                     Uuid::new_v4(),
                     test_objs[i % test_objs.len()],
@@ -216,7 +215,7 @@ impl BenchContext for PopulatedCacheContext {
 
 // Concurrent access simulation context
 struct ConcurrentCacheContext {
-    caches: Vec<Box<VerbResolutionCache>>,
+    caches: Vec<VerbResolutionCache>,
     test_objs: Vec<Obj>,
     test_verbs: Vec<Symbol>,
 }
@@ -224,12 +223,12 @@ struct ConcurrentCacheContext {
 impl BenchContext for ConcurrentCacheContext {
     fn prepare(_num_chunks: usize) -> Self {
         // Create multiple cache instances to simulate concurrent access
-        let main_cache = Box::new(VerbResolutionCache::new());
+        let main_cache = VerbResolutionCache::new();
         let mut caches = vec![main_cache];
 
         // Create several forked caches to simulate transactions
         for _ in 0..10 {
-            caches.push(caches[0].fork());
+            caches.push(*caches[0].fork());
         }
 
         let test_objs: Vec<Obj> = (1..=50).map(Obj::mk_id).collect();
