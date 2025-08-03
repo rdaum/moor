@@ -21,36 +21,77 @@ pub use bitenum::BitEnum;
 pub use bitset::*;
 pub use perf_counter::{PerfCounter, PerfTimerGuard};
 
-/// Check `names` for matches with wildcard prefixes.
-/// e.g. "dname*c" will match for any of 'dname', 'dnamec'
+/// Check single verb pattern for matches following LambdaMOO semantics.
+/// This exactly tries to mirror the C verbcasecmp() state machine from LambdaMOO's utils.c.
+/// (Unlike LambdaMOO, multiple names are handled further up the call chain, not inside this match function.)
+///
+/// Wildcard behavior:
+/// - `*` at the end: matches any string that begins with the prefix (e.g., "foo*" matches "foo", "foobar")
+/// - `*` in the middle: matches any prefix of the full pattern that's at least as long as the part before the star
+///   (e.g., "foo*bar" matches "foo", "foob", "fooba", "foobar")
+/// - Leading `*` are consumed but do NOT act as wildcards - exact matching resumes after them
 #[must_use]
-pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
-    let mut v_iter = vname.chars().peekable();
-    let mut w_iter = candidate.chars().peekable();
+pub fn verbcasecmp(pattern: &str, word: &str) -> bool {
+    if pattern == word {
+        return true;
+    }
 
-    let mut had_wildcard = false;
-    while let Some(v_c) = v_iter.next() {
-        if v_c == '*' {
-            if v_iter.peek().is_none() || w_iter.peek().is_none() {
-                return true;
-            }
-            had_wildcard = true;
-        } else {
-            match w_iter.next() {
-                None => {
-                    return had_wildcard;
+    let mut pattern_chars = pattern.chars().peekable();
+    let mut word_chars = word.chars().peekable();
+
+    #[derive(PartialEq)]
+    enum StarType {
+        None,
+        Inner, // * in the middle of pattern
+        End,   // * at the end of pattern
+    }
+
+    let mut star = StarType::None;
+    let mut has_matched_non_star = false;
+
+    // Main matching loop - mirrors C verbcasecmp state machine
+    loop {
+        // Handle consecutive asterisks
+        while pattern_chars.peek() == Some(&'*') {
+            pattern_chars.next();
+            star = if pattern_chars.peek().is_none() {
+                StarType::End
+            } else {
+                // Only treat as inner wildcard if we've matched non-star characters before
+                if has_matched_non_star {
+                    StarType::Inner
+                } else {
+                    StarType::None // Leading asterisks don't count as wildcards
                 }
-                Some(w_c) if w_c != v_c => {
-                    return false;
-                }
-                _ => {}
+            };
+        }
+
+        // Check if we can continue matching
+        match (pattern_chars.peek(), word_chars.peek()) {
+            (None, _) => break,       // End of pattern
+            (Some(_), None) => break, // End of word but pattern continues
+            (Some(p), Some(w)) if chars_match_case_insensitive(*p, *w) => {
+                // Characters match, advance both
+                pattern_chars.next();
+                word_chars.next();
+                has_matched_non_star = true;
             }
+            _ => break, // Characters don't match
         }
     }
-    if w_iter.peek().is_some() || v_iter.peek().is_some() {
-        return false;
+
+    // Determine if we have a match based on what's left
+    match (word_chars.peek(), star) {
+        (None, StarType::None) => pattern_chars.peek().is_none(), // Exact match
+        (None, _) => true,                // Word consumed and we had a wildcard
+        (Some(_), StarType::End) => true, // Trailing wildcard matches remaining word
+        _ => false,                       // No match
     }
-    true
+}
+
+/// Helper function for case-insensitive character comparison
+fn chars_match_case_insensitive(a: char, b: char) -> bool {
+    a.eq_ignore_ascii_case(&b)
 }
 
 // Simple MOO quasi-C style string quoting.
@@ -120,7 +161,7 @@ pub fn parse_into_words(input: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::{quote_str, verbname_cmp};
+    use crate::util::{quote_str, verbcasecmp};
 
     #[test]
     fn test_string_quote() {
@@ -132,17 +173,17 @@ mod tests {
     #[test]
     fn test_verb_match() {
         // full match
-        assert!(verbname_cmp("give", "give"));
+        assert!(verbcasecmp("give", "give"));
         // * matches anything
-        assert!(verbname_cmp("*", "give"));
+        assert!(verbcasecmp("*", "give"));
         // full match w wildcard
-        assert!(verbname_cmp("g*ive", "give"));
+        assert!(verbcasecmp("g*ive", "give"));
 
         // partial match after wildcard, this is permitted in MOO
-        assert!(verbname_cmp("g*ive", "giv"));
+        assert!(verbcasecmp("g*ive", "giv"));
 
         // negative
-        assert!(!verbname_cmp("g*ive", "gender"));
+        assert!(!verbcasecmp("g*ive", "gender"));
 
         // From reference manual
         // If the name contains a single star, however, then the name matches any prefix of itself
@@ -150,24 +191,150 @@ mod tests {
         // `foo*bar' matches any of the strings `foo', `foob', `fooba', or `foobar'; note that the
         // star itself is not considered part of the name.
         let foobar = "foo*bar";
-        assert!(verbname_cmp(foobar, "foo"));
-        assert!(verbname_cmp(foobar, "foob"));
-        assert!(verbname_cmp(foobar, "fooba"));
-        assert!(verbname_cmp(foobar, "foobar"));
-        assert!(!verbname_cmp(foobar, "fo"));
-        assert!(!verbname_cmp(foobar, "foobaar"));
+        assert!(verbcasecmp(foobar, "foo"));
+        assert!(verbcasecmp(foobar, "foob"));
+        assert!(verbcasecmp(foobar, "fooba"));
+        assert!(verbcasecmp(foobar, "foobar"));
+        assert!(!verbcasecmp(foobar, "fo"));
+        assert!(!verbcasecmp(foobar, "foobaar"));
 
         // If the verb name ends in a star, then it matches any string that begins with the part
         // before the star. For example, the verb-name `foo*' matches any of the strings `foo',
         // `foobar', `food', or `foogleman', among many others. As a special case, if the verb-name
         // is `*' (i.e., a single star all by itself), then it matches anything at all.
         let foostar = "foo*";
-        assert!(verbname_cmp(foostar, "foo"));
-        assert!(verbname_cmp(foostar, "foobar"));
-        assert!(verbname_cmp(foostar, "food"));
-        assert!(!verbname_cmp(foostar, "fo"));
+        assert!(verbcasecmp(foostar, "foo"));
+        assert!(verbcasecmp(foostar, "foobar"));
+        assert!(verbcasecmp(foostar, "food"));
+        assert!(!verbcasecmp(foostar, "fo"));
 
         // Regression for 'do_object' matching 'do'
-        assert!(!verbname_cmp("do", "do_object"));
+        assert!(!verbcasecmp("do", "do_object"));
+    }
+
+    #[test]
+    fn test_verb_match_basic_wildcard() {
+        // First test the basic case that should work
+        assert!(verbcasecmp("ps*c", "psc"), "ps*c should match psc");
+    }
+
+    #[test]
+    fn test_verb_match_regressions() {
+        // Regression test for pronoun verb patterns like "ps*c po*c pr*c pp*c pq*c"
+        // These should match pronoun verbs like "psc", "Psc", "PSC", etc.
+        assert!(
+            verbcasecmp("ps*c", "Psc"),
+            "ps*c should match Psc (case insensitive)"
+        );
+        assert!(
+            verbcasecmp("ps*c", "PSC"),
+            "ps*c should match PSC (case insensitive)"
+        );
+        assert!(
+            verbcasecmp("ps*c", "psc"),
+            "ps*c should match psc (full pattern)"
+        );
+        assert!(
+            !verbcasecmp("ps*c", "psomc"),
+            "ps*c should NOT match psomc (longer than pattern)"
+        );
+        assert!(
+            !verbcasecmp("ps*c", "psc_extra"),
+            "ps*c should not match psc_extra"
+        );
+        assert!(
+            verbcasecmp("ps*c", "ps"),
+            "ps*c should match ps (partial prefix)"
+        );
+
+        // Test other pronoun patterns
+        assert!(verbcasecmp("po*c", "poc"), "po*c should match poc");
+        assert!(
+            verbcasecmp("po*c", "Poc"),
+            "po*c should match Poc (case insensitive)"
+        );
+        assert!(verbcasecmp("pr*c", "prc"), "pr*c should match prc");
+        assert!(verbcasecmp("pp*c", "ppc"), "pp*c should match ppc");
+        assert!(verbcasecmp("pq*c", "pqc"), "pq*c should match pqc");
+
+        // Test patterns without wildcards for case insensitivity
+        assert!(verbcasecmp("psu", "psu"), "psu should match psu");
+        assert!(
+            verbcasecmp("psu", "PSU"),
+            "psu should match PSU (case insensitive)"
+        );
+        assert!(
+            verbcasecmp("psu", "Psu"),
+            "psu should match Psu (case insensitive)"
+        );
+
+        // Mixed case pattern and candidate
+        assert!(
+            verbcasecmp("PS*C", "psc"),
+            "PS*C should match psc (case insensitive)"
+        );
+        assert!(
+            verbcasecmp("Ps*C", "PSC"),
+            "Ps*C should match PSC (case insensitive)"
+        );
+    }
+
+    #[test]
+    fn test_verb_match_leading_asterisks() {
+        // Test LambdaMOO behavior: leading asterisks don't work as wildcards
+        // They are consumed but then exact matching resumes
+
+        // Leading single asterisk - should only match exact suffix
+        assert!(
+            verbcasecmp("*p", "p"),
+            "*p should match p (exact match after consuming *)"
+        );
+        assert!(
+            !verbcasecmp("*p", "ap"),
+            "*p should NOT match ap (leading * is not a wildcard)"
+        );
+        assert!(
+            !verbcasecmp("*p", "anythingp"),
+            "*p should NOT match anythingp"
+        );
+
+        // Leading multiple asterisks - same behavior
+        assert!(verbcasecmp("**p", "p"), "**p should match p");
+        assert!(!verbcasecmp("**p", "ap"), "**p should NOT match ap");
+
+        // Leading asterisk with longer pattern
+        assert!(verbcasecmp("*xyz", "xyz"), "*xyz should match xyz");
+        assert!(
+            !verbcasecmp("*xyz", "abcxyz"),
+            "*xyz should NOT match abcxyz"
+        );
+
+        // Verify trailing asterisks still work as wildcards
+        assert!(verbcasecmp("test*", "test"), "test* should match test");
+        assert!(
+            verbcasecmp("test*", "testfoo"),
+            "test* should match testfoo"
+        );
+
+        // Verify internal asterisks still work as wildcards
+        assert!(verbcasecmp("foo*bar", "foo"), "foo*bar should match foo");
+        assert!(
+            verbcasecmp("foo*bar", "foobar"),
+            "foo*bar should match foobar"
+        );
+
+        // Mixed: leading asterisk followed by internal asterisk pattern
+        assert!(
+            verbcasecmp("*foo*bar", "foobar"),
+            "*foo*bar should match foobar (leading * ignored, internal * works)"
+        );
+        assert!(
+            verbcasecmp("*foo*bar", "foo"),
+            "*foo*bar should match foo (leading * ignored, internal * works)"
+        );
+        assert!(
+            !verbcasecmp("*foo*bar", "xfoobar"),
+            "*foo*bar should NOT match xfoobar (leading * not a wildcard)"
+        );
     }
 }

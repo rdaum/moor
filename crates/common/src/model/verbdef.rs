@@ -15,7 +15,7 @@ use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::util::BitEnum;
-use crate::util::verbname_cmp;
+use crate::util::verbcasecmp;
 use bincode::{Decode, Encode};
 use moor_var::BincodeAsByteBufferExt;
 use moor_var::Obj;
@@ -94,7 +94,7 @@ impl Named for VerbDef {
     fn matches_name(&self, name: Symbol) -> bool {
         self.names()
             .iter()
-            .any(|verb| verbname_cmp(&verb.as_arc_str(), &name.as_arc_str()))
+            .any(|verb| verbcasecmp(&verb.as_arc_str(), &name.as_arc_str()))
     }
 
     fn names(&self) -> Vec<Symbol> {
