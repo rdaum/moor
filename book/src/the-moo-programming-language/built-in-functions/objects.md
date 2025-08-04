@@ -8,17 +8,12 @@ functions for manipulating them.
 ### `create`
 
 ```
-obj create(obj parent [, obj owner] [, list init-args])
-obj create(list parents [, obj owner] [, list init-args])
+obj create(obj parent [, obj owner] [, int is-anon] [, list init-args])
 ```
 
-Creates and returns a new object whose parent (or parents) is parent (or parents) and whose owner is as described below.
+Creates and returns a new object whose parent is parent and whose owner is as described below. If the given parent is neither valid nor #-1, then E_INVARG is raised. The parent object must be valid and must be usable as a parent (i.e., its `f` bit must be true) or else the programmer must own parent or be a wizard; otherwise E_PERM is raised. If the `f` bit is not present, E_PERM is raised unless the programmer owns parent or is a wizard.
 
-Creates and returns a new object whose parents are parents (or whose parent is parent) and whose owner is as described
-below. If any of the given parents are not valid, or if the given parent is neither valid nor #-1, then E_INVARG is
-raised. The given parents objects must be valid and must be usable as a parent (i.e., their `a` or `f` bits must be
-true) or else the programmer must own parents or be a wizard; otherwise E_PERM is raised. If the `f` bit is not present,
-E_PERM is raised unless the programmer owns parents or is a wizard.
+The `is-anon` argument is accepted for backwards compatibility but is ignored.
 
 E_PERM is also raised if owner is provided and not the same as the programmer, unless the programmer is a wizard.
 
