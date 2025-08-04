@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Built-in functions for server management, networking, tasks, and system operations.
+
 use std::io::Read;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -46,6 +48,7 @@ use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_obj, v_str, v_string};
 use moor_var::{Variant, v_sym};
 
+/// Placeholder function for unimplemented builtins.
 pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
         "Builtin function {} is not implemented, called with arguments: ({:?})",
@@ -57,6 +60,8 @@ pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Sends a notification message to a player.
+/// MOO: `none notify(obj player, str message [, str content_type])`
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If in non rich-mode `notify` can only send text.
     // Otherwise, it can send any value, and it's up to the host/client to interpret it.
@@ -106,11 +111,10 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(1)))
 }
 
-/// presentation(player, id : string, [content_type : string, target : string, content: string, [ attributes : list / map]])
 /// Emits a presentation event to the client. The client should interpret this as a request to present
-/// the content provided as a pop-up, panel, or other client-specific UI element (depending on 'target')
-///
+/// the content provided as a pop-up, panel, or other client-specific UI element (depending on 'target').
 /// If only the first two arguments are provided, the client should "unpresent" the presentation with that ID.
+/// MOO: `none presentation(obj player, str id [, str content_type, str target, str content [, list attributes]])`
 fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.rich_notify {
         return Err(ErrValue(E_PERM.msg("present() is not available")));
@@ -278,6 +282,8 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Returns a list of all currently connected players.
+/// MOO: `list connected_players([int include_all])`
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let include_all = if bf_args.args.len() == 1 {
         let Some(include_all) = bf_args.args[0].as_integer() else {
@@ -303,6 +309,8 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(map)))
 }
 
+/// Returns true if the given object is a player object.
+/// MOO: `int is_player(obj object)`
 fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("is_player() requires 1 argument")));
@@ -325,6 +333,8 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(is_player)))
 }
 
+/// Returns the object representing the permissions of the calling task.
+/// MOO: `obj caller_perms()`
 fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -335,6 +345,8 @@ fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(bf_args.caller_perms())))
 }
 
+/// Sets the permissions of the current task.
+/// MOO: `none set_task_perms(obj perms)`
 fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("set_task_perms() requires 1 argument")));
@@ -357,6 +369,8 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Returns information about the current calling stack.
+/// MOO: `list callers()`
 fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -385,6 +399,8 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }))))
 }
 
+/// Returns the unique identifier of the current task.
+/// MOO: `int task_id()`
 fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -395,6 +411,8 @@ fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
 }
 
+/// Returns the number of seconds since the last input from the given player.
+/// MOO: `int idle_seconds(obj player)`
 fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("idle_seconds() requires 1 argument")));
@@ -413,6 +431,8 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(idle_seconds as i64)))
 }
 
+/// Returns the number of seconds the given player has been connected.
+/// MOO: `int connected_seconds(obj player)`
 fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
@@ -433,13 +453,10 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(connected_seconds as i64)))
 }
 
-/*
-Syntax:  connection_name (obj <player>)   => str
-
-Returns a network-specific string identifying the connection being used by the given player.  If the programmer is not a wizard and not
-<player>, then `E_PERM' is raised.  If <player> is not currently connected, then `E_INVARG' is raised.
-
- */
+/// Returns a network-specific string identifying the connection being used by the given player.
+/// If the programmer is not a wizard and not <player>, then `E_PERM' is raised.
+/// If <player> is not currently connected, then `E_INVARG' is raised.
+/// MOO: `str connection_name(obj player)`
 fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
@@ -475,6 +492,8 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(connection_name)))
 }
 
+/// Shuts down the server. Wizard-only.
+/// MOO: `none shutdown([str message])`
 fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("shutdown() requires 0 or 1 arguments")));
@@ -501,6 +520,8 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Returns the current time as seconds since Unix epoch.
+/// MOO: `int time()`
 fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(E_ARGS.msg("time() does not take any arguments")));
@@ -513,6 +534,9 @@ fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Returns the current time as a floating-point number of seconds since Unix epoch.
+/// With argument 1, returns uptime instead.
+/// MOO: `float ftime([int mode])`
 fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("ftime() requires 0 or 1 arguments")));
@@ -556,6 +580,8 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_float(seconds + nanos)))
 }
 
+/// Converts a time value to a human-readable string.
+/// MOO: `str ctime([int time])`
 fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("ctime() requires 0 or 1 arguments")));
@@ -588,12 +614,11 @@ fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_string(datetime_str.to_string())))
 }
+/// Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.
+/// <Message>, which defaults to the value of `tostr(<code>)', and <value>, which defaults to zero,
+/// are made available to any `try'-`except' statements that catch the error.
+/// MOO: `none raise(err code [, str message [, any value]])`
 fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
-    //
-    // Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.  <Message>, which defaults to the value of `tostr(<code>)',
-    // and <value>, which defaults to zero, are made available to any `try'-`except' statements that catch the error.  If the error is not caught, then <message> will
-    // appear on the first line of the traceback printed to the user.
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(ErrValue(E_ARGS.msg("raise() requires 1 to 3 arguments")));
     }
@@ -624,6 +649,8 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Err(BfErr::Raise(Error::new(err.err_type, msg, value)))
 }
 
+/// Returns the version string of the server.
+/// MOO: `str server_version()`
 fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -634,6 +661,8 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(version_string)))
 }
 
+/// Suspends the current task for the given number of seconds.
+/// MOO: `none suspend([num seconds])`
 fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("suspend() requires 0 or 1 arguments")));
@@ -662,6 +691,8 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
 
+/// Commits the current transaction and suspends the task.
+/// MOO: `none commit()`
 fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(E_ARGS.msg("commit() does not take any arguments")));
@@ -670,6 +701,8 @@ fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit)))
 }
 
+/// Rolls back the current transaction. Wizard-only.
+/// MOO: `none rollback([bool output_session])`
 fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Rollback is wizard only
     bf_args
@@ -687,6 +720,8 @@ fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskRollback(output_session)))
 }
 
+/// Suspends the current task until the specified task completes.
+/// MOO: `none wait_task(int task_id)`
 fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("wait_task() requires 1 argument")));
@@ -703,6 +738,8 @@ fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Suspends the current task to wait for input from a player.
+/// MOO: `str read([obj player])`
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(E_ARGS.msg("read() requires 0 or 1 arguments")));
@@ -734,6 +771,8 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskNeedInput))
 }
 
+/// Returns a list of all queued (suspended) tasks.
+/// MOO: `list queued_tasks()`
 fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -771,18 +810,10 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(tasks)))
 }
 
-/// Function: active_tasks()
 /// Returns the list of active running (not suspended/queued) running tasks.
 /// If the player is a wizard, it returns the list of all active tasks, otherwise it returns the list of
 /// tasks only for the player themselves.
-/// The information returned differs from queued_tasks and provides only:
-/// { task_id, player_id, task_start } where task_start is a description of how the task was started,
-/// and varies depending on the type of task:
-/// - { 'command, #handler, #player, "command" }
-/// - { 'do_command, #handler, #player, "command" } - when $do_command has been invoked
-/// - { 'verb, #player, #verb_location, 'verb, { args }, "argstr" }
-/// - { 'eval, #player }
-/// - { 'fork, #player, #perms, parent task, verb_location, verb_name, args }
+/// MOO: `list active_tasks()`
 fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let tasks = match bf_args.task_scheduler_client.active_tasks() {
         Ok(tasks) => tasks,
@@ -894,10 +925,9 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(output)))
 }
 
-/// Function: list queue_info ([obj player])
 /// If player is omitted, returns a list of object numbers naming all players that currently have active task
 /// queues inside the server. If player is provided, returns the number of background tasks currently queued for that user.
-/// It is guaranteed that queue_info(X) will return zero for any X not in the result of queue_info().
+/// MOO: `list queue_info([obj player])`
 fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -951,11 +981,10 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Kills the task with the given <task-id>.
+/// The task can be suspended / queued or running.
+/// MOO: `none kill_task(int task_id)`
 fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  kill_task(<task-id>)   => none
-    //
-    // Kills the task with the given <task-id>.
-    // The task can be suspended / queued or running.
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("kill_task() requires 1 argument")));
     }
@@ -985,9 +1014,9 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(result))
 }
 
+/// Resumes a previously suspended task, optionally with a value to pass back to the suspend() call.
+/// MOO: `none resume(int task_id [, any value])`
 fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax: resume(INT task-ID[, ANY value])
-    // Resumes a previously suspended task, optionally with a value to pass back to the suspend() call
     if bf_args.args.len() > 2 {
         return Err(ErrValue(E_ARGS.msg("resume() requires 1 or 2 arguments")));
     }
@@ -1025,10 +1054,9 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(result))
 }
 
+/// Returns the number of ticks left in the current time slice.
+/// MOO: `int ticks_left()`
 fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  ticks_left()   => int
-    //
-    // Returns the number of ticks left in the current time slice.
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
             E_ARGS.msg("ticks_left() does not take any arguments"),
@@ -1043,10 +1071,9 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(ticks_left as i64)))
 }
 
+/// Returns the number of seconds left in the current time slice.
+/// MOO: `int seconds_left()`
 fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  seconds_left()   => int
-    //
-    // Returns the number of seconds left in the current time slice.
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
             E_ARGS.msg("seconds_left() does not take any arguments"),
@@ -1061,10 +1088,9 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(seconds_left))
 }
 
+/// Disconnects the player with the given object number.
+/// MOO: `none boot_player(obj player)`
 fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  boot_player(<player>)   => none
-    //
-    // Disconnects the player with the given object number.
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("boot_player() requires 1 argument")));
     }
@@ -1087,10 +1113,9 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Calls the given function with the given arguments and returns the result.
+/// MOO: `any call_function(str func, list args)`
 fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  call_function(<func>, <arg1>, <arg2>, ...)   => value
-    //
-    // Calls the given function with the given arguments and returns the result.
     if bf_args.args.is_empty() {
         return Err(ErrValue(
             E_ARGS.msg("call_function() requires at least 1 argument"),
@@ -1125,12 +1150,10 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }))
 }
 
-/*Syntax:  server_log (str <message> [, <is-error>])   => none
-
-The text in <message> is sent to the server log with a distinctive prefix (so that it can be distinguished from server-generated messages).  If the programmer
-is not a wizard, then `E_PERM' is raised.  If <is-error> is provided and true, then <message> is marked in the server log as an error.
-
-*/
+/// The text in <message> is sent to the server log with a distinctive prefix.
+/// If the programmer is not a wizard, then `E_PERM' is raised.
+/// If <is-error> is provided and true, then <message> is marked in the server log as an error.
+/// MOO: `none server_log(str message [, int is_error])`
 fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(ErrValue(
@@ -1183,6 +1206,8 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Logs cache statistics to the server log. Wizard-only.
+/// MOO: `none log_cache_stats()`
 fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1229,6 +1254,7 @@ fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Helper function to convert builtin function information to a MOO list.
 fn bf_function_info_to_list(bf: &Builtin) -> Var {
     let min_args = match bf.min_args {
         ArgCount::Q(q) => v_int(q as i64),
@@ -1252,6 +1278,8 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
     ])
 }
 
+/// Returns information about built-in functions.
+/// MOO: `list function_info([str function_name])`
 fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -1282,12 +1310,9 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(bf_list)))
 }
 
-/// Function: value listen (obj object, point [, print-messages], [host-type])
 /// Start listening for connections on the given port.
-/// `object` is the object to call when a connection is established, in lieux of #0 (the system object)
-/// if `print-messages` is true, then the server will print messages like ** Connected ** etc to the connection when it establishes
-/// if `host-type` is provided, it should be a string, and it will be used to determine the type of host that will be expected to listen.
-///   this defaults to "tcp", but other common can include "websocket"
+/// `object` is the object to call when a connection is established, in lieu of #0 (the system object).
+/// MOO: `int listen(obj object, int port [, int print_messages [, str host_type]])`
 fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args
@@ -1357,6 +1382,8 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(port as i64)))
 }
 
+/// Returns information about active listeners.
+/// MOO: `list listeners([any search_criteria])`
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -1410,7 +1437,8 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(listeners))
 }
 
-// unlisten(port, [host-type])
+/// Stops listening on the given port.
+/// MOO: `none unlisten(int port [, str host_type])`
 fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args
@@ -1458,6 +1486,8 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
+/// Compiles and evaluates a MOO expression or statement.
+/// MOO: `list eval(str program)`
 fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1509,6 +1539,8 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Triggers a database checkpoint. Wizard-only.
+/// MOO: `int dump_database([int blocking])`
 fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1540,6 +1572,8 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(true)))
 }
 
+/// Returns information about server memory usage. Wizard-only.
+/// MOO: `list memory_usage()`
 fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1595,10 +1629,9 @@ fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&[block_size, nused, nfree])))
 }
 
+/// Returns the number of bytes currently occupied by the database on disk. Wizard-only.
+/// MOO: `int db_disk_size()`
 fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  db_disk_size()   => int
-    //
-    // Returns the number of bytes currently occupied by the database on disk.
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
             E_ARGS.msg("db_disk_size() does not take any arguments"),
@@ -1617,12 +1650,9 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(disk_size as i64)))
 }
 
-/* Function: none load_server_options ()
-
-   This causes the server to consult the current common of properties on $server_options, updating
-   the corresponding server option settings (see section Server Options Set in the Database)
-   accordingly. If the programmer is not a wizard, then E_PERM is raised.
-*/
+/// This causes the server to consult the current common of properties on $server_options, updating
+/// the corresponding server option settings accordingly. Wizard-only.
+/// MOO: `none load_server_options()`
 fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1641,6 +1671,7 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// Helper function to convert performance counters to a MOO map.
 fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
     let mut result = vec![];
     for c in counters {
@@ -1662,6 +1693,8 @@ fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
     v_map(&result)
 }
 
+/// Returns performance counters for built-in functions. Wizard-only.
+/// MOO: `map bf_counters()`
 fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1676,6 +1709,8 @@ fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Returns performance counters for database operations. Wizard-only.
+/// MOO: `map db_counters()`
 fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1689,6 +1724,8 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Returns performance counters for task scheduler operations. Wizard-only.
+/// MOO: `map sched_counters()`
 fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1703,9 +1740,9 @@ fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Forces input to be processed as if it came from the given connection.
+/// MOO: `int force_input(obj conn, str line [, int at_front])`
 fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    /*Syntax:  force_input (obj <conn>, str <line> [, <at-front>])   => none
-     */
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(ErrValue(
             E_ARGS.msg("force_input() requires 2 or 3 arguments"),
@@ -1739,10 +1776,9 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// worker_request(worker_type, args, ... [, timeout])
 /// Sends a request to a worker (e.g. outbound HTTP, files, etc.) to perform some action.
-/// Task then goes into suspension until the request is completed or times out.
-/// Wizard only.
+/// Task then goes into suspension until the request is completed or times out. Wizard-only.
+/// MOO: `any worker_request(str worker_type, list args [, map options])`
 fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1804,6 +1840,8 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+/// Returns information about active connections.
+/// MOO: `list connections([obj player])`
 fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
@@ -1873,6 +1911,8 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(connections_list)))
 }
 
+/// Switches the current player to a different player object. Wizard-only.
+/// MOO: `none switch_player(obj new_player)`
 fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("switch_player() requires 1 argument")));
@@ -1953,6 +1993,7 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Helper function to convert cache statistics to a LambdaMOO-compatible list.
 fn make_cache_stats_list(cache_stats: &moor_db::prop_cache::CacheStats) -> Var {
     // Return a LambdaMOO-compatible list: [hits, negative_hits, misses, generation, histogram]
     // For our implementation:
@@ -1979,6 +2020,8 @@ fn make_cache_stats_list(cache_stats: &moor_db::prop_cache::CacheStats) -> Var {
     ])
 }
 
+/// Returns verb cache statistics. Wizard-only.
+/// MOO: `list verb_cache_stats()`
 fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -1999,6 +2042,8 @@ fn bf_verb_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(make_cache_stats_list(&VERB_CACHE_STATS)))
 }
 
+/// Returns property cache statistics. Wizard-only.
+/// MOO: `list property_cache_stats()`
 fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -2019,6 +2064,8 @@ fn bf_property_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(make_cache_stats_list(&PROP_CACHE_STATS)))
 }
 
+/// Returns ancestry cache statistics. Wizard-only.
+/// MOO: `list ancestry_cache_stats()`
 fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
