@@ -72,10 +72,55 @@ server_log("Verb called by: " + tostr(caller_perms()));
 
 ### `set_task_perms`
 
-**Description:** Sets the permissions for the current task.  
+**Description:** Sets the permissions for the current task to those of the specified object. This changes which object's
+permissions are used for subsequent operations within the current task.
+
+**Syntax:** `none set_task_perms(obj perms)`
+
 **Arguments:**
 
-- : The permission level or object to set for the current task `permissions`
+- `perms`: The object whose permissions should be adopted by the current task
+
+**Returns:** None
+
+**Permission Requirements:**
+
+- If the caller is a wizard, they can set task permissions to any object
+- If the caller is not a wizard, they can only set task permissions to themselves (`perms` must equal `caller_perms()`)
+
+**Examples:**
+
+```moo
+// Wizard changing task permissions to another object
+if (caller_perms() in wizards())
+    set_task_perms(#100);  // Now running with #100's permissions
+    // Subsequent operations use #100's permissions
+endif
+
+// Non-wizard can only set permissions to themselves (redundant but valid)
+set_task_perms(caller_perms());
+
+// Typical pattern: temporarily elevate permissions
+old_perms = caller_perms();
+if (old_perms in wizards())
+    set_task_perms(system_object);  // Use system permissions
+    // Do privileged operations...
+    set_task_perms(old_perms);      // Restore original permissions
+endif
+```
+
+**Errors:**
+
+- `E_PERM`: Raised if a non-wizard tries to set permissions to an object other than themselves
+- `E_TYPE`: Raised if the argument is not an object
+- `E_ARGS`: Raised if the wrong number of arguments is provided
+
+**Notes:**
+
+- This affects all subsequent permission checks within the current task
+- The change persists until the task completes or `set_task_perms()` is called again
+- Commonly used by system verbs to temporarily elevate or change permissions
+- Use `caller_perms()` to check current task permissions after calling this function
 
 ### `callers`
 
