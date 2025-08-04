@@ -39,8 +39,36 @@
 
 ### `caller_perms`
 
-**Description:** Returns the permissions of the calling entity.  
+**Description:** Returns the object representing the permissions of the calling task. This is the object whose
+permissions are being used to execute the current code, which may differ from the object that defined the verb being
+executed.
+
+**Syntax:** `obj caller_perms()`
+
 **Arguments:** None
+
+**Returns:** An object representing the current task's permissions
+
+**Permission Requirements:** None - available to all users
+
+**Examples:**
+
+```moo
+// Check if the caller has wizard permissions
+if (caller_perms() in {#1, #2})  // Assuming #1 and #2 are wizards
+    // Do wizard-only operation
+endif
+
+// Log who is calling this verb
+server_log("Verb called by: " + tostr(caller_perms()));
+```
+
+**Notes:**
+
+- The caller permissions determine what operations the current task can perform
+- This may be different from `this` (the object the verb is defined on)
+- Use `set_task_perms()` to change the task permissions if you have appropriate privileges
+- Commonly used for permission checks in verbs that need to validate caller identity
 
 ### `set_task_perms`
 
@@ -94,8 +122,9 @@ have negative IDs (e.g., #-123) and represent the physical connection or line to
   requires wizard permissions or must be the caller's own object.
 
 **Returns:** A list of lists, where each inner list contains connection details:
+
 - Index 0: The connection object (negative ID)
-- Index 1: The hostname/connection name (string)  
+- Index 1: The hostname/connection name (string)
 - Index 2: The idle time in seconds (float)
 - Index 3: The acceptable content types for this connection (list of strings/symbols)
 
@@ -130,9 +159,9 @@ connections()
 - Both connection and player objects can be used with `notify()` and other functions
 - The function now returns enriched connection information including hostname and idle time
 - **Content types** indicate what formats each connection can handle:
-  - Telnet connections: `["text/plain", "text/markdown"]`
-  - Web connections: `["text/plain", "text/html", "text/djot"]` 
-  - Default connections: `["text/plain"]`
+    - Telnet connections: `["text/plain", "text/markdown"]`
+    - Web connections: `["text/plain", "text/html", "text/djot"]`
+    - Default connections: `["text/plain"]`
 
 ### `queued_tasks`
 
