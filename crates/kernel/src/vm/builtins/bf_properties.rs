@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Builtin functions for property manipulation and introspection.
+
 use moor_common::model::{PropAttrs, PropFlag, prop_flags_string};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
@@ -24,8 +26,8 @@ use crate::vm::builtins::BfErr::{Code, ErrValue};
 use crate::vm::builtins::BfRet::{Ret, RetNil};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
-// property_info (obj <object>, str <prop-name>)              => list\
-//  {<owner>, <perms> }
+/// MOO: `list property_info(obj object, symbol prop_name)`
+/// Returns property information as `{owner, perms}`.
 fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
@@ -94,6 +96,8 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
     })
 }
 
+/// MOO: `none set_property_info(obj object, symbol prop_name, list info)`
+/// Sets property information from a `{owner, perms}` list.
 fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(ErrValue(
@@ -122,6 +126,8 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_empty_list()))
 }
 
+/// MOO: `bool is_clear_property(obj object, symbol prop_name)`
+/// Returns true if the property is clear (has no local value).
 fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
@@ -137,6 +143,8 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(is_clear)))
 }
 
+/// MOO: `none clear_property(obj object, symbol prop_name)`
+/// Clears the local value of a property, reverting to inherited value.
 fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
@@ -152,7 +160,8 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_empty_list()))
 }
 
-// add_property (obj <object>, str <prop-name>, <value>, list <info>) => none
+/// MOO: `none add_property(obj object, symbol prop_name, any value, list info)`
+/// Adds a new property with the given value and info.
 fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 4 {
         return Err(Code(E_ARGS));
@@ -191,6 +200,8 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(RetNil)
 }
 
+/// MOO: `none delete_property(obj object, symbol prop_name)`
+/// Removes a property from an object.
 fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
