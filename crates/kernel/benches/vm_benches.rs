@@ -45,7 +45,13 @@ fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());
     let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
-        .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
+        .create_object(
+            &SYSTEM_OBJECT,
+            &NOTHING,
+            &SYSTEM_OBJECT,
+            BitEnum::all(),
+            None,
+        )
         .unwrap();
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     ws_source
