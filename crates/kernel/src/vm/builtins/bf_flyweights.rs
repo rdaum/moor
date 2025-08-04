@@ -11,12 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Builtin functions for flyweight manipulation and introspection.
+
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_PERM, E_TYPE, Sequence, v_flyweight, v_map, v_sym};
 
-/// slots(flyweight) - returns the set of slots on the flyweight as a map
+/// MOO: `map slots(flyweight f)`
+/// Returns the set of slots on the flyweight as a map.
 fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
         return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
@@ -47,8 +50,8 @@ fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(map))
 }
 
-// remove_slot(flyweight, symbol) - return copy of the same flyweight but with the slot of `symbol` name removed.
-// No error is returned if the slot isn't present.
+/// MOO: `flyweight remove_slot(flyweight f, symbol slot_name)`
+/// Returns copy of flyweight with the specified slot removed.
 fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
         return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
@@ -92,7 +95,8 @@ fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(f))
 }
 
-/// add_slot(flyweight, key, value) - return copy of the same flyweight but with the slot of `key` name added or updated.
+/// MOO: `flyweight add_slot(flyweight f, symbol key, any value)`
+/// Returns copy of flyweight with the slot added or updated.
 fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
         return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));

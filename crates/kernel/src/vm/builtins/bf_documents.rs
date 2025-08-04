@@ -26,21 +26,10 @@ use tracing::error;
 use xml::EmitterConfig;
 use xml::reader::XmlEvent;
 
-/// Uses xml-rs to parse a string into various data structures representing the XML.
-///
-/// Arguments:
-/// 1. xml_string: The XML string to parse
-/// 2. result_type (optional): Integer specifying the result format:
-///    - VarType::TYPE_FLYWEIGHT (15): Original flyweight format
-///    - VarType::TYPE_LIST (4): List format like {"tag", {"attr", "value"}, ...contents...}
-///    - VarType::TYPE_MAP (10): Map format with list structure like {"tag", [attrs], content}
-///      (Defaults to LIST format (4) if not specified.)
-/// 3. tag_map (optional): Only used for flyweight format - maps tag names to objects
-///
-/// For flyweight format, delegates are resolved as follows:
-/// a) For each tag, there should be an object: $tag_<tag> for that tag name,
-/// b) Alternatively, if a map is provided as the third argument, the tag name is looked up
-///    in the map, and the object is resolved from that.
+/// MOO: `any xml_parse(str xml_string [, int result_type] [, map tag_map])`
+/// Parses XML string into various data structures.
+/// Result type: 4=list format, 10=map format, 15=flyweight format (default: list).
+/// For flyweight format, tag_map maps tag names to objects.
 fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
@@ -562,28 +551,10 @@ where
     Ok(tags)
 }
 
-/// to_xml(root_element, [tag map]) -> string
-///
-/// Turn a tree of flyweights or lists into an XML document.
-///
-/// The first argument can be either:
-/// 1. A flyweight (original behavior):
-///    - delegate object with a tag property OR there's a second map argument that maps object ids to tags
-///    - attributes property that is a map of strings to string or numbers
-///    - any children must be either other valid flyweights, or string values
-///
-/// 2. A list in one of these formats:
-///    - {"tag", {"attr", "value"}, ...contents...} - strings for tag/attr names
-///    - {'tag, {'attr, "value"}, ...contents...} - symbols for tag/attr names  
-///    - {'tag, ['attr -> "value"], ...contents...} - symbols with map for attributes
-///    
-/// List format details:
-///  - First element: tag name (string or symbol)
-///  - Subsequent elements can be:
-///    - Two-element lists: {"attr", "value"} or {'attr, "value"} (attributes)
-///    - Maps: ['attr -> "value"] (attributes)
-///    - Strings: text content
-///    - Other lists: nested XML elements (recursive)
+/// MOO: `str to_xml(any root_element [, map tag_map])`
+/// Converts a tree of flyweights or lists into an XML document.
+/// List format: {"tag", {"attr", "value"}, ...contents...} or with symbols/maps.
+/// For flyweights, tag_map maps object IDs to tag names.
 fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 && bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
@@ -712,7 +683,8 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
     Ok(output_as_string)
 }
 
-/// Convert a MOO value to a JSON string
+/// MOO: `str generate_json(any value)`
+/// Converts a MOO value to a JSON string.
 fn bf_generate_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
@@ -795,7 +767,8 @@ fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
     }
 }
 
-/// Parse a JSON string into a MOO value
+/// MOO: `any parse_json(str json_string)`
+/// Parses a JSON string into a MOO value.
 fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));

@@ -11,11 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Builtin functions for map operations and manipulation.
+
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence};
 use moor_var::{Var, Variant, v_list};
-/// Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
+/// MOO: `map mapdelete(map m, any key)`
+/// Returns a copy of map with the value corresponding to key removed.
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapdelete() takes 2 arguments")));
@@ -43,6 +46,8 @@ fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(nm))
 }
 
+/// MOO: `list mapkeys(map m)`
+/// Returns a list of all keys in the map.
 fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapkeys() takes 1 argument")));
@@ -59,6 +64,8 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(v_list(&keys)))
 }
 
+/// MOO: `list mapvalues(map m)`
+/// Returns a list of all values in the map.
 fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapvalues() takes 1 argument")));
@@ -75,6 +82,8 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(v_list(&values)))
 }
 
+/// MOO: `bool maphaskey(map m, any key)`
+/// Returns true if the map contains the specified key.
 fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("maphaskey() takes 2 arguments")));

@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Builtin functions for Age encryption (modern file encryption).
+
 use std::io::Write;
 use std::str::FromStr;
 
@@ -31,18 +33,9 @@ use moor_var::{E_ARGS, Sequence};
 use moor_var::{E_INVARG, E_TYPE, Variant};
 use moor_var::{v_list, v_string};
 
-/// Function: list age_generate_keypair()
-///
-/// Generates a new X25519 keypair for use with age encryption.
-/// Returns a list containing two strings: the public key and the private key.
-/// Both are encoded as Bech32 strings (age1... for public keys, AGE-SECRET-KEY-1... for private keys).
-///
-/// Example:
-/// ```moo
-/// keypair = age_generate_keypair();
-/// public_key = keypair[1];
-/// private_key = keypair[2];
-/// ```
+/// MOO: `list age_generate_keypair()`
+/// Generates a new X25519 keypair for age encryption. Programmer-only function.
+/// Returns {public_key, private_key} as Bech32-encoded strings.
 fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(BfErr::ErrValue(
@@ -65,21 +58,9 @@ fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(v_list(&[v_string(public_key), v_string(private_key)])))
 }
 
-/// Function: str age_encrypt(str message, list recipients)
-///
-/// Encrypts a message using age encryption for one or more recipients.
-///
-/// Arguments:
-/// - message: The string to encrypt
-/// - recipients: A list of recipient public keys (either age X25519 keys or SSH public keys)
-///
-/// Returns:
-/// - A base64-encoded encrypted message
-///
-/// Example:
-/// ```moo
-/// encrypted = age_encrypt("secret message", {"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"});
-/// ```
+/// MOO: `str age_encrypt(str message, list recipients)`
+/// Encrypts message using age encryption for one or more recipients. Programmer-only function.
+/// Recipients can be age X25519 keys or SSH public keys. Returns base64-encoded encrypted data.
 fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -187,21 +168,9 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(encoded)))
 }
 
-/// Function: str age_decrypt(str encrypted_message, list private_keys)
-///
-/// Decrypts an age-encrypted message using one or more private keys.
-///
-/// Arguments:
-/// - encrypted_message: A base64-encoded encrypted message
-/// - private_keys: A list of private keys to try for decryption
-///
-/// Returns:
-/// - The decrypted message as a string
-///
-/// Example:
-/// ```moo
-/// decrypted = age_decrypt(encrypted, {"AGE-SECRET-KEY-1QUWM2RNFSA5NQVVMRKD7MMVWWGVPZ2F4XPKQ3RZWDWGWXQUKXPFQSZJ9DA"});
-/// ```
+/// MOO: `str age_decrypt(str encrypted_message, list private_keys)`
+/// Decrypts age-encrypted message using one or more private keys. Programmer-only function.
+/// Encrypted message should be base64-encoded. Returns decrypted plaintext string.
 fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(

@@ -417,7 +417,7 @@ const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 /// Creates and returns a new object whose parent is parent and whose owner is as described below.
-/// MOO: `obj create(obj parent [, obj owner] [, int is-anon] [, list init-args])`
+/// MOO: `obj create(obj parent [, obj owner] [, bool is_anon] [, list init_args])`
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 4 {
         return Err(BfErr::ErrValue(
@@ -441,12 +441,10 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     // Third argument is "is-anon" - we don't support this feature, return error if true
-    if bf_args.args.len() >= 3 {
-        if bf_args.args[2].is_true() {
-            return Err(BfErr::ErrValue(
-                E_INVARG.msg("anonymous objects are not supported"),
-            ));
-        }
+    if bf_args.args.len() >= 3 && bf_args.args[2].is_true() {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("anonymous objects are not supported"),
+        ));
     }
 
     // Fourth argument is "init-args" - must be a list if provided

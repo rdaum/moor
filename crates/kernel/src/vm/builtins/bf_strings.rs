@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Builtin functions for string manipulation, hashing, and encoding operations.
+
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
 use base64::Engine;
@@ -27,6 +29,7 @@ use tracing::warn;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
+/// Internal helper for string substitution with case sensitivity control.
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
     let mut source = subject;
@@ -51,7 +54,8 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     result
 }
 
-//Function: str strsub (str subject, str what, str with [, case-matters])
+/// MOO: `str strsub(str subject, str what, str with [, bool case_matters])`
+/// Substitutes all occurrences of 'what' in 'subject' with 'with'.
 fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 3 {
         false
@@ -76,6 +80,7 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Internal helper for finding first occurrence of substring.
 fn str_index(subject: &str, what: &str, case_matters: bool) -> i64 {
     if case_matters {
         subject.find(what).map(|i| i as i64 + 1).unwrap_or(0)
@@ -88,6 +93,7 @@ fn str_index(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
+/// Internal helper for finding last occurrence of substring.
 fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     if case_matters {
         subject.rfind(what).map(|i| i as i64 + 1).unwrap_or(0)
@@ -100,6 +106,8 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
+/// MOO: `int index(str subject, str what [, bool case_matters])`
+/// Returns the position of the first occurrence of 'what' in 'subject' (1-based), or 0 if not found.
 fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
@@ -123,6 +131,8 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `int rindex(str subject, str what [, bool case_matters])`
+/// Returns the position of the last occurrence of 'what' in 'subject' (1-based), or 0 if not found.
 fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
@@ -146,6 +156,8 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `int strcmp(str str1, str str2)`
+/// Compares two strings lexicographically. Returns -1, 0, or 1.
 fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -159,9 +171,9 @@ fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Generate a random cryptographically secure salt string, for use with crypt & argon2
-/// Note: This is not (for now) compatible with the `salt` function in ToastStunt, which takes
-/// two arguments.
+/// MOO: `str salt()`
+/// Generates a random cryptographically secure salt string for use with crypt & argon2.
+/// Note: Not compatible with ToastStunt's salt function which takes two arguments.
 fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(BfErr::Code(E_ARGS));
@@ -173,15 +185,10 @@ fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(salt))
 }
 
-/*
-str crypt (str text [, str salt])
-
-Encrypts the given text using the standard UNIX encryption method. If provided, salt should be a
-string at least two characters long, the first two characters of which will be used as the extra
-encryption "salt" in the algorithm. If salt is not provided, a random pair of characters is used.
- In any case, the salt used is also returned as the first two characters of the resulting encrypted
- string.
-*/
+/// MOO: `str crypt(str text [, str salt])`
+/// Encrypts text using standard UNIX encryption method.
+/// If salt is provided, uses first two characters as encryption salt.
+/// If no salt provided, uses random pair. Salt is returned as first two characters of result.
 fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -209,6 +216,8 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `str string_hash(str text)`
+/// Returns MD5 hash of the given string in uppercase hexadecimal format.
 fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
@@ -224,11 +233,14 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `str binary_hash(binary data)`
+/// Binary hash function - currently not implemented.
 fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Err(BfErr::Code(E_INVARG))
 }
 
-// password (string), salt (string), iterations, memory, parallelism
+/// MOO: `str argon2(str password, str salt [, int iterations] [, int memory] [, int parallelism])`
+/// Generates Argon2 hash with specified parameters. Wizard-only function.
 fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Must be wizard.
     bf_args
@@ -295,7 +307,8 @@ fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(hash.to_string())))
 }
 
-// password, salt
+/// MOO: `bool argon2_verify(str hashed_password, str password)`
+/// Verifies a password against an Argon2 hash. Wizard-only function.
 fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Must be wizard.
     bf_args
@@ -325,10 +338,8 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(validated)))
 }
 
-/// Function: str encode_base64(str text)
-///
-/// Encodes the given string using Base64 encoding.
-/// Returns the Base64-encoded string.
+/// MOO: `str encode_base64(str|binary data)`
+/// Encodes the given string or binary data using Base64 encoding.
 fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
@@ -344,11 +355,9 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_string(encoded)))
 }
 
-/// Function: binary decode_base64(str encoded_text [, int url_safe])
-///
-/// Decodes the given Base64-encoded string.
-/// Returns the decoded binary data. If the input is not valid Base64, E_INVARG is raised.
-/// If url_safe is true (non-zero), uses URL-safe Base64 decoding. Defaults to true.
+/// MOO: `binary decode_base64(str encoded_text [, bool url_safe])`
+/// Decodes Base64-encoded string to binary data.
+/// If url_safe is true, uses URL-safe Base64 decoding (defaults to true).
 fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -381,7 +390,8 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_binary(decoded_bytes)))
 }
 
-// str string_hmac(str text, str key [, str algo [, binary]])
+/// MOO: `str string_hmac(str text, str key [, str algorithm] [, bool binary_output])`
+/// Computes HMAC of text using key with specified algorithm (SHA1, SHA256).
 fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg_count = bf_args.args.len();
     if !(2..=4).contains(&arg_count) {

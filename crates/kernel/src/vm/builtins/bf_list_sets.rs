@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Builtin functions for list manipulation, set operations, and regular expression matching.
+
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_common::matching::{
@@ -29,6 +31,8 @@ use std::sync::Mutex;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 
+/// MOO: `int is_member(any value, list|map container)`
+/// Returns non-zero if value is a member of container, zero otherwise.
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -58,6 +62,8 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `list listinsert(list list, any value [, int index])`
+/// Inserts value into list at the specified index (1-based), or appends if no index given.
 fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -76,6 +82,8 @@ fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 
+/// MOO: `list listappend(list list, any value [, int index])`
+/// Appends value to list at the specified index (0-based), or appends at end if no index given.
 fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -94,6 +102,8 @@ fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 
+/// MOO: `list listdelete(list list, int index)`
+/// Removes the element at the specified index (1-based) from list.
 fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -105,6 +115,8 @@ fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(BfErr::ErrValue)?))
 }
 
+/// MOO: `list listset(list list, any value, int index)`
+/// Sets the element at the specified index (1-based) in list to value.
 fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -120,6 +132,8 @@ fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(BfErr::ErrValue)?))
 }
 
+/// MOO: `list setadd(list set, any value)`
+/// Adds value to set if not already present, treating list as a set.
 fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -132,6 +146,8 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(list.set_add(&value).map_err(BfErr::ErrValue)?))
 }
 
+/// MOO: `list setremove(list set, any value)`
+/// Removes value from set, treating list as a set.
 fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -268,7 +284,7 @@ fn perform_regex_match(
     Ok(Some((overall, match_vec)))
 }
 
-/// Common code for both match and rmatch.
+/// Common code for both match and rmatch functions.
 fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -307,10 +323,14 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
         bf_args.args[0].clone(),
     ])))
 }
+/// MOO: `list match(str string, str pattern [, bool case_matters])`
+/// Searches for pattern in string using MOO-style regular expressions.
 fn bf_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, false)
 }
 
+/// MOO: `list rmatch(str string, str pattern [, bool case_matters])`
+/// Reverse searches for pattern in string using MOO-style regular expressions.
 fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, true)
 }
@@ -518,6 +538,9 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     Ok(result)
 }
 
+/// MOO: `str pcre_replace(str target, str replace_str)`
+/// Performs PCRE-style replacement using syntax like 's/pattern/replacement/flags'.
+/// Supports 'g' (global) and 'i' (case-insensitive) flags.
 fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // pcre_substitute(target, replace_str)
     // Given a replace_str like 's/frob/dog', and a target like "pet the frobs"
@@ -546,23 +569,11 @@ fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(err) => Err(BfErr::ErrValue(err)),
     }
 }
-/*
-From Toast:
-
-Function: pcre_match
-
-pcre_match -- The function pcre_match() searches subject for pattern using the Perl Compatible Regular Expressions library.
-
-LIST pcre_match(STR subject, STR pattern [, ?case matters=0] [, ?repeat until no matches=1])
-
-The return value is a list of maps containing each match. Each returned map will have a key which corresponds to either a named capture group or
- the number of the capture group being matched. The full match is always found in the key "0". The value of each key will be another map
-  containing the keys 'match' and 'position'. Match corresponds to the text that was matched and position will return the indices of the substring within subject.
-
- In Moor, if maps features is disabled, the return is assoc-lists, which are lists of lists of two elements, the first being the key and the second being the value.
-
- => {["0" -> ["match" -> "09/12/1999", "position" -> {1, 10}], "1" -> ["match" -> "09", "position" -> {1, 2}], "2" -> ["match" -> "12", "position" -> {4, 5}], "3" -> ["match" -> "1999", "position" -> {7, 10}]], ["0" -> ["match" -> "01/21/1952", "position" -> {30, 39}], "1" -> ["match" -> "01", "position" -> {30, 31}], "2" -> ["match" -> "21", "position" -> {33, 34}], "3" -> ["match" -> "1952", "position" -> {36, 39}]]}
- */
+/// MOO: `list pcre_match(str subject, str pattern [, bool case_matters] [, bool repeat])`
+/// Searches subject for pattern using Perl Compatible Regular Expressions.
+/// Returns a list of maps (or assoc-lists if maps disabled) containing each match.
+/// Each map has keys for capture groups, with "0" being the full match.
+/// Values contain 'match' (matched text) and 'position' (start/end indices).
 fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
@@ -674,6 +685,8 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
     Ok(result)
 }
 
+/// MOO: `str substitute(str template, list match_data)`
+/// Substitutes %N patterns in template with matched substrings from match_data.
 fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -880,6 +893,8 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `any complex_match(str token, list targets [, bool fuzzy])`
+/// Performs complex pattern matching with fuzzy matching support.
 fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
