@@ -31,7 +31,7 @@ use crate::config::{Config, ImportExportFormat};
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::task::Task;
 use crate::tasks::task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition};
-use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
+use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, WorkerInfo};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::workers::{WorkerRequest, WorkerResponse};
 use crate::tasks::world_state_action::{WorldStateAction, WorldStateResponse};
@@ -983,6 +983,12 @@ impl Scheduler {
                     error!(?e, "Could not send dump object reply to requester");
                 }
             }
+            TaskControlMsg::GetWorkersInfo { reply } => {
+                let result = self.handle_get_workers_info();
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send workers info reply to requester");
+                }
+            }
         }
     }
 
@@ -1043,6 +1049,49 @@ impl Scheduler {
         Ok(lines)
     }
 
+    fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {
+        let Some(workers_sender) = self.worker_request_send.as_ref() else {
+            warn!("No workers configured for scheduler; returning empty worker list");
+            return vec![];
+        };
+
+        let request_id = Uuid::new_v4();
+
+        // Send the workers info request
+        if let Err(e) = workers_sender.send(WorkerRequest::GetWorkersInfo { request_id }) {
+            error!("Failed to send workers info request: {e}");
+            return vec![];
+        }
+
+        // Wait for the response (with timeout)
+        let Some(worker_recv) = self.worker_request_recv.as_ref() else {
+            error!("No worker response channel configured");
+            return vec![];
+        };
+
+        match worker_recv.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(WorkerResponse::WorkersInfo {
+                request_id: resp_id,
+                workers_info,
+            }) => {
+                if resp_id == request_id {
+                    workers_info
+                } else {
+                    warn!("Received workers info response with mismatched ID");
+                    vec![]
+                }
+            }
+            Ok(other_response) => {
+                warn!("Received unexpected response type: {:?}", other_response);
+                vec![]
+            }
+            Err(e) => {
+                warn!("Timeout or error waiting for workers info response: {e}");
+                vec![]
+            }
+        }
+    }
+
     fn handle_immediate_wake(&mut self, task_id: TaskId) {
         // Handle immediate wake task from channel
         // Check if task still exists in suspended state and wake it
@@ -1078,6 +1127,15 @@ impl Scheduler {
                 request_id,
                 response,
             } => (request_id, v_list(&response)),
+            WorkerResponse::WorkersInfo {
+                request_id: _,
+                workers_info: _,
+            } => {
+                // Workers info responses are handled synchronously in handle_get_workers_info
+                // This shouldn't happen in the normal worker response flow
+                warn!("Received unexpected WorkersInfo response in handle_worker_response");
+                return;
+            }
         };
 
         // Find the suspended task for this request.

@@ -603,6 +603,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             ],
             true,
         ),
+        mk_builtin("workers", Q(0), Q(0), vec![], true),
     ]
 }
 

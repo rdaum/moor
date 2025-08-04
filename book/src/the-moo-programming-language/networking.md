@@ -294,3 +294,64 @@ In this example, the `curl_worker` is being asked to perform a GET request to th
 indicating that the response should be in JSON format. The `worker_request()` function will then suspend the current
 task
 until the worker completes the request and then wake it to return the result.
+
+### The `workers()` Function
+
+The `workers()` builtin function provides information about all available workers and their current state. This is 
+useful for monitoring worker health, debugging worker-related issues, and understanding system capacity.
+
+**Syntax**: `workers()`
+
+**Returns**: A list of lists containing worker information. Each inner list contains:
+- Index 1: The worker type (string or symbol, e.g., "curl")
+- Index 2: The number of workers of this type currently active (integer)
+- Index 3: The total number of requests currently queued across all workers of this type (integer) 
+- Index 4: The average response time in milliseconds (float, currently always 0.0)
+- Index 5: The time in seconds since the last ping from workers of this type (float)
+
+**Permission Requirements**: Wizard-only function. Raises `E_PERM` if called by a non-wizard.
+
+**Examples**:
+
+```moo
+// Check all available workers
+workers()
+=> {{"curl", 2, 0, 0.0, 1.5}, {"email", 1, 3, 0.0, 2.1}}
+// Two curl workers, no queued requests, last ping 1.5 seconds ago
+// One email worker, 3 queued requests, last ping 2.1 seconds ago
+
+// Monitor worker health in a loop
+for worker_info in (workers())
+    {worker_type, count, queue_size, avg_time, last_ping} = worker_info;
+    if (last_ping > 30.0)
+        server_log(tostr("WARNING: ", worker_type, " workers haven't pinged in ", 
+                         last_ping, " seconds"), 1);
+    endif
+    if (queue_size > 10)
+        server_log(tostr("WARNING: ", worker_type, " workers have ", 
+                         queue_size, " queued requests"), 1);
+    endif
+endfor
+
+// Check if a specific worker type is available before making requests
+curl_workers = {};
+for info in (workers())
+    if (info[1] == "curl")
+        curl_workers = {@curl_workers, info};
+    endif
+endfor
+if (length(curl_workers) == 0)
+    return E_INVARG;  // No curl workers available
+endif
+result = worker_request("curl", {"GET", "https://api.example.com/status"});
+```
+
+The `workers()` function is particularly useful for:
+
+- **System monitoring**: Check if workers are healthy and responsive
+- **Load balancing**: Understand queue sizes before sending requests  
+- **Debugging**: Diagnose worker-related issues when requests fail
+- **Capacity planning**: Monitor worker utilization over time
+
+**Note**: The average response time field is currently not implemented and always returns 0.0. This may be implemented
+in future versions to provide more detailed performance metrics.

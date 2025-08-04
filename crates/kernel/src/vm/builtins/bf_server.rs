@@ -2086,6 +2086,46 @@ fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(make_cache_stats_list(&ANCESTRY_CACHE_STATS)))
 }
 
+/// Returns information about all available worker types and their current state.
+/// Wizard-only function that provides insights into worker queue sizes, response times, etc.
+/// MOO: `list workers()`
+fn bf_workers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("workers() does not take any arguments"),
+        ));
+    }
+
+    // Must be wizard
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    let workers_info = bf_args.task_scheduler_client.workers_info();
+
+    // Convert worker information to MOO list format
+    // Each entry: [worker_type, worker_count, total_queue_size, avg_response_time, last_ping_ago]
+    let result = workers_info.iter().map(|worker_info| {
+        let worker_type = if bf_args.config.symbol_type {
+            v_sym(worker_info.worker_type)
+        } else {
+            v_arc_string(worker_info.worker_type.as_arc_string())
+        };
+
+        v_list(&[
+            worker_type,
+            v_int(worker_info.worker_count as i64),
+            v_int(worker_info.total_queue_size as i64),
+            v_float(worker_info.avg_response_time_ms),
+            v_float(worker_info.last_ping_ago_secs),
+        ])
+    });
+
+    Ok(Ret(v_list_iter(result)))
+}
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
     builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
@@ -2139,4 +2179,5 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("worker_request")] = Box::new(bf_worker_request);
     builtins[offset_for_builtin("connections")] = Box::new(bf_connections);
     builtins[offset_for_builtin("switch_player")] = Box::new(bf_switch_player);
+    builtins[offset_for_builtin("workers")] = Box::new(bf_workers);
 }

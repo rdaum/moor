@@ -26,6 +26,16 @@ use moor_var::Symbol;
 use moor_var::Var;
 use moor_var::{Error, Obj};
 
+/// Information about a worker type and its current state
+#[derive(Debug, Clone)]
+pub struct WorkerInfo {
+    pub worker_type: Symbol,
+    pub worker_count: usize,
+    pub total_queue_size: usize,
+    pub avg_response_time_ms: f64,
+    pub last_ping_ago_secs: f64,
+}
+
 /// A handle for talking to the scheduler from within a task.
 #[derive(Clone)]
 pub struct TaskSchedulerClient {
@@ -337,6 +347,16 @@ impl TaskSchedulerClient {
             .recv()
             .expect("Could not receive dump object reply -- scheduler shut down?")
     }
+
+    pub fn workers_info(&self) -> Vec<WorkerInfo> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((self.task_id, TaskControlMsg::GetWorkersInfo { reply }))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive workers info -- scheduler shut down?")
+    }
 }
 
 pub type ActiveTaskDescriptions = Vec<(TaskId, Obj, TaskStart)>;
@@ -432,6 +452,10 @@ pub enum TaskControlMsg {
     DumpObject {
         obj: Obj,
         reply: oneshot::Sender<Result<Vec<String>, Error>>,
+    },
+    /// Request information about all workers
+    GetWorkersInfo {
+        reply: oneshot::Sender<Vec<WorkerInfo>>,
     },
 }
 

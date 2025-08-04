@@ -59,6 +59,9 @@ pub trait WorkersMessageHandler: Send + Sync {
 
     /// Process a worker request from the scheduler
     fn process_worker_request(&self, request: WorkerRequest) -> Result<(), eyre::Error>;
+
+    /// Get information about all workers
+    fn get_workers_info(&self) -> Vec<moor_kernel::tasks::task_scheduler_client::WorkerInfo>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -412,6 +415,56 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 worker.requests.push((request_id, perms, request));
                 Ok(())
             }
+            WorkerRequest::GetWorkersInfo { request_id } => {
+                let workers_info = self.get_workers_info();
+                self.scheduler_send
+                    .send(WorkerResponse::WorkersInfo {
+                        request_id,
+                        workers_info,
+                    })
+                    .map_err(|e| eyre::eyre!("Failed to send workers info response: {e}"))?;
+                Ok(())
+            }
         }
+    }
+
+    fn get_workers_info(&self) -> Vec<moor_kernel::tasks::task_scheduler_client::WorkerInfo> {
+        use moor_kernel::tasks::task_scheduler_client::WorkerInfo;
+        use std::collections::HashMap;
+
+        let workers = self.workers.read().unwrap();
+        let now = std::time::Instant::now();
+
+        // Group workers by type and calculate statistics
+        let mut worker_stats: HashMap<moor_var::Symbol, (usize, usize, Vec<f64>)> = HashMap::new();
+
+        for worker in workers.values() {
+            let entry = worker_stats
+                .entry(worker.worker_type)
+                .or_insert((0, 0, Vec::new()));
+            entry.0 += 1; // worker_count
+            entry.1 += worker.requests.len(); // total_queue_size
+
+            // Calculate time since last ping in seconds
+            let last_ping_ago_secs = now.duration_since(worker.last_ping_time).as_secs_f64();
+            entry.2.push(last_ping_ago_secs);
+        }
+
+        // Convert to WorkerInfo structs
+        worker_stats
+            .into_iter()
+            .map(
+                |(worker_type, (worker_count, total_queue_size, ping_times))| {
+                    let last_ping_ago_secs = ping_times.iter().copied().fold(0.0f64, f64::max);
+                    WorkerInfo {
+                        worker_type,
+                        worker_count,
+                        total_queue_size,
+                        avg_response_time_ms: 0.0, // TODO: Implement response time tracking
+                        last_ping_ago_secs,
+                    }
+                },
+            )
+            .collect()
     }
 }
