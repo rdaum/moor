@@ -797,7 +797,13 @@ mod tests {
         let mut tx = db.new_world_state().unwrap();
 
         let sysobj = tx
-            .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
+            .create_object(
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::all(),
+                None,
+            )
             .unwrap();
         tx.update_property(
             &SYSTEM_OBJECT,

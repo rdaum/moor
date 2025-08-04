@@ -13,7 +13,7 @@ obj create(obj parent [, obj owner] [, int is-anon] [, list init-args])
 
 Creates and returns a new object whose parent is parent and whose owner is as described below. If the given parent is neither valid nor #-1, then E_INVARG is raised. The parent object must be valid and must be usable as a parent (i.e., its `f` bit must be true) or else the programmer must own parent or be a wizard; otherwise E_PERM is raised. If the `f` bit is not present, E_PERM is raised unless the programmer owns parent or is a wizard.
 
-The `is-anon` argument is accepted for backwards compatibility but is ignored.
+The `is-anon` argument is accepted for backwards compatibility. If provided and true, `E_INVARG` is raised as anonymous objects are not supported.
 
 E_PERM is also raised if owner is provided and not the same as the programmer, unless the programmer is a wizard.
 
@@ -26,6 +26,19 @@ created object. Note that no object number is ever reused, even if the object wi
 
 The owner of the new object is either the programmer (if owner is not provided), the new object itself (if owner was
 given and is invalid, or owner (otherwise).
+
+### `create_at`
+
+```
+obj create_at(obj id, obj parent [, obj owner] [, list init-args])
+```
+
+Creates and returns a new object at the specified object ID. This function is wizard-only and allows creating objects
+with specific object numbers rather than using the next available number.
+
+If the specified object ID already exists, E_PERM is raised. The parent, owner, and init-args parameters work exactly
+the same as in create(). After the new object is created, its initialize verb, if any, is called with the provided
+init-args.
 
 The other built-in properties of the new object are initialized as follows:
 

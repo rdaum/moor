@@ -22,8 +22,8 @@ use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_str, v_sym};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
+use moor_var::{Obj, v_int, v_obj};
 use moor_var::{Sequence, Symbol, v_list};
-use moor_var::{v_int, v_obj};
 
 use crate::vm::builtins::BfRet::{Ret, RetNil, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
@@ -38,10 +38,62 @@ lazy_static! {
     static ref RECYCLE_SYM: Symbol = Symbol::mk("recycle");
     static ref ACCEPT_SYM: Symbol = Symbol::mk("accept");
 }
-/*
-Function: int valid (obj object)
-Returns a non-zero integer (i.e., a true value) if object is a valid object (one that has been created and not yet recycled) and zero (i.e., a false value) otherwise.
-*/
+
+fn create_object_with_initialize(
+    bf_args: &mut BfCallState<'_>,
+    parent: &Obj,
+    owner: &Obj,
+    init_args: Option<&List>,
+    obj_id: Option<Obj>,
+) -> Result<BfRet, BfErr> {
+    let new_obj = bf_args
+        .world_state
+        .create_object(
+            &bf_args.task_perms_who(),
+            parent,
+            owner,
+            BitEnum::new(),
+            obj_id,
+        )
+        .map_err(world_state_bf_err)?;
+
+    // Try to call :initialize on the new object
+    let Ok((program, resolved_verb)) = bf_args.world_state.find_method_verb_on(
+        &bf_args.task_perms_who(),
+        &new_obj,
+        *INITIALIZE_SYM,
+    ) else {
+        return Ok(Ret(v_obj(new_obj)));
+    };
+
+    let bf_frame = bf_args.bf_frame_mut();
+    bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
+    bf_frame.bf_trampoline_arg = Some(v_obj(new_obj));
+
+    let initialize_args = if let Some(init_args) = init_args {
+        init_args.clone()
+    } else {
+        List::mk_list(&[])
+    };
+
+    let ve = VerbExecutionRequest {
+        permissions: bf_args.task_perms_who(),
+        resolved_verb,
+        program,
+        call: Box::new(VerbCall {
+            verb_name: *INITIALIZE_SYM,
+            location: v_obj(new_obj),
+            this: v_obj(new_obj),
+            player: bf_args.exec_state.top().player,
+            args: initialize_args,
+            argstr: "".to_string(),
+            caller: bf_args.exec_state.top().this.clone(),
+        }),
+        command: None,
+    };
+    Ok(VmInstr(DispatchVerb(Box::new(ve))))
+}
+/// Returns true if object is a valid object (created and not yet recycled).
 fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("valid() takes 1 argument")));
@@ -213,9 +265,7 @@ fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&ancestors)))
 }
 
-/*
-Syntax: isa (obj <object>, obj <possible_ancestor>) => int
-*/
+/// Returns true if object is a descendant of possible_ancestor.
 fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("isa() takes 2 arguments")));
@@ -349,9 +399,6 @@ fn bf_locations(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&locations)))
 }
 
-/*
-Syntax:  create (obj <parent> [, obj <owner>])   => obj
- */
 const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
@@ -377,9 +424,13 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.task_perms_who()
     };
 
-    // Third argument is "is-anon" - we ignore it but validate it exists
+    // Third argument is "is-anon" - we don't support this feature, return error if true
     if bf_args.args.len() >= 3 {
-        // is-anon argument exists but is ignored
+        if bf_args.args[2].is_true() {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("anonymous objects are not supported"),
+            ));
+        }
     }
 
     // Fourth argument is "init-args" - must be a list if provided
@@ -402,55 +453,12 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match tramp {
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
-            let new_obj = bf_args
-                .world_state
-                .create_object(&bf_args.task_perms_who(), &parent, &owner, BitEnum::new())
-                .map_err(world_state_bf_err)?;
-
-            // We're going to try to call :initialize on the new object.
-            // Then trampoline into the done case.
-            // If :initialize doesn't exist, we'll just skip ahead.
-            let Ok((program, resolved_verb)) = bf_args.world_state.find_method_verb_on(
-                &bf_args.task_perms_who(),
-                &new_obj,
-                *INITIALIZE_SYM,
-            ) else {
-                return Ok(Ret(v_obj(new_obj)));
-            };
-
-            let bf_frame = bf_args.bf_frame_mut();
-            bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
-            bf_frame.bf_trampoline_arg = Some(v_obj(new_obj));
-
-            let initialize_args = if let Some(init_args) = init_args {
-                init_args.clone()
-            } else {
-                List::mk_list(&[])
-            };
-
-            let ve = VerbExecutionRequest {
-                permissions: bf_args.task_perms_who(),
-                resolved_verb,
-                program,
-                call: Box::new(VerbCall {
-                    verb_name: *INITIALIZE_SYM,
-                    location: v_obj(new_obj),
-                    this: v_obj(new_obj),
-                    player: bf_args.exec_state.top().player,
-                    args: initialize_args,
-                    argstr: "".to_string(),
-                    caller: bf_args.exec_state.top().this.clone(),
-                }),
-                command: None,
-            };
-            Ok(VmInstr(DispatchVerb(Box::new(ve))))
+            create_object_with_initialize(bf_args, &parent, &owner, init_args, None)
         }
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
-            // The trampoline argument is the object we just created.
             let Some(new_obj) = bf_args.bf_frame().bf_trampoline_arg.clone() else {
                 panic!("Missing/invalid trampoline argument for bf_create");
             };
-
             Ok(Ret(new_obj))
         }
         _ => {
@@ -458,6 +466,82 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
+
+fn bf_create_at(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("create_at() takes 2 to 4 arguments"),
+        ));
+    }
+
+    // First argument is the object ID to create at
+    let Some(obj_id) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("create_at() first argument must be an object"),
+        ));
+    };
+
+    // Second argument is parent
+    let Some(parent) = bf_args.args[1].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("create_at() second argument must be an object"),
+        ));
+    };
+
+    // Third argument is owner (optional)
+    let owner = if bf_args.args.len() >= 3 {
+        let Some(owner) = bf_args.args[2].as_object() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("create_at() third argument must be an object"),
+            ));
+        };
+        owner
+    } else {
+        bf_args.task_perms_who()
+    };
+
+    // Fourth argument is "init-args" - must be a list if provided
+    let init_args = if bf_args.args.len() == 4 {
+        let Some(init_args) = bf_args.args[3].as_list() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("create_at() fourth argument must be a list"),
+            ));
+        };
+        Some(init_args)
+    } else {
+        None
+    };
+
+    // create_at is wizard-only
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms.check_wizard().map_err(world_state_bf_err)?;
+
+    let tramp = bf_args
+        .bf_frame_mut()
+        .bf_trampoline
+        .take()
+        .unwrap_or(BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE);
+
+    match tramp {
+        BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => create_object_with_initialize(
+            bf_args,
+            &parent,
+            &owner,
+            init_args,
+            Some(obj_id),
+        ),
+        BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
+            let Some(new_obj) = bf_args.bf_frame().bf_trampoline_arg.clone() else {
+                panic!("Missing/invalid trampoline argument for bf_create_at");
+            };
+            Ok(Ret(new_obj))
+        }
+        _ => {
+            panic!("Invalid trampoline for bf_create_at {tramp}")
+        }
+    }
+}
+
 /*
 Function: none recycle (obj object)
 The given object is destroyed, irrevocably. The programmer must either own object or be a wizard; otherwise, E_PERM is raised. If object is not valid, then E_INVARG is raised. The children of object are reparented to the parent of object. Before object is recycled, each object in its contents is moved to #-1 (implying a call to object's exitfunc verb, if any) and then object's `recycle' verb, if any, is called with no arguments.
@@ -1080,6 +1164,7 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
+    builtins[offset_for_builtin("create_at")] = Box::new(bf_create_at);
     builtins[offset_for_builtin("valid")] = Box::new(bf_valid);
     builtins[offset_for_builtin("verbs")] = Box::new(bf_verbs);
     builtins[offset_for_builtin("properties")] = Box::new(bf_properties);

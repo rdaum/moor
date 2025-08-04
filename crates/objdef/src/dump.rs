@@ -627,6 +627,7 @@ mod tests {
                     &Obj::mk_id(-1), // parent: nothing
                     &SYSTEM_OBJECT,  // owner: self
                     BitEnum::new(),  // flags: none
+                    None,
                 )
                 .unwrap();
             assert_eq!(system_obj, SYSTEM_OBJECT);

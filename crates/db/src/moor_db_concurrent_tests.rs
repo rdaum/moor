@@ -37,7 +37,13 @@ mod tests {
 
         // Create root object #0
         let _root = ws
-            .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::new())
+            .create_object(
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                None,
+            )
             .unwrap();
 
         // Create a few test objects
@@ -48,6 +54,7 @@ mod tests {
                     &SYSTEM_OBJECT,
                     &SYSTEM_OBJECT,
                     BitEnum::new(),
+                    None,
                 )
                 .unwrap();
             assert_eq!(obj.id().0, i);
@@ -253,13 +260,20 @@ mod tests {
                             &SYSTEM_OBJECT,
                             &SYSTEM_OBJECT,
                             BitEnum::new(),
+                            None,
                         )
                         .unwrap();
                     assert_eq!(parent.id().0, 6);
 
                     for i in 7..=10 {
                         let child = ws
-                            .create_object(&SYSTEM_OBJECT, &parent, &SYSTEM_OBJECT, BitEnum::new())
+                            .create_object(
+                                &SYSTEM_OBJECT,
+                                &parent,
+                                &SYSTEM_OBJECT,
+                                BitEnum::new(),
+                                None,
+                            )
                             .unwrap();
                         assert_eq!(child.id().0, i);
                     }
@@ -464,13 +478,26 @@ mod tests {
                             &SYSTEM_OBJECT,
                             &SYSTEM_OBJECT,
                             BitEnum::new(),
+                            None,
                         )
                         .unwrap();
                     let parent2 = ws
-                        .create_object(&SYSTEM_OBJECT, &parent1, &SYSTEM_OBJECT, BitEnum::new())
+                        .create_object(
+                            &SYSTEM_OBJECT,
+                            &parent1,
+                            &SYSTEM_OBJECT,
+                            BitEnum::new(),
+                            None,
+                        )
                         .unwrap();
                     let child = ws
-                        .create_object(&SYSTEM_OBJECT, &parent2, &SYSTEM_OBJECT, BitEnum::new())
+                        .create_object(
+                            &SYSTEM_OBJECT,
+                            &parent2,
+                            &SYSTEM_OBJECT,
+                            BitEnum::new(),
+                            None,
+                        )
                         .unwrap();
 
                     // Add verbs at different levels

@@ -213,6 +213,7 @@ impl WorldState for DbWorldState {
         parent: &Obj,
         owner: &Obj,
         flags: BitEnum<ObjFlag>,
+        id: Option<Obj>,
     ) -> Result<Obj, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.create_object);
         let is_wizard = self.perms(perms)?.check_is_wizard()?;
@@ -224,6 +225,13 @@ impl WorldState for DbWorldState {
             return Err(WorldStateError::ObjectPermissionDenied);
         }
 
+        // If a specific ID is requested, check if it already exists
+        if let Some(obj_id) = id {
+            if self.valid(&obj_id)? {
+                return Err(WorldStateError::ObjectAlreadyExists(obj_id));
+            }
+        }
+
         self.check_parent(perms, parent, owner)?;
 
         // TODO: ownership_quota support
@@ -231,7 +239,7 @@ impl WorldState for DbWorldState {
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
         let attrs = ObjAttrs::new(*owner, *parent, NOTHING, flags, "");
-        self.get_tx_mut().create_object(None, attrs)
+        self.get_tx_mut().create_object(id, attrs)
     }
 
     fn recycle_object(&mut self, perms: &Obj, obj: &Obj) -> Result<(), WorldStateError> {

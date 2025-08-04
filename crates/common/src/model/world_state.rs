@@ -89,6 +89,7 @@ impl WorldStateError {
     pub fn to_error(&self) -> Error {
         let err_code = match self {
             Self::ObjectNotFound(_) => E_INVIND,
+            Self::ObjectAlreadyExists(_) => E_PERM,
             Self::ObjectPermissionDenied
             | Self::VerbPermissionDenied
             | Self::PropertyPermissionDenied => E_PERM,
@@ -161,7 +162,8 @@ pub trait WorldState: Send {
     /// Return the number of bytes used by the given object and all its attributes.
     fn object_bytes(&self, perms: &Obj, obj: &Obj) -> Result<usize, WorldStateError>;
 
-    /// Create a new object, assigning it a new unique object id.
+    /// Create a new object, optionally at a specific object id.
+    /// If id is None, assigns a new unique object id.
     /// If owner is #-1, the object's is set to itself.
     /// Note it is the caller's responsibility to execute :initialize).
     fn create_object(
@@ -170,6 +172,7 @@ pub trait WorldState: Send {
         parent: &Obj,
         owner: &Obj,
         flags: BitEnum<ObjFlag>,
+        id: Option<Obj>,
     ) -> Result<Obj, WorldStateError>;
 
     /// Recycles (destroys) the given object, and re-parents all its children to the next parent up

@@ -49,6 +49,7 @@ mod tests {
                     &NOTHING,
                     &SYSTEM_OBJECT,
                     BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                    None,
                 )
                 .unwrap();
 
