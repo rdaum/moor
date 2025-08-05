@@ -1575,6 +1575,23 @@ impl TreeTransformer {
                 }
             }
         }
+
+        // Validate that there's at most one rest (@) target, like LambdaMOO does
+        let mut seen_rest = false;
+        for item in &items {
+            if matches!(item.kind, ScatterKind::Rest) {
+                if seen_rest {
+                    return Err(CompileError::ParseError {
+                        error_position: context,
+                        end_line_col: None,
+                        context: "scattering assignment validation".to_string(),
+                        message: "More than one `@' target in scattering assignment.".to_string(),
+                    });
+                }
+                seen_rest = true;
+            }
+        }
+
         Ok(Expr::Scatter(items, Box::new(rhs)))
     }
 
@@ -1658,6 +1675,23 @@ impl TreeTransformer {
                 }
             }
         }
+
+        // Validate that there's at most one rest (@) target, like LambdaMOO does
+        let mut seen_rest = false;
+        for item in &items {
+            if matches!(item.kind, ScatterKind::Rest) {
+                if seen_rest {
+                    return Err(CompileError::ParseError {
+                        error_position: CompileContext::new((0, 0)), // We don't have context here, but this should rarely happen
+                        end_line_col: None,
+                        context: "lambda parameter validation".to_string(),
+                        message: "More than one `@' target in scattering assignment.".to_string(),
+                    });
+                }
+                seen_rest = true;
+            }
+        }
+
         Ok(items)
     }
 
