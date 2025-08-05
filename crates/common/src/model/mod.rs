@@ -104,3 +104,11 @@ pub enum CompileError {
     #[error("Invalid l-value for assignment @ {0}")]
     InvalidAssignemnt(CompileContext),
 }
+
+impl CompileError {
+    /// Convert the error to a list of error strings as expected by MOO's set_verb_code builtin.
+    /// Since CompileError represents a single error, this returns a vector with one element.
+    pub fn to_error_list(&self) -> Vec<String> {
+        vec![self.to_string()]
+    }
+}

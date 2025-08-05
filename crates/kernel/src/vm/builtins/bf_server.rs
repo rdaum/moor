@@ -1516,7 +1516,11 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
             let program = match compile(&program_code_string, bf_args.config.compile_options()) {
                 Ok(program) => program,
-                Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
+                Err(e) => {
+                    let error_strings = e.to_error_list();
+                    let error_vars: Vec<Var> = error_strings.iter().map(|s| v_str(s)).collect();
+                    return Ok(Ret(v_list(&[v_int(0), v_list(&error_vars)])));
+                }
             };
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);

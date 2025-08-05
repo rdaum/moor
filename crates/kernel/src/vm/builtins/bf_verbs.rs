@@ -448,7 +448,9 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // MOO-code compiler during processing of code. If the list is non-empty, then
             // set_verb_code() did not install code; the program associated with the verb in question
             // is unchanged.
-            return Ok(Ret(v_list(&[v_str(e.to_string().as_str())])));
+            let error_strings = e.to_error_list();
+            let error_vars: Vec<Var> = error_strings.iter().map(|s| v_str(s)).collect();
+            return Ok(Ret(v_list(&error_vars)));
         }
     };
     // Now we can update the verb.
