@@ -48,26 +48,18 @@ Given an encrypted message base-64 encoded (such as from age_encrypt) and one or
 ### `salt`
 
 ```
-str salt(str format, str input)
+str salt()
 ```
 
-Generate a crypt() compatible salt string for the specified salt format using the specified binary random input.
+Generates a random cryptographically secure salt string for use with crypt & argon2.
 
-The specific set of formats supported depends on the libraries used to build the server, but will always include the standard salt format, indicated by the format string "" (the empty string), and the BCrypt salt format, indicated by the format string "$2a$NN$" (where "NN" is the work factor). Other possible formats include MD5 ("$1$"), SHA256 ("$5$") and SHA512 ("$6$"). Both the SHA256 and SHA512 formats support optional rounds.
-
-**Examples:**
+**Example:**
 
 ```
-salt("", ".M")                                           ⇒    "iB"
-salt("$1$", "~183~1E~C6/~D1")                            ⇒    "$1$MAX54zGo"
-salt("$5$", "x~F2~1Fv~ADj~92Y~9E~D4l~C3")                ⇒    "$5$s7z5qpeOGaZb"
-salt("$5$rounds=2000$", "G~7E~A7~F5Q5~B7~0Aa~80T")       ⇒    "$5$rounds=2000$5trdp5JBreEM"
-salt("$6$", "U7~EC!~E8~85~AB~CD~B5+~E1?")                ⇒    "$6$JR1vVUSVfqQhf2yD"
-salt("$6$rounds=5000$", "~ED'~B0~BD~B9~DB^,\\~BD~E7")    ⇒    "$6$rounds=5000$hT0gxavqSl0L"
-salt("$2a$08$", "|~99~86~DEq~94_~F3-~1A~D2#~8C~B5sx")    ⇒    "$2a$08$dHkE1lESV9KrErGhhJTxc."
+salt()  ⇒    "M5pZr3m8N7q9K4v6B"
 ```
 
-> Note: To ensure proper security, the random input must be from a sufficiently random source.
+> Note: This function takes no arguments and generates a cryptographically secure salt string. It is not compatible with Toast's two-argument salt function which allows specifying format and input.
 
 ### `crypt`
 
