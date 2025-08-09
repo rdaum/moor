@@ -42,7 +42,7 @@ done), but with a brand new implementation which fulfilled the following require
   video), user accessibility, and web-based interfaces that don't require custom clients. The platform and core
   database are designed with web browsers as the primary connection method.
 * **Modern computing architecture**: Built to take advantage of multiple execution threads, multiple cores, and
-  potentially distributed deployment across multiple servers in a datacenter environment.
+  potentially distributed deployment across multiple servers in a datacentre environment.
 * **Technological extensibility**: Built in a modular fashion to easily support new behaviors, new builtin functions,
   new protocols for connecting, new integrations to outside services, and even new languages (beyond "MOOcode") for
   writing verbs.
