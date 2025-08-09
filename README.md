@@ -2,6 +2,8 @@
 
 # mooR
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink)](https://github.com/sponsors/rdaum)
+
 **mooR** is a network-accessible, multi-user, programmable system for building online social
 environments, games, and collaborative spaces. Think of it as a virtual world where participants can
 not only interact with each other, but also program and modify the environment itself.
@@ -132,6 +134,7 @@ mooR offers several opportunities for contribution:
 - **Issues**: Check our [GitHub Issues](https://github.com/rdaum/moor/issues) for current needs
 - **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
 - **Development**: See the [mooR Book](https://rdaum.github.io/moor/) for architecture details
+- **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with ongoing development
 
 ## Resources
 
