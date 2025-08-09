@@ -71,7 +71,9 @@ ColdMUD -- ideas from those systems have made their way into mooR as
 well.
 
 I hope you, the reader, enjoy the system we've put together. Even more
-so I welcome your contributions and suggestions.
+so I welcome your contributions and suggestions. If you find value in
+mooR and would like to support its ongoing development, please consider
+[sponsoring the project](https://github.com/sponsors/rdaum).
 
 Ryan Daum (written on an airplane flying over the Canadian prairies,
 Feb 5, 2025)

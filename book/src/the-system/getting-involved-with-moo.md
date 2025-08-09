@@ -59,5 +59,6 @@ Even if you don't want to run a server, there are many ways to contribute:
 - **mooR Development**: Contribute to the server software itself
 - **Community Building**: Help newcomers learn MOO programming
 - **Object Creation**: Build interesting objects and share the code
+- **Financial Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with ongoing development
 
 The beauty of MOO is that there's room for everyone, whether you want to be a player, programmer, administrator, or developer. The next section will explain the crucial concept of "cores" that makes all of this possible.

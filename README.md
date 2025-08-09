@@ -134,7 +134,8 @@ mooR offers several opportunities for contribution:
 - **Issues**: Check our [GitHub Issues](https://github.com/rdaum/moor/issues) for current needs
 - **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
 - **Development**: See the [mooR Book](https://rdaum.github.io/moor/) for architecture details
-- **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with ongoing development
+- **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with
+  ongoing development
 
 ## Resources
 
