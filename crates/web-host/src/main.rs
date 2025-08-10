@@ -216,6 +216,10 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
         .route("/verbs", get(host::verbs_handler))
         .route("/verbs/{object}/{name}", get(host::verb_retrieval_handler))
         .route("/verbs/{object}/{name}", post(host::verb_program_handler))
+        .route(
+            "/verbs/{object}/{name}/invoke",
+            post(host::invoke_verb_handler),
+        )
         .route("/properties", get(host::properties_handler))
         // ?oid=1234 or ?sysobj=foo.bar.baz or ?match=foo
         .route("/objects/{object}", get(host::resolve_objref_handler))

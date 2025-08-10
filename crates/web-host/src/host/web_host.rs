@@ -25,7 +25,7 @@ use eyre::eyre;
 use moor_common::model::ObjectRef;
 use moor_common::tasks::Event;
 use moor_var::v_obj;
-use moor_var::{E_INVIND, Obj, Symbol, v_err};
+use moor_var::{E_INVIND, Obj, Symbol, Var, v_err};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
 use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};
@@ -720,4 +720,81 @@ pub async fn dismiss_presentation_handler(
         .expect("Unable to send detach to RPC server");
 
     response.into_response()
+}
+
+/// RESTful verb invocation handler: POST /verbs/{object}/{name}/invoke
+pub async fn invoke_verb_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path((object_path, verb_name)): Path<(String, String)>,
+    Json(args): Json<Vec<serde_json::Value>>,
+) -> Response {
+    // Parse the object reference from the path
+    let object_ref = match ObjectRef::parse_curie(&object_path) {
+        Some(oref) => oref,
+        None => {
+            warn!("Invalid object reference \"{}\"", object_path);
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+
+    // Convert verb name to Symbol
+    let verb_symbol = Symbol::mk(&verb_name);
+
+    // Convert JSON arguments to MOO Vars
+    let moo_args: Result<Vec<Var>, _> = args.iter().map(crate::host::json_as_var).collect();
+
+    let moo_args = match moo_args {
+        Ok(args) => args,
+        Err(e) => {
+            warn!("Invalid arguments: {:?}", e);
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+
+    // Get authenticated connection
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    // Make the InvokeVerb RPC call
+    let response = rpc_call(
+        client_id,
+        &mut rpc_client,
+        HostClientToDaemonMessage::InvokeVerb(
+            client_token.clone(),
+            auth_token,
+            object_ref,
+            verb_symbol,
+            moo_args,
+        ),
+    )
+    .await;
+
+    let result = match response {
+        Ok(DaemonToClientReply::EvalResult(result)) => {
+            // Convert the result to JSON and return
+            Json(var_as_json(&result)).into_response()
+        }
+        Ok(DaemonToClientReply::TaskSubmitted(task_id)) => {
+            // Verb invocation is async - task was queued successfully
+            // The actual output will come through WebSocket narrative
+            Json(json!({"task_submitted": task_id, "status": "success"})).into_response()
+        }
+        Ok(other) => {
+            error!("Unexpected daemon response to InvokeVerb: {:?}", other);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // Clean up the RPC connection
+    let _ = rpc_client
+        .make_client_rpc_call(client_id, HostClientToDaemonMessage::Detach(client_token))
+        .await;
+
+    result
 }
