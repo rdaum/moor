@@ -136,6 +136,24 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                 
                                 // Convert ALL links to moo-link spans that will call #0:handle_client_url
                                 return `<span class="moo-link" data-url="${href}" style="color: var(--color-link); text-decoration: underline; cursor: pointer;" title="${href}">${linkText}</span>`;
+                            },
+                            table: (node, context) => {
+                                return `<table class="djot-table">${context.renderChildren(node)}</table>`;
+                            },
+                            thead: (node, context) => {
+                                return `<thead>${context.renderChildren(node)}</thead>`;
+                            },
+                            tbody: (node, context) => {
+                                return `<tbody>${context.renderChildren(node)}</tbody>`;
+                            },
+                            tr: (node, context) => {
+                                return `<tr>${context.renderChildren(node)}</tr>`;
+                            },
+                            th: (node, context) => {
+                                return `<th>${context.renderChildren(node)}</th>`;
+                            },
+                            td: (node, context) => {
+                                return `<td>${context.renderChildren(node)}</td>`;
                             }
                         }
                     });
