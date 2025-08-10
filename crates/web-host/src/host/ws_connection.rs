@@ -113,6 +113,18 @@ pub enum ReadEvent {
 }
 
 impl WebSocketConnection {
+    /// Normalize MOO content types to standard MIME types
+    fn normalize_content_type(content_type: Option<String>) -> Option<String> {
+        content_type.map(|ct| {
+            match ct.as_str() {
+                "text_djot" => "text/djot".to_string(),
+                "text_html" => "text/html".to_string(),
+                "text_plain" => "text/plain".to_string(),
+                _ => ct, // Pass through unknown types unchanged
+            }
+        })
+    }
+
     pub async fn handle(&mut self, connect_type: ConnectType, stream: WebSocket) {
         info!("New connection from {}, {}", self.peer_addr, self.player);
         let (mut ws_sender, mut ws_receiver) = stream.split();
@@ -230,7 +242,8 @@ impl WebSocketConnection {
                 let event_id = event.event_id().to_string();
                 match &msg {
                     Event::Notify(msg, content_type) => {
-                        let content_type = content_type.map(|s| s.to_string());
+                        let content_type =
+                            Self::normalize_content_type(content_type.map(|s| s.to_string()));
                         Self::emit_narrative_msg(
                             ws_sender,
                             Some(event_id),
@@ -552,7 +565,7 @@ impl WebSocketConnection {
                 author: var_as_json(&author.clone()),
                 system_message: None,
                 message: None,
-                content_type: Some(present.content_type.clone()),
+                content_type: Self::normalize_content_type(Some(present.content_type.clone())),
                 server_time: SystemTime::now(),
                 present: Some(present),
                 unpresent: None,
