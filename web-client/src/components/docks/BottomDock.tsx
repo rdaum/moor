@@ -18,9 +18,10 @@ import { Panel } from "../Panel";
 interface BottomDockProps {
     presentations: Presentation[];
     onClosePresentation: (id: string) => void;
+    onLinkClick?: (url: string) => void;
 }
 
-export const BottomDock: React.FC<BottomDockProps> = ({ presentations, onClosePresentation }) => {
+export const BottomDock: React.FC<BottomDockProps> = ({ presentations, onClosePresentation, onLinkClick }) => {
     if (presentations.length === 0) {
         return null;
     }
@@ -36,6 +37,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({ presentations, onClosePr
                     titleClassName="bottom_dock_panel_title"
                     contentClassName="bottom_dock_panel_content"
                     closeButtonClassName="bottom_dock_panel_close"
+                    onLinkClick={onLinkClick}
                 />
             ))}
         </div>

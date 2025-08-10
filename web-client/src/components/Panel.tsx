@@ -22,6 +22,7 @@ interface PanelProps {
     titleClassName: string;
     contentClassName: string;
     closeButtonClassName: string;
+    onLinkClick?: (url: string) => void;
 }
 
 export const Panel: React.FC<PanelProps> = ({
@@ -31,6 +32,7 @@ export const Panel: React.FC<PanelProps> = ({
     titleClassName,
     contentClassName,
     closeButtonClassName,
+    onLinkClick,
 }) => {
     const handleClose = () => {
         onClose(presentation.id);
@@ -52,6 +54,7 @@ export const Panel: React.FC<PanelProps> = ({
                 <ContentRenderer
                     content={presentation.content}
                     contentType={presentation.contentType}
+                    onLinkClick={onLinkClick}
                 />
             </div>
         </div>

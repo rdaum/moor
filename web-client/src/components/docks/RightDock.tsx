@@ -18,9 +18,10 @@ import { Panel } from "../Panel";
 interface RightDockProps {
     presentations: Presentation[];
     onClosePresentation: (id: string) => void;
+    onLinkClick?: (url: string) => void;
 }
 
-export const RightDock: React.FC<RightDockProps> = ({ presentations, onClosePresentation }) => {
+export const RightDock: React.FC<RightDockProps> = ({ presentations, onClosePresentation, onLinkClick }) => {
     if (presentations.length === 0) {
         return null;
     }
@@ -36,6 +37,7 @@ export const RightDock: React.FC<RightDockProps> = ({ presentations, onClosePres
                     titleClassName="right_dock_panel_title"
                     contentClassName="right_dock_panel_content"
                     closeButtonClassName="right_dock_panel_close"
+                    onLinkClick={onLinkClick}
                 />
             ))}
         </div>

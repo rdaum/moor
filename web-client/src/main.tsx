@@ -27,6 +27,8 @@ import { PresentationProvider, usePresentationContext } from "./context/Presenta
 import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
+import { MoorRemoteObject } from "./lib/rpc";
+import { oidRef } from "./lib/var";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
@@ -35,9 +37,11 @@ import "./styles/main.css";
 function AppContent({
     narrativeRef,
     narrativeCallbackRef,
+    onLinkClick,
 }: {
     narrativeRef: React.RefObject<NarrativeRef>;
     narrativeCallbackRef: (node: NarrativeRef | null) => void;
+    onLinkClick?: (url: string) => void;
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
     const welcomeMessage = useWelcomeMessage();
@@ -206,6 +210,7 @@ function AppContent({
                     <TopDock
                         presentations={getTopDockPresentations()}
                         onClosePresentation={handleClosePresentation}
+                        onLinkClick={onLinkClick}
                     />
 
                     {/* Middle section with left dock, narrative, right dock */}
@@ -213,6 +218,7 @@ function AppContent({
                         <LeftDock
                             presentations={getLeftDockPresentations()}
                             onClosePresentation={handleClosePresentation}
+                            onLinkClick={onLinkClick}
                         />
 
                         {/* Main narrative interface - takes up full space */}
@@ -223,11 +229,13 @@ function AppContent({
                             onSendMessage={sendMessage}
                             onLoadMoreHistory={handleLoadMoreHistory}
                             isLoadingHistory={isLoadingHistory}
+                            onLinkClick={onLinkClick}
                         />
 
                         <RightDock
                             presentations={getRightDockPresentations()}
                             onClosePresentation={handleClosePresentation}
+                            onLinkClick={onLinkClick}
                         />
                     </div>
 
@@ -235,6 +243,7 @@ function AppContent({
                     <BottomDock
                         presentations={getBottomDockPresentations()}
                         onClosePresentation={handleClosePresentation}
+                        onLinkClick={onLinkClick}
                     />
                 </div>
             )}
@@ -274,6 +283,23 @@ function AppWrapper() {
     const { addPresentation, removePresentation } = usePresentationContext();
     const { showMessage } = useSystemMessage();
     const narrativeRef = useRef<NarrativeRef>(null);
+
+    // Handle MOO link clicks
+    const handleLinkClick = useCallback(async (url: string) => {
+        if (!authState.player?.authToken) {
+            console.warn("Cannot handle link click: No auth token available");
+            return;
+        }
+
+        try {
+            const sysobj = new MoorRemoteObject(oidRef(0), authState.player.authToken);
+            await sysobj.callVerb("handle_client_url", [url]);
+            // The result comes through WebSocket narrative, so we don't need to handle the return value
+        } catch (error) {
+            console.error("Failed to handle link click:", error);
+            showMessage(`Failed to handle link: ${error instanceof Error ? error.message : String(error)}`, 5);
+        }
+    }, [authState.player?.authToken, showMessage]);
     const [pendingMessages, setPendingMessages] = useState<
         Array<{
             content: string | string[];
@@ -327,7 +353,7 @@ function AppWrapper() {
             handlePresentMessage={handlePresentMessage}
             handleUnpresentMessage={handleUnpresentMessage}
         >
-            <AppContent narrativeRef={narrativeRef} narrativeCallbackRef={narrativeCallbackRef} />
+            <AppContent narrativeRef={narrativeRef} narrativeCallbackRef={narrativeCallbackRef} onLinkClick={handleLinkClick} />
         </WebSocketProvider>
     );
 }

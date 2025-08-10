@@ -18,9 +18,10 @@ import { Panel } from "../Panel";
 interface LeftDockProps {
     presentations: Presentation[];
     onClosePresentation: (id: string) => void;
+    onLinkClick?: (url: string) => void;
 }
 
-export const LeftDock: React.FC<LeftDockProps> = ({ presentations, onClosePresentation }) => {
+export const LeftDock: React.FC<LeftDockProps> = ({ presentations, onClosePresentation, onLinkClick }) => {
     if (presentations.length === 0) {
         return null;
     }
@@ -36,6 +37,7 @@ export const LeftDock: React.FC<LeftDockProps> = ({ presentations, onClosePresen
                     titleClassName="left_dock_panel_title"
                     contentClassName="left_dock_panel_content"
                     closeButtonClassName="left_dock_panel_close"
+                    onLinkClick={onLinkClick}
                 />
             ))}
         </div>

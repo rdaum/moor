@@ -18,11 +18,13 @@ import React, { useMemo } from "react";
 interface ContentRendererProps {
     content: string | string[];
     contentType?: "text/plain" | "text/djot" | "text/html";
+    onLinkClick?: (url: string) => void;
 }
 
 export const ContentRenderer: React.FC<ContentRendererProps> = ({
     content,
     contentType = "text/plain",
+    onLinkClick,
 }) => {
     const renderedContent = useMemo(() => {
         // Handle content that might be an array or string
@@ -34,7 +36,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
         };
 
         switch (contentType) {
-            case "text/html":
+            case "text/html": {
                 // For HTML, join array elements with newlines
                 const htmlContent = getContentString("\n");
                 // Sanitize HTML content for security
@@ -89,7 +91,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         "height",
                     ],
                     ALLOWED_URI_REGEXP:
-                        /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+                        /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
                 });
 
                 return (
@@ -101,15 +103,42 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         }}
                     />
                 );
+            }
 
-            case "text/djot":
+            case "text/djot": {
                 try {
                     // For djot, join array elements with newlines
                     const djotContent = getContentString("\n");
 
-                    // Parse djot markdown and render to HTML
+                    // Parse djot markdown and render to HTML  
                     const djotAst = parse(djotContent);
-                    const djotHtml = renderHTML(djotAst);
+                    const djotHtml = renderHTML(djotAst, {
+                        overrides: {
+                            link: (node, _context) => {
+                                const href = node.destination || '';
+                                
+                                // Extract link text from djot AST
+                                let linkText = '';
+                                if (node.children && node.children.length > 0) {
+                                    linkText = node.children.map((child: any) => {
+                                        if (child.tag === 'str') {
+                                            return child.text || '';
+                                        }
+                                        // Handle other node types if needed
+                                        return '';
+                                    }).join('');
+                                }
+                                
+                                // Only fall back to URL if we truly have no text
+                                if (!linkText.trim()) {
+                                    linkText = href;
+                                }
+                                
+                                // Convert ALL links to moo-link spans that will call #0:handle_client_url
+                                return `<span class="moo-link" data-url="${href}" style="color: var(--color-link); text-decoration: underline; cursor: pointer;" title="${href}">${linkText}</span>`;
+                            }
+                        }
+                    });
 
                     // Sanitize the rendered HTML
                     const sanitizedDjotHtml = DOMPurify.sanitize(djotHtml, {
@@ -161,6 +190,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             "style",
                             "width",
                             "height",
+                            "data-url",
                         ],
                     });
 
@@ -168,6 +198,17 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         <div
                             className="text_djot"
                             dangerouslySetInnerHTML={{ __html: sanitizedDjotHtml }}
+                            onClick={(e) => {
+                                // Handle clicks on moo-link spans
+                                const target = e.target as HTMLElement;
+                                if (target.classList.contains('moo-link')) {
+                                    e.preventDefault();
+                                    const url = target.getAttribute('data-url');
+                                    if (url && onLinkClick) {
+                                        onLinkClick(url);
+                                    }
+                                }
+                            }}
                             style={{
                                 wordWrap: "break-word",
                                 overflowWrap: "break-word",
@@ -188,6 +229,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         </div>
                     );
                 }
+            }
 
             case "text/plain":
             default:

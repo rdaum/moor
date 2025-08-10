@@ -74,7 +74,6 @@ export const useWebSocket = (
                 console.log("DEBUG: Raw WebSocket message data:", JSON.stringify(data, null, 2));
 
                 let content: string | string[];
-                let contentType: string | undefined;
 
                 if (typeof data.message === "string") {
                     content = data.message;
@@ -86,7 +85,7 @@ export const useWebSocket = (
                 }
 
                 // Always check for content_type at the top level of the message
-                contentType = (data as any).content_type;
+                const contentType = (data as any).content_type;
 
                 console.log("DEBUG: Extracted content:", content);
                 console.log("DEBUG: Extracted contentType:", contentType);

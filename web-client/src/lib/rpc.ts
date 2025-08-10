@@ -20,58 +20,6 @@
  */
 import { matchRef, ObjectRef, oidRef, ORefKind, sysobjRef } from "./var";
 
-/**
- * Converts a JavaScript value to its MOO string representation
- *
- * @param json - The JavaScript value to convert
- * @returns String representation in MOO format
- * @throws Error if the value cannot be converted
- */
-function translateJsonToMOO(json: any): string {
-    // Handle primitive types
-    if (typeof json === "number") {
-        return json.toString();
-    } else if (typeof json === "string") {
-        return "\"" + json + "\"";
-    } else if (json === null) {
-        return "NULL";
-    } else if (json === undefined) {
-        return "E_NONE";
-    } else if (typeof json === "boolean") {
-        return json ? "1" : "0";
-    } // Handle object types
-    else if (typeof json === "object") {
-        if (json["error_code"]) {
-            return json["error_name"];
-        } else if (json["oid"] != null) {
-            return "#" + json["oid"];
-        } else if (Array.isArray(json)) {
-            let result = "{";
-            for (let i = 0; i < json.length; i++) {
-                result += translateJsonToMOO(json[i]);
-                if (i < json.length - 1) {
-                    result += ", ";
-                }
-            }
-            result += "}";
-            return result;
-        } else {
-            throw new Error(`Cannot convert object to MOO format: ${JSON.stringify(json)}`);
-        }
-    } else {
-        throw new Error(`Cannot convert ${typeof json} to MOO format`);
-    }
-}
-
-/**
- * Converts an array of JavaScript values to a MOO argument list string
- *
- * @param args - Array of arguments to convert to MOO format
- * @returns Comma-separated string of MOO-formatted arguments
- */
-function transformArgs(args: any[]): string {
-    return args.map(arg => translateJsonToMOO(arg)).join(", ");
-}
 
 /**
  * Recursively transforms a JSON result from server eval into JavaScript objects
@@ -143,14 +91,31 @@ export class MoorRemoteObject {
      * @param verbName - Name of the verb to call
      * @param args - Arguments to pass to the verb
      * @returns Promise resolving to the result of the verb invocation
-     *
-     * @todo Replace with RESTful API instead of using eval
      */
     async callVerb(verbName: string, args: any[] = []): Promise<any> {
-        const self = "#" + this.oref;
-        const argsStr = transformArgs(args);
-        const expr = `return ${self}:${verbName}(${argsStr});`;
-        return performEval(this.authToken, expr);
+        const endpoint = `/verbs/${orefCurie(this.oref)}/${verbName}/invoke`;
+
+        try {
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Moor-Auth-Token": this.authToken,
+                },
+                body: JSON.stringify(args),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                return transformEval(result);
+            } else {
+                console.error(`Failed to invoke verb ${verbName}:`, response.statusText);
+                throw new Error(`Verb invocation failed: ${response.status} ${response.statusText}`);
+            }
+        } catch (err) {
+            console.error(`Exception during verb invocation for ${verbName}:`, err);
+            throw new Error(`Exception during verb invocation: ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
 
     /**

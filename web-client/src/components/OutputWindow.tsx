@@ -25,12 +25,14 @@ interface OutputWindowProps {
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
+    onLinkClick?: (url: string) => void;
 }
 
 export const OutputWindow: React.FC<OutputWindowProps> = ({
     messages,
     onLoadMoreHistory,
     isLoadingHistory = false,
+    onLinkClick,
 }) => {
     const outputRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
@@ -225,6 +227,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     <ContentRenderer
                         content={message.content}
                         contentType={message.contentType}
+                        onLinkClick={onLinkClick}
                     />
                 </div>
             ))}

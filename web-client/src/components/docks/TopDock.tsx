@@ -18,9 +18,10 @@ import { Panel } from "../Panel";
 interface TopDockProps {
     presentations: Presentation[];
     onClosePresentation: (id: string) => void;
+    onLinkClick?: (url: string) => void;
 }
 
-export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresentation }) => {
+export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresentation, onLinkClick }) => {
     if (presentations.length === 0) {
         return null;
     }
@@ -36,6 +37,7 @@ export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresenta
                     titleClassName="top_dock_panel_title"
                     contentClassName="top_dock_panel_content"
                     closeButtonClassName="top_dock_panel_close"
+                    onLinkClick={onLinkClick}
                 />
             ))}
         </div>
