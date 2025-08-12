@@ -114,7 +114,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     const djotAst = parse(djotContent);
                     const djotHtml = renderHTML(djotAst, {
                         overrides: {
-                            link: (node, _context) => {
+                            link: (node: any, _context: any) => {
                                 const href = node.destination || '';
                                 
                                 // Extract link text from djot AST
@@ -137,25 +137,25 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                 // Convert ALL links to moo-link spans that will call #0:handle_client_url
                                 return `<span class="moo-link" data-url="${href}" style="color: var(--color-link); text-decoration: underline; cursor: pointer;" title="${href}">${linkText}</span>`;
                             },
-                            table: (node, context) => {
+                            table: (node: any, context: any) => {
                                 return `<table class="djot-table">${context.renderChildren(node)}</table>`;
                             },
-                            thead: (node, context) => {
+                            thead: (node: any, context: any) => {
                                 return `<thead>${context.renderChildren(node)}</thead>`;
                             },
-                            tbody: (node, context) => {
+                            tbody: (node: any, context: any) => {
                                 return `<tbody>${context.renderChildren(node)}</tbody>`;
                             },
-                            tr: (node, context) => {
+                            tr: (node: any, context: any) => {
                                 return `<tr>${context.renderChildren(node)}</tr>`;
                             },
-                            th: (node, context) => {
+                            th: (node: any, context: any) => {
                                 return `<th>${context.renderChildren(node)}</th>`;
                             },
-                            td: (node, context) => {
+                            td: (node: any, context: any) => {
                                 return `<td>${context.renderChildren(node)}</td>`;
                             }
-                        }
+                        } as any
                     });
 
                     // Sanitize the rendered HTML
