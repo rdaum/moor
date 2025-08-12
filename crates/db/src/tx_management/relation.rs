@@ -78,7 +78,7 @@ where
         }
     }
 
-    pub fn write_lock(&self) -> RwLockWriteGuard<Box<dyn RelationIndex<Domain, Codomain>>> {
+    pub fn write_lock(&self) -> RwLockWriteGuard<'_, Box<dyn RelationIndex<Domain, Codomain>>> {
         self.index.write().unwrap()
     }
 

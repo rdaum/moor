@@ -61,7 +61,7 @@ pub enum MootBlockTestKind {
     EvalBg,
 }
 
-pub fn parse(input: &str) -> eyre::Result<Vec<MootBlockSpan>> {
+pub fn parse(input: &str) -> eyre::Result<Vec<MootBlockSpan<'_>>> {
     let mut expressions = vec![];
     for pair in MootParser::parse(Rule::file, input)? {
         let line_no = pair.as_span().start_pos().line_col().0;
