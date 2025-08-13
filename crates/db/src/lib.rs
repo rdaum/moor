@@ -220,7 +220,7 @@ impl AsByteBuffer for SystemTimeHolder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjAndUUIDHolder {
     pub obj: Obj,
     pub uuid: Uuid,
@@ -243,6 +243,15 @@ impl Ord for ObjAndUUIDHolder {
 impl ObjAndUUIDHolder {
     pub fn new(obj: &Obj, uuid: Uuid) -> Self {
         Self { obj: *obj, uuid }
+    }
+}
+
+impl std::hash::Hash for ObjAndUUIDHolder {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Write the raw 24 bytes directly to the hasher without building intermediate slices
+        // This is exactly what the article advocates for composite keys
+        state.write(self.uuid.as_bytes());
+        state.write(&self.obj.as_bytes().unwrap().as_ref());
     }
 }
 
