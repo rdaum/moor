@@ -21,6 +21,7 @@ use std::cmp::Ordering;
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
 
@@ -119,8 +120,19 @@ impl AsByteBuffer for StringHolder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct UUIDHolder(Uuid);
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoBytes, FromBytes, Immutable)]
+#[repr(transparent)]
+pub struct UUIDHolder([u8; 16]);
+
+impl UUIDHolder {
+    pub fn new(uuid: Uuid) -> Self {
+        Self(*uuid.as_bytes())
+    }
+
+    pub fn uuid(&self) -> Uuid {
+        Uuid::from_bytes(self.0)
+    }
+}
 
 impl AsByteBuffer for UUIDHolder {
     fn size_bytes(&self) -> usize {
@@ -128,11 +140,13 @@ impl AsByteBuffer for UUIDHolder {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(&self.0.as_bytes()[..]))
+        // Zero-copy: direct access to the struct's bytes
+        Ok(f(IntoBytes::as_bytes(self)))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_bytes().to_vec())
+        // Zero-copy to Vec
+        Ok(IntoBytes::as_bytes(self).to_vec())
     }
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
@@ -143,13 +157,15 @@ impl AsByteBuffer for UUIDHolder {
                 bytes.len()
             )));
         }
-        let mut uuid_bytes = [0u8; 16];
-        uuid_bytes.copy_from_slice(bytes);
-        Ok(Self(Uuid::from_bytes(uuid_bytes)))
+
+        // Use zerocopy to safely transmute from bytes
+        Self::read_from_bytes(bytes)
+            .map_err(|_| DecodingError::CouldNotDecode("Invalid bytes for UUIDHolder".to_string()))
     }
 
     fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.0.as_bytes().to_vec()))
+        // Zero-copy: create ByteView directly from struct bytes
+        Ok(ByteView::from(IntoBytes::as_bytes(self)))
     }
 }
 
@@ -178,8 +194,23 @@ impl AsByteBuffer for BytesHolder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SystemTimeHolder(pub std::time::SystemTime);
+#[derive(Clone, Debug, PartialEq, Eq, IntoBytes, FromBytes, Immutable)]
+#[repr(transparent)]
+pub struct SystemTimeHolder(u128); // microseconds since UNIX_EPOCH
+
+impl SystemTimeHolder {
+    pub fn new(time: std::time::SystemTime) -> Result<Self, EncodingError> {
+        let dur = time.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
+            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
+        })?;
+        Ok(Self(dur.as_micros()))
+    }
+
+    pub fn system_time(&self) -> std::time::SystemTime {
+        let dur = std::time::Duration::from_micros(self.0 as u64);
+        std::time::UNIX_EPOCH + dur
+    }
+}
 
 impl AsByteBuffer for SystemTimeHolder {
     fn size_bytes(&self) -> usize {
@@ -187,43 +218,41 @@ impl AsByteBuffer for SystemTimeHolder {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
-            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
-        })?;
-        let micros = dur.as_micros();
-        Ok(f(&micros.to_le_bytes()))
+        // Zero-copy: direct access to the struct's bytes
+        Ok(f(IntoBytes::as_bytes(self)))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
-            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
-        })?;
-        let micros = dur.as_micros();
-        Ok(micros.to_le_bytes().to_vec())
+        // Zero-copy to Vec
+        Ok(IntoBytes::as_bytes(self).to_vec())
     }
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         let bytes = bytes.as_ref();
-        let micros = u128::from_le_bytes(bytes.try_into().map_err(|_| {
-            DecodingError::CouldNotDecode("Expected 16 bytes for SystemTime".to_string())
-        })?);
-        let dur = std::time::Duration::from_micros(micros as u64);
-        Ok(Self(std::time::UNIX_EPOCH + dur))
+        if bytes.len() != 16 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 16 bytes for SystemTimeHolder, got {}",
+                bytes.len()
+            )));
+        }
+
+        // Use zerocopy to safely transmute from bytes
+        Self::read_from_bytes(bytes).map_err(|_| {
+            DecodingError::CouldNotDecode("Invalid bytes for SystemTimeHolder".to_string())
+        })
     }
 
     fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
-            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
-        })?;
-        let micros = dur.as_micros();
-        Ok(ByteView::from(micros.to_le_bytes().to_vec()))
+        // Zero-copy: create ByteView directly from struct bytes
+        Ok(ByteView::from(IntoBytes::as_bytes(self)))
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, IntoBytes, FromBytes, Immutable)]
+#[repr(C)]
 pub struct ObjAndUUIDHolder {
-    pub obj: Obj,
-    pub uuid: Uuid,
+    pub uuid: [u8; 16],
+    pub obj: u64,
 }
 
 impl PartialOrd for ObjAndUUIDHolder {
@@ -242,58 +271,62 @@ impl Ord for ObjAndUUIDHolder {
 
 impl ObjAndUUIDHolder {
     pub fn new(obj: &Obj, uuid: Uuid) -> Self {
-        Self { obj: *obj, uuid }
+        Self {
+            uuid: *uuid.as_bytes(),
+            obj: obj.id().0 as u64,
+        }
+    }
+
+    pub fn obj(&self) -> Obj {
+        Obj::mk_id(self.obj as i32)
+    }
+
+    pub fn uuid(&self) -> Uuid {
+        Uuid::from_bytes(self.uuid)
     }
 }
 
 impl std::hash::Hash for ObjAndUUIDHolder {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // Write the raw 24 bytes directly to the hasher without building intermediate slices
-        // This is exactly what the article advocates for composite keys
-        state.write(self.uuid.as_bytes());
-        state.write(&self.obj.as_bytes().unwrap().as_ref());
+        // Use zerocopy to write the entire struct as contiguous bytes
+        // This is the ultimate optimization - zero-copy hashing of the entire struct
+        state.write(IntoBytes::as_bytes(self));
     }
 }
 
 impl AsByteBuffer for ObjAndUUIDHolder {
     fn size_bytes(&self) -> usize {
-        self.obj.size_bytes() + 16
+        24 // Fixed size: 16 bytes (UUID) + 8 bytes (u64)
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        let mut bytes = Vec::with_capacity(self.size_bytes());
-        bytes.extend_from_slice(self.uuid.as_bytes());
-        bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
-        Ok(f(&bytes))
+        // Zero-copy: direct access to the struct's bytes
+        Ok(f(IntoBytes::as_bytes(self)))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        let mut bytes = Vec::with_capacity(self.size_bytes());
-        bytes.extend_from_slice(self.uuid.as_bytes());
-        bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
-        Ok(bytes)
+        // Zero-copy to Vec
+        Ok(IntoBytes::as_bytes(self).to_vec())
     }
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         let bytes = bytes.as_ref();
-        let uuid_bytes = bytes.get(..16).ok_or_else(|| {
-            DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
-        })?;
-        let obj_bytes = bytes.get(16..).ok_or_else(|| {
-            DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
-        })?;
-        let uuid = Uuid::from_bytes(uuid_bytes.try_into().map_err(|_| {
-            DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
-        })?);
-        let obj = Obj::from_bytes(ByteView::from(obj_bytes.to_vec()))?;
-        Ok(Self { obj, uuid })
+        if bytes.len() != 24 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 24 bytes for ObjAndUUIDHolder, got {}",
+                bytes.len()
+            )));
+        }
+
+        // Use zerocopy to safely transmute from bytes
+        Self::read_from_bytes(bytes).map_err(|_| {
+            DecodingError::CouldNotDecode("Invalid bytes for ObjAndUUIDHolder".to_string())
+        })
     }
 
     fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        let mut bytes = Vec::with_capacity(self.size_bytes());
-        bytes.extend_from_slice(self.uuid.as_bytes());
-        bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
-        Ok(ByteView::from(bytes))
+        // Zero-copy: create ByteView directly from struct bytes
+        Ok(ByteView::from(IntoBytes::as_bytes(self).to_vec()))
     }
 }
 
@@ -320,8 +353,8 @@ mod tests {
         let bytes = oh.as_bytes().unwrap();
         let oh2 = ObjAndUUIDHolder::from_bytes(bytes).unwrap();
         assert_eq!(oh, oh2);
-        assert_eq!(oh.uuid, oh2.uuid);
-        assert_eq!(oh.obj, oh2.obj);
+        assert_eq!(oh.uuid(), oh2.uuid());
+        assert_eq!(oh.obj(), oh2.obj());
     }
 
     #[test]

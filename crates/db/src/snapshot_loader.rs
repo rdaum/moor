@@ -126,7 +126,7 @@ impl SnapshotLoader {
     }
 
     fn get_verb_program(&self, objid: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
-        let key = ObjAndUUIDHolder { obj: *objid, uuid };
+        let key = ObjAndUUIDHolder::new(objid, uuid);
         self.get_from_snapshot::<ObjAndUUIDHolder, ProgramType>(&self.object_verbs_snapshot, &key)?
             .ok_or_else(|| WorldStateError::VerbNotFound(*objid, uuid.to_string()))
     }
@@ -142,7 +142,7 @@ impl SnapshotLoader {
         obj: &Obj,
         uuid: Uuid,
     ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
-        let key = ObjAndUUIDHolder { obj: *obj, uuid };
+        let key = ObjAndUUIDHolder::new(obj, uuid);
 
         // Get property value
         let value = self

@@ -110,30 +110,30 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     // For djot, join array elements with newlines
                     const djotContent = getContentString("\n");
 
-                    // Parse djot markdown and render to HTML  
+                    // Parse djot markdown and render to HTML
                     const djotAst = parse(djotContent);
                     const djotHtml = renderHTML(djotAst, {
                         overrides: {
                             link: (node: any, _context: any) => {
-                                const href = node.destination || '';
-                                
+                                const href = node.destination || "";
+
                                 // Extract link text from djot AST
-                                let linkText = '';
+                                let linkText = "";
                                 if (node.children && node.children.length > 0) {
                                     linkText = node.children.map((child: any) => {
-                                        if (child.tag === 'str') {
-                                            return child.text || '';
+                                        if (child.tag === "str") {
+                                            return child.text || "";
                                         }
                                         // Handle other node types if needed
-                                        return '';
-                                    }).join('');
+                                        return "";
+                                    }).join("");
                                 }
-                                
+
                                 // Only fall back to URL if we truly have no text
                                 if (!linkText.trim()) {
                                     linkText = href;
                                 }
-                                
+
                                 // Convert ALL links to moo-link spans that will call #0:handle_client_url
                                 return `<span class="moo-link" data-url="${href}" style="color: var(--color-link); text-decoration: underline; cursor: pointer;" title="${href}">${linkText}</span>`;
                             },
@@ -154,8 +154,8 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             },
                             td: (node: any, context: any) => {
                                 return `<td>${context.renderChildren(node)}</td>`;
-                            }
-                        } as any
+                            },
+                        } as any,
                     });
 
                     // Sanitize the rendered HTML
@@ -219,9 +219,9 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             onClick={(e) => {
                                 // Handle clicks on moo-link spans
                                 const target = e.target as HTMLElement;
-                                if (target.classList.contains('moo-link')) {
+                                if (target.classList.contains("moo-link")) {
                                     e.preventDefault();
-                                    const url = target.getAttribute('data-url');
+                                    const url = target.getAttribute("data-url");
                                     if (url && onLinkClick) {
                                         onLinkClick(url);
                                     }

@@ -34,6 +34,7 @@ use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use unicase::UniCase;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 // ============================================================================
 // Global Interner State
@@ -227,7 +228,8 @@ static GLOBAL_INTERNER: Lazy<GlobalInternerState> = Lazy::new(GlobalInternerStat
 /// assert_eq!(sym2.as_string(), "hello");
 /// assert_eq!(sym3.as_string(), "HELLO");
 /// ```
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IntoBytes, FromBytes, Immutable)]
+#[repr(C)]
 pub struct Symbol {
     compare_id: u32,
     repr_id: u32,

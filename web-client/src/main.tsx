@@ -27,9 +27,9 @@ import { PresentationProvider, usePresentationContext } from "./context/Presenta
 import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
+import { useVerbEditor } from "./hooks/useVerbEditor";
 import { MoorRemoteObject } from "./lib/rpc";
 import { oidRef } from "./lib/var";
-import { useVerbEditor } from "./hooks/useVerbEditor";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
 
@@ -353,7 +353,11 @@ function AppWrapper() {
             handlePresentMessage={handlePresentMessage}
             handleUnpresentMessage={handleUnpresentMessage}
         >
-            <AppContent narrativeRef={narrativeRef} narrativeCallbackRef={narrativeCallbackRef} onLinkClick={handleLinkClick} />
+            <AppContent
+                narrativeRef={narrativeRef}
+                narrativeCallbackRef={narrativeCallbackRef}
+                onLinkClick={handleLinkClick}
+            />
         </WebSocketProvider>
     );
 }

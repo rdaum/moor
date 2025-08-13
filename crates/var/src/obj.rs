@@ -19,6 +19,7 @@ use byteview::ByteView;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
 /// from where $name style references hang off of. A bit like the Lobby in Self.
@@ -36,8 +37,22 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 /// For now this is the global unique DB object id.
 /// In the future this may also encode other object types (anonymous objects, etc)
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Encode,
+    Decode,
+    Serialize,
+    Deserialize,
+    IntoBytes,
+    FromBytes,
+    Immutable,
 )]
+#[repr(transparent)]
 pub struct Obj(u64);
 
 const OBJID_TYPE_CODE: u8 = 0;
@@ -140,23 +155,35 @@ impl AsByteBuffer for Obj {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(&self.0.to_le_bytes()))
+        // Zero-copy: direct access to the struct's bytes
+        Ok(f(IntoBytes::as_bytes(self)))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.to_le_bytes().to_vec())
+        // Zero-copy to Vec
+        Ok(IntoBytes::as_bytes(self).to_vec())
     }
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
-        let content = u64::from_le_bytes(bytes.as_ref().try_into().unwrap());
-        Ok(Self(content))
+        let bytes = bytes.as_ref();
+        if bytes.len() != 8 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 8 bytes for Obj, got {}",
+                bytes.len()
+            )));
+        }
+
+        // Use zerocopy to safely transmute from bytes
+        Self::read_from_bytes(bytes)
+            .map_err(|_| DecodingError::CouldNotDecode("Invalid bytes for Obj".to_string()))
     }
 
     fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.0.to_le_bytes()))
+        // Zero-copy: create ByteView directly from struct bytes
+        Ok(ByteView::from(IntoBytes::as_bytes(self)))
     }
 }
 

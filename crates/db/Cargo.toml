@@ -67,6 +67,7 @@ minstant.workspace = true
 paste.workspace = true
 rand.workspace = true
 uuid.workspace = true
+zerocopy.workspace = true
 
 # Testing & Development
 tempfile.workspace = true

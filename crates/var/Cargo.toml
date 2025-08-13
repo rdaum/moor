@@ -52,3 +52,4 @@ num-traits.workspace = true
 once_cell.workspace = true
 paste.workspace = true
 strum.workspace = true
+zerocopy.workspace = true

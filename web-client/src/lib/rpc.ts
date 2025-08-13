@@ -20,7 +20,6 @@
  */
 import { matchRef, ObjectRef, oidRef, ORefKind, sysobjRef } from "./var";
 
-
 /**
  * Recursively transforms a JSON result from server eval into JavaScript objects
  *
