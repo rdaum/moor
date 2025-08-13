@@ -18,7 +18,7 @@ use flume::Sender;
 use crate::tasks::task::Task;
 use crate::tasks::{TaskDescription, TaskStart};
 use crate::vm::{Fork, TaskSuspend};
-use moor_common::model::Perms;
+use moor_common::model::{Perms, WorldState};
 use moor_common::tasks::{
     AbortLimitReason, CommandError, Exception, NarrativeEvent, SchedulerError, TaskId,
 };
@@ -357,12 +357,26 @@ impl TaskSchedulerClient {
             .recv()
             .expect("Could not receive workers info -- scheduler shut down?")
     }
+
+    /// Request a new database transaction for immediate task continuation.
+    /// This is used for optimizing suspend(0) and commit-only suspensions
+    /// to avoid the full suspend/resume cycle through the scheduler.
+    pub fn begin_new_transaction(&self) -> Result<Box<dyn WorldState>, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((self.task_id, TaskControlMsg::RequestNewTransaction(reply)))
+            .expect("Could not deliver client message -- scheduler shut down?");
+
+        // Short timeout since this should be very fast - just a database call
+        receive
+            .recv_timeout(Duration::from_millis(100))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
 }
 
 pub type ActiveTaskDescriptions = Vec<(TaskId, Obj, TaskStart)>;
 
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
-#[derive(Debug)]
 pub enum TaskControlMsg {
     /// Everything executed. The task is done.
     TaskSuccess(Var),
@@ -457,6 +471,8 @@ pub enum TaskControlMsg {
     GetWorkersInfo {
         reply: oneshot::Sender<Vec<WorkerInfo>>,
     },
+    /// Request a new database transaction for immediate task continuation
+    RequestNewTransaction(oneshot::Sender<Result<Box<dyn WorldState>, SchedulerError>>),
 }
 
 #[cfg(test)]

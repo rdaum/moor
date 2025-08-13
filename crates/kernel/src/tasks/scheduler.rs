@@ -989,6 +989,15 @@ impl Scheduler {
                     error!(?e, "Could not send workers info reply to requester");
                 }
             }
+            TaskControlMsg::RequestNewTransaction(reply) => {
+                let result = self
+                    .database
+                    .new_world_state()
+                    .map_err(|_| SchedulerError::CouldNotStartTask);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send new transaction reply to requester");
+                }
+            }
         }
     }
 

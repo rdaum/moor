@@ -50,7 +50,7 @@ use crate::tasks::{ServerOptions, TaskStart, sched_counters};
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::exec_state::VMExecState;
 use crate::vm::vm_host::VmHost;
-use crate::vm::{VMHostResponse, VerbCall};
+use crate::vm::{TaskSuspend, VMHostResponse, VerbCall};
 use moor_common::matching::{
     CommandParser, ComplexObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
     WsMatchEnv,
@@ -210,6 +210,31 @@ impl Task {
                     return None;
                 }
 
+                // Check for immediate wake conditions to avoid scheduler round-trip
+                let is_immediate = match delay.as_ref() {
+                    TaskSuspend::Commit => true,
+                    TaskSuspend::Timed(d) if d.is_zero() => true,
+                    _ => false,
+                };
+
+                if is_immediate {
+                    // Fast path: get new transaction and continue immediately
+                    match task_scheduler_client.begin_new_transaction() {
+                        Ok(new_world_state) => {
+                            self.retry_state = self.vm_host.snapshot_state();
+                            self.vm_host.resume_execution(v_int(0));
+                            return Some((self, new_world_state));
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to begin new transaction for immediate resume: {:?}",
+                                e
+                            );
+                            // Fall back to normal suspend path
+                        }
+                    }
+                }
+
                 self.retry_state = self.vm_host.snapshot_state();
                 self.vm_host.stop();
 
@@ -231,9 +256,11 @@ impl Task {
                     .expect("Could not commit world state before suspend");
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
-                    session.rollback().unwrap();
-                    task_scheduler_client.conflict_retry(self);
-                    return None;
+                    return self.try_immediate_retry(
+                        task_scheduler_client,
+                        session,
+                        "suspend need input",
+                    );
                 }
                 self.retry_state = self.vm_host.snapshot_state();
                 self.vm_host.stop();
@@ -275,9 +302,11 @@ impl Task {
                 let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
                 else {
                     warn!("Conflict during commit before complete, asking scheduler to retry task");
-                    session.rollback().unwrap();
-                    task_scheduler_client.conflict_retry(self);
-                    return None;
+                    return self.try_immediate_retry(
+                        task_scheduler_client,
+                        session,
+                        "complete success",
+                    );
                 };
 
                 self.vm_host.stop();
@@ -313,9 +342,11 @@ impl Task {
                         "Conflict during commit before complete, asking scheduler to retry task ({})",
                         self.task_id
                     );
-                    session.rollback().unwrap();
-                    task_scheduler_client.conflict_retry(self);
-                    return None;
+                    return self.try_immediate_retry(
+                        task_scheduler_client,
+                        session,
+                        "complete exception",
+                    );
                 };
 
                 warn!(task_id = self.task_id, ?exception, "Task exception");
@@ -362,6 +393,34 @@ impl Task {
                 world_state
                     .rollback()
                     .expect("Could not rollback world state");
+
+                // Try immediate retry for rollback requests
+                self.try_immediate_retry(task_scheduler_client, session, "rollback retry")
+            }
+        }
+    }
+
+    /// Try to restart immediately with a new transaction, falling back to scheduler retry
+    /// if the immediate restart fails. This optimizes common conflict retry scenarios.
+    fn try_immediate_retry(
+        mut self: Box<Self>,
+        task_scheduler_client: &TaskSchedulerClient,
+        session: &dyn Session,
+        reason: &str,
+    ) -> Option<(Box<Self>, Box<dyn WorldState>)> {
+        match task_scheduler_client.begin_new_transaction() {
+            Ok(new_world_state) => {
+                // Immediate retry succeeded
+                self.vm_host.restore_state(&self.retry_state);
+                Some((self, new_world_state))
+            }
+            Err(e) => {
+                // Fall back to scheduler retry
+                warn!(
+                    "Failed to begin new transaction for immediate retry ({}): {:?}. Falling back to scheduler retry.",
+                    reason, e
+                );
+                session.rollback().unwrap();
                 task_scheduler_client.conflict_retry(self);
                 None
             }
@@ -907,7 +966,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(2));
     }
@@ -932,7 +991,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskException(exception) = msg else {
-            panic!("Expected TaskException, got {msg:?}");
+            panic!("Expected TaskException, got different message type");
         };
         assert_eq!(exception.error.err_type, E_DIV);
     }
@@ -957,7 +1016,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::Notify { player, event } = msg else {
-            panic!("Expected Notify, got {msg:?}");
+            panic!("Expected Notify, got different message type");
         };
         assert_eq!(player, SYSTEM_OBJECT);
         assert_eq!(event.author(), &v_obj(SYSTEM_OBJECT));
@@ -967,7 +1026,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
     }
@@ -992,7 +1051,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuspend(_, mut resume_task) = msg else {
-            panic!("Expected TaskSuspend, got {msg:?}");
+            panic!("Expected TaskSuspend, got different message type");
         };
         assert_eq!(resume_task.task_id, 1);
 
@@ -1011,7 +1070,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
     }
@@ -1036,7 +1095,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskRequestInput(mut resume_task) = msg else {
-            panic!("Expected TaskRequestInput, got {msg:?}");
+            panic!("Expected TaskRequestInput, got different message type");
         };
         assert_eq!(resume_task.task_id, 1);
 
@@ -1058,7 +1117,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_str("hello, world!"));
     }
@@ -1095,7 +1154,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
-            panic!("Expected TaskRequestFork, got {msg:?}");
+            panic!("Expected TaskRequestFork, got different message type");
         };
         assert_eq!(fork_request.task_id, None);
         assert_eq!(fork_request.parent_task_id, 1);
@@ -1118,7 +1177,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
     }
@@ -1143,7 +1202,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskCommandError(CommandError::NoCommandMatch) = msg else {
-            panic!("Expected NoCommandMatch, got {msg:?}");
+            panic!("Expected NoCommandMatch, got different message type");
         };
     }
 
@@ -1176,7 +1235,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));
     }
@@ -1207,7 +1266,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));
     }
@@ -1239,7 +1298,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskCommandError(CommandError::NoCommandMatch) = msg else {
-            panic!("Expected NoCommandMatch, got {msg:?}");
+            panic!("Expected NoCommandMatch, got different message type");
         };
     }
 
@@ -1279,7 +1338,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {msg:?}");
+            panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));
     }
