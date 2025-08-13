@@ -17,6 +17,12 @@ use moor_var::{Obj, Symbol};
 use std::hash::BuildHasherDefault;
 use std::sync::Mutex;
 
+/// Create an optimized cache key by packing Obj and Symbol into a single u64.
+/// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
+fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
+    ((obj.id().0 as u64) << 32) | (symbol.compare_id() as u64)
+}
+
 use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
 
 pub struct VerbResolutionCache {
@@ -49,8 +55,7 @@ struct Inner {
     version: i64,
     flushed: bool,
 
-    #[allow(clippy::type_complexity)]
-    entries: im::HashMap<(Obj, Symbol), Option<VerbDef>, BuildHasherDefault<AHasher>>,
+    entries: im::HashMap<u64, Option<VerbDef>, BuildHasherDefault<AHasher>>,
     first_parent_with_verbs_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
 }
 
@@ -83,7 +88,8 @@ impl VerbResolutionCache {
 
     pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.lock().unwrap();
-        let entry = inner.entries.get(&(*obj, *verb));
+        let key = make_cache_key(obj, verb);
+        let entry = inner.entries.get(&key);
         let result = entry.cloned();
 
         if result.is_some() {
@@ -107,13 +113,15 @@ impl VerbResolutionCache {
     pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((*obj, *verb), Some(verbdef.clone()));
+        let key = make_cache_key(obj, verb);
+        inner.entries.insert(key, Some(verbdef.clone()));
     }
 
     pub fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((*obj, *verb), None);
+        let key = make_cache_key(obj, verb);
+        inner.entries.insert(key, None);
     }
 }
 

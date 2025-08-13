@@ -19,6 +19,12 @@ use moor_var::{Obj, Symbol};
 use std::hash::BuildHasherDefault;
 use std::sync::Mutex;
 
+/// Create an optimized cache key by packing Obj and Symbol into a single u64.
+/// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
+fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
+    ((obj.id().0 as u64) << 32) | (symbol.compare_id() as u64)
+}
+
 /// Unified cache statistics structure
 pub struct CacheStats {
     hits: ConcurrentCounter,
@@ -112,8 +118,7 @@ struct Inner {
     version: i64,
     flushed: bool,
 
-    #[allow(clippy::type_complexity)]
-    entries: im::HashMap<(Obj, Symbol), Option<PropDef>, BuildHasherDefault<AHasher>>,
+    entries: im::HashMap<u64, Option<PropDef>, BuildHasherDefault<AHasher>>,
     first_parent_with_props_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
 }
 
@@ -135,7 +140,8 @@ impl PropResolutionCache {
 
     pub fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let inner = self.inner.lock().unwrap();
-        let result = inner.entries.get(&(*obj, *prop)).cloned();
+        let key = make_cache_key(obj, prop);
+        let result = inner.entries.get(&key).cloned();
 
         if result.is_some() {
             PROP_CACHE_STATS.hit();
@@ -159,13 +165,15 @@ impl PropResolutionCache {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
 
-        inner.entries.insert((*obj, *prop), Some(propd.clone()));
+        let key = make_cache_key(obj, prop);
+        inner.entries.insert(key, Some(propd.clone()));
     }
 
     pub fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((*obj, *prop), None);
+        let key = make_cache_key(obj, prop);
+        inner.entries.insert(key, None);
     }
 
     pub fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
