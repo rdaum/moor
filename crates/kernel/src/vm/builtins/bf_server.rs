@@ -1228,26 +1228,29 @@ fn bf_log_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Log cache statistics in a format similar to LambdaMOO
     info!(
-        "Property cache: {} hits, {} misses, {} flushes ({:.1}% hit rate)",
+        "Property cache: {} hits, {} misses, {} flushes, {} entries ({:.1}% hit rate)",
         PROP_CACHE_STATS.hit_count(),
         PROP_CACHE_STATS.miss_count(),
         PROP_CACHE_STATS.flush_count(),
+        PROP_CACHE_STATS.num_entries(),
         PROP_CACHE_STATS.hit_rate()
     );
 
     info!(
-        "Verb cache: {} hits, {} misses, {} flushes ({:.1}% hit rate)",
+        "Verb cache: {} hits, {} misses, {} flushes, {} entries ({:.1}% hit rate)",
         VERB_CACHE_STATS.hit_count(),
         VERB_CACHE_STATS.miss_count(),
         VERB_CACHE_STATS.flush_count(),
+        VERB_CACHE_STATS.num_entries(),
         VERB_CACHE_STATS.hit_rate()
     );
 
     info!(
-        "Ancestry cache: {} hits, {} misses, {} flushes ({:.1}% hit rate)",
+        "Ancestry cache: {} hits, {} misses, {} flushes, {} entries ({:.1}% hit rate)",
         ANCESTRY_CACHE_STATS.hit_count(),
         ANCESTRY_CACHE_STATS.miss_count(),
         ANCESTRY_CACHE_STATS.flush_count(),
+        ANCESTRY_CACHE_STATS.num_entries(),
         ANCESTRY_CACHE_STATS.hit_rate()
     );
 
@@ -1998,7 +2001,7 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Helper function to convert cache statistics to a LambdaMOO-compatible list.
-fn make_cache_stats_list(cache_stats: &moor_db::prop_cache::CacheStats) -> Var {
+fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
     // Return a LambdaMOO-compatible list: [hits, negative_hits, misses, generation, histogram]
     // For our implementation:
     // - hits: direct cache hits

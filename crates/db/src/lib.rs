@@ -46,6 +46,7 @@ mod utils;
 pub mod verb_cache;
 
 pub use db_worldstate::db_counters;
+use fast_counter::ConcurrentCounter;
 pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
@@ -375,5 +376,73 @@ mod tests {
     fn test_ord_eq_obj_uuid_holder() {
         let mut tree = BTreeSet::new();
         tree.insert(ObjAndUUIDHolder::new(&SYSTEM_OBJECT, Uuid::new_v4()));
+    }
+}
+
+/// Unified cache statistics structure
+pub struct CacheStats {
+    hits: ConcurrentCounter,
+    misses: ConcurrentCounter,
+    flushes: ConcurrentCounter,
+    num_entries: ConcurrentCounter,
+}
+
+impl Default for CacheStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CacheStats {
+    pub fn new() -> Self {
+        Self {
+            hits: ConcurrentCounter::new(0),
+            misses: ConcurrentCounter::new(0),
+            flushes: ConcurrentCounter::new(0),
+            num_entries: ConcurrentCounter::new(0),
+        }
+    }
+
+    pub fn hit(&self) {
+        self.hits.add(1);
+    }
+    pub fn miss(&self) {
+        self.misses.add(1);
+    }
+    pub fn flush(&self) {
+        self.flushes.add(1);
+    }
+
+    pub fn add_entry(&self) {
+        self.num_entries.add(1);
+    }
+
+    pub fn remove_entries(&self, count: isize) {
+        self.num_entries.add(-count);
+    }
+
+    pub fn hit_count(&self) -> isize {
+        self.hits.sum()
+    }
+    pub fn miss_count(&self) -> isize {
+        self.misses.sum()
+    }
+    pub fn flush_count(&self) -> isize {
+        self.flushes.sum()
+    }
+
+    pub fn num_entries(&self) -> isize {
+        self.num_entries.sum()
+    }
+
+    pub fn hit_rate(&self) -> f64 {
+        let hits = self.hits.sum() as f64;
+        let misses = self.misses.sum() as f64;
+        let total = hits + misses;
+        if total > 0.0 {
+            (hits / total) * 100.0
+        } else {
+            0.0
+        }
     }
 }

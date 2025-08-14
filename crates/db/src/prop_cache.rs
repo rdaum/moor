@@ -11,72 +11,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::CacheStats;
 use ahash::AHasher;
-use fast_counter::ConcurrentCounter;
 use lazy_static::lazy_static;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
+use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u64.
 /// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
 fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
     ((obj.id().0 as u64) << 32) | (symbol.compare_id() as u64)
-}
-
-/// Unified cache statistics structure
-pub struct CacheStats {
-    hits: ConcurrentCounter,
-    misses: ConcurrentCounter,
-    flushes: ConcurrentCounter,
-}
-
-impl Default for CacheStats {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CacheStats {
-    pub fn new() -> Self {
-        Self {
-            hits: ConcurrentCounter::new(0),
-            misses: ConcurrentCounter::new(0),
-            flushes: ConcurrentCounter::new(0),
-        }
-    }
-
-    pub fn hit(&self) {
-        self.hits.add(1);
-    }
-    pub fn miss(&self) {
-        self.misses.add(1);
-    }
-    pub fn flush(&self) {
-        self.flushes.add(1);
-    }
-
-    pub fn hit_count(&self) -> isize {
-        self.hits.sum()
-    }
-    pub fn miss_count(&self) -> isize {
-        self.misses.sum()
-    }
-    pub fn flush_count(&self) -> isize {
-        self.flushes.sum()
-    }
-
-    pub fn hit_rate(&self) -> f64 {
-        let hits = self.hits.sum() as f64;
-        let misses = self.misses.sum() as f64;
-        let total = hits + misses;
-        if total > 0.0 {
-            (hits / total) * 100.0
-        } else {
-            0.0
-        }
-    }
 }
 
 lazy_static! {
@@ -105,8 +52,8 @@ impl PropResolutionCache {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
-                entries: im::HashMap::default(),
-                first_parent_with_props_cache: im::HashMap::default(),
+                entries: Arc::new(HashMap::default()),
+                first_parent_with_props_cache: Arc::new(HashMap::default()),
             }),
         }
     }
@@ -118,8 +65,22 @@ struct Inner {
     version: i64,
     flushed: bool,
 
-    entries: im::HashMap<u64, Option<PropDef>, BuildHasherDefault<AHasher>>,
-    first_parent_with_props_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
+    entries: Arc<HashMap<u64, Option<PropDef>, BuildHasherDefault<AHasher>>>,
+    first_parent_with_props_cache: Arc<HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>>,
+}
+
+impl Inner {
+    /// Get a mutable reference to entries, cloning if necessary (copy-on-write)
+    fn entries_mut(&mut self) -> &mut HashMap<u64, Option<PropDef>, BuildHasherDefault<AHasher>> {
+        Arc::make_mut(&mut self.entries)
+    }
+
+    /// Get a mutable reference to first_parent_with_props_cache, cloning if necessary (copy-on-write)
+    fn first_parent_cache_mut(
+        &mut self,
+    ) -> &mut HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>> {
+        Arc::make_mut(&mut self.first_parent_with_props_cache)
+    }
 }
 
 impl PropResolutionCache {
@@ -154,11 +115,13 @@ impl PropResolutionCache {
 
     pub fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
+        let entries_count = inner.entries.len() as isize;
         inner.flushed = true;
         inner.version += 1;
-        inner.entries.clear();
-        inner.first_parent_with_props_cache.clear();
+        inner.entries_mut().clear();
+        inner.first_parent_cache_mut().clear();
         PROP_CACHE_STATS.flush();
+        PROP_CACHE_STATS.remove_entries(entries_count);
     }
 
     pub fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
@@ -166,14 +129,22 @@ impl PropResolutionCache {
         inner.version += 1;
 
         let key = make_cache_key(obj, prop);
-        inner.entries.insert(key, Some(propd.clone()));
+        let is_new_entry = !inner.entries.contains_key(&key);
+        inner.entries_mut().insert(key, Some(propd.clone()));
+        if is_new_entry {
+            PROP_CACHE_STATS.add_entry();
+        }
     }
 
     pub fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         let key = make_cache_key(obj, prop);
-        inner.entries.insert(key, None);
+        let is_new_entry = !inner.entries.contains_key(&key);
+        inner.entries_mut().insert(key, None);
+        if is_new_entry {
+            PROP_CACHE_STATS.add_entry();
+        }
     }
 
     pub fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
@@ -184,6 +155,6 @@ impl PropResolutionCache {
     pub fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.first_parent_with_props_cache.insert(*obj, parent);
+        inner.first_parent_cache_mut().insert(*obj, parent);
     }
 }

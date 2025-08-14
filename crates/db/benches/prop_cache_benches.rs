@@ -122,6 +122,52 @@ impl BenchContext for LargePropCacheContext {
     }
 }
 
+// Realistic cache context - matches real-world cache statistics  
+// Property cache: ~355 entries, 98.8% hit rate
+struct RealisticPropCacheContext {
+    prop_cache: Box<PropResolutionCache>,
+    test_objs: Vec<Obj>,
+    test_props: Vec<Symbol>,
+}
+
+impl BenchContext for RealisticPropCacheContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        let prop_cache = Box::new(PropResolutionCache::new());
+
+        // Realistic object count - approximate 50 objects based on 355 property entries and ~7 props per object
+        let test_objs: Vec<Obj> = (1..=50).map(Obj::mk_id).collect();
+        
+        // Common MOO properties - about 12 core properties that get cached frequently
+        let test_props: Vec<Symbol> = [
+            "name", "description", "location", "owner", "key", "aliases",
+            "exits", "contents", "parent", "wizard", "programmer", "player"
+        ]
+        .iter()
+        .map(|&s| Symbol::mk(s))
+        .collect();
+
+        // Pre-populate to achieve realistic hit rates
+        // 98.8% hit rate means 98.8% of lookups find cached entries
+        let mut entry_count = 0;
+        for obj in &test_objs {
+            for prop in &test_props {
+                if entry_count < 355 {
+                    // Fill cache entry (98.8% will be hits)
+                    let propdef = PropDef::new(Uuid::new_v4(), *obj, *obj, *prop);
+                    prop_cache.fill_hit(obj, prop, &propdef);
+                    entry_count += 1;
+                }
+            }
+        }
+
+        RealisticPropCacheContext {
+            prop_cache,
+            test_objs,
+            test_props,
+        }
+    }
+}
+
 // Pre-populated cache context - tests performance with existing cache entries
 struct PopulatedPropCacheContext {
     prop_cache: Box<PropResolutionCache>,
@@ -329,6 +375,34 @@ fn prop_cache_parent_fill(
     }
 }
 
+// Realistic workload - matches real-world usage patterns
+fn prop_cache_realistic_workload(
+    ctx: &mut RealisticPropCacheContext,
+    chunk_size: usize,
+    _chunk_num: usize,
+) {
+    for i in 0..chunk_size {
+        let obj_idx = i % ctx.test_objs.len();
+        let prop_idx = i % ctx.test_props.len();
+
+        match i % 1000 {
+            0..=987 => {
+                // 98.8% lookups with hits (matches real hit rate)
+                let result = ctx
+                    .prop_cache
+                    .lookup(&ctx.test_objs[obj_idx], &ctx.test_props[prop_idx]);
+                black_box(result);
+            }
+            _ => {
+                // 1.2% cache misses
+                let new_obj = Obj::mk_id(10000 + (i as i32)); // Uncached object
+                let result = ctx.prop_cache.lookup(&new_obj, &ctx.test_props[prop_idx]);
+                black_box(result);
+            }
+        }
+    }
+}
+
 // Mixed workload - realistic simulation
 fn prop_cache_mixed_workload(
     ctx: &mut LargePropCacheContext,
@@ -402,7 +476,7 @@ pub fn main() {
     if let Some(f) = filter {
         eprintln!("Running prop cache benchmarks matching filter: '{f}'");
         eprintln!(
-            "Available filters: all, lookup, fill, flush, fork, parent, mixed, or any benchmark name substring"
+            "Available filters: all, lookup, fill, flush, fork, parent, mixed, realistic, or any benchmark name substring"
         );
         eprintln!();
     }
@@ -470,6 +544,12 @@ pub fn main() {
         func: prop_cache_mixed_workload,
     }];
 
+    let realistic_benchmarks = [BenchmarkDef {
+        name: "prop_cache_realistic_workload",
+        group: "realistic",
+        func: prop_cache_realistic_workload,
+    }];
+
     // Run benchmark groups
     run_benchmark_group::<PopulatedPropCacheContext>(
         &lookup_benchmarks,
@@ -499,6 +579,11 @@ pub fn main() {
     run_benchmark_group::<LargePropCacheContext>(
         &mixed_benchmarks,
         "Mixed Workload Benchmarks",
+        filter,
+    );
+    run_benchmark_group::<RealisticPropCacheContext>(
+        &realistic_benchmarks,
+        "Realistic Workload Benchmarks",
         filter,
     );
 
