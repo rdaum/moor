@@ -572,11 +572,22 @@ pub async fn history_handler(
                     "event_id": e.event.event_id(),
                     "author": var_as_json(e.event.author()),
                     "message": match e.event.event() {
-                        Event::Notify(msg, content_type) => json!({
-                            "type": "notify",
-                            "content": var_as_json(&msg),
-                            "content_type": content_type
-                        }),
+                        Event::Notify(msg, content_type) => {
+                            // Normalize content type to match live events (text_djot -> text/djot, etc.)
+                            let normalized_content_type = content_type.as_ref().map(|ct| {
+                                match ct.as_string().as_str() {
+                                    "text_djot" => "text/djot".to_string(),
+                                    "text_html" => "text/html".to_string(),
+                                    "text_plain" => "text/plain".to_string(),
+                                    _ => ct.as_string(), // Pass through unknown types unchanged
+                                }
+                            });
+                            json!({
+                                "type": "notify",
+                                "content": var_as_json(&msg),
+                                "content_type": normalized_content_type
+                            })
+                        },
                         Event::Traceback(ex) => json!({
                             "type": "traceback",
                             "error": format!("{}", ex)
