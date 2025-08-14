@@ -122,7 +122,7 @@ impl BenchContext for LargePropCacheContext {
     }
 }
 
-// Realistic cache context - matches real-world cache statistics  
+// Realistic cache context - matches real-world cache statistics
 // Property cache: ~355 entries, 98.8% hit rate
 struct RealisticPropCacheContext {
     prop_cache: Box<PropResolutionCache>,
@@ -136,11 +136,21 @@ impl BenchContext for RealisticPropCacheContext {
 
         // Realistic object count - approximate 50 objects based on 355 property entries and ~7 props per object
         let test_objs: Vec<Obj> = (1..=50).map(Obj::mk_id).collect();
-        
+
         // Common MOO properties - about 12 core properties that get cached frequently
         let test_props: Vec<Symbol> = [
-            "name", "description", "location", "owner", "key", "aliases",
-            "exits", "contents", "parent", "wizard", "programmer", "player"
+            "name",
+            "description",
+            "location",
+            "owner",
+            "key",
+            "aliases",
+            "exits",
+            "contents",
+            "parent",
+            "wizard",
+            "programmer",
+            "player",
         ]
         .iter()
         .map(|&s| Symbol::mk(s))

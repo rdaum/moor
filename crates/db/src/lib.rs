@@ -339,46 +339,6 @@ enum CommitSet {
     CommitReadOnly(Caches),
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::ObjAndUUIDHolder;
-    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
-    use std::collections::BTreeSet;
-    use std::hash::{Hash, Hasher};
-    use uuid::Uuid;
-
-    #[test]
-    fn test_reconstitute_obj_uuid_holder() {
-        let u = Uuid::new_v4();
-        let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
-        let bytes = oh.as_bytes().unwrap();
-        let oh2 = ObjAndUUIDHolder::from_bytes(bytes).unwrap();
-        assert_eq!(oh, oh2);
-        assert_eq!(oh.uuid(), oh2.uuid());
-        assert_eq!(oh.obj(), oh2.obj());
-    }
-
-    #[test]
-    fn test_hash_obj_uuid_holder() {
-        let u = Uuid::new_v4();
-        let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
-        let oh2 = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
-
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        oh.hash(&mut hasher);
-        oh2.hash(&mut hasher);
-        let h1 = hasher.finish();
-        let h2 = hasher.finish();
-        assert_eq!(h1, h2);
-    }
-
-    #[test]
-    fn test_ord_eq_obj_uuid_holder() {
-        let mut tree = BTreeSet::new();
-        tree.insert(ObjAndUUIDHolder::new(&SYSTEM_OBJECT, Uuid::new_v4()));
-    }
-}
-
 /// Unified cache statistics structure
 pub struct CacheStats {
     hits: ConcurrentCounter,
@@ -444,5 +404,45 @@ impl CacheStats {
         } else {
             0.0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ObjAndUUIDHolder;
+    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
+    use std::collections::BTreeSet;
+    use std::hash::{Hash, Hasher};
+    use uuid::Uuid;
+
+    #[test]
+    fn test_reconstitute_obj_uuid_holder() {
+        let u = Uuid::new_v4();
+        let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
+        let bytes = oh.as_bytes().unwrap();
+        let oh2 = ObjAndUUIDHolder::from_bytes(bytes).unwrap();
+        assert_eq!(oh, oh2);
+        assert_eq!(oh.uuid(), oh2.uuid());
+        assert_eq!(oh.obj(), oh2.obj());
+    }
+
+    #[test]
+    fn test_hash_obj_uuid_holder() {
+        let u = Uuid::new_v4();
+        let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
+        let oh2 = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        oh.hash(&mut hasher);
+        oh2.hash(&mut hasher);
+        let h1 = hasher.finish();
+        let h2 = hasher.finish();
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_ord_eq_obj_uuid_holder() {
+        let mut tree = BTreeSet::new();
+        tree.insert(ObjAndUUIDHolder::new(&SYSTEM_OBJECT, Uuid::new_v4()));
     }
 }

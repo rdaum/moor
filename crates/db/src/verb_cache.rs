@@ -67,7 +67,9 @@ impl Inner {
     }
 
     /// Get a mutable reference to first_parent_with_verbs_cache, cloning if necessary (copy-on-write)
-    fn first_parent_cache_mut(&mut self) -> &mut HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>> {
+    fn first_parent_cache_mut(
+        &mut self,
+    ) -> &mut HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>> {
         Arc::make_mut(&mut self.first_parent_with_verbs_cache)
     }
 }

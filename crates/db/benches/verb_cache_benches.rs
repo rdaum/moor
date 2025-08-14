@@ -185,7 +185,7 @@ impl BenchContext for RealisticCacheContext {
         // 99.5% hit rate means 99.5% of lookups find cached entries
         let mut entry_count = 0;
         for (i, obj) in test_objs.iter().enumerate() {
-            for (_j, verb) in test_verbs.iter().enumerate() {
+            for verb in test_verbs.iter() {
                 if entry_count < 633 {
                     // Fill cache entry (99.5% will be hits)
                     let verbdef = VerbDef::new(

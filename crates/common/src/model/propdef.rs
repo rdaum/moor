@@ -13,21 +13,16 @@
 
 use crate::model::defset::{Defs, HasUuid, Named};
 use bincode::{Decode, Encode};
-use moor_var::BincodeAsByteBufferExt;
-use moor_var::Obj;
-use moor_var::Symbol;
-use std::sync::Arc;
+use byteview::ByteView;
+use moor_var::encode::{DecodingError, EncodingError};
+use moor_var::{AsByteBuffer, Obj, Symbol};
 use uuid::Uuid;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
-#[derive(Debug, Eq, PartialEq, Hash, Encode, Decode, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Encode, Decode, Clone, IntoBytes, FromBytes, Immutable)]
+#[repr(C)]
 pub struct PropDef {
-    inner: Arc<PropDefInner>,
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Encode, Decode, Clone)]
-struct PropDefInner {
-    #[bincode(with_serde)]
-    uuid: Uuid,
+    uuid: [u8; 16],
     definer: Obj,
     location: Obj,
     name: Symbol,
@@ -37,49 +32,89 @@ impl PropDef {
     #[must_use]
     pub fn new(uuid: Uuid, definer: Obj, location: Obj, name: Symbol) -> Self {
         Self {
-            inner: Arc::new(PropDefInner {
-                uuid,
-                definer,
-                location,
-                name,
-            }),
+            uuid: *uuid.as_bytes(),
+            definer,
+            location,
+            name,
         }
     }
 
     #[must_use]
     pub fn definer(&self) -> Obj {
-        self.inner.definer
+        self.definer
     }
     #[must_use]
     pub fn location(&self) -> Obj {
-        self.inner.location
+        self.location
     }
 
     #[must_use]
     pub fn name(&self) -> Symbol {
-        self.inner.name
+        self.name
     }
 }
 
 impl Named for PropDef {
     fn matches_name(&self, name: Symbol) -> bool {
-        self.inner.name == name
+        self.name == name
     }
 
     fn names(&self) -> &[Symbol] {
-        std::slice::from_ref(&self.inner.name)
+        std::slice::from_ref(&self.name)
     }
 }
 
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
-        self.inner.uuid
+        Uuid::from_bytes(self.uuid)
     }
 }
 
 pub type PropDefs = Defs<PropDef>;
 
-impl BincodeAsByteBufferExt for PropDef {}
+impl AsByteBuffer for PropDef {
+    fn size_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        // Zero-copy: direct access to the struct's bytes
+        Ok(f(IntoBytes::as_bytes(self)))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        // Zero-copy to Vec
+        Ok(IntoBytes::as_bytes(self).to_vec())
+    }
+
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
+    where
+        Self: Sized,
+    {
+        let bytes = bytes.as_ref();
+        if bytes.len() != std::mem::size_of::<Self>() {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected {} bytes for PropDef, got {}",
+                size_of::<Self>(),
+                bytes.len()
+            )));
+        }
+
+        // Handle potentially unaligned ByteView data safely
+        // Copy to properly aligned buffer, then transmute directly
+        let mut aligned_buffer = [0u8; std::mem::size_of::<Self>()];
+        aligned_buffer.copy_from_slice(bytes);
+        
+        // Safe transmute using zerocopy - no additional copy
+        Self::read_from_bytes(&aligned_buffer)
+            .map_err(|_| DecodingError::CouldNotDecode("Invalid bytes for PropDef".to_string()))
+    }
+
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        // Zero-copy: create ByteView directly from struct bytes
+        Ok(ByteView::from(IntoBytes::as_bytes(self)))
+    }
+}
 
 #[cfg(test)]
 mod tests {
