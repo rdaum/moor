@@ -113,47 +113,51 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, onConnect
 
             {/* Login form */}
             <div className="login_prompt">
-                <select
-                    id="mode_select"
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value as "connect" | "create")}
-                >
-                    <option value="connect">Connect</option>
-                    <option value="create">Create</option>
-                </select>{" "}
-                <label htmlFor="login_username" className="login_label">
-                    Player:{" "}
-                    <input
-                        ref={usernameRef}
-                        id="login_username"
-                        type="text"
-                        placeholder="Username"
-                        autoComplete="username"
-                        spellCheck={false}
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        onKeyUp={handleKeyPress}
-                    />
-                </label>{" "}
-                <label htmlFor="login_password" className="login_label">
-                    Password:{" "}
-                    <input
-                        ref={passwordRef}
-                        id="login_password"
-                        type="password"
-                        placeholder="Password"
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onKeyUp={handleKeyPress}
-                    />
-                </label>{" "}
-                <button
-                    onClick={handleSubmit}
-                    className="login_button"
-                >
-                    Go
-                </button>
+                <fieldset>
+                    <legend>Player Authentication</legend>
+                    <label htmlFor="mode_select" className="sr-only">Connection type:</label>
+                    <select
+                        id="mode_select"
+                        value={mode}
+                        onChange={(e) => setMode(e.target.value as "connect" | "create")}
+                    >
+                        <option value="connect">Connect</option>
+                        <option value="create">Create</option>
+                    </select>{" "}
+                    <label htmlFor="login_username" className="login_label">
+                        Player:{" "}
+                        <input
+                            ref={usernameRef}
+                            id="login_username"
+                            type="text"
+                            placeholder="Username"
+                            autoComplete="username"
+                            spellCheck={false}
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            onKeyUp={handleKeyPress}
+                        />
+                    </label>{" "}
+                    <label htmlFor="login_password" className="login_label">
+                        Password:{" "}
+                        <input
+                            ref={passwordRef}
+                            id="login_password"
+                            type="password"
+                            placeholder="Password"
+                            autoComplete="current-password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            onKeyUp={handleKeyPress}
+                        />
+                    </label>{" "}
+                    <button
+                        onClick={handleSubmit}
+                        className="login_button"
+                    >
+                        Go
+                    </button>
+                </fieldset>
             </div>
         </div>
     );

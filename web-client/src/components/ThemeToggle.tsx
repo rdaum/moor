@@ -50,8 +50,13 @@ export const ThemeToggle: React.FC = () => {
             <button
                 className="theme-toggle"
                 onClick={toggleTheme}
+                aria-label={`Switch to ${isDarkTheme ? 'light' : 'dark'} theme`}
+                aria-pressed={isDarkTheme ? "true" : "false"}
             >
-                {isDarkTheme ? "Switch to Light Theme" : "Switch to Dark Theme"}
+                {isDarkTheme ? "🌙" : "☀️"} 
+                <span className="sr-only">
+                    {isDarkTheme ? "Switch to Light Theme" : "Switch to Dark Theme"}
+                </span>
             </button>
         </div>
     );

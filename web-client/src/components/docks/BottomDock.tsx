@@ -28,6 +28,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({ presentations, onClosePr
 
     return (
         <div className="bottom_dock" style={{ display: "flex" }}>
+            <h2 className="sr-only">Bottom Dock Panels</h2>
             {presentations.map((presentation) => (
                 <Panel
                     key={presentation.id}

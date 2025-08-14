@@ -28,6 +28,7 @@ export const LeftDock: React.FC<LeftDockProps> = ({ presentations, onClosePresen
 
     return (
         <div className="left_dock" style={{ display: "block" }}>
+            <h2 className="sr-only">Left Dock Panels</h2>
             {presentations.map((presentation) => (
                 <Panel
                     key={presentation.id}

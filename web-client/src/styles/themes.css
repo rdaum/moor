@@ -55,7 +55,8 @@
 }
 
 .theme-toggle-area:hover .theme-toggle,
-.theme-toggle:hover {
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;

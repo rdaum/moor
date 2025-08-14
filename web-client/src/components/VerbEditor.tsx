@@ -319,6 +319,62 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         return error.message;
     };
 
+    // Focus management for modal
+    useEffect(() => {
+        if (!visible) return;
+
+        // Store the previously focused element
+        const previouslyFocused = document.activeElement as HTMLElement;
+        
+        // Focus the modal container when it opens
+        if (containerRef.current) {
+            containerRef.current.focus();
+        }
+
+        // Handle keyboard events for focus trapping
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                onClose();
+                return;
+            }
+
+            if (e.key === "Tab") {
+                const focusableElements = containerRef.current?.querySelectorAll(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                );
+                
+                if (!focusableElements || focusableElements.length === 0) return;
+                
+                const firstElement = focusableElements[0] as HTMLElement;
+                const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+                
+                if (e.shiftKey) {
+                    // Shift+Tab: if focus is on first element, move to last
+                    if (document.activeElement === firstElement) {
+                        e.preventDefault();
+                        lastElement.focus();
+                    }
+                } else {
+                    // Tab: if focus is on last element, move to first
+                    if (document.activeElement === lastElement) {
+                        e.preventDefault();
+                        firstElement.focus();
+                    }
+                }
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+
+        // Cleanup: restore focus when modal closes
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+            if (previouslyFocused) {
+                previouslyFocused.focus();
+            }
+        };
+    }, [visible, onClose]);
+
     if (!visible) {
         return null;
     }
@@ -327,6 +383,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         <div
             ref={containerRef}
             className="editor_container"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="verb-editor-title"
+            tabIndex={-1}
             style={{
                 position: "fixed",
                 top: `${position.y}px`,
@@ -357,11 +417,12 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     cursor: isDragging ? "grabbing" : "grab",
                 }}
             >
-                <h3 style={{ margin: 0, color: "var(--color-text-primary)" }}>
+                <h3 id="verb-editor-title" style={{ margin: 0, color: "var(--color-text-primary)" }}>
                     {title}
                 </h3>
                 <button
                     onClick={onClose}
+                    aria-label="Close verb editor"
                     style={{
                         background: "transparent",
                         border: "none",
@@ -371,7 +432,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         padding: "4px 8px",
                     }}
                 >
-                    ×
+                    <span aria-hidden="true">×</span>
                 </button>
             </div>
 
@@ -445,6 +506,20 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             {/* Resize handle */}
             <div
                 onMouseDown={handleResizeMouseDown}
+                tabIndex={0}
+                role="button"
+                aria-label="Resize editor window"
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        // Start resize mode - could be enhanced with arrow key support
+                        handleResizeMouseDown({
+                            ...e,
+                            clientX: size.width + position.x,
+                            clientY: size.height + position.y,
+                        } as any);
+                    }
+                }}
                 style={{
                     position: "absolute",
                     bottom: 0,

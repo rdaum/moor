@@ -45,9 +45,9 @@ export const Panel: React.FC<PanelProps> = ({
                 <button
                     className={closeButtonClassName}
                     onClick={handleClose}
-                    aria-label={`Close ${presentation.title}`}
+                    aria-label={`Close ${presentation.title} panel`}
                 >
-                    ×
+                    <span aria-hidden="true">×</span>
                 </button>
             </div>
             <div className={contentClassName}>

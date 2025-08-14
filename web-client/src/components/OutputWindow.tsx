@@ -181,6 +181,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     <span>Viewing history</span>
                     <button
                         onClick={jumpToNow}
+                        aria-label="Return to latest messages"
+                        aria-describedby="history-status"
                         style={{
                             background: "var(--color-button-primary)",
                             color: "white",
@@ -199,6 +201,9 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     >
                         Jump to Now
                     </button>
+                    <div id="history-status" className="sr-only">
+                        Currently viewing message history
+                    </div>
                 </div>
             )}
 
@@ -214,7 +219,11 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                         fontSize: "0.8em",
                     }}
                 >
-                    {isLoadingHistory && "Loading more history..."}
+                    {isLoadingHistory && (
+                        <span role="status" aria-live="polite">
+                            Loading more history...
+                        </span>
+                    )}
                 </div>
             )}
 

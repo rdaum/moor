@@ -28,6 +28,7 @@ export const RightDock: React.FC<RightDockProps> = ({ presentations, onClosePres
 
     return (
         <div className="right_dock" style={{ display: "block" }}>
+            <h2 className="sr-only">Right Dock Panels</h2>
             {presentations.map((presentation) => (
                 <Panel
                     key={presentation.id}

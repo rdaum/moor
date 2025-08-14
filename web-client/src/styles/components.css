@@ -528,3 +528,26 @@
 .djot-table td:last-child {
   border-right: none;
 }
+
+/* ====== ACCESSIBILITY ENHANCEMENTS ====== */
+
+/* Better focus indicators for custom elements */
+.theme-toggle:focus-visible,
+.login_button:focus-visible,
+[class*="dock_panel_close"]:focus-visible {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(var(--color-text-accent-rgb), 0.3);
+}
+
+/* Ensure interactive elements meet minimum size requirements */
+.theme-toggle,
+[class*="dock_panel_close"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.login_button {
+  min-height: 32px;
+  padding: 4px 12px;
+}

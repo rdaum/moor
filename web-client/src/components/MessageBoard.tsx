@@ -68,6 +68,9 @@ export const MessageBoard: React.FC<
         <div
             className={`message_board ${className}`}
             style={{ display: displayStyle }}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
         >
             {message}
         </div>

@@ -222,6 +222,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 autoComplete="off"
                 spellCheck={false}
                 aria-label="Command input"
+                aria-describedby="input-help"
+                aria-multiline="true"
                 style={{
                     minHeight: "2.5rem",
                     height: "auto",
@@ -231,6 +233,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
                     resize: "none",
                 }}
             />
+            <div id="input-help" className="sr-only">
+                Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input.
+            </div>
         </div>
     );
 };

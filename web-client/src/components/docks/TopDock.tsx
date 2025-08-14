@@ -28,6 +28,7 @@ export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresenta
 
     return (
         <div className="top_dock" style={{ display: "flex" }}>
+            <h2 className="sr-only">Top Dock Panels</h2>
             {presentations.map((presentation) => (
                 <Panel
                     key={presentation.id}

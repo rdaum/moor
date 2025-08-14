@@ -184,6 +184,9 @@ function AppContent({
 
     return (
         <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Screen reader heading for main application */}
+            <h1 className="sr-only">mooR Web Client</h1>
+            
             {/* Main container (primarily for styling) */}
             <div className="main" />
 
@@ -205,47 +208,57 @@ function AppContent({
 
             {/* Main app layout with narrative interface */}
             {isConnected && (
-                <div className="app_layout">
+                <main className="app_layout" role="main">
                     {/* Top dock */}
-                    <TopDock
-                        presentations={getTopDockPresentations()}
-                        onClosePresentation={handleClosePresentation}
-                        onLinkClick={onLinkClick}
-                    />
+                    <aside role="complementary" aria-label="Top dock panels">
+                        <TopDock
+                            presentations={getTopDockPresentations()}
+                            onClosePresentation={handleClosePresentation}
+                            onLinkClick={onLinkClick}
+                        />
+                    </aside>
 
                     {/* Middle section with left dock, narrative, right dock */}
                     <div className="middle_section">
-                        <LeftDock
-                            presentations={getLeftDockPresentations()}
-                            onClosePresentation={handleClosePresentation}
-                            onLinkClick={onLinkClick}
-                        />
+                        <aside role="complementary" aria-label="Left dock panels">
+                            <LeftDock
+                                presentations={getLeftDockPresentations()}
+                                onClosePresentation={handleClosePresentation}
+                                onLinkClick={onLinkClick}
+                            />
+                        </aside>
 
                         {/* Main narrative interface - takes up full space */}
-                        <Narrative
-                            ref={narrativeCallbackRef}
-                            visible={isConnected}
-                            connected={isConnected}
-                            onSendMessage={sendMessage}
-                            onLoadMoreHistory={handleLoadMoreHistory}
-                            isLoadingHistory={isLoadingHistory}
-                            onLinkClick={onLinkClick}
-                        />
+                        <section role="main" aria-label="Game narrative and input">
+                            <Narrative
+                                ref={narrativeCallbackRef}
+                                visible={isConnected}
+                                connected={isConnected}
+                                onSendMessage={sendMessage}
+                                onLoadMoreHistory={handleLoadMoreHistory}
+                                isLoadingHistory={isLoadingHistory}
+                                onLinkClick={onLinkClick}
+                            />
+                        </section>
 
-                        <RightDock
-                            presentations={getRightDockPresentations()}
-                            onClosePresentation={handleClosePresentation}
-                            onLinkClick={onLinkClick}
-                        />
+                        <aside role="complementary" aria-label="Right dock panels">
+                            <RightDock
+                                presentations={getRightDockPresentations()}
+                                onClosePresentation={handleClosePresentation}
+                                onLinkClick={onLinkClick}
+                            />
+                        </aside>
                     </div>
 
                     {/* Bottom dock */}
-                    <BottomDock
-                        presentations={getBottomDockPresentations()}
-                        onClosePresentation={handleClosePresentation}
-                        onLinkClick={onLinkClick}
-                    />
-                </div>
+                    <aside role="complementary" aria-label="Bottom dock panels">
+                        <BottomDock
+                            presentations={getBottomDockPresentations()}
+                            onClosePresentation={handleClosePresentation}
+                            onLinkClick={onLinkClick}
+                        />
+                    </aside>
+                </main>
             )}
 
             {/* Verb Editor Modal */}
