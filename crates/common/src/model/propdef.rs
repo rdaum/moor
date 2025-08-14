@@ -104,7 +104,7 @@ impl AsByteBuffer for PropDef {
         // Copy to properly aligned buffer, then transmute directly
         let mut aligned_buffer = [0u8; std::mem::size_of::<Self>()];
         aligned_buffer.copy_from_slice(bytes);
-        
+
         // Safe transmute using zerocopy - no additional copy
         Self::read_from_bytes(&aligned_buffer)
             .map_err(|_| DecodingError::CouldNotDecode("Invalid bytes for PropDef".to_string()))
