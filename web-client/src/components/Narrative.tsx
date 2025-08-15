@@ -21,7 +21,7 @@ export interface NarrativeMessage {
     type: "narrative" | "input_echo" | "system" | "error";
     timestamp?: number;
     isHistorical?: boolean;
-    contentType?: "text/plain" | "text/djot" | "text/html";
+    contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
 }
 
 interface NarrativeProps {
@@ -34,7 +34,7 @@ interface NarrativeProps {
 }
 
 export interface NarrativeRef {
-    addNarrativeContent: (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html") => void;
+    addNarrativeContent: (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback") => void;
     addSystemMessage: (content: string | string[]) => void;
     addErrorMessage: (content: string | string[]) => void;
     addHistoricalMessages: (messages: NarrativeMessage[]) => void;
@@ -58,7 +58,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     const addMessage = useCallback((
         content: string | string[],
         type: NarrativeMessage["type"] = "narrative",
-        contentType?: "text/plain" | "text/djot" | "text/html",
+        contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
     ) => {
         const newMessage: NarrativeMessage = {
             id: `msg_${Date.now()}_${Math.random()}`,
@@ -87,7 +87,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
     // Add a method to add narrative content from WebSocket messages
     const addNarrativeContent = useCallback(
-        (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html") => {
+        (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback") => {
             addMessage(content, "narrative", contentType);
         },
         [addMessage],

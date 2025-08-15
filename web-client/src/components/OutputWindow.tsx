@@ -21,7 +21,7 @@ interface OutputWindowProps {
         type: "narrative" | "input_echo" | "system" | "error";
         timestamp?: number;
         isHistorical?: boolean;
-        contentType?: "text/plain" | "text/djot" | "text/html";
+        contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;

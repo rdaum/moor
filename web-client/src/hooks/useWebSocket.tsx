@@ -101,7 +101,12 @@ export const useWebSocket = (
                     onUnpresentMessage(data.unpresent);
                 }
             } else if (data.traceback) {
-                // Traceback message - for now just log it
+                // Traceback message - log to console and show as narrative
+                console.error("MOO Traceback:", data.traceback);
+                if (onNarrativeMessage) {
+                    const tracebackText = `${data.traceback.error}\n${data.traceback.traceback.join('\n')}`;
+                    onNarrativeMessage(tracebackText, data.server_time, 'text/traceback', false);
+                }
             }
 
             // Call optional message handler

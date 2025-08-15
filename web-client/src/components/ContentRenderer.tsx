@@ -17,7 +17,7 @@ import React, { useMemo } from "react";
 
 interface ContentRendererProps {
     content: string | string[];
-    contentType?: "text/plain" | "text/djot" | "text/html";
+    contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
     onLinkClick?: (url: string) => void;
 }
 
@@ -298,6 +298,16 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         </div>
                     );
                 }
+            }
+
+            case "text/traceback": {
+                // For traceback, render as plain text with special traceback styling
+                const tracebackContent = getContentString("\n");
+                return (
+                    <pre className="traceback_narrative">
+                        {tracebackContent}
+                    </pre>
+                );
             }
 
             case "text/plain":
