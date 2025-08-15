@@ -39,6 +39,11 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             case "text/html": {
                 // For HTML, join array elements with newlines
                 const htmlContent = getContentString("\n");
+                console.log("HTML Content Received:", { 
+                    raw: content,
+                    joined: htmlContent,
+                    contentType 
+                });
                 // Add hook to DOMPurify
                 DOMPurify.addHook('afterSanitizeElements', function(node) {
                     if (node.tagName === 'TABLE') {
@@ -81,6 +86,9 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         "ul",
                         "ol",
                         "li",
+                        "dl",
+                        "dt",
+                        "dd",
                         "a",
                         "img",
                         "pre",
@@ -115,6 +123,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         "style",
                         "width",
                         "height",
+                        "data-url",
                     ],
                     ALLOWED_URI_REGEXP:
                         /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
@@ -122,6 +131,8 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 
                 // Remove the hook after use to avoid affecting other calls
                 DOMPurify.removeHook('afterSanitizeElements');
+                
+                console.log("HTML After Sanitization:", sanitizedHtml);
 
                 return (
                     <div

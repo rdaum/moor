@@ -405,6 +405,13 @@
   margin-bottom: 0;
 }
 
+/* Normalize whitespace in HTML content */
+.text_narrative div {
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
 /* ====== HISTORICAL CONTENT ====== */
 /* Historical events - lighter, muted appearance */
 .historical_narrative {
@@ -532,6 +539,34 @@
 /* ====== MOO LINK STYLES ====== */
 .moo-link {
   margin-right: 0.5em;
+  color: var(--color-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.moo-link:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+/* ====== DEFINITION LIST STYLES ====== */
+dl {
+  margin: 1em 0;
+  white-space: normal;
+}
+
+dt {
+  font-weight: bold;
+  margin-top: 0.5em;
+  margin-bottom: 0.2em;
+  white-space: normal;
+}
+
+dd {
+  margin-left: 2em;
+  margin-bottom: 0.8em;
+  margin-top: 0;
+  white-space: normal;
 }
 
 /* ====== ACCESSIBILITY ENHANCEMENTS ====== */
