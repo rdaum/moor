@@ -491,8 +491,8 @@
   background: color-mix(in srgb, var(--color-button-primary) 80%, white);
 }
 
-/* ====== DJOT TABLE STYLES ====== */
-.djot-table {
+/* ====== NARRATIVE TABLE STYLES ====== */
+.narrative-table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.5em 0;
@@ -500,33 +500,38 @@
   border: 1px solid var(--color-border-medium);
 }
 
-.djot-table thead {
+.narrative-table thead {
   background-color: var(--color-bg-secondary);
 }
 
-.djot-table tbody tr {
+.narrative-table tbody tr {
   border-bottom: 1px solid var(--color-border-medium);
 }
 
-.djot-table tbody tr:last-child {
+.narrative-table tbody tr:last-child {
   border-bottom: none;
 }
 
-.djot-table th,
-.djot-table td {
+.narrative-table th,
+.narrative-table td {
   padding: 8px 12px;
   text-align: left;
   border-right: 1px solid var(--color-border-medium);
 }
 
-.djot-table th {
+.narrative-table th {
   font-weight: bold;
   border-bottom: 1px solid var(--color-border-medium);
 }
 
-.djot-table th:last-child,
-.djot-table td:last-child {
+.narrative-table th:last-child,
+.narrative-table td:last-child {
   border-right: none;
+}
+
+/* ====== MOO LINK STYLES ====== */
+.moo-link {
+  margin-right: 0.5em;
 }
 
 /* ====== ACCESSIBILITY ENHANCEMENTS ====== */

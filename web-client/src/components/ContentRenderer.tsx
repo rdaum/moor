@@ -39,6 +39,32 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             case "text/html": {
                 // For HTML, join array elements with newlines
                 const htmlContent = getContentString("\n");
+                // Add hook to DOMPurify
+                DOMPurify.addHook('afterSanitizeElements', function(node) {
+                    if (node.tagName === 'TABLE') {
+                        const existingClass = node.getAttribute('class') || '';
+                        const newClass = existingClass ? `${existingClass} narrative-table` : 'narrative-table';
+                        node.setAttribute('class', newClass);
+                    } else if (node.tagName === 'A') {
+                        // Convert links to moo-link spans (same as djot does)
+                        const href = node.getAttribute('href') || '';
+                        const linkText = node.textContent || href;
+                        
+                        // Create a span element to replace the link
+                        const span = document.createElement('span');
+                        span.className = 'moo-link';
+                        span.setAttribute('data-url', href);
+                        span.style.color = 'var(--color-link)';
+                        span.style.textDecoration = 'underline';
+                        span.style.cursor = 'pointer';
+                        span.title = href;
+                        span.textContent = linkText;
+                        
+                        // Replace the link with the span
+                        node.parentNode?.replaceChild(span, node);
+                    }
+                });
+                
                 // Sanitize HTML content for security
                 const sanitizedHtml = DOMPurify.sanitize(htmlContent, {
                     ALLOWED_TAGS: [
@@ -93,10 +119,24 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     ALLOWED_URI_REGEXP:
                         /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
                 });
+                
+                // Remove the hook after use to avoid affecting other calls
+                DOMPurify.removeHook('afterSanitizeElements');
 
                 return (
                     <div
                         dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+                        onClick={(e) => {
+                            // Handle clicks on moo-link spans
+                            const target = e.target as HTMLElement;
+                            if (target.classList.contains("moo-link")) {
+                                e.preventDefault();
+                                const url = target.getAttribute("data-url");
+                                if (url && onLinkClick) {
+                                    onLinkClick(url);
+                                }
+                            }
+                        }}
                         style={{
                             wordWrap: "break-word",
                             overflowWrap: "break-word",
@@ -138,7 +178,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                 return `<span class="moo-link" data-url="${href}" style="color: var(--color-link); text-decoration: underline; cursor: pointer;" title="${href}">${linkText}</span>`;
                             },
                             table: (node: any, context: any) => {
-                                return `<table class="djot-table">${context.renderChildren(node)}</table>`;
+                                return `<table class="narrative-table">${context.renderChildren(node)}</table>`;
                             },
                             thead: (node: any, context: any) => {
                                 return `<thead>${context.renderChildren(node)}</thead>`;

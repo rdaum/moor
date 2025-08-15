@@ -71,7 +71,6 @@ export const useWebSocket = (
                 onSystemMessage(data.system_message, 5);
             } else if ("message" in data && data.message !== undefined) {
                 // Narrative message - send to narrative display
-                console.log("DEBUG: Raw WebSocket message data:", JSON.stringify(data, null, 2));
 
                 let content: string | string[];
 
@@ -87,8 +86,6 @@ export const useWebSocket = (
                 // Always check for content_type at the top level of the message
                 const contentType = (data as any).content_type;
 
-                console.log("DEBUG: Extracted content:", content);
-                console.log("DEBUG: Extracted contentType:", contentType);
 
                 if (onNarrativeMessage) {
                     onNarrativeMessage(content, data.server_time, contentType, false); // WebSocket messages are always live (not historical)
