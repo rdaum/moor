@@ -12,55 +12,68 @@
 //
 
 import React, { useEffect, useRef, useState } from "react";
+import { ContentRenderer } from "./ContentRenderer";
 
 interface LoginProps {
     visible: boolean;
     welcomeMessage: string;
+    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
     onConnect: (mode: "connect" | "create", username: string, password: string) => void;
 }
 
 /**
- * Hook to fetch welcome message from the server
+ * Hook to fetch welcome message and content type from the server
  */
 export const useWelcomeMessage = () => {
     const [welcomeMessage, setWelcomeMessage] = useState<string>("");
+    const [contentType, setContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">("text/plain");
 
     useEffect(() => {
         const fetchWelcome = async () => {
             try {
-                const response = await fetch("/system_property/login/welcome_message");
-                if (response.ok) {
-                    const welcomeText = await response.json() as string[];
-                    setWelcomeMessage(welcomeText.join("\n"));
+                // Fetch welcome message
+                const messageResponse = await fetch("/system_property/login/welcome_message");
+                let welcomeText = "";
+                
+                if (messageResponse.ok) {
+                    const welcomeArray = await messageResponse.json() as string[];
+                    welcomeText = welcomeArray.join("\n");
                 } else {
-                    console.error(`Failed to retrieve welcome text: ${response.status} ${response.statusText}`);
-                    setWelcomeMessage("Welcome to mooR");
+                    console.error(`Failed to retrieve welcome text: ${messageResponse.status} ${messageResponse.statusText}`);
+                    welcomeText = "Welcome to mooR";
                 }
+
+                // Fetch content type
+                let contentTypeValue: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
+                try {
+                    const typeResponse = await fetch("/system_property/login/welcome_message_content_type");
+                    if (typeResponse.ok) {
+                        const typeValue = await typeResponse.json() as string;
+                        // Validate the content type
+                        if (typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain" || typeValue === "text/traceback") {
+                            contentTypeValue = typeValue;
+                        }
+                    }
+                    // If 404 or invalid value, default to text/plain (already set)
+                } catch (error) {
+                    console.log("Content type not available, defaulting to text/plain:", error);
+                }
+
+                setWelcomeMessage(welcomeText);
+                setContentType(contentTypeValue);
             } catch (error) {
                 console.error("Error fetching welcome message:", error);
                 setWelcomeMessage("Welcome to mooR");
+                setContentType("text/plain");
             }
         };
 
         fetchWelcome();
     }, []);
 
-    return welcomeMessage;
+    return { welcomeMessage, contentType };
 };
 
-/**
- * Simple Djot-like content renderer (placeholder for now)
- * TODO: Integrate actual @djot/djot library
- */
-const DjotContent: React.FC<{ content: string }> = ({ content }) => {
-    return (
-        <div className="welcome_box">
-            <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
-        {content}
-            </pre>
-        </div>
-    );
-};
 
 /**
  * Login Component
@@ -69,7 +82,7 @@ const DjotContent: React.FC<{ content: string }> = ({ content }) => {
  * account or create a new one. The component automatically hides when
  * the user is connected and shows when disconnected.
  */
-export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, onConnect }) => {
+export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentType, onConnect }) => {
     const [mode, setMode] = useState<"connect" | "create">("connect");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -108,7 +121,9 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, onConnect
     return (
         <div className="login_window" style={{ display: "block" }}>
             {/* Welcome message display */}
-            <DjotContent content={welcomeMessage} />
+            <div className="welcome_box">
+                <ContentRenderer content={welcomeMessage} contentType={contentType} />
+            </div>
             <br />
 
             {/* Login form */}

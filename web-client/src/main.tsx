@@ -46,7 +46,7 @@ function AppContent({
     onLinkClick?: (url: string) => void;
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
-    const welcomeMessage = useWelcomeMessage();
+    const { welcomeMessage, contentType } = useWelcomeMessage();
     const { authState, connect } = useAuthContext();
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
     const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -204,6 +204,7 @@ function AppContent({
             <Login
                 visible={!isConnected}
                 welcomeMessage={welcomeMessage}
+                contentType={contentType}
                 onConnect={handleConnect}
             />
 
