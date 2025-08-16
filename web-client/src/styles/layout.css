@@ -21,6 +21,14 @@
   box-sizing: border-box;
 }
 
+/* Ensure the main section (narrative wrapper) takes full available space */
+.middle_section section[role="main"] {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .columns_grid {
   width: 100%;
   height: 100%;

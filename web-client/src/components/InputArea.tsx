@@ -21,6 +21,17 @@ interface InputAreaProps {
     onAddToHistory: (command: string) => void;
 }
 
+const ENCOURAGING_PLACEHOLDERS = [
+    "What would you like to explore?",
+    "Ready for your next adventure?",
+    "What's on your mind?",
+    "How can we help you today?",
+    "What would you like to try?",
+    "Share your thoughts...",
+    "What's your next move?",
+    "Ready to discover something new?",
+];
+
 export const InputArea: React.FC<InputAreaProps> = ({
     visible,
     disabled,
@@ -30,6 +41,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 }) => {
     const [input, setInput] = useState("");
     const [historyOffset, setHistoryOffset] = useState(0);
+    const [placeholderIndex, setPlaceholderIndex] = useState(() => Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Focus input area when it becomes visible and enabled
@@ -51,7 +63,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
         // Set height to scroll height, but constrain within min/max bounds
         const scrollHeight = textarea.scrollHeight;
-        const minHeight = 40; // 2.5rem in pixels (approximate)
+        const minHeight = 48; // 3rem in pixels (approximate)
         const maxHeight = 128; // 8rem in pixels (approximate)
 
         const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
@@ -121,6 +133,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
         // Clear input and reset history offset
         setInput("");
         setHistoryOffset(0);
+        
+        // Pick a new encouraging placeholder for next input
+        setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
     }, [input, onSendMessage, onAddToHistory, disabled]);
 
     // Handle paste events
@@ -218,14 +233,14 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 disabled={disabled}
-                placeholder="Type a command..."
+                placeholder={ENCOURAGING_PLACEHOLDERS[placeholderIndex]}
                 autoComplete="off"
                 spellCheck={false}
                 aria-label="Command input"
                 aria-describedby="input-help"
                 aria-multiline="true"
                 style={{
-                    minHeight: "2.5rem",
+                    minHeight: "3rem",
                     height: "auto",
                     maxHeight: "8rem",
                     width: "100%",

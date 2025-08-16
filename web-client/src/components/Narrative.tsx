@@ -74,7 +74,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     // Handle sending messages
     const handleSendMessage = useCallback((message: string) => {
         // Echo the input to the narrative
-        addMessage(`> ${message}`, "input_echo");
+        addMessage(message, "input_echo");
 
         // Send to server
         onSendMessage(message);

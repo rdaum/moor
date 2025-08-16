@@ -13,17 +13,16 @@
   margin: 0 var(--space-sm);
   font-family: var(--font-sans);
   overflow-y: scroll;
-  min-width: 50%;
   flex: 1;
   min-height: 0;
   resize: none;
-  width: 100%;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 /* Text styles within narrative */
 .text_narrative {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 1em;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -62,6 +61,12 @@
   font-family: var(--font-mono);
   white-space: pre-wrap;
   color: var(--color-text-success);
+  background-color: color-mix(in srgb, var(--color-text-success) 8%, transparent);
+  border-left: 3px solid var(--color-text-success);
+  padding: 6px 8px !important;
+  margin: var(--space-sm) 0 !important;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-left: var(--space-md) !important;
 }
 
 /* ====== DOCK CONTAINERS ====== */
@@ -238,22 +243,23 @@
 .input_area {
   background-color: var(--color-bg-input);
   color: var(--color-text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   padding: var(--space-md);
   margin: 0;
-  border: none;
-  border-top: 1px solid var(--color-border-medium);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-lg);
   resize: none;
   overflow: auto;
-  min-height: 2.5rem;
-  height: 2.5rem;
+  min-height: 3rem;
+  height: 3rem;
   max-height: 8rem;
   box-sizing: border-box;
 }
 
 /* ====== WINDOWS & DIALOGS ====== */
 .login_window {
-  width: 800px;
+  width: min(800px, 95vw);
+  max-height: 95vh;
   position: fixed;
   top: 50%;
   left: 50%;
@@ -262,13 +268,15 @@
   color: var(--color-text-primary);
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
-  margin: var(--space-lg);
+  margin: 0;
   font-family: var(--font-sans);
-  resize: both;
-  overflow: hidden;
+  resize: none;
+  overflow: auto;
   border: 1px solid var(--color-border-medium);
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 8px 32px var(--color-shadow);
+  box-sizing: border-box;
 }
 
 .welcome_box,
@@ -277,12 +285,64 @@
   color: var(--color-text-primary);
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
-  margin: var(--space-lg);
+  margin: var(--space-md);
   font-family: var(--font-sans);
+  flex-shrink: 0;
 }
 
 .welcome_box {
   overflow: auto;
+  max-height: 60vh;
+  font-size: 1.1em;
+  line-height: 1.4;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .login_window {
+    width: 95vw;
+    height: 95vh;
+    padding: var(--space-md);
+  }
+  
+  .welcome_box,
+  .login_prompt {
+    margin: var(--space-sm);
+    padding: var(--space-md);
+  }
+  
+  .welcome_box {
+    max-height: 50vh;
+    font-size: 1em;
+  }
+  
+  .login_prompt {
+    flex-shrink: 0;
+  }
+  
+  .login_prompt fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .login_prompt input,
+  .login_prompt select,
+  .login_prompt button {
+    padding: var(--space-md);
+    font-size: 16px; /* Prevents zoom on iOS */
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-medium);
+  }
+  
+  .login_label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
 }
 
 .message_board {
@@ -432,7 +492,7 @@
 /* ====== HISTORICAL CONTENT ====== */
 /* Historical events - lighter, muted appearance */
 .historical_narrative {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 1em;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -451,7 +511,7 @@
 
 /* Live events - normal appearance */
 .live_narrative {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 1em;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -515,12 +575,29 @@
   background: color-mix(in srgb, var(--color-button-primary) 80%, white);
 }
 
+/* ====== PREFORMATTED CONTENT WRAPPING ====== */
+/* Ensure pre and code blocks wrap properly and don't overflow */
+.text_narrative pre,
+.text_narrative code,
+.historical_narrative pre,
+.historical_narrative code,
+.live_narrative pre,
+.live_narrative code,
+.text_djot pre,
+.text_djot code {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
 /* ====== NARRATIVE TABLE STYLES ====== */
 .narrative-table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.5em 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   border: 1px solid var(--color-border-medium);
 }
 
