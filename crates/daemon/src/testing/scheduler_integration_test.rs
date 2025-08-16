@@ -253,7 +253,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let config = Arc::new(config);
 
         // Create real database with core
-        let (mut db, temp_dir) = setup_test_db_with_core();
+        let (db, temp_dir) = setup_test_db_with_core();
 
         // Create a test object in the database before starting scheduler
         let test_object = {

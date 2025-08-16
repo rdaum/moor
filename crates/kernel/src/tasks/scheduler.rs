@@ -611,7 +611,7 @@ impl Scheduler {
                 }
 
                 // Send the result
-                if let Err(_) = reply.send(result) {
+                if reply.send(result).is_err() {
                     warn!("Could not send command suggestions reply");
                 }
             }

@@ -464,11 +464,10 @@ impl Activation {
             );
 
             // Now set the self-reference in the environment
-            if let Some(env) = frame.environment.last_mut() {
-                if var_idx < env.len() {
+            if let Some(env) = frame.environment.last_mut()
+                && var_idx < env.len() {
                     env[var_idx] = Some(lambda_var);
                 }
-            }
         }
 
         let mut frame = Frame::Moo(frame);

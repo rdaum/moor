@@ -426,8 +426,8 @@ impl WorldStateTransaction {
             let props = self.get_properties(&a)?;
             if !props.is_empty() {
                 for p in props.iter() {
-                    if p.definer().eq(&a) {
-                        if let Some(propperms) = self
+                    if p.definer().eq(&a)
+                        && let Some(propperms) = self
                             .object_propflags
                             .get(&ObjAndUUIDHolder::new(&a, p.uuid()))
                             .map_err(|e| {
@@ -444,7 +444,6 @@ impl WorldStateTransaction {
                             };
                             new_props.push((p.clone(), propperms));
                         }
-                    }
                 }
             }
         }
@@ -572,11 +571,10 @@ impl WorldStateTransaction {
             WorldStateError::DatabaseError(format!("Error getting object location: {e:?}"))
         })?;
 
-        if let Some(old_location) = &old_location {
-            if old_location.eq(new_location) {
+        if let Some(old_location) = &old_location
+            && old_location.eq(new_location) {
                 return Ok(());
             }
-        }
 
         // Set new location.
         upsert(&mut self.object_location, *what, *new_location).map_err(|e| {

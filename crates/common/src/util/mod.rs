@@ -135,11 +135,10 @@ pub fn parse_into_words(input: &str) -> Vec<String> {
             in_quotes = !in_quotes;
         } else if c.is_whitespace() && !in_quotes {
             // Add a new empty string to the accumulator if we've reached a whitespace boundary.
-            if let Some(last_word) = acc.last() {
-                if !last_word.is_empty() {
+            if let Some(last_word) = acc.last()
+                && !last_word.is_empty() {
                     acc.push(String::new());
                 }
-            }
         } else {
             // Append the current character to the last word in the accumulator,
             // or create a new word if there isn't one yet.

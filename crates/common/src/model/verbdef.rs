@@ -85,11 +85,10 @@ impl VerbDef {
         argspec: &Option<VerbArgsSpec>,
         flagspec: &Option<BitEnum<VerbFlag>>,
     ) -> bool {
-        if let Some(argspec) = argspec {
-            if !self.args().matches(argspec) {
+        if let Some(argspec) = argspec
+            && !self.args().matches(argspec) {
                 return false;
             }
-        }
         if let Some(flagspec) = flagspec {
             return self.flags().contains_all(*flagspec);
         }
