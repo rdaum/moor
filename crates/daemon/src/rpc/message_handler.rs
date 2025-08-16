@@ -1227,6 +1227,33 @@ impl RpcMessageHandler {
 
                 self.program_verb(scheduler_client, client_id, &player, &object, verb, code)
             }
+            HostClientToDaemonMessage::CommandSuggestions {
+                client_token: token,
+                auth_token,
+                selected_object,
+                suggestion_mode,
+                max_suggestions,
+            } => {
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
+
+                self.get_command_suggestions(
+                    scheduler_client,
+                    &player,
+                    selected_object.as_ref(),
+                    suggestion_mode,
+                    max_suggestions,
+                )
+            }
         }
     }
 
@@ -1767,6 +1794,98 @@ impl RpcMessageHandler {
         };
 
         Ok(DaemonToClientReply::SysPropValue(Some(pv)))
+    }
+
+    fn get_command_suggestions(
+        &self,
+        scheduler_client: SchedulerClient,
+        player: &Obj,
+        selected_object: Option<&Obj>,
+        suggestion_mode: rpc_common::CommandSuggestionMode,
+        max_suggestions: usize,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Convert RPC suggestion mode to kernel suggestion mode
+        let kernel_suggestion_mode = match suggestion_mode {
+            rpc_common::CommandSuggestionMode::ObjectActions => {
+                moor_kernel::tasks::SuggestionMode::ObjectActions
+            }
+            rpc_common::CommandSuggestionMode::EnvironmentActions => {
+                moor_kernel::tasks::SuggestionMode::EnvironmentActions
+            }
+            rpc_common::CommandSuggestionMode::VerbTargets(verb) => {
+                moor_kernel::tasks::SuggestionMode::VerbTargets(verb)
+            }
+            rpc_common::CommandSuggestionMode::IndirectTargets(verb, dobj) => {
+                moor_kernel::tasks::SuggestionMode::IndirectTargets(verb, dobj)
+            }
+        };
+
+        let suggestions = scheduler_client
+            .get_command_suggestions(player, selected_object, kernel_suggestion_mode, max_suggestions)
+            .map_err(|e| {
+                error!(error = ?e, "Error getting command suggestions");
+                RpcMessageError::InternalError("error getting command suggestions".to_string())
+            })?;
+
+        // Convert kernel response to RPC response
+        let rpc_response = rpc_common::CommandSuggestionsResponse {
+            action_suggestions: suggestions
+                .action_suggestions
+                .into_iter()
+                .map(|action| rpc_common::ActionSuggestion {
+                    verb: action.verb,
+                    dobj: action.dobj,
+                    dobjstr: action.dobjstr,
+                    prepstr: action.prepstr,
+                    iobj: action.iobj,
+                    iobjstr: action.iobjstr,
+                    needs_input: action.needs_input,
+                })
+                .collect(),
+            verb_suggestions: suggestions
+                .verb_suggestions
+                .into_iter()
+                .map(|verb| rpc_common::VerbSuggestion {
+                    verb_name: verb.verb_name,
+                    object: verb.object,
+                    object_name: verb.object_name,
+                    full_command: verb.full_command,
+                    args_spec: verb.args_spec,
+                    description: verb.description,
+                })
+                .collect(),
+            object_suggestions: suggestions
+                .object_suggestions
+                .into_iter()
+                .map(|obj| rpc_common::ObjectSuggestion {
+                    object: obj.object,
+                    name: obj.name,
+                    aliases: obj.aliases,
+                    object_type: obj.object_type,
+                })
+                .collect(),
+            suggestion_context: match suggestions.suggestion_context {
+                moor_kernel::tasks::SuggestionContext::Verb => rpc_common::SuggestionContext::Verb,
+                moor_kernel::tasks::SuggestionContext::DirectObject(s) => {
+                    rpc_common::SuggestionContext::DirectObject(s)
+                }
+                moor_kernel::tasks::SuggestionContext::Preposition(s) => {
+                    rpc_common::SuggestionContext::Preposition(s)
+                }
+                moor_kernel::tasks::SuggestionContext::IndirectObject(s) => {
+                    rpc_common::SuggestionContext::IndirectObject(s)
+                }
+                moor_kernel::tasks::SuggestionContext::ObjectActions(obj) => {
+                    rpc_common::SuggestionContext::ObjectActions(obj)
+                }
+                moor_kernel::tasks::SuggestionContext::Environment => {
+                    rpc_common::SuggestionContext::Environment
+                }
+            },
+            has_more: suggestions.has_more,
+        };
+
+        Ok(DaemonToClientReply::CommandSuggestionsResponse(rpc_response))
     }
 
     fn build_history_response(

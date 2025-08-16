@@ -755,7 +755,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Should not have other suggestion types for ObjectActions mode
         assert!(suggestions.verb_suggestions.is_empty());
         assert!(suggestions.object_suggestions.is_empty());
-        assert!(suggestions.builtin_suggestions.is_empty());
 
         // Verify we get expected object-related verbs
         let verb_names: Vec<String> = suggestions
@@ -831,7 +830,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Should not have other suggestion types for EnvironmentActions mode
         assert!(suggestions.verb_suggestions.is_empty());
         assert!(suggestions.object_suggestions.is_empty());
-        assert!(suggestions.builtin_suggestions.is_empty());
 
         // Collect all verb names for analysis
         let verb_names: Vec<String> = suggestions

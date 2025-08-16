@@ -233,6 +233,7 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             "/api/presentations/{presentation_id}",
             axum::routing::delete(host::dismiss_presentation_handler),
         )
+        .route("/api/suggestions", get(host::suggestions_handler))
         .with_state(web_host);
 
     Ok(webhost_router)

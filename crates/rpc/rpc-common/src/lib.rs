@@ -16,9 +16,10 @@ use moor_common::tasks::SchedulerError;
 use thiserror::Error;
 
 pub use client::{
-    ClientEvent, ClientsBroadcastEvent, ConnectType, DaemonToClientReply, EntityType,
-    HistoricalNarrativeEvent, HistoryRecall, HistoryResponse, HostClientToDaemonMessage, PropInfo,
-    VerbInfo, VerbProgramResponse,
+    ActionSuggestion, ClientEvent, ClientsBroadcastEvent, CommandSuggestionMode,
+    CommandSuggestionsResponse, ConnectType, DaemonToClientReply, EntityType,
+    HistoricalNarrativeEvent, HistoryRecall, HistoryResponse, HostClientToDaemonMessage,
+    ObjectSuggestion, PropInfo, SuggestionContext, VerbInfo, VerbProgramResponse, VerbSuggestion,
 };
 pub use host::{DaemonToHostReply, HostBroadcastEvent, HostToDaemonMessage, HostType};
 pub use worker::{DaemonToWorkerMessage, DaemonToWorkerReply, WorkerToDaemonMessage};

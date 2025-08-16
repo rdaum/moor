@@ -812,3 +812,208 @@ pub async fn invoke_verb_handler(
 
     result
 }
+
+#[derive(Deserialize)]
+pub struct SuggestionsQuery {
+    /// Optional selected object for ObjectActions mode
+    pub selected_object: Option<String>,
+    /// Suggestion mode: "object_actions", "environment_actions", "verb_targets", "indirect_targets"
+    pub mode: Option<String>,
+    /// For verb_targets and indirect_targets modes
+    pub verb: Option<String>,
+    /// For indirect_targets mode - the direct object
+    pub direct_object: Option<String>,
+    /// Maximum number of suggestions to return
+    pub max_suggestions: Option<usize>,
+}
+
+/// Helper function to resolve an object reference to an Obj
+async fn resolve_objref(
+    objref: ObjectRef,
+    client_id: Uuid,
+    rpc_client: &mut RpcSendClient,
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+) -> Result<Obj, StatusCode> {
+    match rpc_call(
+        client_id,
+        rpc_client,
+        HostClientToDaemonMessage::Resolve(client_token.clone(), auth_token.clone(), objref),
+    )
+    .await
+    {
+        Ok(DaemonToClientReply::ResolveResult(var)) => {
+            let moor_var::Variant::Obj(obj) = var.variant() else {
+                return Err(StatusCode::BAD_REQUEST);
+            };
+            Ok(*obj)
+        }
+        Ok(_) => Err(StatusCode::BAD_REQUEST),
+        Err(status) => Err(status),
+    }
+}
+
+/// REST endpoint to get command suggestions for autocompletion
+pub async fn suggestions_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Query(query): Query<SuggestionsQuery>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    // Parse and validate query parameters (player is derived from auth token)
+
+    let selected_object = match query.selected_object.as_deref().map(ObjectRef::parse_curie) {
+        Some(Some(objref)) => {
+            match resolve_objref(
+                objref,
+                client_id,
+                &mut rpc_client,
+                &client_token,
+                &auth_token,
+            )
+            .await
+            {
+                Ok(obj) => Some(obj),
+                Err(_) => {
+                    warn!("Failed to resolve selected object reference");
+                    return StatusCode::BAD_REQUEST.into_response();
+                }
+            }
+        }
+        Some(None) => {
+            warn!("Invalid selected object reference");
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+        None => None,
+    };
+
+    let suggestion_mode = match query.mode.as_deref().unwrap_or("environment_actions") {
+        "object_actions" => rpc_common::CommandSuggestionMode::ObjectActions,
+        "environment_actions" => rpc_common::CommandSuggestionMode::EnvironmentActions,
+        "verb_targets" => {
+            let Some(verb) = query.verb else {
+                warn!("verb_targets mode requires 'verb' parameter");
+                return StatusCode::BAD_REQUEST.into_response();
+            };
+            rpc_common::CommandSuggestionMode::VerbTargets(verb)
+        }
+        "indirect_targets" => {
+            let Some(verb) = query.verb else {
+                warn!("indirect_targets mode requires 'verb' parameter");
+                return StatusCode::BAD_REQUEST.into_response();
+            };
+
+            let direct_object = match query.direct_object.as_deref().map(ObjectRef::parse_curie) {
+                Some(Some(objref)) => {
+                    match resolve_objref(
+                        objref,
+                        client_id,
+                        &mut rpc_client,
+                        &client_token,
+                        &auth_token,
+                    )
+                    .await
+                    {
+                        Ok(obj) => Some(obj),
+                        Err(_) => {
+                            warn!("Failed to resolve direct object reference");
+                            return StatusCode::BAD_REQUEST.into_response();
+                        }
+                    }
+                }
+                Some(None) => {
+                    warn!("Invalid direct object reference");
+                    return StatusCode::BAD_REQUEST.into_response();
+                }
+                None => None,
+            };
+            rpc_common::CommandSuggestionMode::IndirectTargets(verb, direct_object)
+        }
+        other => {
+            warn!("Invalid suggestion mode: {}", other);
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+
+    let max_suggestions = query.max_suggestions.unwrap_or(20);
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        HostClientToDaemonMessage::CommandSuggestions {
+            client_token: client_token.clone(),
+            auth_token: auth_token.clone(),
+            selected_object,
+            suggestion_mode,
+            max_suggestions,
+        },
+    )
+    .await
+    {
+        Ok(DaemonToClientReply::CommandSuggestionsResponse(suggestions)) => Json(json!({
+            "action_suggestions": suggestions.action_suggestions.iter().map(|action| {
+                json!({
+                    "verb": action.verb.as_string(),
+                    "dobj": action.dobj.map(|o| o.id().0),
+                    "dobjstr": action.dobjstr,
+                    "prepstr": action.prepstr,
+                    "iobj": action.iobj.map(|o| o.id().0),
+                    "iobjstr": action.iobjstr,
+                    "needs_input": action.needs_input
+                })
+            }).collect::<Vec<_>>(),
+            "verb_suggestions": suggestions.verb_suggestions.iter().map(|verb| {
+                json!({
+                    "verb_name": verb.verb_name.as_string(),
+                    "object": verb.object.id().0,
+                    "object_name": verb.object_name,
+                    "full_command": verb.full_command,
+                    "args_spec": verb.args_spec.iter().map(|s| s.as_string()).collect::<Vec<_>>(),
+                    "description": verb.description
+                })
+            }).collect::<Vec<_>>(),
+            "object_suggestions": suggestions.object_suggestions.iter().map(|obj| {
+                json!({
+                    "object": obj.object.id().0,
+                    "name": obj.name,
+                    "aliases": obj.aliases,
+                    "object_type": obj.object_type
+                })
+            }).collect::<Vec<_>>(),
+            "suggestion_context": match &suggestions.suggestion_context {
+                rpc_common::SuggestionContext::Verb => json!({"type": "verb"}),
+                rpc_common::SuggestionContext::DirectObject(s) => json!({"type": "direct_object", "verb": s}),
+                rpc_common::SuggestionContext::Preposition(s) => json!({"type": "preposition", "verb": s}),
+                rpc_common::SuggestionContext::IndirectObject(s) => json!({"type": "indirect_object", "verb": s}),
+                rpc_common::SuggestionContext::ObjectActions(obj) => json!({"type": "object_actions", "object": obj.id().0}),
+                rpc_common::SuggestionContext::Environment => json!({"type": "environment"})
+            },
+            "has_more": suggestions.has_more
+        })),
+        Ok(other) => {
+            error!("Unexpected daemon response: {:?}", other);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(e) => {
+            error!("RPC error getting suggestions: {:?}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response.into_response()
+}
