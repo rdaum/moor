@@ -278,8 +278,8 @@ fn collect_nested_constants(
     visited.insert(current_obj.oid);
 
     for pd in current_obj.property_definitions.iter() {
-        if let Some(value) = pd.value.as_ref() {
-            if let Some(oid) = value.as_object() {
+        if let Some(value) = pd.value.as_ref()
+            && let Some(oid) = value.as_object() {
                 // Build the constant name from the path
                 let mut constant_parts = path.to_vec();
                 constant_parts.push(pd.name.to_string());
@@ -312,7 +312,6 @@ fn collect_nested_constants(
                     );
                 }
             }
-        }
     }
 
     // Remove from visited set when done to allow this object to be visited in different paths

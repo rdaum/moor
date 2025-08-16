@@ -701,7 +701,7 @@ impl Var {
         }
     }
 
-    pub fn type_class(&self) -> TypeClass {
+    pub fn type_class(&self) -> TypeClass<'_> {
         match self.variant() {
             Variant::List(s) => TypeClass::Sequence(s),
             Variant::Flyweight(f) => TypeClass::Sequence(f),

@@ -101,13 +101,12 @@ fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Check if this is a lambda with captures - if so, raise an error
-    if let Some(lambda) = bf_args.args[0].as_lambda() {
-        if !lambda.0.captured_env.is_empty() {
+    if let Some(lambda) = bf_args.args[0].as_lambda()
+        && !lambda.0.captured_env.is_empty() {
             return Err(BfErr::ErrValue(
                 E_INVARG.msg("Cannot convert closure with captured variables to literal"),
             ));
         }
-    }
 
     let literal = to_literal(&bf_args.args[0]);
     Ok(Ret(v_str(literal.as_str())))

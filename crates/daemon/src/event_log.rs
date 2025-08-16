@@ -481,8 +481,8 @@ impl EventLog {
         }
 
         // Send to background persistence thread
-        if let Some(ref sender) = self.persistence_sender {
-            if let Err(e) = sender.send(PersistenceMessage::WriteNarrativeEvent(
+        if let Some(ref sender) = self.persistence_sender
+            && let Err(e) = sender.send(PersistenceMessage::WriteNarrativeEvent(
                 event_id,
                 logged_event,
             )) {
@@ -491,7 +491,6 @@ impl EventLog {
                     e
                 );
             }
-        }
 
         event_id
     }
@@ -642,14 +641,13 @@ impl EventLog {
 
     /// Shutdown the event log and flush any pending writes
     pub fn shutdown(&mut self) {
-        if let Some(sender) = self.persistence_sender.take() {
-            if let Err(e) = sender.send(PersistenceMessage::Shutdown) {
+        if let Some(sender) = self.persistence_sender.take()
+            && let Err(e) = sender.send(PersistenceMessage::Shutdown) {
                 error!(
                     "Failed to send shutdown message to persistence thread: {}",
                     e
                 );
             }
-        }
     }
 
     /// Get all narrative events since the given UUID (exclusive)
