@@ -9,6 +9,10 @@ target/
 /.idea/vcs.xml
 /.idea
 
+node_modules/
+
+development-export/
+moor-data/
 connections.json
 development.db
 connections.db
