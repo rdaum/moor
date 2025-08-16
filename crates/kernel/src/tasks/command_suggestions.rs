@@ -56,8 +56,6 @@ pub struct CommandSuggestionsResponse {
     pub verb_suggestions: Vec<VerbSuggestion>,
     /// Object suggestions (for object selection)
     pub object_suggestions: Vec<ObjectSuggestion>,
-    /// Built-in commands and shortcuts
-    pub builtin_suggestions: Vec<BuiltinSuggestion>,
     /// The context that was used for these suggestions
     pub suggestion_context: SuggestionContext,
     /// Whether more suggestions are available
@@ -113,16 +111,6 @@ pub struct ObjectSuggestion {
 }
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
-pub struct BuiltinSuggestion {
-    /// The built-in command (e.g. "say", "emote", "eval")
-    pub command: String,
-    /// Human-readable description
-    pub description: String,
-    /// Optional argument hint (e.g. "<message>", "<expression>")
-    pub args_hint: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub enum SuggestionContext {
     /// Empty command or partial verb
     Verb,
@@ -144,7 +132,6 @@ impl Default for CommandSuggestionsResponse {
             action_suggestions: Vec::new(),
             verb_suggestions: Vec::new(),
             object_suggestions: Vec::new(),
-            builtin_suggestions: Vec::new(),
             suggestion_context: SuggestionContext::Verb,
             has_more: false,
         }
@@ -263,7 +250,6 @@ impl CommandSuggestionEngine {
             action_suggestions,
             verb_suggestions: Vec::new(),
             object_suggestions: Vec::new(),
-            builtin_suggestions: Vec::new(),
             suggestion_context: SuggestionContext::ObjectActions(*target_object),
             has_more: false,
         })
@@ -359,7 +345,6 @@ impl CommandSuggestionEngine {
             action_suggestions,
             verb_suggestions: Vec::new(),
             object_suggestions: Vec::new(),
-            builtin_suggestions: Vec::new(),
             suggestion_context: SuggestionContext::Environment,
             has_more: false, // TODO: Could track if we hit the limit
         })
