@@ -26,7 +26,9 @@ interface LoginProps {
  */
 export const useWelcomeMessage = () => {
     const [welcomeMessage, setWelcomeMessage] = useState<string>("");
-    const [contentType, setContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">("text/plain");
+    const [contentType, setContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">(
+        "text/plain",
+    );
 
     useEffect(() => {
         const fetchWelcome = async () => {
@@ -34,12 +36,14 @@ export const useWelcomeMessage = () => {
                 // Fetch welcome message
                 const messageResponse = await fetch("/system_property/login/welcome_message");
                 let welcomeText = "";
-                
+
                 if (messageResponse.ok) {
                     const welcomeArray = await messageResponse.json() as string[];
                     welcomeText = welcomeArray.join("\n");
                 } else {
-                    console.error(`Failed to retrieve welcome text: ${messageResponse.status} ${messageResponse.statusText}`);
+                    console.error(
+                        `Failed to retrieve welcome text: ${messageResponse.status} ${messageResponse.statusText}`,
+                    );
                     welcomeText = "Welcome to mooR";
                 }
 
@@ -50,7 +54,10 @@ export const useWelcomeMessage = () => {
                     if (typeResponse.ok) {
                         const typeValue = await typeResponse.json() as string;
                         // Validate the content type
-                        if (typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain" || typeValue === "text/traceback") {
+                        if (
+                            typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain"
+                            || typeValue === "text/traceback"
+                        ) {
                             contentTypeValue = typeValue;
                         }
                     }
@@ -73,7 +80,6 @@ export const useWelcomeMessage = () => {
 
     return { welcomeMessage, contentType };
 };
-
 
 /**
  * Login Component

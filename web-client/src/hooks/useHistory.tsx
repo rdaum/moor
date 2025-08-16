@@ -22,10 +22,13 @@ const filterMCPSequences = (messages: NarrativeMessage[]): NarrativeMessage[] =>
     for (const message of messages) {
         const content = Array.isArray(message.content) ? message.content.join("").trim() : message.content.trim();
 
-        // Check if this starts an MCP edit sequence
-        if (content.startsWith("#$# edit")) {
-            inMCPSpool = true;
-            continue; // Skip the MCP command line
+        // Filter out ALL MCP messages (anything starting with "#$#")
+        if (content.startsWith("#$#")) {
+            // Check if this starts an MCP edit sequence
+            if (content.startsWith("#$# edit")) {
+                inMCPSpool = true;
+            }
+            continue; // Skip all MCP command lines
         }
 
         // Check if this ends an MCP spool sequence

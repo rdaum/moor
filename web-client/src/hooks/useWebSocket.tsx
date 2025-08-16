@@ -86,7 +86,6 @@ export const useWebSocket = (
                 // Always check for content_type at the top level of the message
                 const contentType = (data as any).content_type;
 
-
                 if (onNarrativeMessage) {
                     onNarrativeMessage(content, data.server_time, contentType, false); // WebSocket messages are always live (not historical)
                 }
@@ -104,8 +103,8 @@ export const useWebSocket = (
                 // Traceback message - log to console and show as narrative
                 console.error("MOO Traceback:", data.traceback);
                 if (onNarrativeMessage) {
-                    const tracebackText = `${data.traceback.error}\n${data.traceback.traceback.join('\n')}`;
-                    onNarrativeMessage(tracebackText, data.server_time, 'text/traceback', false);
+                    const tracebackText = `${data.traceback.error}\n${data.traceback.traceback.join("\n")}`;
+                    onNarrativeMessage(tracebackText, data.server_time, "text/traceback", false);
                 }
             }
 

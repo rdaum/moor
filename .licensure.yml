@@ -72,7 +72,7 @@ excludes:
   - \.cargo/.*
   - crates/web-host/src/client/flexbuffers/*
   - crates/db-wiredtiger/third-party/*
-  - target/.*
+  - target/*
   - README.*
   - LICENSE.*
   - Dockerfile
@@ -80,7 +80,8 @@ excludes:
   - cowbell
   - book/*
   - .envrc
-  - node_modules
+  - node_modules/*
+  - development-export/*
   - crates/daemon/debian/*
   - crates/telnet-host/debian/*
   - crates/web-host/debian/*

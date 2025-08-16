@@ -34,7 +34,10 @@ interface NarrativeProps {
 }
 
 export interface NarrativeRef {
-    addNarrativeContent: (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback") => void;
+    addNarrativeContent: (
+        content: string | string[],
+        contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
+    ) => void;
     addSystemMessage: (content: string | string[]) => void;
     addErrorMessage: (content: string | string[]) => void;
     addHistoricalMessages: (messages: NarrativeMessage[]) => void;

@@ -39,37 +39,37 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             case "text/html": {
                 // For HTML, join array elements with newlines
                 const htmlContent = getContentString("\n");
-                console.log("HTML Content Received:", { 
+                console.log("HTML Content Received:", {
                     raw: content,
                     joined: htmlContent,
-                    contentType 
+                    contentType,
                 });
                 // Add hook to DOMPurify
-                DOMPurify.addHook('afterSanitizeElements', function(node) {
-                    if (node.tagName === 'TABLE') {
-                        const existingClass = node.getAttribute('class') || '';
-                        const newClass = existingClass ? `${existingClass} narrative-table` : 'narrative-table';
-                        node.setAttribute('class', newClass);
-                    } else if (node.tagName === 'A') {
+                DOMPurify.addHook("afterSanitizeElements", function(node) {
+                    if (node.tagName === "TABLE") {
+                        const existingClass = node.getAttribute("class") || "";
+                        const newClass = existingClass ? `${existingClass} narrative-table` : "narrative-table";
+                        node.setAttribute("class", newClass);
+                    } else if (node.tagName === "A") {
                         // Convert links to moo-link spans (same as djot does)
-                        const href = node.getAttribute('href') || '';
+                        const href = node.getAttribute("href") || "";
                         const linkText = node.textContent || href;
-                        
+
                         // Create a span element to replace the link
-                        const span = document.createElement('span');
-                        span.className = 'moo-link';
-                        span.setAttribute('data-url', href);
-                        span.style.color = 'var(--color-link)';
-                        span.style.textDecoration = 'underline';
-                        span.style.cursor = 'pointer';
+                        const span = document.createElement("span");
+                        span.className = "moo-link";
+                        span.setAttribute("data-url", href);
+                        span.style.color = "var(--color-link)";
+                        span.style.textDecoration = "underline";
+                        span.style.cursor = "pointer";
                         span.title = href;
                         span.textContent = linkText;
-                        
+
                         // Replace the link with the span
                         node.parentNode?.replaceChild(span, node);
                     }
                 });
-                
+
                 // Sanitize HTML content for security
                 const sanitizedHtml = DOMPurify.sanitize(htmlContent, {
                     ALLOWED_TAGS: [
@@ -128,10 +128,10 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                     ALLOWED_URI_REGEXP:
                         /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
                 });
-                
+
                 // Remove the hook after use to avoid affecting other calls
-                DOMPurify.removeHook('afterSanitizeElements');
-                
+                DOMPurify.removeHook("afterSanitizeElements");
+
                 console.log("HTML After Sanitization:", sanitizedHtml);
 
                 return (

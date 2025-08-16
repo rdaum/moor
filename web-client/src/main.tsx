@@ -20,9 +20,9 @@ import { TopDock } from "./components/docks/TopDock";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { TopNavBar } from "./components/TopNavBar";
-import { SettingsPanel } from "./components/SettingsPanel";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
 import { PresentationProvider, usePresentationContext } from "./context/PresentationContext";
@@ -53,6 +53,12 @@ function AppContent({
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
+    // Verb editor state (only used in this component for the modal)
+    const {
+        editorSession,
+        closeEditor,
+    } = useVerbEditor();
+
     // History management
     const {
         setHistoryBoundaryNow,
@@ -71,15 +77,8 @@ function AppContent({
         fetchCurrentPresentations,
     } = usePresentationContext();
 
-    // Verb editor management
-    const {
-        editorSession,
-        showVerbEditor,
-        closeEditor,
-    } = useVerbEditor();
-
-    // MCP handler for parsing edit commands
-    useMCPHandler(showVerbEditor);
+    // MCP handler for parsing edit commands - passed from parent
+    // (We receive the handler instead of creating it here)
 
     // Handle closing presentations
     const handleClosePresentation = useCallback((id: string) => {
@@ -189,7 +188,7 @@ function AppContent({
         <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {/* Screen reader heading for main application */}
             <h1 className="sr-only">mooR Web Client</h1>
-            
+
             {/* Main container (primarily for styling) */}
             <div className="main" />
 
@@ -198,7 +197,6 @@ function AppContent({
                 message={systemMessage.message}
                 visible={systemMessage.visible}
             />
-
 
             {/* Login component (shows/hides based on connection state) */}
             <Login
@@ -212,9 +210,9 @@ function AppContent({
             <TopNavBar onSettingsToggle={() => setIsSettingsOpen(true)} />
 
             {/* Settings panel */}
-            <SettingsPanel 
-                isOpen={isSettingsOpen} 
-                onClose={() => setIsSettingsOpen(false)} 
+            <SettingsPanel
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
             />
 
             {/* Main app layout with narrative interface */}
@@ -308,6 +306,16 @@ function AppWrapper() {
     const { showMessage } = useSystemMessage();
     const narrativeRef = useRef<NarrativeRef>(null);
 
+    // We need to get showVerbEditor here to create the MCP handler
+    const {
+        editorSession,
+        showVerbEditor,
+        closeEditor,
+    } = useVerbEditor();
+
+    // MCP handler for parsing edit commands
+    const { handleNarrativeMessage: mcpHandler } = useMCPHandler(showVerbEditor);
+
     // Handle MOO link clicks
     const handleLinkClick = useCallback(async (url: string) => {
         if (!authState.player?.authToken) {
@@ -331,19 +339,52 @@ function AppWrapper() {
         }>
     >([]);
 
-    const handleNarrativeMessage = (
+    const handleNarrativeMessage = useCallback((
         content: string | string[],
         _timestamp?: string,
         contentType?: string,
-        _isHistorical?: boolean,
+        isHistorical?: boolean,
     ) => {
-        if (narrativeRef.current) {
-            narrativeRef.current.addNarrativeContent(content, contentType as "text/plain" | "text/djot" | "text/html");
+        // Handle array content by processing each line
+        if (Array.isArray(content)) {
+            const filteredContent: string[] = [];
+            for (const line of content) {
+                // Check if this line is an MCP message that should be filtered
+                if (!mcpHandler(line, isHistorical || false)) {
+                    // If mcpHandler returns false, the line was not MCP-related and should be shown
+                    filteredContent.push(line);
+                }
+            }
+
+            // Only add content if there are non-MCP lines
+            if (filteredContent.length > 0) {
+                if (narrativeRef.current) {
+                    narrativeRef.current.addNarrativeContent(
+                        filteredContent,
+                        contentType as "text/plain" | "text/djot" | "text/html",
+                    );
+                } else {
+                    setPendingMessages(prev => [...prev, { content: filteredContent, contentType }]);
+                }
+            }
         } else {
-            // Queue message if narrative ref is not available yet
-            setPendingMessages(prev => [...prev, { content, contentType }]);
+            // Handle single string content
+            if (!mcpHandler(content, isHistorical || false)) {
+                // If mcpHandler returns false, the content was not MCP-related and should be shown
+                console.log("MCP handler says to show content:", content);
+                if (narrativeRef.current) {
+                    narrativeRef.current.addNarrativeContent(
+                        content,
+                        contentType as "text/plain" | "text/djot" | "text/html",
+                    );
+                } else {
+                    setPendingMessages(prev => [...prev, { content, contentType }]);
+                }
+            } else {
+                console.log("MCP handler filtered content:", content);
+            }
         }
-    };
+    }, [mcpHandler]);
 
     const handlePresentMessage = (presentData: PresentationData) => {
         addPresentation(presentData);

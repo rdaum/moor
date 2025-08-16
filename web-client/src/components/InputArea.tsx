@@ -41,7 +41,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
 }) => {
     const [input, setInput] = useState("");
     const [historyOffset, setHistoryOffset] = useState(0);
-    const [placeholderIndex, setPlaceholderIndex] = useState(() => Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
+    const [placeholderIndex, setPlaceholderIndex] = useState(() =>
+        Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length)
+    );
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Focus input area when it becomes visible and enabled
@@ -133,7 +135,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         // Clear input and reset history offset
         setInput("");
         setHistoryOffset(0);
-        
+
         // Pick a new encouraging placeholder for next input
         setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
     }, [input, onSendMessage, onAddToHistory, disabled]);

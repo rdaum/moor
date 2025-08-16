@@ -61,9 +61,22 @@ export const useMCPHandler = (
     }, []);
 
     // Handle narrative messages that might be MCP commands or spool content
-    const handleNarrativeMessage = useCallback((content: string) => {
-        // Check if this is an MCP command
-        if (content.startsWith("#$# ")) {
+    const handleNarrativeMessage = useCallback((content: string, isHistorical: boolean = false) => {
+        // Handle null/undefined content
+        if (!content || typeof content !== "string") {
+            return false; // Let it pass through if content is invalid
+        }
+
+        // Always filter out any MCP messages (anything starting with "#$#")
+        if (content.startsWith("#$#")) {
+            console.log(`MCP Handler: Filtering MCP message (historical: ${isHistorical}):`, content);
+
+            // For historical content, just filter it out without processing
+            if (isHistorical) {
+                return true; // Indicate this message was handled (filtered)
+            }
+
+            // For live content, process edit commands
             const editInfo = parseEditCommand(content);
             if (editInfo) {
                 // Start spooling for this edit command
@@ -74,12 +87,12 @@ export const useMCPHandler = (
                     uploadAction: editInfo.uploadAction,
                     lines: [],
                 };
-                return true; // Indicate this message was handled as MCP
             }
+            return true; // Indicate this message was handled as MCP
         }
 
-        // Check if we're currently spooling and this might be content
-        if (spoolRef.current) {
+        // Only process spooling for live content, not historical
+        if (!isHistorical && spoolRef.current) {
             // Check for end marker (single "." on its own line)
             if (content.trim() === ".") {
                 // End of spool - launch editor

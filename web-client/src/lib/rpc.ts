@@ -358,7 +358,7 @@ export async function retrieveWelcome(): Promise<{
         // Fetch welcome message
         const messageResponse = await fetch("/system_property/login/welcome_message");
         let welcomeMessage = "";
-        
+
         if (messageResponse.ok) {
             const welcomeText = await messageResponse.json() as string[];
             welcomeMessage = welcomeText.join("\n");
@@ -375,7 +375,10 @@ export async function retrieveWelcome(): Promise<{
             if (typeResponse.ok) {
                 const typeValue = await typeResponse.json() as string;
                 // Validate the content type
-                if (typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain" || typeValue === "text/traceback") {
+                if (
+                    typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain"
+                    || typeValue === "text/traceback"
+                ) {
                     contentType = typeValue;
                 }
             }

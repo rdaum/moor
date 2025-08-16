@@ -325,7 +325,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         // Store the previously focused element
         const previouslyFocused = document.activeElement as HTMLElement;
-        
+
         // Focus the modal container when it opens
         if (containerRef.current) {
             containerRef.current.focus();
@@ -340,14 +340,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
             if (e.key === "Tab") {
                 const focusableElements = containerRef.current?.querySelectorAll(
-                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                    "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])",
                 );
-                
+
                 if (!focusableElements || focusableElements.length === 0) return;
-                
+
                 const firstElement = focusableElements[0] as HTMLElement;
                 const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-                
+
                 if (e.shiftKey) {
                     // Shift+Tab: if focus is on first element, move to last
                     if (document.activeElement === firstElement) {

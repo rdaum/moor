@@ -12,13 +12,13 @@
 //
 
 import { useCallback, useState } from "react";
-import { Presentation, PresentationData, TARGET_TYPES, SemanticTarget } from "../types/presentation";
+import { Presentation, PresentationData, SemanticTarget, TARGET_TYPES } from "../types/presentation";
 import { useMediaQuery } from "./useMediaQuery";
 
 // Responsive mapping of semantic targets to visual placement
 const useSemanticMapping = () => {
-    const isMobile = useMediaQuery('(max-width: 768px)');
-    
+    const isMobile = useMediaQuery("(max-width: 768px)");
+
     const getPlacementForTarget = useCallback((target: SemanticTarget): "left" | "right" | "top" | "bottom" => {
         if (isMobile) {
             // On mobile, map most things to bottom for better UX
@@ -27,7 +27,7 @@ const useSemanticMapping = () => {
                 case "communication":
                     return "top";
                 case "status":
-                    return "top";  
+                    return "top";
                 case "inventory":
                 case "tools":
                 default:
@@ -48,7 +48,7 @@ const useSemanticMapping = () => {
             }
         }
     }, [isMobile]);
-    
+
     return { getPlacementForTarget };
 };
 

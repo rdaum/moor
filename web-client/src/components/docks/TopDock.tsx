@@ -12,9 +12,9 @@
 //
 
 import React from "react";
+import { useCarouselOverflow } from "../../hooks/useCarouselOverflow";
 import { Presentation } from "../../types/presentation";
 import { Panel } from "../Panel";
-import { useCarouselOverflow } from "../../hooks/useCarouselOverflow";
 
 interface TopDockProps {
     presentations: Presentation[];
@@ -35,7 +35,7 @@ export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresenta
     const className = [
         "top_dock",
         hasOverflow && "has-overflow",
-        hasScroll && "has-scroll"
+        hasScroll && "has-scroll",
     ].filter(Boolean).join(" ");
 
     return (
@@ -56,46 +56,50 @@ export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresenta
                 ))}
             </div>
             {hasOverflow && (
-                <div style={{
-                    position: "absolute",
-                    top: "50%",
-                    right: "8px",
-                    transform: "translateY(-50%)",
-                    fontSize: "24px",
-                    color: "white",
-                    background: "rgba(0, 0, 0, 0.8)",
-                    borderRadius: "50%",
-                    width: "36px",
-                    height: "36px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: "bold",
-                    pointerEvents: "none",
-                    zIndex: 1000
-                }}>
+                <div
+                    style={{
+                        position: "absolute",
+                        top: "50%",
+                        right: "8px",
+                        transform: "translateY(-50%)",
+                        fontSize: "24px",
+                        color: "white",
+                        background: "rgba(0, 0, 0, 0.8)",
+                        borderRadius: "50%",
+                        width: "36px",
+                        height: "36px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: "bold",
+                        pointerEvents: "none",
+                        zIndex: 1000,
+                    }}
+                >
                     ›
                 </div>
             )}
             {hasScroll && (
-                <div style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "8px",
-                    transform: "translateY(-50%)",
-                    fontSize: "24px",
-                    color: "white",
-                    background: "rgba(0, 0, 0, 0.8)",
-                    borderRadius: "50%",
-                    width: "36px",
-                    height: "36px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: "bold",
-                    pointerEvents: "none",
-                    zIndex: 1000
-                }}>
+                <div
+                    style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "8px",
+                        transform: "translateY(-50%)",
+                        fontSize: "24px",
+                        color: "white",
+                        background: "rgba(0, 0, 0, 0.8)",
+                        borderRadius: "50%",
+                        width: "36px",
+                        height: "36px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: "bold",
+                        pointerEvents: "none",
+                        zIndex: 1000,
+                    }}
+                >
                     ‹
                 </div>
             )}
