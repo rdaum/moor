@@ -30,7 +30,7 @@ export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresenta
     }
 
     // Debug logging for React state
-    console.log('TopDock render:', { hasOverflow, hasScroll });
+    // console.log('TopDock render:', { hasOverflow, hasScroll });
 
     const className = [
         "top_dock",

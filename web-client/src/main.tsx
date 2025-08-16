@@ -21,6 +21,8 @@ import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { TopNavBar } from "./components/TopNavBar";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
 import { PresentationProvider, usePresentationContext } from "./context/PresentationContext";
@@ -49,6 +51,7 @@ function AppContent({
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
+    const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
     // History management
     const {
@@ -196,14 +199,21 @@ function AppContent({
                 visible={systemMessage.visible}
             />
 
-            {/* Theme toggle component */}
-            <ThemeToggle />
 
             {/* Login component (shows/hides based on connection state) */}
             <Login
                 visible={!isConnected}
                 welcomeMessage={welcomeMessage}
                 onConnect={handleConnect}
+            />
+
+            {/* Top navigation bar */}
+            <TopNavBar onSettingsToggle={() => setIsSettingsOpen(true)} />
+
+            {/* Settings panel */}
+            <SettingsPanel 
+                isOpen={isSettingsOpen} 
+                onClose={() => setIsSettingsOpen(false)} 
             />
 
             {/* Main app layout with narrative interface */}

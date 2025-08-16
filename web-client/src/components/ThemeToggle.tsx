@@ -41,23 +41,23 @@ export const ThemeToggle: React.FC = () => {
 
     // Toggle theme function
     const toggleTheme = () => {
+        console.log('Theme toggle clicked! Current isDarkTheme:', isDarkTheme);
         setIsDarkTheme(!isDarkTheme);
+        console.log('Theme toggle - new state should be:', !isDarkTheme);
     };
 
-    // Return hover area with toggle button inside
+    // Return full-width clickable row for settings
     return (
-        <div className="theme-toggle-area">
-            <button
-                className="theme-toggle"
-                onClick={toggleTheme}
-                aria-label={`Switch to ${isDarkTheme ? 'light' : 'dark'} theme`}
-                aria-pressed={isDarkTheme ? "true" : "false"}
-            >
-                {isDarkTheme ? "🌙" : "☀️"} 
-                <span className="sr-only">
-                    {isDarkTheme ? "Switch to Light Theme" : "Switch to Dark Theme"}
-                </span>
-            </button>
-        </div>
+        <button
+            className="theme-toggle-row"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${isDarkTheme ? 'light' : 'dark'} theme`}
+            aria-pressed={isDarkTheme ? "true" : "false"}
+        >
+            <span>Theme</span>
+            <span className="theme-indicator">
+                {isDarkTheme ? "🌙 Dark" : "☀️ Light"}
+            </span>
+        </button>
     );
 };
