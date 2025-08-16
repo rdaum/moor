@@ -114,7 +114,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Emits a presentation event to the client. The client should interpret this as a request to present
 /// the content provided as a pop-up, panel, or other client-specific UI element (depending on 'target').
 /// If only the first two arguments are provided, the client should "unpresent" the presentation with that ID.
-/// MOO: `none presentation(obj player, str id [, str content_type, str target, str content [, list attributes]])`
+/// MOO: `none present(obj player, str id [, str content_type, str target, str content [, list attributes]])`
 fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.rich_notify {
         return Err(ErrValue(E_PERM.msg("present() is not available")));
