@@ -10,6 +10,7 @@ target/
 /.idea
 
 node_modules/
+dist/
 
 development-export/
 moor-data/
