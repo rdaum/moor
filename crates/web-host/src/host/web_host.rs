@@ -272,7 +272,7 @@ pub(crate) async fn rpc_call(
                 Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
             ReplyResult::Failure(f) => {
-                error!("RPC failure in welcome message retrieval: {:?}", f);
+                error!("RPC failure in RPC call retrieval: {:?}", f);
                 Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
             ReplyResult::HostSuccess(hs) => {
