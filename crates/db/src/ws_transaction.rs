@@ -603,6 +603,54 @@ impl WorldStateTransaction {
         Ok(r.unwrap_or_else(VerbDefs::empty))
     }
 
+    pub fn get_command_verbs(&self, obj: &Obj) -> Result<VerbDefs, WorldStateError> {
+        use moor_common::model::{ArgSpec, PrepSpec};
+        use std::collections::HashSet;
+
+        // Get all ancestors including self (ordered from child to parent)
+        let ancestors = self.ancestors(obj, true)?;
+        let mut all_verbs = VerbDefs::empty();
+        let mut seen_verb_names: HashSet<Symbol> = HashSet::new();
+
+        // Walk the hierarchy from child to parent (inheritance priority)
+        for ancestor in ancestors.iter() {
+            let verbs = self.get_verbs(&ancestor)?;
+            for verb in verbs.iter() {
+                // Filter out method verbs with "this none this" pattern
+                let args = verb.args();
+                if matches!(args.dobj, ArgSpec::This)
+                    && matches!(args.prep, PrepSpec::None)
+                    && matches!(args.iobj, ArgSpec::This)
+                {
+                    continue;
+                }
+
+                // Check if any of this verb's names are already seen (inheritance override)
+                let any_name_seen = verb
+                    .names()
+                    .iter()
+                    .any(|name| seen_verb_names.contains(name));
+
+                if !any_name_seen {
+                    // This verb introduces new names not seen in more specific ancestors
+                    // Add it to our result set
+                    all_verbs = all_verbs.with_added(verb.clone());
+
+                    // Mark all names as seen to prevent parent verbs from overriding
+                    for verb_name in verb.names() {
+                        seen_verb_names.insert(*verb_name);
+
+                        // Populate the verb resolution cache for future lookups
+                        // This helps other consumers (like resolve_verb) benefit from our work
+                        self.verb_resolution_cache.fill_hit(obj, verb_name, &verb);
+                    }
+                }
+            }
+        }
+
+        Ok(all_verbs)
+    }
+
     pub fn get_verb_program(&self, obj: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
         let r = self
             .object_verbs

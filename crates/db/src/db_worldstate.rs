@@ -787,6 +787,14 @@ impl WorldState for DbWorldState {
         self.get_tx().get_object_parent(obj)
     }
 
+    fn command_verbs_on(&self, perms: &Obj, obj: &Obj) -> Result<VerbDefs, WorldStateError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        self.perms(perms)?
+            .check_object_allows(&owner, flags, ObjFlag::Read.into())?;
+
+        self.get_tx().get_command_verbs(obj)
+    }
+
     fn change_parent(
         &mut self,
         perms: &Obj,

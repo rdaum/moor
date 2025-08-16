@@ -577,6 +577,44 @@ impl Scheduler {
                     })
                     .expect("Could not spawn WorldStateAction execution thread");
             }
+            SchedulerClientMsg::RequestCommandSuggestions {
+                player,
+                partial_command: _,
+                selected_object,
+                suggestion_mode,
+                max_suggestions,
+                reply,
+            } => {
+                // Create transaction for suggestion engine
+                let mut world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        error!(?e, "Could not create world state for command suggestions");
+                        let _ = reply.send(Err(SchedulerError::CouldNotStartTask));
+                        return;
+                    }
+                };
+
+                // Get suggestions using the command suggestion engine
+                let result =
+                    crate::tasks::command_suggestions::CommandSuggestionEngine::get_suggestions(
+                        &player,
+                        selected_object.as_ref(),
+                        suggestion_mode,
+                        max_suggestions,
+                        world_state.as_mut(),
+                    );
+
+                // Rollback the transaction (we're just reading)
+                if let Err(e) = world_state.rollback() {
+                    warn!(?e, "Could not rollback command suggestions transaction");
+                }
+
+                // Send the result
+                if let Err(_) = reply.send(result) {
+                    warn!("Could not send command suggestions reply");
+                }
+            }
         }
     }
 

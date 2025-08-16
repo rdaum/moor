@@ -201,6 +201,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         transport: Arc<MockTransport>,
         event_log: Arc<MockEventLog>,
         scheduler_client: moor_kernel::SchedulerClient,
+        test_object: moor_var::Obj,
         kill_switch: Arc<AtomicBool>,
         _temp_dir: TempDir,
         _temp_output_dir: Option<TempDir>,
@@ -252,7 +253,37 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let config = Arc::new(config);
 
         // Create real database with core
-        let (db, temp_dir) = setup_test_db_with_core();
+        let (mut db, temp_dir) = setup_test_db_with_core();
+
+        // Create a test object in the database before starting scheduler
+        let test_object = {
+            let mut ws = db.new_world_state().expect("Should get world state");
+            let wizard = moor_var::Obj::mk_id(2);
+            let thing_parent = moor_var::Obj::mk_id(5); // $thing
+
+            let test_obj = ws
+                .create_object(
+                    &wizard,                           // perms - wizard can create objects
+                    &thing_parent,                     // parent - $thing (#5)
+                    &wizard,                           // owner - wizard owns it
+                    moor_common::util::BitEnum::new(), // flags - no special flags
+                    None,                              // id - let system assign
+                )
+                .expect("Should be able to create test object");
+
+            // Set a name property
+            ws.update_property(
+                &wizard,                         // perms
+                &test_obj,                       // object
+                moor_var::Symbol::mk("name"),    // property name
+                &moor_var::v_str("test object"), // value
+            )
+            .expect("Should be able to set name");
+
+            ws.commit()
+                .expect("Should be able to commit object creation");
+            test_obj
+        };
 
         // Create kill switch
         let kill_switch = Arc::new(AtomicBool::new(false));
@@ -320,6 +351,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             transport,
             event_log,
             scheduler_client,
+            test_object,
             kill_switch,
             _temp_dir: temp_dir,
             _temp_output_dir: Some(temp_output_dir),
@@ -664,6 +696,312 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             if let Event::Traceback(traceback) = event.event.event {
                 panic!("Unexpected traceback: {traceback:?}");
             }
+        }
+    }
+
+    #[test]
+    fn test_command_suggestions_object_actions() {
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None;
+        env.output_dir_path = None;
+
+        wait_for_scheduler_ready(&env.scheduler_client);
+
+        let wizard = Obj::mk_id(2);
+
+        let suggestions = env
+            .scheduler_client
+            .get_command_suggestions(
+                &wizard,
+                Some(&env.test_object),
+                moor_kernel::tasks::SuggestionMode::ObjectActions,
+                10,
+            )
+            .expect("Should be able to get command suggestions");
+
+        // Verify we got action suggestions
+        assert!(
+            !suggestions.action_suggestions.is_empty(),
+            "Should have action suggestions for test object"
+        );
+
+        // Verify all suggestions have proper structure
+        for action in &suggestions.action_suggestions {
+            assert!(
+                !action.verb.as_string().is_empty(),
+                "Verb should not be empty"
+            );
+
+            // For object actions, the target object should be the direct object (if any)
+            if action.dobj.is_some() {
+                assert_eq!(
+                    action.dobj.unwrap(),
+                    env.test_object,
+                    "Direct object should be test object"
+                );
+                assert!(
+                    action.dobjstr.is_some(),
+                    "Should have display string for direct object"
+                );
+            }
+        }
+
+        // Verify context is correct
+        assert_eq!(
+            suggestions.suggestion_context,
+            moor_kernel::tasks::SuggestionContext::ObjectActions(env.test_object)
+        );
+
+        // Should not have other suggestion types for ObjectActions mode
+        assert!(suggestions.verb_suggestions.is_empty());
+        assert!(suggestions.object_suggestions.is_empty());
+        assert!(suggestions.builtin_suggestions.is_empty());
+
+        // Verify we get expected object-related verbs
+        let verb_names: Vec<String> = suggestions
+            .action_suggestions
+            .iter()
+            .map(|action| action.verb.as_string())
+            .collect();
+
+        // Things should have basic verbs like look/examine/take
+        assert!(
+            !verb_names.is_empty(),
+            "Should have some verbs, got: {:?}",
+            verb_names
+        );
+
+        // If we have verbs, verify they're structured properly
+        if let Some(first_action) = suggestions.action_suggestions.first() {
+            // Verify the action has proper structure
+            assert!(
+                !first_action.verb.as_string().is_empty(),
+                "Verb should not be empty"
+            );
+
+            if first_action.dobj.is_some() {
+                assert_eq!(
+                    first_action.dobj.unwrap(),
+                    env.test_object,
+                    "Should target test object"
+                );
+                assert!(
+                    first_action.dobjstr.is_some(),
+                    "Should have object name for display"
+                );
+
+                let object_name = first_action.dobjstr.as_ref().unwrap();
+                assert!(!object_name.is_empty(), "Object name should not be empty");
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_suggestions_environment_actions() {
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None;
+        env.output_dir_path = None;
+
+        wait_for_scheduler_ready(&env.scheduler_client);
+
+        let wizard = Obj::mk_id(2);
+
+        let suggestions = env
+            .scheduler_client
+            .get_command_suggestions(
+                &wizard,
+                None, // No specific object - get environment actions
+                moor_kernel::tasks::SuggestionMode::EnvironmentActions,
+                20, // Higher limit to see more environmental verbs
+            )
+            .expect("Should be able to get environment action suggestions");
+
+        // Verify we got action suggestions
+        assert!(
+            !suggestions.action_suggestions.is_empty(),
+            "Should have environment action suggestions"
+        );
+
+        // Verify context is correct
+        assert_eq!(
+            suggestions.suggestion_context,
+            moor_kernel::tasks::SuggestionContext::Environment
+        );
+
+        // Should not have other suggestion types for EnvironmentActions mode
+        assert!(suggestions.verb_suggestions.is_empty());
+        assert!(suggestions.object_suggestions.is_empty());
+        assert!(suggestions.builtin_suggestions.is_empty());
+
+        // Collect all verb names for analysis
+        let verb_names: Vec<String> = suggestions
+            .action_suggestions
+            .iter()
+            .map(|action| action.verb.as_string())
+            .collect();
+
+        // We should get verbs from:
+        // 1. The player themselves (like 'inventory', 'look')
+        // 2. The test object in inventory (inherited $thing verbs like 'get', 'take', 'drop')
+        // 3. The room (like directional verbs or room-specific actions)
+
+        // Verify we get some expected verbs that should be in any environment
+        let has_look_verb = verb_names.iter().any(|v| v == "look" || v == "l");
+        let has_thing_verbs = verb_names
+            .iter()
+            .any(|v| v == "get" || v == "take" || v == "drop");
+
+        // At minimum we should have basic player verbs and inherited $thing verbs
+        assert!(
+            has_look_verb || has_thing_verbs,
+            "Should have basic verbs like 'look' or thing verbs like 'get/take/drop'. Got: {:?}",
+            verb_names
+        );
+
+        // Verify all suggestions have proper structure
+        for action in &suggestions.action_suggestions {
+            assert!(
+                !action.verb.as_string().is_empty(),
+                "Verb should not be empty"
+            );
+
+            // Each action should either have no object (like 'look') or a specific target
+            if let Some(dobj) = action.dobj {
+                assert!(
+                    action.dobjstr.is_some(),
+                    "Should have display string for direct object"
+                );
+                // The object should be either the wizard, the test object, or the room
+                let obj_id = dobj.id().0;
+                assert!(
+                    obj_id == 2 || obj_id == env.test_object.id().0 || obj_id == 70, // wizard, test_object, or room
+                    "Direct object should be wizard (#2), test object (#{}) or room (#70), got #{}",
+                    env.test_object.id().0,
+                    obj_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_suggestions_limits() {
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None;
+        env.output_dir_path = None;
+
+        wait_for_scheduler_ready(&env.scheduler_client);
+
+        let client_id = Uuid::new_v4();
+        let wizard = Obj::mk_id(2);
+
+        // Establish connection and login (same setup as first test)
+        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
+            peer_addr: "127.0.0.1:8080".to_string(),
+            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
+        };
+
+        let establish_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            establish_message,
+        );
+
+        let (client_token, _) = match establish_result.unwrap() {
+            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+            other => panic!("Expected NewConnection, got {other:?}"),
+        };
+
+        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec!["connect".to_string(), "wizard".to_string()],
+            do_attach: true,
+        };
+
+        let login_result = env
+            .transport
+            .process_client_message(
+                env.message_handler.as_ref(),
+                env.scheduler_client.clone(),
+                client_id,
+                login_message,
+            )
+            .expect("Login should succeed");
+
+        let (auth_token, _, _) = match login_result {
+            rpc_common::DaemonToClientReply::LoginResult(Some((
+                auth_token,
+                connect_type,
+                player_obj,
+            ))) => (auth_token, connect_type, player_obj),
+            other => panic!("Expected successful login, got {other:?}"),
+        };
+
+        // Create a test object for limits testing
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            wizard,
+            "@create $thing named \"limits test object\"",
+            "You now have limits test object with object number",
+            "@create limits test object",
+        );
+
+        // Use the test object created during environment setup
+        let test_object = env.test_object;
+
+        // Test with different limits
+        let suggestions_3 = env
+            .scheduler_client
+            .get_command_suggestions(
+                &wizard,
+                Some(&test_object),
+                moor_kernel::tasks::SuggestionMode::ObjectActions,
+                3,
+            )
+            .expect("Should get suggestions with limit 3");
+
+        let suggestions_10 = env
+            .scheduler_client
+            .get_command_suggestions(
+                &wizard,
+                Some(&test_object),
+                moor_kernel::tasks::SuggestionMode::ObjectActions,
+                10,
+            )
+            .expect("Should get suggestions with limit 10");
+
+        // Verify limits are respected
+        assert!(
+            suggestions_3.action_suggestions.len() <= 3,
+            "Should respect limit of 3"
+        );
+        assert!(
+            suggestions_10.action_suggestions.len() <= 10,
+            "Should respect limit of 10"
+        );
+
+        // If the room has more than 3 verbs, the 10-limit should get more suggestions
+        if suggestions_10.action_suggestions.len() > 3 {
+            assert!(
+                suggestions_10.action_suggestions.len() > suggestions_3.action_suggestions.len(),
+                "Higher limit should return more suggestions when available"
+            );
+        }
+
+        // Verify the first N suggestions are the same (due to priority ordering)
+        let min_len = suggestions_3
+            .action_suggestions
+            .len()
+            .min(suggestions_10.action_suggestions.len());
+        for i in 0..min_len {
+            assert_eq!(
+                suggestions_3.action_suggestions[i].verb, suggestions_10.action_suggestions[i].verb,
+                "Priority ordering should be consistent"
+            );
         }
     }
 

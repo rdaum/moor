@@ -28,6 +28,8 @@ use moor_common::util::PerfCounter;
 
 pub mod scheduler;
 
+pub(crate) mod command_suggestions;
+pub use command_suggestions::{CommandSuggestionsResponse, SuggestionContext, SuggestionMode};
 pub(crate) mod scheduler_client;
 pub(crate) mod task;
 pub(crate) mod task_q;
