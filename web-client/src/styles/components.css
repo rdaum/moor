@@ -343,6 +343,120 @@
     flex-direction: column;
     gap: var(--space-xs);
   }
+
+  /* Mobile dock optimizations */
+  .top_dock,
+  .bottom_dock {
+    padding: 0;
+    margin: 0;
+    max-height: 40vh;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    position: relative;
+  }
+
+  .top_dock::-webkit-scrollbar,
+  .bottom_dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  .top_dock_panel,
+  .bottom_dock_panel {
+    margin: 0;
+    height: auto;
+    max-height: none;
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+    width: 100%;
+  }
+
+  .top_dock_panel_title,
+  .bottom_dock_panel_title {
+    padding: var(--space-md);
+    font-size: 1em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .top_dock_panel_close,
+  .bottom_dock_panel_close {
+    min-width: 44px;
+    min-height: 44px;
+    padding: var(--space-md);
+    margin: 0;
+    font-size: 1.2em;
+    border-radius: var(--radius-md);
+    margin-left: var(--space-md);
+  }
+
+  .top_dock_panel_content,
+  .bottom_dock_panel_content {
+    padding: var(--space-md);
+    flex: 1;
+    overflow: auto;
+  }
+
+  /* Carousel indicators for multiple panels */
+  .top_dock::before,
+  .bottom_dock::before {
+    content: "›";
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    font-size: 20px;
+    color: white;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 100;
+    transition: opacity 0.3s ease;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+  }
+
+  .top_dock.has-overflow::before,
+  .bottom_dock.has-overflow::before {
+    opacity: 1;
+  }
+
+  .top_dock::after,
+  .bottom_dock::after {
+    content: "‹";
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+    font-size: 20px;
+    color: white;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 100;
+    transition: opacity 0.3s ease;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+  }
+
+  .top_dock.has-scroll::after,
+  .bottom_dock.has-scroll::after {
+    opacity: 1;
+  }
 }
 
 .message_board {

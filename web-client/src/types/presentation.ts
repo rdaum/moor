@@ -28,14 +28,16 @@ export interface Presentation {
     readonly attrs: Readonly<{ [key: string]: string }>;
 }
 
-export type DockTarget = "left-dock" | "right-dock" | "top-dock" | "bottom-dock";
-export type PresentationTarget = DockTarget | "window" | "verb-editor";
+export type SemanticTarget = "navigation" | "inventory" | "status" | "tools" | "communication" | "help";
+export type PresentationTarget = SemanticTarget | "window" | "verb-editor";
 
 export const TARGET_TYPES = {
     WINDOW: "window" as const,
-    RIGHT_DOCK: "right-dock" as const,
-    LEFT_DOCK: "left-dock" as const,
-    TOP_DOCK: "top-dock" as const,
-    BOTTOM_DOCK: "bottom-dock" as const,
+    NAVIGATION: "navigation" as const,
+    INVENTORY: "inventory" as const,
+    STATUS: "status" as const,
+    TOOLS: "tools" as const,
+    COMMUNICATION: "communication" as const,
+    HELP: "help" as const,
     VERB_EDITOR: "verb-editor" as const,
 };

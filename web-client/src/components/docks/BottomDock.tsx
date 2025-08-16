@@ -14,6 +14,7 @@
 import React from "react";
 import { Presentation } from "../../types/presentation";
 import { Panel } from "../Panel";
+import { useCarouselOverflow } from "../../hooks/useCarouselOverflow";
 
 interface BottomDockProps {
     presentations: Presentation[];
@@ -22,25 +23,79 @@ interface BottomDockProps {
 }
 
 export const BottomDock: React.FC<BottomDockProps> = ({ presentations, onClosePresentation, onLinkClick }) => {
+    const { containerRef, hasOverflow, hasScroll } = useCarouselOverflow();
+
     if (presentations.length === 0) {
         return null;
     }
 
+    const className = [
+        "bottom_dock",
+        hasOverflow && "has-overflow",
+        hasScroll && "has-scroll"
+    ].filter(Boolean).join(" ");
+
     return (
-        <div className="bottom_dock" style={{ display: "flex" }}>
-            <h2 className="sr-only">Bottom Dock Panels</h2>
-            {presentations.map((presentation) => (
-                <Panel
-                    key={presentation.id}
-                    presentation={presentation}
-                    onClose={onClosePresentation}
-                    className="bottom_dock_panel"
-                    titleClassName="bottom_dock_panel_title"
-                    contentClassName="bottom_dock_panel_content"
-                    closeButtonClassName="bottom_dock_panel_close"
-                    onLinkClick={onLinkClick}
-                />
-            ))}
-        </div>
+        <>
+            <div ref={containerRef} className={className} style={{ display: "flex" }}>
+                <h2 className="sr-only">Bottom Dock Panels</h2>
+                {presentations.map((presentation) => (
+                    <Panel
+                        key={presentation.id}
+                        presentation={presentation}
+                        onClose={onClosePresentation}
+                        className="bottom_dock_panel"
+                        titleClassName="bottom_dock_panel_title"
+                        contentClassName="bottom_dock_panel_content"
+                        closeButtonClassName="bottom_dock_panel_close"
+                        onLinkClick={onLinkClick}
+                    />
+                ))}
+            </div>
+            {hasOverflow && (
+                <div style={{
+                    position: "absolute",
+                    top: "50%",
+                    right: "8px",
+                    transform: "translateY(-50%)",
+                    fontSize: "24px",
+                    color: "white",
+                    background: "rgba(0, 0, 0, 0.8)",
+                    borderRadius: "50%",
+                    width: "36px",
+                    height: "36px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "bold",
+                    pointerEvents: "none",
+                    zIndex: 1000
+                }}>
+                    ›
+                </div>
+            )}
+            {hasScroll && (
+                <div style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "8px",
+                    transform: "translateY(-50%)",
+                    fontSize: "24px",
+                    color: "white",
+                    background: "rgba(0, 0, 0, 0.8)",
+                    borderRadius: "50%",
+                    width: "36px",
+                    height: "36px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "bold",
+                    pointerEvents: "none",
+                    zIndex: 1000
+                }}>
+                    ‹
+                </div>
+            )}
+        </>
     );
 };

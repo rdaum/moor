@@ -12,10 +12,49 @@
 //
 
 import { useCallback, useState } from "react";
-import { Presentation, PresentationData, TARGET_TYPES } from "../types/presentation";
+import { Presentation, PresentationData, TARGET_TYPES, SemanticTarget } from "../types/presentation";
+import { useMediaQuery } from "./useMediaQuery";
+
+// Responsive mapping of semantic targets to visual placement
+const useSemanticMapping = () => {
+    const isMobile = useMediaQuery('(max-width: 768px)');
+    
+    const getPlacementForTarget = useCallback((target: SemanticTarget): "left" | "right" | "top" | "bottom" => {
+        if (isMobile) {
+            // On mobile, map most things to bottom for better UX
+            switch (target) {
+                case "navigation":
+                case "communication":
+                    return "top";
+                case "status":
+                    return "top";  
+                case "inventory":
+                case "tools":
+                default:
+                    return "bottom";
+            }
+        } else {
+            // Desktop placement
+            switch (target) {
+                case "navigation":
+                case "communication":
+                    return "left";
+                case "inventory":
+                case "status":
+                case "tools":
+                    return "right";
+                default:
+                    return "right";
+            }
+        }
+    }, [isMobile]);
+    
+    return { getPlacementForTarget };
+};
 
 export const usePresentations = () => {
     const [presentations, setPresentations] = useState<Map<string, Presentation>>(new Map());
+    const { getPlacementForTarget } = useSemanticMapping();
 
     // Add a new presentation
     const addPresentation = useCallback((data: PresentationData) => {
@@ -61,24 +100,44 @@ export const usePresentations = () => {
         return Array.from(presentations.values()).filter(p => p.target === target);
     }, [presentations]);
 
-    // Get presentations for specific dock
-    const getLeftDockPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.LEFT_DOCK), [
-        getPresentationsByTarget,
-    ]);
+    // Get presentations for visual placement (mapped from semantic targets)
+    const getLeftDockPresentations = useCallback((): Presentation[] => {
+        return Array.from(presentations.values()).filter(p => {
+            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            const semanticTarget = p.target as SemanticTarget;
+            return getPlacementForTarget(semanticTarget) === "left";
+        });
+    }, [presentations, getPlacementForTarget]);
 
-    const getRightDockPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.RIGHT_DOCK), [
-        getPresentationsByTarget,
-    ]);
+    const getRightDockPresentations = useCallback((): Presentation[] => {
+        return Array.from(presentations.values()).filter(p => {
+            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            const semanticTarget = p.target as SemanticTarget;
+            return getPlacementForTarget(semanticTarget) === "right";
+        });
+    }, [presentations, getPlacementForTarget]);
 
-    const getTopDockPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.TOP_DOCK), [
-        getPresentationsByTarget,
-    ]);
+    const getTopDockPresentations = useCallback((): Presentation[] => {
+        return Array.from(presentations.values()).filter(p => {
+            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            const semanticTarget = p.target as SemanticTarget;
+            return getPlacementForTarget(semanticTarget) === "top";
+        });
+    }, [presentations, getPlacementForTarget]);
 
-    const getBottomDockPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.BOTTOM_DOCK), [
-        getPresentationsByTarget,
-    ]);
+    const getBottomDockPresentations = useCallback((): Presentation[] => {
+        return Array.from(presentations.values()).filter(p => {
+            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            const semanticTarget = p.target as SemanticTarget;
+            return getPlacementForTarget(semanticTarget) === "bottom";
+        });
+    }, [presentations, getPlacementForTarget]);
 
     const getWindowPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.WINDOW), [
+        getPresentationsByTarget,
+    ]);
+
+    const getHelpPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.HELP), [
         getPresentationsByTarget,
     ]);
 
@@ -142,6 +201,7 @@ export const usePresentations = () => {
         getTopDockPresentations,
         getBottomDockPresentations,
         getWindowPresentations,
+        getHelpPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
     };

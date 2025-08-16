@@ -14,6 +14,7 @@
 import React from "react";
 import { Presentation } from "../../types/presentation";
 import { Panel } from "../Panel";
+import { useCarouselOverflow } from "../../hooks/useCarouselOverflow";
 
 interface TopDockProps {
     presentations: Presentation[];
@@ -22,25 +23,82 @@ interface TopDockProps {
 }
 
 export const TopDock: React.FC<TopDockProps> = ({ presentations, onClosePresentation, onLinkClick }) => {
+    const { containerRef, hasOverflow, hasScroll } = useCarouselOverflow();
+
     if (presentations.length === 0) {
         return null;
     }
 
+    // Debug logging for React state
+    console.log('TopDock render:', { hasOverflow, hasScroll });
+
+    const className = [
+        "top_dock",
+        hasOverflow && "has-overflow",
+        hasScroll && "has-scroll"
+    ].filter(Boolean).join(" ");
+
     return (
-        <div className="top_dock" style={{ display: "flex" }}>
-            <h2 className="sr-only">Top Dock Panels</h2>
-            {presentations.map((presentation) => (
-                <Panel
-                    key={presentation.id}
-                    presentation={presentation}
-                    onClose={onClosePresentation}
-                    className="top_dock_panel"
-                    titleClassName="top_dock_panel_title"
-                    contentClassName="top_dock_panel_content"
-                    closeButtonClassName="top_dock_panel_close"
-                    onLinkClick={onLinkClick}
-                />
-            ))}
-        </div>
+        <>
+            <div ref={containerRef} className={className} style={{ display: "flex" }}>
+                <h2 className="sr-only">Top Dock Panels</h2>
+                {presentations.map((presentation) => (
+                    <Panel
+                        key={presentation.id}
+                        presentation={presentation}
+                        onClose={onClosePresentation}
+                        className="top_dock_panel"
+                        titleClassName="top_dock_panel_title"
+                        contentClassName="top_dock_panel_content"
+                        closeButtonClassName="top_dock_panel_close"
+                        onLinkClick={onLinkClick}
+                    />
+                ))}
+            </div>
+            {hasOverflow && (
+                <div style={{
+                    position: "absolute",
+                    top: "50%",
+                    right: "8px",
+                    transform: "translateY(-50%)",
+                    fontSize: "24px",
+                    color: "white",
+                    background: "rgba(0, 0, 0, 0.8)",
+                    borderRadius: "50%",
+                    width: "36px",
+                    height: "36px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "bold",
+                    pointerEvents: "none",
+                    zIndex: 1000
+                }}>
+                    ›
+                </div>
+            )}
+            {hasScroll && (
+                <div style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "8px",
+                    transform: "translateY(-50%)",
+                    fontSize: "24px",
+                    color: "white",
+                    background: "rgba(0, 0, 0, 0.8)",
+                    borderRadius: "50%",
+                    width: "36px",
+                    height: "36px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "bold",
+                    pointerEvents: "none",
+                    zIndex: 1000
+                }}>
+                    ‹
+                </div>
+            )}
+        </>
     );
 };

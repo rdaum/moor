@@ -29,6 +29,11 @@
   flex-direction: column;
 }
 
+/* Dock container positioning for indicators */
+aside[aria-label*="dock"] {
+  position: relative;
+}
+
 .columns_grid {
   width: 100%;
   height: 100%;
