@@ -356,6 +356,10 @@ pub trait WorldState: Send {
     /// Get the object that is the parent of the given object.
     fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError>;
 
+    /// Get all command verbs available on an object, including inherited ones.
+    /// Filters out method verbs (verbs with "this none this" args pattern).
+    fn command_verbs_on(&self, perms: &Obj, obj: &Obj) -> Result<VerbDefs, WorldStateError>;
+
     /// Change the parent of the given object.
     /// This manages the movement of property definitions between the old and new parents.
     fn change_parent(

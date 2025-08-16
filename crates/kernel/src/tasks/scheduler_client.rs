@@ -451,6 +451,31 @@ impl SchedulerClient {
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
+
+    /// Request command suggestions for autocompletion
+    pub fn get_command_suggestions(
+        &self,
+        player: &Obj,
+        selected_object: Option<&Obj>,
+        suggestion_mode: crate::tasks::SuggestionMode,
+        max_suggestions: usize,
+    ) -> Result<crate::tasks::CommandSuggestionsResponse, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestCommandSuggestions {
+                player: *player,
+                partial_command: None,
+                selected_object: selected_object.copied(),
+                suggestion_mode,
+                max_suggestions,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
 }
 
 pub enum SchedulerClientMsg {
@@ -513,5 +538,14 @@ pub enum SchedulerClientMsg {
         reply: oneshot::Sender<
             Result<Vec<crate::tasks::world_state_action::WorldStateResponse>, SchedulerError>,
         >,
+    },
+    /// Request command suggestions for autocompletion
+    RequestCommandSuggestions {
+        player: Obj,
+        partial_command: Option<String>,
+        selected_object: Option<Obj>,
+        suggestion_mode: crate::tasks::SuggestionMode,
+        max_suggestions: usize,
+        reply: oneshot::Sender<Result<crate::tasks::CommandSuggestionsResponse, SchedulerError>>,
     },
 }

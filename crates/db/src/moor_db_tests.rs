@@ -2084,4 +2084,112 @@ mod tests {
             assert_eq!(resolve_result.unwrap().location(), parent_obj);
         }
     }
+
+    #[test]
+    fn test_get_command_verbs() {
+        use moor_common::model::{ArgSpec, PrepSpec};
+
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create parent object
+        let parent = tx
+            .create_object(
+                None,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        // Create child object that inherits from parent
+        let child = tx
+            .create_object(
+                None,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+            )
+            .unwrap();
+
+        // Add command verbs to parent
+        tx.add_object_verb(
+            &parent,
+            &SYSTEM_OBJECT,
+            &[Symbol::mk("look"), Symbol::mk("l")],
+            ProgramType::MooR(Program::new()),
+            BitEnum::new_with(VerbFlag::Read),
+            VerbArgsSpec {
+                dobj: ArgSpec::This,
+                prep: PrepSpec::None,
+                iobj: ArgSpec::None,
+            },
+        )
+        .unwrap();
+
+        tx.add_object_verb(
+            &parent,
+            &SYSTEM_OBJECT,
+            &[Symbol::mk("take"), Symbol::mk("get")],
+            ProgramType::MooR(Program::new()),
+            BitEnum::new_with(VerbFlag::Read),
+            VerbArgsSpec {
+                dobj: ArgSpec::This,
+                prep: PrepSpec::None,
+                iobj: ArgSpec::None,
+            },
+        )
+        .unwrap();
+
+        // Add method verb (should be filtered out by get_command_verbs)
+        tx.add_object_verb(
+            &parent,
+            &SYSTEM_OBJECT,
+            &[Symbol::mk("do_something")],
+            ProgramType::MooR(Program::new()),
+            BitEnum::new_with(VerbFlag::Read),
+            VerbArgsSpec::this_none_this(), // "this none this" = method verb
+        )
+        .unwrap();
+
+        // Add command verb directly to child (should override inheritance)
+        tx.add_object_verb(
+            &child,
+            &SYSTEM_OBJECT,
+            &[Symbol::mk("look"), Symbol::mk("examine")],
+            ProgramType::MooR(Program::new()),
+            BitEnum::new_with(VerbFlag::Read),
+            VerbArgsSpec {
+                dobj: ArgSpec::This,
+                prep: PrepSpec::None,
+                iobj: ArgSpec::None,
+            },
+        )
+        .unwrap();
+
+        // Test get_command_verbs on child object
+        let command_verbs = tx.get_command_verbs(&child).unwrap();
+
+        // Should contain child's "look" verb (overrides parent's)
+        let look_verbs = command_verbs.find_named(Symbol::mk("look"));
+        assert_eq!(look_verbs.len(), 1);
+        assert_eq!(look_verbs[0].location(), child); // Child's verb, not parent's
+        assert!(look_verbs[0].names().contains(&Symbol::mk("examine"))); // Child's additional name
+
+        // Should contain inherited "take" verb from parent
+        let take_verbs = command_verbs.find_named(Symbol::mk("take"));
+        assert_eq!(take_verbs.len(), 1);
+        assert_eq!(take_verbs[0].location(), parent); // Inherited from parent
+
+        // Should NOT contain method verb
+        let method_verbs = command_verbs.find_named(Symbol::mk("do_something"));
+        assert_eq!(method_verbs.len(), 0);
+
+        // Verify cache population: subsequent resolve_verb calls should hit cache
+        let resolve_look = tx.resolve_verb(&child, Symbol::mk("look"), None, None);
+        assert!(resolve_look.is_ok());
+        assert_eq!(resolve_look.unwrap().location(), child);
+
+        let resolve_take = tx.resolve_verb(&child, Symbol::mk("take"), None, None);
+        assert!(resolve_take.is_ok());
+        assert_eq!(resolve_take.unwrap().location(), parent);
+
+        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    }
 }
