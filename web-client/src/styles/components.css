@@ -2,6 +2,81 @@
  * Component-specific styles
  */
 
+/* ====== SUGGESTION STRIP ====== */
+.suggestion-strip {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-bg-secondary);
+  border-top: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  min-height: 44px; /* Touch-friendly minimum height */
+  align-items: center;
+  /* Smooth scrolling behavior */
+  scroll-behavior: smooth;
+  /* Prevent flex items from wrapping */
+  flex-wrap: nowrap;
+}
+
+.suggestion-strip::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.suggestion-button {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xs) var(--space-md);
+  font-size: 0.9em;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 32px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.suggestion-button:hover {
+  background-color: var(--color-bg-accent);
+  border-color: var(--color-border-accent);
+  transform: translateY(-1px);
+}
+
+.suggestion-button:active {
+  transform: translateY(0);
+  background-color: var(--color-accent);
+  color: var(--color-bg-primary);
+}
+
+.suggestion-button.selected {
+  background-color: var(--color-accent);
+  color: var(--color-bg-primary);
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+
+/* Mobile touch improvements */
+@media (max-width: 768px) {
+  .suggestion-button {
+    min-height: 40px;
+    padding: var(--space-sm) var(--space-lg);
+    font-size: 1em;
+  }
+  
+  .suggestion-strip {
+    padding: var(--space-sm);
+    min-height: 52px;
+  }
+}
+
 /* ====== NARRATIVE AREA ====== */
 .narrative {
   position: relative;

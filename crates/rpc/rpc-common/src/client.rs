@@ -29,6 +29,100 @@ pub enum ConnectType {
     Created,
 }
 
+/// Command suggestion modes for different autocompletion contexts
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum CommandSuggestionMode {
+    /// Show actions available on selected object
+    ObjectActions,
+    /// Show all available actions in player's environment
+    EnvironmentActions,
+    /// Show objects that work with a verb
+    VerbTargets(String),
+    /// Show objects that work as indirect objects
+    IndirectTargets(String, Option<Obj>),
+}
+
+/// Response containing command suggestions for autocompletion
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub struct CommandSuggestionsResponse {
+    /// Complete command suggestions ready to execute
+    pub action_suggestions: Vec<ActionSuggestion>,
+    /// Standalone verb suggestions (for command completion)
+    pub verb_suggestions: Vec<VerbSuggestion>,
+    /// Object suggestions (for object selection)
+    pub object_suggestions: Vec<ObjectSuggestion>,
+    /// The context that was used for these suggestions
+    pub suggestion_context: SuggestionContext,
+    /// Whether more suggestions are available
+    pub has_more: bool,
+}
+
+/// A suggested action with all components
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub struct ActionSuggestion {
+    /// The verb being suggested
+    pub verb_aliases: Vec<Symbol>,
+    /// Direct object (if any)
+    pub dobj: Option<Obj>,
+    /// Direct object name for display
+    pub dobjstr: Option<String>,
+    /// Preposition string for display
+    pub prepstr: Option<String>,
+    /// Indirect object (if any)
+    pub iobj: Option<Obj>,
+    /// Indirect object name for display
+    pub iobjstr: Option<String>,
+    /// Whether this action requires additional input from user
+    pub needs_input: bool,
+}
+
+/// A suggested verb with context
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub struct VerbSuggestion {
+    /// The verb name (e.g. "look", "take", "put")
+    pub verb_name: Symbol,
+    /// Object the verb is defined on
+    pub object: Obj,
+    /// Display name of the object
+    pub object_name: String,
+    /// Complete command suggestion (e.g. "look lamp")
+    pub full_command: String,
+    /// Verb argument specification (dobj, prep, iobj)
+    pub args_spec: Vec<Symbol>,
+    /// Optional help text or description
+    pub description: Option<String>,
+}
+
+/// A suggested object for command completion
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub struct ObjectSuggestion {
+    /// The object reference
+    pub object: Obj,
+    /// Primary name of the object
+    pub name: String,
+    /// Alternative names/aliases
+    pub aliases: Vec<String>,
+    /// Type classification ("player", "room", "thing", etc.)
+    pub object_type: String,
+}
+
+/// Context information for command suggestions
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum SuggestionContext {
+    /// Empty command or partial verb
+    Verb,
+    /// After verb, looking for direct object
+    DirectObject(String),
+    /// After direct object, looking for preposition
+    Preposition(String),
+    /// After preposition, looking for indirect object
+    IndirectObject(String),
+    /// Object-first mode: show actions available on specific object
+    ObjectActions(Obj),
+    /// Environment mode: show all available actions in player's environment
+    Environment,
+}
+
 /// History recall options for connection establishment
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum HistoryRecall {
@@ -168,6 +262,14 @@ pub enum HostClientToDaemonMessage {
     /// We're done with this ClientToken
     /// The second argument indicates whether this constitutes a physical "disconnection" event
     /// and whether this should trigger the `$user_disconnected` verb invocation.
+    /// Request command suggestions for autocompletion and object-first interactions
+    CommandSuggestions {
+        client_token: ClientToken,
+        auth_token: AuthToken,
+        selected_object: Option<Obj>,
+        suggestion_mode: CommandSuggestionMode,
+        max_suggestions: usize,
+    },
     Detach(ClientToken, bool),
 }
 
@@ -210,6 +312,8 @@ pub enum DaemonToClientReply {
     CurrentPresentations(Vec<moor_common::tasks::Presentation>),
     /// Response to `DismissPresentation` - acknowledgment of dismissal
     PresentationDismissed,
+    /// Response to `CommandSuggestions` - command suggestions for autocompletion
+    CommandSuggestionsResponse(CommandSuggestionsResponse),
     /// This Client has been disconnected and is not expected to be heard from again.
     Disconnected,
 }

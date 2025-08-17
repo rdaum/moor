@@ -31,6 +31,7 @@ interface NarrativeProps {
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
+    authToken?: string | null;
 }
 
 export interface NarrativeRef {
@@ -52,6 +53,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     onLoadMoreHistory,
     isLoadingHistory = false,
     onLinkClick,
+    authToken = null,
 }, ref) => {
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -187,6 +189,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     onSendMessage={handleSendMessage}
                     commandHistory={commandHistory}
                     onAddToHistory={addToHistory}
+                    authToken={authToken}
                 />
             </div>
         </div>

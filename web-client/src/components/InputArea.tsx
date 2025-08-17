@@ -12,6 +12,8 @@
 //
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useSuggestions } from "../hooks/useSuggestions";
+import { SuggestionStrip } from "./SuggestionStrip";
 
 interface InputAreaProps {
     visible: boolean;
@@ -19,6 +21,7 @@ interface InputAreaProps {
     onSendMessage: (message: string) => void;
     commandHistory: string[];
     onAddToHistory: (command: string) => void;
+    authToken?: string | null;
 }
 
 const ENCOURAGING_PLACEHOLDERS = [
@@ -38,13 +41,27 @@ export const InputArea: React.FC<InputAreaProps> = ({
     onSendMessage,
     commandHistory,
     onAddToHistory,
+    authToken = null,
 }) => {
     const [input, setInput] = useState("");
     const [historyOffset, setHistoryOffset] = useState(0);
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
     const [placeholderIndex, setPlaceholderIndex] = useState(() =>
         Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length)
     );
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Get suggestions based on current input
+    const { suggestions } = useSuggestions(input, {
+        authToken,
+        mode: "environment_actions", // Start with environment actions
+        maxSuggestions: 20, // Fetch more suggestions, let SuggestionStrip decide how many to show
+    });
+
+    // Reset suggestion selection when suggestions change
+    useEffect(() => {
+        setSelectedSuggestionIndex(-1);
+    }, [suggestions]);
 
     // Focus input area when it becomes visible and enabled
     useEffect(() => {
@@ -175,8 +192,50 @@ export const InputArea: React.FC<InputAreaProps> = ({
         }, 0);
     }, []);
 
+    // Handle suggestion click
+    const handleSuggestionClick = useCallback((suggestion: string) => {
+        // Replace current input with suggestion
+        setInput(suggestion);
+        setHistoryOffset(0);
+
+        // Focus back to input
+        if (textareaRef.current) {
+            textareaRef.current.focus();
+            // Place cursor at end
+            setTimeout(() => {
+                if (textareaRef.current) {
+                    textareaRef.current.selectionStart = suggestion.length;
+                    textareaRef.current.selectionEnd = suggestion.length;
+                }
+            }, 0);
+        }
+    }, []);
+
     // Handle key events
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        // Tab to accept first suggestion
+        if (e.key === "Tab" && suggestions.length > 0) {
+            e.preventDefault();
+            const suggestionToUse = selectedSuggestionIndex >= 0
+                ? suggestions[selectedSuggestionIndex]
+                : suggestions[0];
+            handleSuggestionClick(suggestionToUse);
+            return;
+        }
+
+        // Arrow left/right to navigate suggestions when we have them
+        if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && suggestions.length > 0) {
+            e.preventDefault();
+            if (e.key === "ArrowLeft") {
+                setSelectedSuggestionIndex(prev => Math.max(-1, prev - 1) // Stop at -1 (no selection)
+                );
+            } else {
+                setSelectedSuggestionIndex(prev => Math.min(suggestions.length - 1, prev + 1) // Stop at last suggestion
+                );
+            }
+            return;
+        }
+
         if (e.key === "ArrowUp") {
             const isMultiline = input.includes("\n");
             const textarea = textareaRef.current;
@@ -218,7 +277,16 @@ export const InputArea: React.FC<InputAreaProps> = ({
             e.preventDefault();
             sendInput();
         }
-    }, [navigateHistory, sendInput, input, historyOffset, commandHistory]);
+    }, [
+        navigateHistory,
+        sendInput,
+        input,
+        historyOffset,
+        commandHistory,
+        suggestions,
+        selectedSuggestionIndex,
+        handleSuggestionClick,
+    ]);
 
     if (!visible) {
         return null;
@@ -226,6 +294,12 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
     return (
         <div style={{ width: "100%" }}>
+            <SuggestionStrip
+                suggestions={suggestions}
+                onSuggestionClick={handleSuggestionClick}
+                visible={visible && !disabled}
+                selectedIndex={selectedSuggestionIndex}
+            />
             <textarea
                 ref={textareaRef}
                 id="input_area"
@@ -251,7 +325,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 }}
             />
             <div id="input-help" className="sr-only">
-                Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input.
+                Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input. Tab to
+                accept suggestion, Left/Right arrows to select suggestions. Tap suggestions above to complete commands.
             </div>
         </div>
     );

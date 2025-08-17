@@ -64,8 +64,8 @@ pub struct CommandSuggestionsResponse {
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct ActionSuggestion {
-    /// The verb being suggested
-    pub verb: Symbol,
+    /// All verb aliases for this action
+    pub verb_aliases: Vec<Symbol>,
     /// Direct object (if any)
     pub dobj: Option<Obj>,
     /// Direct object name for display
@@ -208,43 +208,48 @@ impl CommandSuggestionEngine {
                 continue;
             }
 
-            for verb_name in verb_def.names() {
-                // Determine if this action needs additional input
-                let needs_input = matches!(args_spec.iobj, ArgSpec::This | ArgSpec::Any)
-                    || matches!(args_spec.prep, PrepSpec::Any | PrepSpec::Other(_));
+            // Determine if this action needs additional input
+            let needs_input = matches!(args_spec.iobj, ArgSpec::This | ArgSpec::Any)
+                || matches!(args_spec.prep, PrepSpec::Any | PrepSpec::Other(_));
 
-                // For object actions, the target object is typically the direct object
-                let (dobj, dobjstr) = if matches!(args_spec.dobj, ArgSpec::This | ArgSpec::Any) {
-                    (Some(*target_object), Some(primary_name.clone()))
-                } else {
-                    (None, None)
-                };
+            // For object actions, the target object is typically the direct object
+            let (dobj, dobjstr) = if matches!(args_spec.dobj, ArgSpec::This | ArgSpec::Any) {
+                (Some(*target_object), Some(primary_name.clone()))
+            } else {
+                (None, None)
+            };
 
-                action_suggestions.push(ActionSuggestion {
-                    verb: *verb_name,
-                    dobj,
-                    dobjstr,
-                    prep: args_spec.prep,
-                    prepstr: None, // TODO: Could populate if prep is Other(preposition)
-                    iobj: None,    // Object actions don't specify indirect objects
-                    iobjstr: None,
-                    needs_input,
-                });
+            // Collect all verb aliases into a single suggestion
+            let verb_aliases: Vec<Symbol> = verb_def.names().iter().copied().collect();
 
-                // Don't exceed the limit
-                if action_suggestions.len() >= max_suggestions {
-                    break;
-                }
-            }
+            action_suggestions.push(ActionSuggestion {
+                verb_aliases,
+                dobj,
+                dobjstr,
+                prep: args_spec.prep,
+                prepstr: None, // TODO: Could populate if prep is Other(preposition)
+                iobj: None,    // Object actions don't specify indirect objects
+                iobjstr: None,
+                needs_input,
+            });
 
-            if action_suggestions.len() >= max_suggestions {
+            // Only limit if max_suggestions is specified (> 0)
+            if max_suggestions > 0 && action_suggestions.len() >= max_suggestions {
                 break;
             }
         }
 
-        // Sort by verb priority (common verbs first)
-        action_suggestions.sort_by_key(|a| Self::get_verb_priority(&a.verb));
-        action_suggestions.truncate(max_suggestions);
+        // Sort by verb priority (common verbs first) - use first alias for priority
+        action_suggestions.sort_by_key(|a| {
+            a.verb_aliases.first()
+                .map(|verb| Self::get_verb_priority(verb))
+                .unwrap_or(100)
+        });
+        
+        // Only truncate if max_suggestions is specified (> 0)
+        if max_suggestions > 0 {
+            action_suggestions.truncate(max_suggestions);
+        }
 
         Ok(CommandSuggestionsResponse {
             action_suggestions,
@@ -262,7 +267,7 @@ impl CommandSuggestionEngine {
         world_state: &mut dyn WorldState,
     ) -> Result<CommandSuggestionsResponse, SchedulerError> {
         let mut action_suggestions = Vec::new();
-        let mut seen_verb_names = std::collections::HashSet::new();
+        let mut seen_verb_signatures = std::collections::HashSet::new();
 
         // Get player's current location
         let player_location = world_state
@@ -275,7 +280,7 @@ impl CommandSuggestionEngine {
             player,
             world_state,
             &mut action_suggestions,
-            &mut seen_verb_names,
+            &mut seen_verb_signatures,
             "self",
         )?;
 
@@ -286,7 +291,7 @@ impl CommandSuggestionEngine {
                 &player_location,
                 world_state,
                 &mut action_suggestions,
-                &mut seen_verb_names,
+                &mut seen_verb_signatures,
                 "room",
             )?;
 
@@ -310,7 +315,7 @@ impl CommandSuggestionEngine {
                     &obj,
                     world_state,
                     &mut action_suggestions,
-                    &mut seen_verb_names,
+                    &mut seen_verb_signatures,
                     &obj_name,
                 )?;
             }
@@ -332,14 +337,22 @@ impl CommandSuggestionEngine {
                 &obj,
                 world_state,
                 &mut action_suggestions,
-                &mut seen_verb_names,
+                &mut seen_verb_signatures,
                 &obj_name,
             )?;
         }
 
-        // Sort by verb priority and limit results
-        action_suggestions.sort_by_key(|a| Self::get_verb_priority(&a.verb));
-        action_suggestions.truncate(max_suggestions);
+        // Sort by verb priority - use first alias for priority
+        action_suggestions.sort_by_key(|a| {
+            a.verb_aliases.first()
+                .map(|verb| Self::get_verb_priority(verb))
+                .unwrap_or(100)
+        });
+        
+        // Only limit results if max_suggestions is specified (> 0)
+        if max_suggestions > 0 {
+            action_suggestions.truncate(max_suggestions);
+        }
 
         Ok(CommandSuggestionsResponse {
             action_suggestions,
@@ -356,7 +369,7 @@ impl CommandSuggestionEngine {
         target_object: &Obj,
         world_state: &mut dyn WorldState,
         action_suggestions: &mut Vec<ActionSuggestion>,
-        seen_verb_names: &mut std::collections::HashSet<Symbol>,
+        seen_verb_signatures: &mut std::collections::HashSet<(Vec<Symbol>, ArgSpec, PrepSpec, ArgSpec)>,
         object_display_name: &str,
     ) -> Result<(), SchedulerError> {
         // Get command verbs available on the target object
@@ -372,39 +385,43 @@ impl CommandSuggestionEngine {
 
             let args_spec = verb_def.args();
 
-            for verb_name in verb_def.names() {
-                // Skip if we've already seen this verb name (avoid duplicates)
-                if seen_verb_names.contains(verb_name) {
-                    continue;
-                }
+            // Collect all verb aliases into a single suggestion
+            let verb_aliases: Vec<Symbol> = verb_def.names().iter().copied().collect();
 
-                seen_verb_names.insert(*verb_name);
-
-                // Determine if this action needs additional input
-                let needs_input = matches!(args_spec.iobj, ArgSpec::This | ArgSpec::Any)
-                    || matches!(args_spec.prep, PrepSpec::Any | PrepSpec::Other(_));
-
-                // Determine the direct object based on the verb's arg spec
-                let (dobj, dobjstr) = match args_spec.dobj {
-                    ArgSpec::This => (Some(*target_object), Some(object_display_name.to_string())),
-                    ArgSpec::Any => {
-                        // For "any" verbs, we could suggest the object but it's optional
-                        (Some(*target_object), Some(object_display_name.to_string()))
-                    }
-                    ArgSpec::None => (None, None),
-                };
-
-                action_suggestions.push(ActionSuggestion {
-                    verb: *verb_name,
-                    dobj,
-                    dobjstr,
-                    prep: args_spec.prep,
-                    prepstr: None, // TODO: Could populate if prep is Other(preposition)
-                    iobj: None,    // Environment actions don't specify indirect objects yet
-                    iobjstr: None,
-                    needs_input,
-                });
+            // Create a signature to avoid duplicate verb definitions with same args
+            let signature = (verb_aliases.clone(), args_spec.dobj, args_spec.prep, args_spec.iobj);
+            
+            // Skip if we've already seen this exact verb signature
+            if seen_verb_signatures.contains(&signature) {
+                continue;
             }
+
+            seen_verb_signatures.insert(signature);
+
+            // Determine if this action needs additional input
+            let needs_input = matches!(args_spec.iobj, ArgSpec::This | ArgSpec::Any)
+                || matches!(args_spec.prep, PrepSpec::Any | PrepSpec::Other(_));
+
+            // Determine the direct object based on the verb's arg spec
+            let (dobj, dobjstr) = match args_spec.dobj {
+                ArgSpec::This => (Some(*target_object), Some(object_display_name.to_string())),
+                ArgSpec::Any => {
+                    // For "any" verbs, we could suggest the object but it's optional
+                    (Some(*target_object), Some(object_display_name.to_string()))
+                }
+                ArgSpec::None => (None, None),
+            };
+
+            action_suggestions.push(ActionSuggestion {
+                verb_aliases,
+                dobj,
+                dobjstr,
+                prep: args_spec.prep,
+                prepstr: None, // TODO: Could populate if prep is Other(preposition)
+                iobj: None,    // Environment actions don't specify indirect objects yet
+                iobjstr: None,
+                needs_input,
+            });
         }
 
         Ok(())
@@ -441,26 +458,38 @@ impl CommandSuggestionEngine {
     /// - MOO world-specific configuration
     /// - Learning from player behavior
     fn get_verb_priority(verb: &Symbol) -> u32 {
-        if *verb == *LOOK || *verb == *EXAMINE || *verb == *L {
+        let verb_str = verb.as_string();
+        
+        // Rank verbs with underscores very low (low user friendliness)
+        if verb_str.contains('_') {
+            return 500;
+        }
+        
+        // Top priority verbs (most commonly used)
+        if verb_str == "say" {
             1
-        } else if *verb == *TAKE || *verb == *GET {
+        } else if verb_str == "emote" {
             2
-        } else if *verb == *USE {
+        } else if *verb == *LOOK || *verb == *EXAMINE || *verb == *L {
             3
-        } else if *verb == *OPEN {
+        } else if *verb == *TAKE || *verb == *GET {
             4
-        } else if *verb == *CLOSE {
+        } else if verb_str == "help" {
             5
-        } else if *verb == *TALK || *verb == *SAY {
+        } else if *verb == *USE {
             6
-        } else if *verb == *GIVE {
+        } else if *verb == *OPEN {
             7
-        } else if *verb == *PUT {
+        } else if *verb == *CLOSE {
             8
-        } else if *verb == *DROP {
+        } else if *verb == *GIVE {
             9
+        } else if *verb == *PUT {
+            10
+        } else if *verb == *DROP {
+            11
         } else {
-            100 // Everything else gets lower priority
+            100 // Everything else gets normal priority
         }
     }
 }

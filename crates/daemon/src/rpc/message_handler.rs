@@ -1833,7 +1833,7 @@ impl RpcMessageHandler {
                 .action_suggestions
                 .into_iter()
                 .map(|action| rpc_common::ActionSuggestion {
-                    verb: action.verb,
+                    verb_aliases: action.verb_aliases,
                     dobj: action.dobj,
                     dobjstr: action.dobjstr,
                     prepstr: action.prepstr,

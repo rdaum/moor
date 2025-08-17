@@ -728,8 +728,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Verify all suggestions have proper structure
         for action in &suggestions.action_suggestions {
             assert!(
-                !action.verb.as_string().is_empty(),
-                "Verb should not be empty"
+                !action.verb_aliases.is_empty(),
+                "Verb aliases should not be empty"
+            );
+            assert!(
+                !action.verb_aliases[0].as_string().is_empty(),
+                "First verb alias should not be empty"
             );
 
             // For object actions, the target object should be the direct object (if any)
@@ -760,7 +764,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let verb_names: Vec<String> = suggestions
             .action_suggestions
             .iter()
-            .map(|action| action.verb.as_string())
+            .map(|action| action.verb_aliases[0].as_string())
             .collect();
 
         // Things should have basic verbs like look/examine/take
@@ -774,8 +778,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         if let Some(first_action) = suggestions.action_suggestions.first() {
             // Verify the action has proper structure
             assert!(
-                !first_action.verb.as_string().is_empty(),
-                "Verb should not be empty"
+                !first_action.verb_aliases.is_empty(),
+                "Verb aliases should not be empty"
+            );
+            assert!(
+                !first_action.verb_aliases[0].as_string().is_empty(),
+                "First verb alias should not be empty"
             );
 
             if first_action.dobj.is_some() {
@@ -835,7 +843,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let verb_names: Vec<String> = suggestions
             .action_suggestions
             .iter()
-            .map(|action| action.verb.as_string())
+            .map(|action| action.verb_aliases[0].as_string())
             .collect();
 
         // We should get verbs from:
@@ -859,8 +867,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Verify all suggestions have proper structure
         for action in &suggestions.action_suggestions {
             assert!(
-                !action.verb.as_string().is_empty(),
-                "Verb should not be empty"
+                !action.verb_aliases.is_empty(),
+                "Verb aliases should not be empty"
+            );
+            assert!(
+                !action.verb_aliases[0].as_string().is_empty(),
+                "First verb alias should not be empty"
             );
 
             // Each action should either have no object (like 'look') or a specific target

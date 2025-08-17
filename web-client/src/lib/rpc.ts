@@ -343,6 +343,96 @@ export async function performEval(authToken: string, expr: string): Promise<any>
 }
 
 /**
+ * Command suggestion types for the suggestions API
+ */
+export interface ActionSuggestion {
+    verb_aliases: string[];
+    dobj?: number;
+    dobjstr?: string;
+    prepstr?: string;
+    iobj?: number;
+    iobjstr?: string;
+    needs_input: boolean;
+}
+
+export interface VerbSuggestion {
+    verb_name: string;
+    object: number;
+    object_name: string;
+    full_command: string;
+    args_spec: string[];
+    description?: string;
+}
+
+export interface ObjectSuggestion {
+    object: number;
+    name: string;
+    aliases: string[];
+    object_type: string;
+}
+
+export interface SuggestionContext {
+    type: "verb" | "direct_object" | "preposition" | "indirect_object" | "object_actions" | "environment";
+    verb?: string;
+    object?: number;
+}
+
+export interface CommandSuggestionsResponse {
+    action_suggestions: ActionSuggestion[];
+    verb_suggestions: VerbSuggestion[];
+    object_suggestions: ObjectSuggestion[];
+    suggestion_context: SuggestionContext;
+    has_more: boolean;
+}
+
+export type SuggestionMode = "object_actions" | "environment_actions" | "verb_targets" | "indirect_targets";
+
+/**
+ * Retrieves command suggestions from the server
+ *
+ * @param authToken - Authentication token for the request
+ * @param options - Suggestion options
+ * @returns Promise resolving to command suggestions
+ */
+export async function getCommandSuggestions(
+    authToken: string,
+    options: {
+        mode?: SuggestionMode;
+        selectedObject?: string;
+        verb?: string;
+        directObject?: string;
+        maxSuggestions?: number;
+    } = {},
+): Promise<CommandSuggestionsResponse> {
+    const params = new URLSearchParams();
+
+    if (options.mode) params.set("mode", options.mode);
+    if (options.selectedObject) params.set("selected_object", options.selectedObject);
+    if (options.verb) params.set("verb", options.verb);
+    if (options.directObject) params.set("direct_object", options.directObject);
+    if (options.maxSuggestions) params.set("max_suggestions", options.maxSuggestions.toString());
+
+    try {
+        const response = await fetch(`/api/suggestions?${params.toString()}`, {
+            method: "GET",
+            headers: {
+                "X-Moor-Auth-Token": authToken,
+            },
+        });
+
+        if (response.ok) {
+            return await response.json();
+        } else {
+            console.error("Failed to get command suggestions:", response.statusText);
+            throw new Error(`Command suggestions failed: ${response.status} ${response.statusText}`);
+        }
+    } catch (err) {
+        console.error("Exception during command suggestions:", err);
+        throw new Error(`Exception during suggestions: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
+/**
  * Retrieves the welcome message and content type from the server
  *
  * The welcome message is returned as an array of strings that are joined

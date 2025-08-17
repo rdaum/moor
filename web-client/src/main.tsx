@@ -246,6 +246,7 @@ function AppContent({
                                 onLoadMoreHistory={handleLoadMoreHistory}
                                 isLoadingHistory={isLoadingHistory}
                                 onLinkClick={onLinkClick}
+                                authToken={authState.player?.authToken || null}
                             />
                         </section>
 

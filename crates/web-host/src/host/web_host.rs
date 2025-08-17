@@ -941,7 +941,7 @@ pub async fn suggestions_handler(
         }
     };
 
-    let max_suggestions = query.max_suggestions.unwrap_or(20);
+    let max_suggestions = query.max_suggestions.unwrap_or(0); // 0 = no limit
 
     let response = match rpc_call(
         client_id,
@@ -959,7 +959,7 @@ pub async fn suggestions_handler(
         Ok(DaemonToClientReply::CommandSuggestionsResponse(suggestions)) => Json(json!({
             "action_suggestions": suggestions.action_suggestions.iter().map(|action| {
                 json!({
-                    "verb": action.verb.as_string(),
+                    "verb_aliases": action.verb_aliases.iter().map(|v| v.as_string()).collect::<Vec<_>>(),
                     "dobj": action.dobj.map(|o| o.id().0),
                     "dobjstr": action.dobjstr,
                     "prepstr": action.prepstr,
@@ -1010,7 +1010,7 @@ pub async fn suggestions_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
