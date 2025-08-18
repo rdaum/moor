@@ -322,7 +322,39 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                 wordWrap: "break-word",
                             }}
                         >
-                            {content.map((item, index) => <div key={index}>{String(item)}</div>)}
+                            {content.map((item, index) => {
+                                const text = String(item);
+                                const speechMatch = text.match(/^(\w+)\s+says?,\s+"(.+)"$/);
+                                
+                                if (speechMatch) {
+                                    const [, speaker, speech] = speechMatch;
+                                    return (
+                                        <div key={index} className="speech-bubble-container" role="region" aria-label={`${speaker} says`}>
+                                            <div className="speech-speaker" aria-label="Speaker">{text.replace(/, ".*"$/, '')}</div>
+                                            <div className="speech-bubble">
+                                                <div className="speech-content" aria-label="Speech content">{speech}</div>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                
+                                return <div key={index}>{text}</div>;
+                            })}
+                        </div>
+                    );
+                }
+
+                const text = String(content);
+                const speechMatch = text.match(/^(\w+)\s+says?,\s+"(.+)"$/);
+                
+                if (speechMatch) {
+                    const [, speaker, speech] = speechMatch;
+                    return (
+                        <div className="speech-bubble-container" role="region" aria-label={`${speaker} says`}>
+                            <div className="speech-speaker" aria-label="Speaker">{text.replace(/, ".*"$/, '')}</div>
+                            <div className="speech-bubble">
+                                <div className="speech-content" aria-label="Speech content">{speech}</div>
+                            </div>
                         </div>
                     );
                 }
@@ -334,7 +366,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                             wordWrap: "break-word",
                         }}
                     >
-                        {String(content)}
+                        {text}
                     </div>
                 );
         }
