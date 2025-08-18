@@ -44,17 +44,17 @@ export default defineConfig({
     server: {
         port: 3000,
         proxy: {
-            "/api": "http://localhost:8080",
+            "/api": process.env.MOOR_API_URL || "http://localhost:8080",
             "/ws": {
-                target: "ws://localhost:8080",
+                target: process.env.MOOR_WS_URL || "ws://localhost:8080",
                 ws: true,
             },
-            "/auth": "http://localhost:8080",
-            "/eval": "http://localhost:8080",
-            "/verbs": "http://localhost:8080",
-            "/properties": "http://localhost:8080",
-            "/objects": "http://localhost:8080",
-            "/system_property": "http://localhost:8080",
+            "/auth": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/eval": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/verbs": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/properties": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/objects": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/system_property": process.env.MOOR_API_URL || "http://localhost:8080",
         },
     },
 });

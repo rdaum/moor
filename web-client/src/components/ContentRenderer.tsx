@@ -46,14 +46,15 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 });
                 // Add hook to DOMPurify
                 DOMPurify.addHook("afterSanitizeElements", function(node) {
-                    if (node.tagName === "TABLE") {
-                        const existingClass = node.getAttribute("class") || "";
+                    const element = node as Element;
+                    if (element.tagName === "TABLE") {
+                        const existingClass = element.getAttribute("class") || "";
                         const newClass = existingClass ? `${existingClass} narrative-table` : "narrative-table";
-                        node.setAttribute("class", newClass);
-                    } else if (node.tagName === "A") {
+                        element.setAttribute("class", newClass);
+                    } else if (element.tagName === "A") {
                         // Convert links to moo-link spans (same as djot does)
-                        const href = node.getAttribute("href") || "";
-                        const linkText = node.textContent || href;
+                        const href = element.getAttribute("href") || "";
+                        const linkText = element.textContent || href;
 
                         // Create a span element to replace the link
                         const span = document.createElement("span");
@@ -66,7 +67,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         span.textContent = linkText;
 
                         // Replace the link with the span
-                        node.parentNode?.replaceChild(span, node);
+                        element.parentNode?.replaceChild(span, element);
                     }
                 });
 

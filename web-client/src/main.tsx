@@ -21,7 +21,6 @@ import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { ThemeToggle } from "./components/ThemeToggle";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
@@ -308,9 +307,7 @@ function AppWrapper() {
 
     // We need to get showVerbEditor here to create the MCP handler
     const {
-        editorSession,
         showVerbEditor,
-        closeEditor,
     } = useVerbEditor();
 
     // MCP handler for parsing edit commands
