@@ -398,7 +398,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(ping_result.is_ok(), "Client ping should succeed");
 
         // Step 5: Test detachment and verify reply
-        let detach_message = rpc_common::HostClientToDaemonMessage::Detach(client_token);
+        let detach_message = rpc_common::HostClientToDaemonMessage::Detach(client_token, true);
 
         let detach_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -499,7 +499,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Detach first connection
-        let detach_message_1 = rpc_common::HostClientToDaemonMessage::Detach(token_2.clone());
+        let detach_message_1 = rpc_common::HostClientToDaemonMessage::Detach(token_2.clone(), true);
 
         let detach_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -640,7 +640,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(ping_result.is_ok(), "Client ping should succeed");
 
         // Test 5: Client detach should reply with Disconnected
-        let detach_message = rpc_common::HostClientToDaemonMessage::Detach(client_token);
+        let detach_message = rpc_common::HostClientToDaemonMessage::Detach(client_token, true);
 
         let detach_result = transport.process_client_message(
             message_handler.as_ref(),

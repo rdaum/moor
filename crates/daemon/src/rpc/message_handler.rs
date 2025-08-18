@@ -1185,21 +1185,25 @@ impl RpcMessageHandler {
 
                 Ok(DaemonToClientReply::PresentationDismissed)
             }
-            HostClientToDaemonMessage::Detach(token) => {
+            HostClientToDaemonMessage::Detach(token, disconnected) => {
                 let _connection = self.client_auth(token, client_id)?;
 
-                // Submit disconnected only if there's a logged-in player
-                if let Some(player) = self.connections.player_object_for_client(client_id) {
-                    if let Err(e) = self.submit_disconnected_task(
-                        &SYSTEM_OBJECT,
-                        scheduler_client,
-                        client_id,
-                        &player,
-                    ) {
-                        error!(error = ?e, "Error submitting user_disconnected task");
+                // Submit disconnected only if there's a logged-in player, and if the intent is
+                // to actually disconnect.
+                if disconnected {
+                    if let Some(player) = self.connections.player_object_for_client(client_id) {
+                        if let Err(e) = self.submit_disconnected_task(
+                            &SYSTEM_OBJECT,
+                            scheduler_client,
+                            client_id,
+                            &player,
+                        ) {
+                            error!(error = ?e, "Error submitting user_disconnected task");
+                        }
                     }
                 }
-                // Detach this client id from the player/connection object.
+                // Detach this client id from the connection DB and any connection object
+                // associations it may have.
                 let Ok(_) = self.connections.remove_client_connection(client_id) else {
                     return Err(RpcMessageError::InternalError(
                         "Unable to remove client connection".to_string(),

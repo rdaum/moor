@@ -215,7 +215,7 @@ impl WebSocketConnection {
         self.rpc_client
             .make_client_rpc_call(
                 self.client_id,
-                HostClientToDaemonMessage::Detach(self.client_token.clone()),
+                HostClientToDaemonMessage::Detach(self.client_token.clone(), true),
             )
             .await
             .expect("Unable to send detach event to RPC server");

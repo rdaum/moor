@@ -165,8 +165,10 @@ pub enum HostClientToDaemonMessage {
     RequestCurrentPresentations(ClientToken, AuthToken),
     /// Dismiss a specific presentation by ID.
     DismissPresentation(ClientToken, AuthToken, String),
-    /// We're done with this connection, buh-bye.
-    Detach(ClientToken),
+    /// We're done with this ClientToken
+    /// The second argument indicates whether this constitutes a physical "disconnection" event
+    /// and whether this should trigger the `$user_disconnected` verb invocation.
+    Detach(ClientToken, bool),
 }
 
 /// An RPC message sent from the daemon to a client on a specific host, in response to a

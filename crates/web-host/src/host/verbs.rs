@@ -99,7 +99,7 @@ pub async fn verb_program_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -173,7 +173,7 @@ pub async fn verb_retrieval_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -233,7 +233,7 @@ pub async fn verbs_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");

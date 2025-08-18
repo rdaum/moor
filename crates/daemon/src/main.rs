@@ -327,7 +327,7 @@ fn main() -> Result<(), Report> {
                 // Delete the entire data directory if the import fails since it was freshly created.
                 if let Err(e) = std::fs::remove_dir_all(&args.data_dir) {
                     panic!(
-                        "Failed to remove data directory {:?} after import failure: {}", 
+                        "Failed to remove data directory {:?} after import failure: {}",
                         args.data_dir, e
                     );
                 } else {

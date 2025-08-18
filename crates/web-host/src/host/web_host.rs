@@ -337,7 +337,7 @@ pub async fn system_property_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -381,7 +381,7 @@ pub async fn eval_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -433,7 +433,7 @@ pub async fn resolve_objref_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -628,7 +628,7 @@ pub async fn history_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -675,7 +675,7 @@ pub async fn presentations_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -725,7 +725,7 @@ pub async fn dismiss_presentation_handler(
     let _ = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone()),
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
         )
         .await
         .expect("Unable to send detach to RPC server");
@@ -804,7 +804,10 @@ pub async fn invoke_verb_handler(
 
     // Clean up the RPC connection
     let _ = rpc_client
-        .make_client_rpc_call(client_id, HostClientToDaemonMessage::Detach(client_token))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token, false),
+        )
         .await;
 
     result
