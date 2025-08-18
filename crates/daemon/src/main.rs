@@ -307,7 +307,11 @@ fn main() -> Result<(), Report> {
         if !freshly_made {
             info!("Database already exists, skipping textdump import");
         } else {
-            info!("Loading textdump from {:?}", import_path);
+            let import_format_name = match &config.import_export.import_format {
+                ImportExportFormat::Objdef => "objdef",
+                ImportExportFormat::Textdump => "textdump",
+            };
+            info!("Loading {} from {:?}", import_format_name, import_path);
             let loader_interface = database
                 .loader_client()
                 .map_err(|e| eyre!("Unable to get loader interface from database: {}", e))?;
@@ -320,15 +324,16 @@ fn main() -> Result<(), Report> {
             ) {
                 error!("Import failed: {}", import_error);
 
-                // Just delete the created database file if the import fails.
-                if let Err(e) = std::fs::remove_file(&resolved_db_path) {
+                // Delete the entire data directory if the import fails since it was freshly created.
+                if let Err(e) = std::fs::remove_dir_all(&args.data_dir) {
                     panic!(
-                        "Failed to remove database {resolved_db_path:?} after import failure: {e}"
+                        "Failed to remove data directory {:?} after import failure: {}", 
+                        args.data_dir, e
                     );
                 } else {
                     info!(
-                        "Removed bad database {:?} after import failure",
-                        resolved_db_path
+                        "Removed bad data directory {:?} after import failure",
+                        args.data_dir
                     );
                 }
 
