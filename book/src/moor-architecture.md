@@ -134,10 +134,10 @@ The MOO language is compiled to opcodes, which are executed by a virtual machine
 the program can be "decompiled" back into a human-readable MOO code. In this way all verbs in the system can be read
 and modified by any user (who has permissions), without the source code itself being stored in the database.
 
-For now, mooR sticks to the classic LambdaMOO 1.8.x language without some of the extensions that were added in later
-by the MOO community (such as those offered by Stunt or ToastStunt). So MOO does not have e.g. "WAIFs" (light weight
-objects),
-or dictionary/map types. These may be added in the future.
+mooR includes the classic LambdaMOO 1.8.x language foundation along with extensions from the MOO community
+and features of our own invention. From ToastStunt, mooR includes dictionary/map types. mooR does not have WAIFs
+but provides "flyweights" - lightweight immutable objects. Additional features of our own invention include
+lambdas, list comprehensions, and lexical scope.
 
 #### The virtual machine
 
