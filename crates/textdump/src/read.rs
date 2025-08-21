@@ -159,7 +159,7 @@ impl<R: Read> TextdumpReader<R> {
     }
     fn read_string(&mut self) -> Result<String, TextdumpReaderError> {
         let buf = self.read_next_line()?;
-        let buf = buf.trim_matches('\n');
+        let buf = buf.trim_end_matches(['\n', '\r']);
         Ok(buf.to_string())
     }
     fn read_verbdef(&mut self) -> Result<Verbdef, TextdumpReaderError> {
