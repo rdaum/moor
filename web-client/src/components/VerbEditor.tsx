@@ -14,6 +14,7 @@
 import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 interface VerbEditorProps {
     visible: boolean;
@@ -25,6 +26,11 @@ interface VerbEditorProps {
     authToken: string;
     uploadAction?: string; // For MCP-triggered editors
     onSendMessage?: (message: string) => boolean; // WebSocket send function
+    splitMode?: boolean; // When true, renders as embedded split component instead of modal
+    onSplitDrag?: (e: React.MouseEvent) => void; // Handler for split dragging in split mode
+    onSplitTouchStart?: (e: React.TouchEvent) => void; // Handler for split touch dragging in split mode
+    onToggleSplitMode?: () => void; // Handler to toggle between split and floating modes
+    isInSplitMode?: boolean; // Whether currently in split mode (for icon display)
 }
 
 interface CompileError {
@@ -44,7 +50,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     authToken,
     uploadAction,
     onSendMessage,
+    splitMode = false,
+    onSplitDrag,
+    onSplitTouchStart,
+    onToggleSplitMode,
+    isInSplitMode = false,
 }) => {
+    const isMobile = useMediaQuery("(max-width: 768px)");
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<CompileError[]>([]);
     const [isCompiling, setIsCompiling] = useState(false);
@@ -216,6 +228,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         // Focus the editor
         editor.focus();
+        
+        // Force layout update to prevent artifacts
+        setTimeout(() => {
+            editor.layout();
+        }, 100);
     }, []);
 
     const handleEditorChange = useCallback((value: string | undefined) => {
@@ -379,33 +396,48 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         return null;
     }
 
+    // Split mode styling - fills container
+    const splitStyle = {
+        width: "100%",
+        height: "100%",
+        backgroundColor: "var(--color-bg-input)",
+        border: "1px solid var(--color-border-medium)",
+        display: "flex",
+        flexDirection: "column" as const,
+        overflow: "hidden",
+    };
+
+    // Modal mode styling - floating window
+    const modalStyle = {
+        position: "fixed" as const,
+        top: `${position.y}px`,
+        left: `${position.x}px`,
+        width: `${size.width}px`,
+        height: `${size.height}px`,
+        backgroundColor: "var(--color-bg-input)",
+        border: "1px solid var(--color-border-medium)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "0 8px 32px var(--color-shadow)",
+        zIndex: 1000,
+        display: "flex",
+        flexDirection: "column" as const,
+        cursor: isDragging ? "grabbing" : "default",
+    };
+
     return (
         <div
             ref={containerRef}
             className="editor_container"
-            role="dialog"
-            aria-modal="true"
+            role={splitMode ? "region" : "dialog"}
+            aria-modal={splitMode ? undefined : "true"}
             aria-labelledby="verb-editor-title"
             tabIndex={-1}
-            style={{
-                position: "fixed",
-                top: `${position.y}px`,
-                left: `${position.x}px`,
-                width: `${size.width}px`,
-                height: `${size.height}px`,
-                backgroundColor: "var(--color-bg-input)",
-                border: "1px solid var(--color-border-medium)",
-                borderRadius: "var(--radius-lg)",
-                boxShadow: "0 8px 32px var(--color-shadow)",
-                zIndex: 1000,
-                display: "flex",
-                flexDirection: "column",
-                cursor: isDragging ? "grabbing" : "default",
-            }}
+            style={splitMode ? splitStyle : modalStyle}
         >
             {/* Title bar */}
             <div
-                onMouseDown={handleMouseDown}
+                onMouseDown={splitMode ? onSplitDrag : handleMouseDown}
+                onTouchStart={splitMode ? onSplitTouchStart : undefined}
                 style={{
                     padding: "var(--space-md)",
                     borderBottom: "1px solid var(--color-border-light)",
@@ -413,27 +445,54 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     justifyContent: "space-between",
                     alignItems: "center",
                     backgroundColor: "var(--color-bg-header)",
-                    borderRadius: "var(--radius-lg) var(--radius-lg) 0 0",
-                    cursor: isDragging ? "grabbing" : "grab",
+                    borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
+                    cursor: splitMode ? "row-resize" : (isDragging ? "grabbing" : "grab"),
+                    touchAction: splitMode ? "none" : "auto", // Prevent default touch behaviors when in split mode
                 }}
             >
                 <h3 id="verb-editor-title" style={{ margin: 0, color: "var(--color-text-primary)" }}>
                     {title}
                 </h3>
-                <button
-                    onClick={onClose}
-                    aria-label="Close verb editor"
-                    style={{
-                        background: "transparent",
-                        border: "none",
-                        fontSize: "1.2em",
-                        cursor: "pointer",
-                        color: "var(--color-text-secondary)",
-                        padding: "4px 8px",
-                    }}
-                >
-                    <span aria-hidden="true">×</span>
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    {/* Split/Float toggle button - only on desktop */}
+                    {!isMobile && onToggleSplitMode && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent drag handler from firing
+                                onToggleSplitMode();
+                            }}
+                            aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                            title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                            style={{
+                                background: "transparent",
+                                border: "1px solid var(--color-border-medium)",
+                                borderRadius: "var(--radius-sm)",
+                                cursor: "pointer",
+                                color: "var(--color-text-secondary)",
+                                padding: "4px 6px",
+                                fontSize: "12px",
+                                display: "flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            {isInSplitMode ? "🪟" : "⇅"}
+                        </button>
+                    )}
+                    <button
+                        onClick={onClose}
+                        aria-label="Close verb editor"
+                        style={{
+                            background: "transparent",
+                            border: "none",
+                            fontSize: "1.2em",
+                            cursor: "pointer",
+                            color: "var(--color-text-secondary)",
+                            padding: "4px 8px",
+                        }}
+                    >
+                        <span aria-hidden="true">×</span>
+                    </button>
+                </div>
             </div>
 
             {/* Compile button */}
@@ -482,7 +541,12 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             )}
 
             {/* Monaco Editor */}
-            <div style={{ flex: 1, minHeight: 0 }}>
+            <div style={{ 
+                flex: 1, 
+                minHeight: 0,
+                position: "relative",
+                overflow: "hidden" // Prevent rendering artifacts
+            }}>
                 <Editor
                     value={content}
                     language="moo"
@@ -491,47 +555,60 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     beforeMount={handleEditorWillMount}
                     onMount={handleEditorDidMount}
                     options={{
-                        minimap: { enabled: true },
-                        fontSize: 12,
+                        minimap: { enabled: !isMobile },
+                        fontSize: isMobile ? 16 : 12,
                         fontFamily: "Monaco, Menlo, \"Ubuntu Mono\", monospace",
                         automaticLayout: true,
                         colorDecorators: true,
                         dragAndDrop: false,
                         emptySelectionClipboard: false,
                         autoClosingDelete: "never",
+                        wordWrap: isMobile ? "on" : "off",
+                        lineNumbers: "on",
+                        folding: !isMobile,
+                        renderWhitespace: isMobile ? "none" : "selection",
+                        stickyScroll: { enabled: false }, // Disable sticky scroll
+                        overviewRulerLanes: 0, // Disable overview ruler
+                        hideCursorInOverviewRuler: true, // Hide cursor in overview
+                        scrollbar: {
+                            verticalScrollbarSize: isMobile ? 8 : 10, // Thinner scrollbar on mobile
+                            horizontalScrollbarSize: isMobile ? 8 : 10,
+                        },
                     }}
                 />
             </div>
 
-            {/* Resize handle */}
-            <div
-                onMouseDown={handleResizeMouseDown}
-                tabIndex={0}
-                role="button"
-                aria-label="Resize editor window"
-                onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        // Start resize mode - could be enhanced with arrow key support
-                        handleResizeMouseDown({
-                            ...e,
-                            clientX: size.width + position.x,
-                            clientY: size.height + position.y,
-                        } as any);
-                    }
-                }}
-                style={{
-                    position: "absolute",
-                    bottom: 0,
-                    right: 0,
-                    width: "16px",
-                    height: "16px",
-                    cursor: "nw-resize",
-                    background:
-                        "linear-gradient(-45deg, transparent 0%, transparent 30%, var(--color-border-medium) 30%, var(--color-border-medium) 70%, transparent 70%)",
-                    borderBottomRightRadius: "var(--radius-lg)",
-                }}
-            />
+            {/* Resize handle - only in modal mode */}
+            {!splitMode && (
+                <div
+                    onMouseDown={handleResizeMouseDown}
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Resize editor window"
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            // Start resize mode - could be enhanced with arrow key support
+                            handleResizeMouseDown({
+                                ...e,
+                                clientX: size.width + position.x,
+                                clientY: size.height + position.y,
+                            } as any);
+                        }
+                    }}
+                    style={{
+                        position: "absolute",
+                        bottom: 0,
+                        right: 0,
+                        width: "16px",
+                        height: "16px",
+                        cursor: "nw-resize",
+                        background:
+                            "linear-gradient(-45deg, transparent 0%, transparent 30%, var(--color-border-medium) 30%, var(--color-border-medium) 70%, transparent 70%)",
+                        borderBottomRightRadius: "var(--radius-lg)",
+                    }}
+                />
+            )}
         </div>
     );
 };

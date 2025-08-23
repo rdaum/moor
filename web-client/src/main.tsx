@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BottomDock } from "./components/docks/BottomDock";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { LeftDock } from "./components/docks/LeftDock";
 import { RightDock } from "./components/docks/RightDock";
 import { TopDock } from "./components/docks/TopDock";
@@ -53,6 +54,21 @@ function AppContent({
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+    const [splitRatio, setSplitRatio] = useState(() => {
+        // Load saved split ratio or default to 60% for room, 40% for editor
+        const saved = localStorage.getItem('moor-split-ratio');
+        return saved ? parseFloat(saved) : 0.6;
+    });
+    
+    const splitRatioRef = useRef(splitRatio);
+    splitRatioRef.current = splitRatio;
+    
+    const isMobile = useMediaQuery("(max-width: 768px)");
+    const [forceSplitMode, setForceSplitMode] = useState(false);
+    
+    const toggleSplitMode = useCallback(() => {
+        setForceSplitMode(prev => !prev);
+    }, []);
 
     // Verb editor state (only used in this component for the modal)
     const {
@@ -179,7 +195,77 @@ function AppContent({
         }
     }, [wsState.connectionStatus, historyLoaded]);
 
+    // Handle split divider dragging
+    const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+    const splitDividerRef = useRef<HTMLDivElement>(null);
+
+    const handleSplitMouseDown = useCallback((e: React.MouseEvent) => {
+        if (e.button !== 0) return;
+        setIsDraggingSplit(true);
+        e.preventDefault();
+        e.stopPropagation(); // Prevent other drag handlers from interfering
+    }, []);
+
+    const handleSplitTouchStart = useCallback((e: React.TouchEvent) => {
+        setIsDraggingSplit(true);
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+
+    // Add global mouse event listeners for split dragging
+    useEffect(() => {
+        if (!isDraggingSplit) return;
+
+        const updateSplitRatio = (clientY: number) => {
+            // Get the main app layout element to calculate relative position
+            const mainElement = document.querySelector('.app_layout') as HTMLElement;
+            if (!mainElement) return;
+            
+            const rect = mainElement.getBoundingClientRect();
+            const relativeY = clientY - rect.top;
+            const newRatio = relativeY / rect.height;
+            const clampedRatio = Math.max(0.2, Math.min(0.8, newRatio)); // Keep between 20% and 80%
+            
+            setSplitRatio(clampedRatio);
+        };
+
+        const handleMouseMove = (e: MouseEvent) => {
+            updateSplitRatio(e.clientY);
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches.length === 0) return; // Safety check
+            e.preventDefault(); // Prevent scrolling
+            e.stopPropagation(); // Prevent other handlers from processing this
+            updateSplitRatio(e.touches[0].clientY);
+        };
+
+        const endDrag = () => {
+            setIsDraggingSplit(false);
+            // Save the split ratio to localStorage
+            localStorage.setItem('moor-split-ratio', splitRatioRef.current.toString());
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', endDrag);
+        document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+        document.addEventListener('touchend', endDrag, { capture: true });
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', endDrag);
+            document.removeEventListener('touchmove', handleTouchMove, { capture: true } as any);
+            document.removeEventListener('touchend', endDrag, { capture: true } as any);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+    }, [isDraggingSplit]);
+
     const isConnected = authState.player?.connected || false;
+    const isSplitMode = isConnected && editorSession && (isMobile || forceSplitMode);
 
     // Add pending historical messages when narrative component becomes available
     useEffect(() => {
@@ -240,61 +326,110 @@ function AppContent({
 
             {/* Main app layout with narrative interface */}
             {isConnected && (
-                <main className="app_layout" role="main">
-                    {/* Top dock */}
-                    <aside role="complementary" aria-label="Top dock panels">
-                        <TopDock
-                            presentations={getTopDockPresentations()}
-                            onClosePresentation={handleClosePresentation}
-                            onLinkClick={onLinkClick}
-                        />
-                    </aside>
-
-                    {/* Middle section with left dock, narrative, right dock */}
-                    <div className="middle_section">
-                        <aside role="complementary" aria-label="Left dock panels">
-                            <LeftDock
-                                presentations={getLeftDockPresentations()}
+                <main 
+                    className="app_layout" 
+                    role="main"
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        flex: 1,
+                        overflow: "hidden"
+                    }}
+                >
+                    {/* Room/Narrative Section */}
+                    <div 
+                        style={{
+                            height: isSplitMode ? `${splitRatio * 100}%` : "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            overflow: "hidden"
+                        }}
+                    >
+                        {/* Top dock */}
+                        <aside role="complementary" aria-label="Top dock panels">
+                            <TopDock
+                                presentations={getTopDockPresentations()}
                                 onClosePresentation={handleClosePresentation}
                                 onLinkClick={onLinkClick}
                             />
                         </aside>
 
-                        {/* Main narrative interface - takes up full space */}
-                        <section role="main" aria-label="Game narrative and input">
-                            <Narrative
-                                ref={narrativeCallbackRef}
-                                visible={isConnected}
-                                connected={isConnected}
-                                onSendMessage={sendMessage}
-                                onLoadMoreHistory={handleLoadMoreHistory}
-                                isLoadingHistory={isLoadingHistory}
-                                onLinkClick={onLinkClick}
-                            />
-                        </section>
+                        {/* Middle section with left dock, narrative, right dock */}
+                        <div className="middle_section">
+                            <aside role="complementary" aria-label="Left dock panels">
+                                <LeftDock
+                                    presentations={getLeftDockPresentations()}
+                                    onClosePresentation={handleClosePresentation}
+                                    onLinkClick={onLinkClick}
+                                />
+                            </aside>
 
-                        <aside role="complementary" aria-label="Right dock panels">
-                            <RightDock
-                                presentations={getRightDockPresentations()}
+                            {/* Main narrative interface - takes up full space */}
+                            <section role="main" aria-label="Game narrative and input">
+                                <Narrative
+                                    ref={narrativeCallbackRef}
+                                    visible={isConnected}
+                                    connected={isConnected}
+                                    onSendMessage={sendMessage}
+                                    onLoadMoreHistory={handleLoadMoreHistory}
+                                    isLoadingHistory={isLoadingHistory}
+                                    onLinkClick={onLinkClick}
+                                />
+                            </section>
+
+                            <aside role="complementary" aria-label="Right dock panels">
+                                <RightDock
+                                    presentations={getRightDockPresentations()}
+                                    onClosePresentation={handleClosePresentation}
+                                    onLinkClick={onLinkClick}
+                                />
+                            </aside>
+                        </div>
+
+                        {/* Bottom dock */}
+                        <aside role="complementary" aria-label="Bottom dock panels">
+                            <BottomDock
+                                presentations={getBottomDockPresentations()}
                                 onClosePresentation={handleClosePresentation}
                                 onLinkClick={onLinkClick}
                             />
                         </aside>
                     </div>
 
-                    {/* Bottom dock */}
-                    <aside role="complementary" aria-label="Bottom dock panels">
-                        <BottomDock
-                            presentations={getBottomDockPresentations()}
-                            onClosePresentation={handleClosePresentation}
-                            onLinkClick={onLinkClick}
-                        />
-                    </aside>
+
+                    {/* Editor Section (in split mode) */}
+                    {isSplitMode && editorSession && authState.player?.authToken && (
+                        <div 
+                            style={{
+                                height: `${(1 - splitRatio) * 100}%`,
+                                display: "flex",
+                                flexDirection: "column",
+                                overflow: "hidden"
+                            }}
+                        >
+                            <VerbEditor
+                                visible={true}
+                                onClose={closeEditor}
+                                title={editorSession.title}
+                                objectCurie={editorSession.objectCurie}
+                                verbName={editorSession.verbName}
+                                initialContent={editorSession.content}
+                                authToken={authState.player.authToken}
+                                uploadAction={editorSession.uploadAction}
+                                onSendMessage={sendMessage}
+                                splitMode={true}
+                                onSplitDrag={handleSplitMouseDown}
+                                onSplitTouchStart={handleSplitTouchStart}
+                                onToggleSplitMode={toggleSplitMode}
+                                isInSplitMode={true}
+                            />
+                        </div>
+                    )}
                 </main>
             )}
 
-            {/* Verb Editor Modal */}
-            {editorSession && authState.player?.authToken && (
+            {/* Verb Editor Modal (fallback for non-split mode) */}
+            {!isSplitMode && editorSession && authState.player?.authToken && (
                 <VerbEditor
                     visible={true}
                     onClose={closeEditor}
@@ -305,6 +440,8 @@ function AppContent({
                     authToken={authState.player.authToken}
                     uploadAction={editorSession.uploadAction}
                     onSendMessage={sendMessage}
+                    onToggleSplitMode={toggleSplitMode}
+                    isInSplitMode={false}
                 />
             )}
         </div>
