@@ -1080,7 +1080,7 @@ impl RpcMessageHandler {
 
                 Ok(DaemonToClientReply::ResolveResult(resolved))
             }
-            HostClientToDaemonMessage::Properties(token, auth_token, obj) => {
+            HostClientToDaemonMessage::Properties(token, auth_token, obj, inherited) => {
                 let _connection = self.client_auth(token, client_id)?;
                 let player = self.validate_auth_token(auth_token, None)?;
 
@@ -1094,7 +1094,7 @@ impl RpcMessageHandler {
                 }
 
                 let props = scheduler_client
-                    .request_properties(&player, &player, &obj)
+                    .request_properties(&player, &player, &obj, inherited)
                     .map_err(|e| {
                         error!(error = ?e, "Error requesting properties");
                         RpcMessageError::EntityRetrievalError(
@@ -1117,7 +1117,7 @@ impl RpcMessageHandler {
 
                 Ok(DaemonToClientReply::Properties(props))
             }
-            HostClientToDaemonMessage::Verbs(token, auth_token, obj) => {
+            HostClientToDaemonMessage::Verbs(token, auth_token, obj, inherited) => {
                 let _connection = self.client_auth(token, client_id)?;
                 let player = self.validate_auth_token(auth_token, None)?;
 
@@ -1131,7 +1131,7 @@ impl RpcMessageHandler {
                 }
 
                 let verbs = scheduler_client
-                    .request_verbs(&player, &player, &obj)
+                    .request_verbs(&player, &player, &obj, inherited)
                     .map_err(|e| {
                         error!(error = ?e, "Error requesting verbs");
                         RpcMessageError::EntityRetrievalError("error requesting verbs".to_string())

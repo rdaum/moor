@@ -140,11 +140,11 @@ pub enum HostClientToDaemonMessage {
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, Obj, String),
     /// Return the (visible) verbs on the given object.
-    Verbs(ClientToken, AuthToken, ObjectRef),
+    Verbs(ClientToken, AuthToken, ObjectRef, bool),
     /// Invoke the given verb on the given object.
     InvokeVerb(ClientToken, AuthToken, ObjectRef, Symbol, Vec<Var>),
     /// Return the (visible) properties on the given object.
-    Properties(ClientToken, AuthToken, ObjectRef),
+    Properties(ClientToken, AuthToken, ObjectRef, bool),
     /// Retrieve the given verb code or property.
     Retrieve(ClientToken, AuthToken, ObjectRef, EntityType, Symbol),
     /// Attempt to program the object with the given verb code

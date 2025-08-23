@@ -150,7 +150,7 @@ export class MoorRemoteObject {
      * @throws Error if the fetch operation fails
      */
     async getVerbs(): Promise<any> {
-        const endpoint = `/verbs/${orefCurie(this.oref)}`;
+        const endpoint = `/verbs/${orefCurie(this.oref)}?inherited=true`;
 
         const response = await fetch(endpoint, {
             method: "GET",
@@ -237,7 +237,7 @@ export class MoorRemoteObject {
      * @throws Error if the fetch operation fails
      */
     async getProperties(): Promise<Record<string, any>> {
-        const endpoint = `/properties/${orefCurie(this.oref)}`;
+        const endpoint = `/properties/${orefCurie(this.oref)}?inherited=true`;
 
         const response = await fetch(endpoint, {
             method: "GET",

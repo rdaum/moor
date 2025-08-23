@@ -142,22 +142,49 @@ impl WorldStateActionExecutor {
                 player: _,
                 perms,
                 obj,
+                inherited,
             } => {
                 let object = match_object_ref(&perms, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
-                let properties = self
-                    .tx
-                    .properties(&perms, &object)
-                    .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
-
                 let mut props = Vec::new();
-                for prop in properties.iter() {
-                    let (info, perms) = self
+
+                if inherited {
+                    // Get full inheritance chain including self
+                    let ancestors = self
                         .tx
-                        .get_property_info(&perms, &object, prop.name())
+                        .ancestors_of(&perms, &object, true)
                         .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
-                    props.push((info, perms));
+
+                    // Collect properties from all ancestors (including self)
+                    for ancestor in ancestors.iter() {
+                        let ancestor_properties = self
+                            .tx
+                            .properties(&perms, &ancestor)
+                            .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+
+                        for prop in ancestor_properties.iter() {
+                            let (info, prop_perms) = self
+                                .tx
+                                .get_property_info(&perms, &ancestor, prop.name())
+                                .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+                            props.push((info, prop_perms));
+                        }
+                    }
+                } else {
+                    // Just get properties directly defined on this object
+                    let properties = self
+                        .tx
+                        .properties(&perms, &object)
+                        .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+
+                    for prop in properties.iter() {
+                        let (info, prop_perms) = self
+                            .tx
+                            .get_property_info(&perms, &object, prop.name())
+                            .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+                        props.push((info, prop_perms));
+                    }
                 }
 
                 Ok(WorldStateResult::Properties(props))
@@ -189,14 +216,34 @@ impl WorldStateActionExecutor {
                 player: _,
                 perms,
                 obj,
+                inherited,
             } => {
                 let object = match_object_ref(&perms, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
-                let verbs = self
-                    .tx
-                    .verbs(&perms, &object)
-                    .map_err(SchedulerError::VerbRetrievalFailed)?;
+                let verbs = if inherited {
+                    // Get full inheritance chain including self
+                    let ancestors = self
+                        .tx
+                        .ancestors_of(&perms, &object, true)
+                        .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+
+                    // Collect verbs from all ancestors (including self)
+                    let mut all_verbs = Vec::new();
+                    for ancestor in ancestors.iter() {
+                        let ancestor_verbs = self
+                            .tx
+                            .verbs(&perms, &ancestor)
+                            .map_err(SchedulerError::VerbRetrievalFailed)?;
+                        all_verbs.extend(ancestor_verbs.iter());
+                    }
+                    all_verbs.into_iter().collect()
+                } else {
+                    // Just get verbs directly defined on this object
+                    self.tx
+                        .verbs(&perms, &object)
+                        .map_err(SchedulerError::VerbRetrievalFailed)?
+                };
 
                 Ok(WorldStateResult::Verbs(verbs))
             }

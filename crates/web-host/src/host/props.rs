@@ -13,21 +13,28 @@
 
 use crate::host::{WebHost, auth, var_as_json, web_host};
 use axum::Json;
-use axum::extract::{ConnectInfo, Path, State};
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use moor_common::model::ObjectRef;
 use moor_var::Symbol;
 use rpc_common::{DaemonToClientReply, EntityType, HostClientToDaemonMessage, PropInfo};
 use serde_json::json;
+use serde::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error};
+
+#[derive(Deserialize)]
+pub struct PropertiesQuery {
+    inherited: Option<bool>,
+}
 
 pub async fn properties_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path(object): Path<String>,
+    Query(query): Query<PropertiesQuery>,
 ) -> Response {
     let (auth_token, client_id, client_token, mut rpc_client) =
         match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
@@ -39,10 +46,12 @@ pub async fn properties_handler(
         return StatusCode::BAD_REQUEST.into_response();
     };
 
+    let inherited = query.inherited.unwrap_or(false);
+
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        HostClientToDaemonMessage::Properties(client_token.clone(), auth_token.clone(), object),
+        HostClientToDaemonMessage::Properties(client_token.clone(), auth_token.clone(), object, inherited),
     )
     .await
     {

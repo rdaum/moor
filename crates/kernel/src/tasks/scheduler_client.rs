@@ -301,6 +301,7 @@ impl SchedulerClient {
         player: &Obj,
         perms: &Obj,
         obj: &ObjectRef,
+        inherited: bool,
     ) -> Result<VerbDefs, SchedulerError> {
         use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
@@ -308,6 +309,7 @@ impl SchedulerClient {
             player: *player,
             perms: *perms,
             obj: obj.clone(),
+            inherited,
         };
         let request = WorldStateRequest::new(action);
         let responses = self.execute_world_state_actions(vec![request], false)?;
@@ -359,6 +361,7 @@ impl SchedulerClient {
         player: &Obj,
         perms: &Obj,
         obj: &ObjectRef,
+        inherited: bool,
     ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
         use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
@@ -366,6 +369,7 @@ impl SchedulerClient {
             player: *player,
             perms: *perms,
             obj: obj.clone(),
+            inherited,
         };
         let request = WorldStateRequest::new(action);
         let responses = self.execute_world_state_actions(vec![request], false)?;

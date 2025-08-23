@@ -286,7 +286,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
         editorRef.current = editor;
 
-
         // Cache for verb/property lookups to avoid repeated API calls
         const completionCache = new Map<
             string,
@@ -314,10 +313,96 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             return properties;
         };
 
+        // Generic property completion for any object reference
+        const addPropertyCompletions = async (
+            objectRef: any,
+            cacheKey: string,
+            contextLabel: string,
+            prefix: string,
+            startColumn: number,
+            position: any,
+            suggestions: monaco.languages.CompletionItem[],
+        ) => {
+            try {
+                const properties = await getCachedProperties(cacheKey, () => objectRef.getProperties());
+                properties.forEach((prop: any, index: number) => {
+                    if (prop.name && prop.name.startsWith(prefix)) {
+                        suggestions.push({
+                            label: {
+                                label: prop.name,
+                                detail: ` #${prop.definer}`,
+                            },
+                            kind: monaco.languages.CompletionItemKind.Property,
+                            insertText: prop.name,
+                            sortText: index.toString().padStart(4, "0"),
+                            documentation:
+                                `Property on ${contextLabel} (defined in #${prop.definer}, owner: #${prop.owner}, ${
+                                    prop.r ? "readable" : "not readable"
+                                }, ${prop.w ? "writable" : "read-only"})`,
+                            range: {
+                                startLineNumber: position.lineNumber,
+                                endLineNumber: position.lineNumber,
+                                startColumn,
+                                endColumn: position.column,
+                            },
+                        });
+                    }
+                });
+            } catch (error) {
+                console.warn(`Failed to fetch properties for ${contextLabel}:`, error);
+            }
+        };
+
+        // Generic verb completion for any object reference
+        const addVerbCompletions = async (
+            objectRef: any,
+            cacheKey: string,
+            contextLabel: string,
+            prefix: string,
+            startColumn: number,
+            position: any,
+            suggestions: monaco.languages.CompletionItem[],
+        ) => {
+            try {
+                const verbs = await getCachedVerbs(cacheKey, () => objectRef.getVerbs());
+                let sortIndex = 0;
+                verbs.forEach((verb: any) => {
+                    if (verb.names && Array.isArray(verb.names)) {
+                        verb.names.forEach((verbName: string) => {
+                            if (verbName.startsWith(prefix)) {
+                                suggestions.push({
+                                    label: {
+                                        label: verbName,
+                                        detail: ` #${verb.location}`,
+                                    },
+                                    kind: monaco.languages.CompletionItemKind.Method,
+                                    insertText: verbName,
+                                    sortText: sortIndex.toString().padStart(4, "0"),
+                                    documentation:
+                                        `Verb on ${contextLabel} (defined in #${verb.location}, owner: #${verb.owner}, ${
+                                            verb.r ? "readable" : "not readable"
+                                        }, ${verb.x ? "executable" : "not executable"})`,
+                                    range: {
+                                        startLineNumber: position.lineNumber,
+                                        endLineNumber: position.lineNumber,
+                                        startColumn,
+                                        endColumn: position.column,
+                                    },
+                                });
+                                sortIndex++;
+                            }
+                        });
+                    }
+                });
+            } catch (error) {
+                console.warn(`Failed to fetch verbs for ${contextLabel}:`, error);
+            }
+        };
+
         // Add completion provider for MOO block structures and smart completions
         monaco.languages.registerCompletionItemProvider("moo", {
             provideCompletionItems: async (model, position) => {
-                const suggestions = [];
+                const suggestions: monaco.languages.CompletionItem[] = [];
                 const lineContent = model.getLineContent(position.lineNumber);
                 const beforeCursor = lineContent.substring(0, position.column - 1);
 
@@ -340,216 +425,102 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                 // Smart completion for this: verbs
                 if (thisVerbMatch) {
-                    try {
-                        const { MoorRemoteObject, curieORef } = await import("../lib/rpc");
-                        const { oidRef } = await import("../lib/var");
-                        // Use actual object ID if available, otherwise fallback to objectCurie
-                        const currentObject = actualObjectId
-                            ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
-                            : new MoorRemoteObject(curieORef(objectCurie), authToken);
-                        const cacheKey = actualObjectId ? `#${actualObjectId}:verbs` : `this:verbs`;
-                        const verbs = await getCachedVerbs(cacheKey, () => currentObject.getVerbs());
+                    const { MoorRemoteObject, curieORef } = await import("../lib/rpc");
+                    const { oidRef } = await import("../lib/var");
+                    const currentObject = actualObjectId
+                        ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
+                        : new MoorRemoteObject(curieORef(objectCurie), authToken);
+                    const cacheKey = actualObjectId ? `#${actualObjectId}:verbs` : `this:verbs`;
 
-                        verbs.forEach((verb: any) => {
-                            if (verb.names && Array.isArray(verb.names)) {
-                                verb.names.forEach((verbName: string) => {
-                                    if (verbName.startsWith(thisVerbMatch[1])) {
-                                        suggestions.push({
-                                            label: verbName,
-                                            kind: monaco.languages.CompletionItemKind.Method,
-                                            insertText: verbName,
-                                            documentation: `Verb on this object (owner: #${verb.owner}, ${
-                                                verb.r ? "readable" : "not readable"
-                                            }, ${verb.x ? "executable" : "not executable"})`,
-                                            range: {
-                                                startLineNumber: position.lineNumber,
-                                                endLineNumber: position.lineNumber,
-                                                startColumn: position.column - thisVerbMatch[1].length,
-                                                endColumn: position.column,
-                                            },
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    } catch (error) {
-                        console.warn("Failed to fetch verbs for this:", error);
-                    }
+                    await addVerbCompletions(
+                        currentObject,
+                        cacheKey,
+                        "this object",
+                        thisVerbMatch[1],
+                        position.column - thisVerbMatch[1].length,
+                        position,
+                        suggestions,
+                    );
                 } // Smart completion for this. properties
                 else if (thisPropMatch) {
-                    try {
-                        const { MoorRemoteObject, curieORef } = await import("../lib/rpc");
-                        const { oidRef } = await import("../lib/var");
-                        // Use actual object ID if available, otherwise fallback to objectCurie
-                        const currentObject = actualObjectId
-                            ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
-                            : new MoorRemoteObject(curieORef(objectCurie), authToken);
-                        const cacheKey = actualObjectId ? `#${actualObjectId}:properties` : `this:properties`;
-                        const properties = await getCachedProperties(cacheKey, () => currentObject.getProperties());
+                    const { MoorRemoteObject, curieORef } = await import("../lib/rpc");
+                    const { oidRef } = await import("../lib/var");
+                    const currentObject = actualObjectId
+                        ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
+                        : new MoorRemoteObject(curieORef(objectCurie), authToken);
+                    const cacheKey = actualObjectId ? `#${actualObjectId}:properties` : `this:properties`;
 
-                        properties.forEach((prop: any) => {
-                            if (prop.name && prop.name.startsWith(thisPropMatch[1])) {
-                                suggestions.push({
-                                    label: prop.name,
-                                    kind: monaco.languages.CompletionItemKind.Property,
-                                    insertText: prop.name,
-                                    documentation: `Property on this object (owner: #${prop.owner}, ${
-                                        prop.r ? "readable" : "not readable"
-                                    }, ${prop.w ? "writable" : "read-only"})`,
-                                    range: {
-                                        startLineNumber: position.lineNumber,
-                                        endLineNumber: position.lineNumber,
-                                        startColumn: position.column - thisPropMatch[1].length,
-                                        endColumn: position.column,
-                                    },
-                                });
-                            }
-                        });
-                    } catch (error) {
-                        console.warn("Failed to fetch properties for this:", error);
-                    }
+                    await addPropertyCompletions(
+                        currentObject,
+                        cacheKey,
+                        "this object",
+                        thisPropMatch[1],
+                        position.column - thisPropMatch[1].length,
+                        position,
+                        suggestions,
+                    );
                 } // Smart completion for #123: object verb calls
                 else if (objVerbMatch) {
-                    try {
-                        const { MoorRemoteObject } = await import("../lib/rpc");
-                        const { oidRef } = await import("../lib/var");
-                        const objectId = parseInt(objVerbMatch[1]);
-                        const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
-                        const verbs = await getCachedVerbs(`#${objectId}:verbs`, () => targetObject.getVerbs());
+                    const { MoorRemoteObject } = await import("../lib/rpc");
+                    const { oidRef } = await import("../lib/var");
+                    const objectId = parseInt(objVerbMatch[1]);
+                    const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
 
-                        verbs.forEach((verb: any) => {
-                            if (verb.names && Array.isArray(verb.names)) {
-                                verb.names.forEach((verbName: string) => {
-                                    if (verbName.startsWith(objVerbMatch[2])) {
-                                        suggestions.push({
-                                            label: verbName,
-                                            kind: monaco.languages.CompletionItemKind.Method,
-                                            insertText: verbName,
-                                            documentation: `Verb on object #${objectId} (owner: #${verb.owner}, ${
-                                                verb.r ? "readable" : "not readable"
-                                            }, ${verb.x ? "executable" : "not executable"})`,
-                                            range: {
-                                                startLineNumber: position.lineNumber,
-                                                endLineNumber: position.lineNumber,
-                                                startColumn: position.column - objVerbMatch[2].length,
-                                                endColumn: position.column,
-                                            },
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    } catch (error) {
-                        console.warn(`Failed to fetch verbs for object #${objVerbMatch[1]}:`, error);
-                    }
+                    await addVerbCompletions(
+                        targetObject,
+                        `#${objectId}:verbs`,
+                        `object #${objectId}`,
+                        objVerbMatch[2],
+                        position.column - objVerbMatch[2].length,
+                        position,
+                        suggestions,
+                    );
                 } // Smart completion for #123. object property access
                 else if (objPropMatch) {
-                    try {
-                        const { MoorRemoteObject } = await import("../lib/rpc");
-                        const { oidRef } = await import("../lib/var");
-                        const objectId = parseInt(objPropMatch[1]);
-                        const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
-                        const properties = await getCachedProperties(
-                            `#${objectId}:properties`,
-                            () => targetObject.getProperties(),
-                        );
+                    const { MoorRemoteObject } = await import("../lib/rpc");
+                    const { oidRef } = await import("../lib/var");
+                    const objectId = parseInt(objPropMatch[1]);
+                    const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
 
-                        properties.forEach((prop: any) => {
-                            if (prop.name && prop.name.startsWith(objPropMatch[2])) {
-                                suggestions.push({
-                                    label: prop.name,
-                                    kind: monaco.languages.CompletionItemKind.Property,
-                                    insertText: prop.name,
-                                    documentation: `Property on object #${objectId} (owner: #${prop.owner}, ${
-                                        prop.r ? "readable" : "not readable"
-                                    }, ${prop.w ? "writable" : "read-only"})`,
-                                    range: {
-                                        startLineNumber: position.lineNumber,
-                                        endLineNumber: position.lineNumber,
-                                        startColumn: position.column - objPropMatch[2].length,
-                                        endColumn: position.column,
-                                    },
-                                });
-                            }
-                        });
-                    } catch (error) {
-                        console.warn(`Failed to fetch properties for object #${objPropMatch[1]}:`, error);
-                    }
+                    await addPropertyCompletions(
+                        targetObject,
+                        `#${objectId}:properties`,
+                        `object #${objectId}`,
+                        objPropMatch[2],
+                        position.column - objPropMatch[2].length,
+                        position,
+                        suggestions,
+                    );
                 } // Smart completion for $thing. property access
                 else if (sysPropMatch) {
-                    try {
-                        const { MoorRemoteObject } = await import("../lib/rpc");
-                        const { sysobjRef } = await import("../lib/var");
-                        const { orefCurie } = await import("../lib/rpc");
-                        // Create system object reference using CURIE system
-                        const objectRef = sysobjRef([sysPropMatch[1]]);
-                        console.log(
-                            `System object reference for $${sysPropMatch[1]}:`,
-                            objectRef,
-                            "CURIE:",
-                            orefCurie(objectRef),
-                        );
-                        const targetObject = new MoorRemoteObject(objectRef, authToken);
-                        const properties = await getCachedProperties(
-                            `$${sysPropMatch[1]}:properties`,
-                            () => targetObject.getProperties(),
-                        );
+                    const { MoorRemoteObject } = await import("../lib/rpc");
+                    const { sysobjRef } = await import("../lib/var");
+                    const targetObject = new MoorRemoteObject(sysobjRef([sysPropMatch[1]]), authToken);
 
-                        properties.forEach((prop: any) => {
-                            if (prop.name && prop.name.startsWith(sysPropMatch[2])) {
-                                suggestions.push({
-                                    label: prop.name,
-                                    kind: monaco.languages.CompletionItemKind.Property,
-                                    insertText: prop.name,
-                                    documentation: `Property on $${sysPropMatch[1]} (owner: #${prop.owner}, ${
-                                        prop.r ? "readable" : "not readable"
-                                    }, ${prop.w ? "writable" : "read-only"})`,
-                                    range: {
-                                        startLineNumber: position.lineNumber,
-                                        endLineNumber: position.lineNumber,
-                                        startColumn: position.column - sysPropMatch[2].length,
-                                        endColumn: position.column,
-                                    },
-                                });
-                            }
-                        });
-                    } catch (error) {
-                        console.warn(`Failed to fetch properties for $${sysPropMatch[1]}:`, error);
-                    }
+                    await addPropertyCompletions(
+                        targetObject,
+                        `$${sysPropMatch[1]}:properties`,
+                        `$${sysPropMatch[1]}`,
+                        sysPropMatch[2],
+                        position.column - sysPropMatch[2].length,
+                        position,
+                        suggestions,
+                    );
                 } // Smart completion for $thing: verb calls
                 else if (sysVerbMatch) {
-                    try {
-                        const { MoorRemoteObject } = await import("../lib/rpc");
-                        const { sysobjRef } = await import("../lib/var");
-                        // Create system object reference using CURIE system
-                        const targetObject = new MoorRemoteObject(sysobjRef([sysVerbMatch[1]]), authToken);
-                        const verbs = await getCachedVerbs(`$${sysVerbMatch[1]}:verbs`, () => targetObject.getVerbs());
+                    const { MoorRemoteObject } = await import("../lib/rpc");
+                    const { sysobjRef } = await import("../lib/var");
+                    const targetObject = new MoorRemoteObject(sysobjRef([sysVerbMatch[1]]), authToken);
 
-                        verbs.forEach((verb: any) => {
-                            if (verb.names && Array.isArray(verb.names)) {
-                                verb.names.forEach((verbName: string) => {
-                                    if (verbName.startsWith(sysVerbMatch[2])) {
-                                        suggestions.push({
-                                            label: verbName,
-                                            kind: monaco.languages.CompletionItemKind.Method,
-                                            insertText: verbName,
-                                            documentation: `Verb on $${sysVerbMatch[1]} (owner: #${verb.owner}, ${
-                                                verb.r ? "readable" : "not readable"
-                                            }, ${verb.x ? "executable" : "not executable"})`,
-                                            range: {
-                                                startLineNumber: position.lineNumber,
-                                                endLineNumber: position.lineNumber,
-                                                startColumn: position.column - sysVerbMatch[2].length,
-                                                endColumn: position.column,
-                                            },
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    } catch (error) {
-                        console.warn(`Failed to fetch verbs for $${sysVerbMatch[1]}:`, error);
-                    }
+                    await addVerbCompletions(
+                        targetObject,
+                        `$${sysVerbMatch[1]}:verbs`,
+                        `$${sysVerbMatch[1]}`,
+                        sysVerbMatch[2],
+                        position.column - sysVerbMatch[2].length,
+                        position,
+                        suggestions,
+                    );
                 } // If no smart completions matched, show block templates
                 else {
                     const defaultRange = {
@@ -558,7 +529,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         startColumn: position.column,
                         endColumn: position.column,
                     };
-                    
+
                     suggestions.push(
                         {
                             label: "if",

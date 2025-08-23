@@ -40,6 +40,7 @@ pub enum WorldStateAction {
         player: Obj,
         perms: Obj,
         obj: ObjectRef,
+        inherited: bool,
     },
 
     /// Request a specific property's info and value
@@ -55,6 +56,7 @@ pub enum WorldStateAction {
         player: Obj,
         perms: Obj,
         obj: ObjectRef,
+        inherited: bool,
     },
 
     /// Request verb code and definition
