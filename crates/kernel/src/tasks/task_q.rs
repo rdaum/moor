@@ -429,10 +429,9 @@ impl SuspensionQ {
             result_sender,
         };
 
-        if should_persist
-            && let Err(e) = self.tasks_database.save_task(&sr) {
-                error!(?e, "Could not save suspended task");
-            }
+        if should_persist && let Err(e) = self.tasks_database.save_task(&sr) {
+            error!(?e, "Could not save suspended task");
+        }
 
         self.tasks.insert(task_id, sr);
     }
@@ -562,10 +561,9 @@ impl SuspensionQ {
     /// If `filter_input` is true, filter out WaitingInput tasks.
     pub(crate) fn perms_check(&self, task_id: TaskId, filter_input: bool) -> Option<Obj> {
         let sr = self.tasks.get(&task_id)?;
-        if filter_input
-            && let WakeCondition::Input(_) = sr.wake_condition {
-                return None;
-            }
+        if filter_input && let WakeCondition::Input(_) = sr.wake_condition {
+            return None;
+        }
         Some(sr.task.perms)
     }
 

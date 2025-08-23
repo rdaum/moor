@@ -140,9 +140,10 @@ impl VMExecState {
         self.set_return_value(v_error(error.clone()));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last()
-            && activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.throw_error(error);
-            }
+            && activation.verbdef.flags().contains(VerbFlag::Debug)
+        {
+            return self.throw_error(error);
+        }
         ExecutionResult::More
     }
     /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
@@ -152,9 +153,10 @@ impl VMExecState {
         // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame
-            && activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.throw_error(error);
-            }
+            && activation.verbdef.flags().contains(VerbFlag::Debug)
+        {
+            return self.throw_error(error);
+        }
         ExecutionResult::More
     }
 
@@ -175,9 +177,10 @@ impl VMExecState {
         // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame
-            && activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.throw_error(error);
-            }
+            && activation.verbdef.flags().contains(VerbFlag::Debug)
+        {
+            return self.throw_error(error);
+        }
         // If we're not unwinding, we need to pop the builtin function's activation frame.
         self.stack.pop();
         ExecutionResult::More

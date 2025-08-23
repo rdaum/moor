@@ -459,7 +459,7 @@ pub fn moo_frame_execute(
             }
             Op::MakeSingletonList => {
                 let v = f.peek_top();
-                f.poke(0, v_list(&[v.clone()]));
+                f.poke(0, v_list(std::slice::from_ref(v)));
             }
             Op::MakeMap => {
                 f.push(v_empty_map());
@@ -985,10 +985,12 @@ pub fn moo_frame_execute(
                             // Find the first optional parameter that needs defaults
                             for label in table.labels.iter() {
                                 if let ScatterLabel::Optional(_, jump_to) = label
-                                    && jump_where.is_none() && jump_to.is_some() {
-                                        jump_where = *jump_to;
-                                        break;
-                                    }
+                                    && jump_where.is_none()
+                                    && jump_to.is_some()
+                                {
+                                    jump_where = *jump_to;
+                                    break;
+                                }
                             }
                         }
 

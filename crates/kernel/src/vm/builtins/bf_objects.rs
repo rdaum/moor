@@ -382,28 +382,30 @@ fn bf_locations(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         // Handle stop conditions before adding to the list
         if let Some(stop) = stop_obj
-            && !is_parent {
-                // Simple equality check - stop before adding this location
-                if location == stop {
-                    break;
-                }
+            && !is_parent
+        {
+            // Simple equality check - stop before adding this location
+            if location == stop {
+                break;
             }
+        }
 
         // Add this location to our list
         locations.push(v_obj(location));
 
         // Handle is_parent stop condition after adding to the list
         if let Some(stop) = stop_obj
-            && is_parent {
-                // If is_parent is true, check if location is a child of stop
-                let ancestors = bf_args
-                    .world_state
-                    .ancestors_of(&bf_args.task_perms_who(), &location, false)
-                    .map_err(world_state_bf_err)?;
-                if ancestors.contains(stop) {
-                    break;
-                }
+            && is_parent
+        {
+            // If is_parent is true, check if location is a child of stop
+            let ancestors = bf_args
+                .world_state
+                .ancestors_of(&bf_args.task_perms_who(), &location, false)
+                .map_err(world_state_bf_err)?;
+            if ancestors.contains(stop) {
+                break;
             }
+        }
 
         current = location;
     }

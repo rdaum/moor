@@ -279,39 +279,34 @@ fn collect_nested_constants(
 
     for pd in current_obj.property_definitions.iter() {
         if let Some(value) = pd.value.as_ref()
-            && let Some(oid) = value.as_object() {
-                // Build the constant name from the path
-                let mut constant_parts = path.to_vec();
-                constant_parts.push(pd.name.to_string());
+            && let Some(oid) = value.as_object()
+        {
+            // Build the constant name from the path
+            let mut constant_parts = path.to_vec();
+            constant_parts.push(pd.name.to_string());
 
-                let constant_name = constant_parts.join("_").to_ascii_uppercase();
-                let file_name = if path.is_empty() {
-                    pd.name.to_string()
-                } else {
-                    format!("{}_{}", path.join("_"), pd.name)
-                };
+            let constant_name = constant_parts.join("_").to_ascii_uppercase();
+            let file_name = if path.is_empty() {
+                pd.name.to_string()
+            } else {
+                format!("{}_{}", path.join("_"), pd.name)
+            };
 
-                // Add this candidate
-                candidates.push(ConstantCandidate {
-                    obj: oid,
-                    constant_name,
-                    file_name,
-                    path_depth: path.len(),
-                });
+            // Add this candidate
+            candidates.push(ConstantCandidate {
+                obj: oid,
+                constant_name,
+                file_name,
+                path_depth: path.len(),
+            });
 
-                // Recursively traverse nested object properties
-                if let Some(nested_obj) = object_defs.iter().find(|od| od.oid == oid) {
-                    let mut new_path = path.to_vec();
-                    new_path.push(pd.name.to_string());
-                    collect_nested_constants(
-                        object_defs,
-                        nested_obj,
-                        &new_path,
-                        candidates,
-                        visited,
-                    );
-                }
+            // Recursively traverse nested object properties
+            if let Some(nested_obj) = object_defs.iter().find(|od| od.oid == oid) {
+                let mut new_path = path.to_vec();
+                new_path.push(pd.name.to_string());
+                collect_nested_constants(object_defs, nested_obj, &new_path, candidates, visited);
             }
+        }
     }
 
     // Remove from visited set when done to allow this object to be visited in different paths

@@ -1415,14 +1415,15 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
             // Check if the argument matches the port
             else if let Some(port) = find_arg.as_integer()
-                && port == listener.2 as i64 {
-                    let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
-                    return Ok(Ret(v_list(&[
-                        v_obj(listener.0),
-                        v_int(listener.2 as i64),
-                        print_messages,
-                    ])));
-                }
+                && port == listener.2 as i64
+            {
+                let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
+                return Ok(Ret(v_list(&[
+                    v_obj(listener.0),
+                    v_int(listener.2 as i64),
+                    print_messages,
+                ])));
+            }
         }
         // If not found, return empty list.
         return Ok(Ret(v_list(&[])));
@@ -1813,9 +1814,10 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 for (k, v) in m.iter() {
                     let key = k.as_symbol().map_err(ErrValue)?;
                     if key.as_string() == "timeout_seconds"
-                        && let Some(secs) = v.as_float() {
-                            timeout = Some(Duration::from_secs_f64(secs));
-                        }
+                        && let Some(secs) = v.as_float()
+                    {
+                        timeout = Some(Duration::from_secs_f64(secs));
+                    }
                 }
             }
             Variant::List(l) => {
@@ -1824,9 +1826,10 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         Variant::List(pair_list) if pair_list.len() == 2 => {
                             let key = pair_list[0].as_symbol().map_err(ErrValue)?;
                             if key.as_string() == "timeout_seconds"
-                                && let Some(secs) = pair_list[1].as_float() {
-                                    timeout = Some(Duration::from_secs_f64(secs));
-                                }
+                                && let Some(secs) = pair_list[1].as_float()
+                            {
+                                timeout = Some(Duration::from_secs_f64(secs));
+                            }
                         }
                         _ => continue,
                     }

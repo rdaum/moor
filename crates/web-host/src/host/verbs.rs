@@ -23,8 +23,8 @@ use moor_var::Symbol;
 use rpc_common::{
     DaemonToClientReply, EntityType, HostClientToDaemonMessage, VerbInfo, VerbProgramResponse,
 };
-use serde_json::json;
 use serde::Deserialize;
+use serde_json::json;
 use std::net::SocketAddr;
 use tracing::error;
 

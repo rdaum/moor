@@ -92,10 +92,11 @@ pub fn parse_ordinal(word: &str) -> Result<i64, OrdinalParseError> {
         if token.len() > 2 {
             let (num_part, suffix) = token.split_at(token.len() - 2);
             if matches!(suffix, "st" | "nd" | "rd" | "th")
-                && let Ok(num) = num_part.parse::<i64>() {
-                    ordinal_values.push(num);
-                    continue;
-                }
+                && let Ok(num) = num_part.parse::<i64>()
+            {
+                ordinal_values.push(num);
+                continue;
+            }
         }
 
         // If we can't parse any token, fail

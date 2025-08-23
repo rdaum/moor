@@ -80,9 +80,10 @@ impl VarScope {
         for scope in self.scopes.iter().rev() {
             for v in scope {
                 if let Named(sym) = v.nr
-                    && sym == name {
-                        return Some(*v);
-                    }
+                    && sym == name
+                {
+                    return Some(*v);
+                }
             }
         }
 

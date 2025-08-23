@@ -247,9 +247,10 @@ fn parse_xml_to_lists(xml: &str) -> Result<BfRet, BfErr> {
             }
             Ok(XmlEvent::Characters(text)) => {
                 if let Some(parent) = element_stack.last_mut()
-                    && !text.trim().is_empty() {
-                        parent.push(v_str(text.as_str()));
-                    }
+                    && !text.trim().is_empty()
+                {
+                    parent.push(v_str(text.as_str()));
+                }
             }
             Ok(_) => {
                 // Ignore other events (CDATA, etc)
@@ -325,10 +326,11 @@ fn parse_xml_to_maps(xml: &str) -> Result<BfRet, BfErr> {
             }
             Ok(XmlEvent::Characters(text)) => {
                 if let Some(parent) = element_stack.last_mut()
-                    && !text.trim().is_empty() {
-                        // Add text to parent's content
-                        parent.push(v_str(text.as_str()));
-                    }
+                    && !text.trim().is_empty()
+                {
+                    // Add text to parent's content
+                    parent.push(v_str(text.as_str()));
+                }
             }
             Ok(_) => {
                 // Ignore other events (CDATA, etc)
@@ -567,11 +569,12 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Check if flyweights are enabled only when we have a flyweight
     if let Variant::Flyweight(_) = root.variant()
-        && !bf_args.config.flyweight_type {
-            return Err(BfErr::ErrValue(
-                E_PERM.msg("Flyweight functionality not enabled"),
-            ));
-        }
+        && !bf_args.config.flyweight_type
+    {
+        return Err(BfErr::ErrValue(
+            E_PERM.msg("Flyweight functionality not enabled"),
+        ));
+    }
 
     let map = if bf_args.args.len() == 2 {
         let Some(m) = bf_args.args[1].as_map() else {

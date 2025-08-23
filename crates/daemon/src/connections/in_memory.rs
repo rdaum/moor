@@ -318,16 +318,17 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
 
         // Also update player connection record if logged in
         if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied()
-            && let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
-                if let Some(client) = player_connections
-                    .connections
-                    .iter_mut()
-                    .find(|cr| cr.client_id == client_id.as_u128())
-                {
-                    client.last_activity = now;
-                }
-                player_changes.update(player_obj, player_connections.clone());
+            && let Some(player_connections) = inner.player_connections.get_mut(&player_obj)
+        {
+            if let Some(client) = player_connections
+                .connections
+                .iter_mut()
+                .find(|cr| cr.client_id == client_id.as_u128())
+            {
+                client.last_activity = now;
             }
+            player_changes.update(player_obj, player_connections.clone());
+        }
 
         drop(inner);
         self.persist_changes(ClientMappingChanges::new(), player_changes)?;
@@ -357,16 +358,17 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
 
         // Also update player connection record if logged in
         if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied()
-            && let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
-                if let Some(cr) = player_connections
-                    .connections
-                    .iter_mut()
-                    .find(|cr| cr.client_id == client_id.as_u128())
-                {
-                    cr.last_ping = now;
-                }
-                player_changes.update(player_obj, player_connections.clone());
+            && let Some(player_connections) = inner.player_connections.get_mut(&player_obj)
+        {
+            if let Some(cr) = player_connections
+                .connections
+                .iter_mut()
+                .find(|cr| cr.client_id == client_id.as_u128())
+            {
+                cr.last_ping = now;
             }
+            player_changes.update(player_obj, player_connections.clone());
+        }
 
         drop(inner);
         self.persist_changes(ClientMappingChanges::new(), player_changes)?;
@@ -403,17 +405,17 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                 // Remove from player connections if logged in
                 if let Some(player_obj) = player_obj
                     && let Some(player_connections) = inner.player_connections.get_mut(&player_obj)
-                    {
-                        player_connections
-                            .connections
-                            .retain(|cr| cr.client_id != client_id);
-                        if player_connections.connections.is_empty() {
-                            inner.player_connections.remove(&player_obj);
-                            player_changes.remove(player_obj);
-                        } else {
-                            player_changes.update(player_obj, player_connections.clone());
-                        }
+                {
+                    player_connections
+                        .connections
+                        .retain(|cr| cr.client_id != client_id);
+                    if player_connections.connections.is_empty() {
+                        inner.player_connections.remove(&player_obj);
+                        player_changes.remove(player_obj);
+                    } else {
+                        player_changes.update(player_obj, player_connections.clone());
                     }
+                }
             }
 
             // Remove from connection records
@@ -582,17 +584,18 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
 
         // Remove from player connections if logged in
         if let Some(player_obj) = player_obj
-            && let Some(connections_record) = inner.player_connections.get_mut(&player_obj) {
-                connections_record
-                    .connections
-                    .retain(|cr| cr.client_id != client_id.as_u128());
-                if connections_record.connections.is_empty() {
-                    inner.player_connections.remove(&player_obj);
-                    player_changes.remove(player_obj);
-                } else {
-                    player_changes.update(player_obj, connections_record.clone());
-                }
+            && let Some(connections_record) = inner.player_connections.get_mut(&player_obj)
+        {
+            connections_record
+                .connections
+                .retain(|cr| cr.client_id != client_id.as_u128());
+            if connections_record.connections.is_empty() {
+                inner.player_connections.remove(&player_obj);
+                player_changes.remove(player_obj);
+            } else {
+                player_changes.update(player_obj, connections_record.clone());
             }
+        }
 
         drop(inner);
         self.persist_changes(client_changes, player_changes)?;

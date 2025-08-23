@@ -37,9 +37,10 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
 
         // Handle object number references (e.g. "#123")
         if let Some(stripped) = object_name.strip_prefix('#')
-            && let Ok(object_number) = stripped.parse::<i32>() {
-                return Ok(Some(Obj::mk_id(object_number)));
-            }
+            && let Ok(object_number) = stripped.parse::<i32>()
+        {
+            return Ok(Some(Obj::mk_id(object_number)));
+        }
 
         // Check if the player is valid
         if !self.env.obj_valid(&self.player)? {

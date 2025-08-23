@@ -78,16 +78,17 @@ fn get_target_directory() -> std::path::PathBuf {
         && let Ok(output) = std::process::Command::new(cargo)
             .args(["metadata", "--format-version", "1"])
             .output()
-            && let Ok(metadata_str) = String::from_utf8(output.stdout) {
-                // Simple JSON parsing to extract target_directory
-                if let Some(start) = metadata_str.find("\"target_directory\":\"") {
-                    let start = start + "\"target_directory\":\"".len();
-                    if let Some(end) = metadata_str[start..].find('"') {
-                        let target_dir = &metadata_str[start..start + end];
-                        return std::path::PathBuf::from(target_dir);
-                    }
-                }
+        && let Ok(metadata_str) = String::from_utf8(output.stdout)
+    {
+        // Simple JSON parsing to extract target_directory
+        if let Some(start) = metadata_str.find("\"target_directory\":\"") {
+            let start = start + "\"target_directory\":\"".len();
+            if let Some(end) = metadata_str[start..].find('"') {
+                let target_dir = &metadata_str[start..start + end];
+                return std::path::PathBuf::from(target_dir);
             }
+        }
+    }
 
     // Fallback to ./target
     std::path::PathBuf::from("target")

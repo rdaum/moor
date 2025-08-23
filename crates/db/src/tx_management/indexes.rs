@@ -203,14 +203,15 @@ where
 
     fn remove_from_secondary(&mut self, codomain: &Codomain, domain: &Domain) {
         if let Some(ref mut secondary) = self.inner.secondary_index
-            && let Some(mut domain_set) = secondary.remove(codomain) {
-                domain_set.remove(domain);
-                // Only reinsert if set is not empty - this prevents memory leaks
-                if !domain_set.is_empty() {
-                    secondary.insert(codomain.clone(), domain_set);
-                }
-                // If empty, we just let it get dropped - automatic cleanup
+            && let Some(mut domain_set) = secondary.remove(codomain)
+        {
+            domain_set.remove(domain);
+            // Only reinsert if set is not empty - this prevents memory leaks
+            if !domain_set.is_empty() {
+                secondary.insert(codomain.clone(), domain_set);
             }
+            // If empty, we just let it get dropped - automatic cleanup
+        }
     }
 
     fn add_to_secondary(&mut self, codomain: &Codomain, domain: &Domain) {

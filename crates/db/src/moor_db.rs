@@ -116,13 +116,13 @@ impl MoorDB {
             && let Err(e) = self
                 .relations
                 .wait_for_write_barrier(last_write_timestamp, std::time::Duration::from_secs(10))
-            {
-                warn!(
-                    "Timeout waiting for write barrier {} before snapshot: {}",
-                    last_write_timestamp.0, e
-                );
-                // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
-            }
+        {
+            warn!(
+                "Timeout waiting for write barrier {} before snapshot: {}",
+                last_write_timestamp.0, e
+            );
+            // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
+        }
 
         // Get a consistent instant from the keyspace
         let instant = self.keyspace.instant();

@@ -158,19 +158,20 @@ fn parse_literal_lambda(
     let mut self_var = None;
 
     if let Some(metadata_pair) = pairs.next()
-        && metadata_pair.as_rule() == Rule::lambda_metadata {
-            for meta_item in metadata_pair.into_inner() {
-                match meta_item.as_rule() {
-                    Rule::lambda_captured => {
-                        captured_env = parse_lambda_captured_env(context, meta_item)?;
-                    }
-                    Rule::lambda_self_ref => {
-                        self_var = parse_lambda_self_ref(context, meta_item)?;
-                    }
-                    _ => {}
+        && metadata_pair.as_rule() == Rule::lambda_metadata
+    {
+        for meta_item in metadata_pair.into_inner() {
+            match meta_item.as_rule() {
+                Rule::lambda_captured => {
+                    captured_env = parse_lambda_captured_env(context, meta_item)?;
                 }
+                Rule::lambda_self_ref => {
+                    self_var = parse_lambda_self_ref(context, meta_item)?;
+                }
+                _ => {}
             }
         }
+    }
 
     Ok(moor_var::Var::mk_lambda(
         params,

@@ -181,9 +181,10 @@ impl CodegenState {
                 continue;
             }
             if let Some(name) = &l.loop_name
-                && name.eq(loop_label) {
-                    return Ok(l);
-                }
+                && name.eq(loop_label)
+            {
+                return Ok(l);
+            }
         }
         // If we don't find a loop with the given name, that's an error.as
         let loop_name = self.var_names.ident_for_name(loop_label).unwrap();

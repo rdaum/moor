@@ -167,7 +167,9 @@ impl WorldStateActionExecutor {
                             let (info, prop_perms) = self
                                 .tx
                                 .get_property_info(&perms, &ancestor, prop.name())
-                                .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+                                .map_err(|e| {
+                                    CommandExecutionError(CommandError::DatabaseError(e))
+                                })?;
                             props.push((info, prop_perms));
                         }
                     }

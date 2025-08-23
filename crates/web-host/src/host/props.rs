@@ -19,8 +19,8 @@ use axum::response::{IntoResponse, Response};
 use moor_common::model::ObjectRef;
 use moor_var::Symbol;
 use rpc_common::{DaemonToClientReply, EntityType, HostClientToDaemonMessage, PropInfo};
-use serde_json::json;
 use serde::Deserialize;
+use serde_json::json;
 use std::net::SocketAddr;
 use tracing::{debug, error};
 
@@ -51,7 +51,12 @@ pub async fn properties_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        HostClientToDaemonMessage::Properties(client_token.clone(), auth_token.clone(), object, inherited),
+        HostClientToDaemonMessage::Properties(
+            client_token.clone(),
+            auth_token.clone(),
+            object,
+            inherited,
+        ),
     )
     .await
     {

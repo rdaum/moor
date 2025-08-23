@@ -435,15 +435,15 @@ impl WorldStateTransaction {
                                     "Error getting object flags: {e:?}"
                                 ))
                             })?
-                        {
-                            let propperms = if propperms.flags().contains(PropFlag::Chown) {
-                                let my_owner = self.get_object_owner(o)?;
-                                propperms.with_owner(my_owner)
-                            } else {
-                                propperms
-                            };
-                            new_props.push((p.clone(), propperms));
-                        }
+                    {
+                        let propperms = if propperms.flags().contains(PropFlag::Chown) {
+                            let my_owner = self.get_object_owner(o)?;
+                            propperms.with_owner(my_owner)
+                        } else {
+                            propperms
+                        };
+                        new_props.push((p.clone(), propperms));
+                    }
                 }
             }
         }
@@ -572,9 +572,10 @@ impl WorldStateTransaction {
         })?;
 
         if let Some(old_location) = &old_location
-            && old_location.eq(new_location) {
-                return Ok(());
-            }
+            && old_location.eq(new_location)
+        {
+            return Ok(());
+        }
 
         // Set new location.
         upsert(&mut self.object_location, *what, *new_location).map_err(|e| {

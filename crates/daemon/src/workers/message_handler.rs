@@ -108,9 +108,10 @@ impl WorkersMessageHandlerImpl {
         {
             let worker_tokens = self.token_cache.read().unwrap();
             if let Some((t, worker_id)) = worker_tokens.get(token)
-                && t.elapsed().as_secs() <= 60 {
-                    return Ok(*worker_id);
-                }
+                && t.elapsed().as_secs() <= 60
+            {
+                return Ok(*worker_id);
+            }
         }
 
         let pk: PasetoAsymmetricPublicKey<V4, Public> =

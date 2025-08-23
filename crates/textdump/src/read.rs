@@ -467,9 +467,10 @@ impl<R: Read> TextdumpReader<R> {
             _ => self.read_objid()?,
         };
         if let ToastStunt(v) = self.version
-            && v >= ToastDbvLastMove {
-                let _last_move = self.read_var()?;
-            }
+            && v >= ToastDbvLastMove
+        {
+            let _last_move = self.read_var()?;
+        }
         let (contents, next, parent, child, sibling) = match self.version {
             ToastStunt(_) => {
                 let _contents = self.read_var()?;
