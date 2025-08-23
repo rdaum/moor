@@ -286,6 +286,40 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
         editorRef.current = editor;
 
+        // Set Monaco theme to match client theme
+        const savedTheme = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const isDarkTheme = savedTheme ? savedTheme === "dark" : prefersDark;
+
+        monaco.editor.setTheme(isDarkTheme ? "vs-dark" : "vs");
+
+        // Listen for theme changes
+        const handleThemeChange = () => {
+            const currentTheme = localStorage.getItem("theme");
+            const currentPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            const currentIsDarkTheme = currentTheme ? currentTheme === "dark" : currentPrefersDark;
+            monaco.editor.setTheme(currentIsDarkTheme ? "vs-dark" : "vs");
+        };
+
+        // Listen for storage changes (theme toggle)
+        window.addEventListener("storage", handleThemeChange);
+
+        // Also listen for changes to the light-theme class on body
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === "attributes" && mutation.attributeName === "class") {
+                    handleThemeChange();
+                }
+            });
+        });
+        observer.observe(document.body, { attributes: true });
+
+        // Cleanup function
+        const cleanup = () => {
+            window.removeEventListener("storage", handleThemeChange);
+            observer.disconnect();
+        };
+
         // Cache for verb/property lookups to avoid repeated API calls
         const completionCache = new Map<
             string,
