@@ -1458,6 +1458,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             client_token.clone(),
             auth_token.clone(),
             moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
+            false, // inherited = false for testing
         );
 
         let verbs_result = transport.process_client_message(
@@ -1482,6 +1483,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             client_token.clone(),
             auth_token.clone(),
             moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
+            false, // inherited = false for testing
         );
 
         let props_result = transport.process_client_message(
