@@ -69,6 +69,19 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
+    // Parse actual object ID from uploadAction and create enhanced title
+    const enhancedTitle = React.useMemo(() => {
+        if (uploadAction) {
+            const programMatch = uploadAction.match(/@program\s+#(\d+):(\w+)/);
+            if (programMatch) {
+                const actualObjectId = programMatch[1];
+                const actualVerbName = programMatch[2];
+                return `${title} (#${actualObjectId}:${actualVerbName})`;
+            }
+        }
+        return title;
+    }, [title, uploadAction]);
+
     // Reset content when initial content changes
     useEffect(() => {
         setContent(initialContent);
@@ -152,20 +165,23 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             tokenizer: {
                 root: [
                     // Control flow keywords
-                    [/\b(if|elseif|else|endif|while|endwhile|for|endfor|try|except|endtry|finally|fork|endfork|begin|end)\b/, "keyword.control"],
-                    
+                    [
+                        /\b(if|elseif|else|endif|while|endwhile|for|endfor|try|except|endtry|finally|fork|endfork|begin|end)\b/,
+                        "keyword.control",
+                    ],
+
                     // Flow control
                     [/\b(return|break|continue|pass)\b/, "keyword.control"],
-                    
+
                     // Declaration keywords
                     [/\b(let|const|global|fn|endfn)\b/, "keyword.declaration"],
-                    
+
                     // Special keywords
                     [/\b(any|in)\b/, "keyword.operator"],
 
                     // Built-in constants
                     [/\b(true|false)\b/, "constant.language"],
-                    
+
                     // Type constants
                     [/\b(INT|NUM|FLOAT|STR|ERR|OBJ|LIST|MAP|BOOL|FLYWEIGHT|SYM)\b/, "type"],
 
@@ -181,13 +197,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                     // System properties and verbs ($property)
                     [/\$[a-zA-Z_][a-zA-Z0-9_]*/, "variable.predefined"],
-                    
+
                     // Symbols ('symbol)
                     [/'[a-zA-Z_][a-zA-Z0-9_]*/, "string.key"],
-                    
+
                     // Try expressions (backtick to single quote)
                     [/`[^']*'/, "string.escape"],
-                    
+
                     // Range end marker ($)
                     [/\$(?=\s*[\]\})])/, "constant.numeric"],
 
@@ -201,24 +217,24 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/\d+/, "number"],
 
                     // Operators - order matters, specific to general
-                    [/\.\./, "keyword.operator"],  // Range operator
-                    [/->/, "keyword.operator"],    // Map arrow
-                    [/=>/, "keyword.operator"],    // Lambda arrow
+                    [/\.\./, "keyword.operator"], // Range operator
+                    [/->/, "keyword.operator"], // Map arrow
+                    [/=>/, "keyword.operator"], // Lambda arrow
                     [/(==|!=|<=|>=)/, "operator.comparison"],
                     [/(&&|\|\|)/, "operator.logical"],
                     [/[<>]/, "operator.comparison"],
                     [/=/, "operator.assignment"],
                     [/!/, "operator.logical"],
                     [/[+\-*\/%^]/, "operator.arithmetic"],
-                    [/[?|]/, "operator.conditional"],  // Ternary operators
-                    [/:/, "keyword.operator"],      // Verb call
-                    [/\./, "operator.accessor"],    // Property access
-                    [/@/, "keyword.operator"],      // Scatter/splat operator
+                    [/[?|]/, "operator.conditional"], // Ternary operators
+                    [/:/, "keyword.operator"], // Verb call
+                    [/\./, "operator.accessor"], // Property access
+                    [/@/, "keyword.operator"], // Scatter/splat operator
 
                     // Comments
                     [/\/\*/, "comment", "@comment"],
                     [/\/\/.*$/, "comment"],
-                    
+
                     // Identifiers
                     [/[a-zA-Z_][a-zA-Z0-9_]*/, "identifier"],
                 ],
@@ -244,10 +260,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 blockComment: ["/*", "*/"],
             },
             brackets: [
-                ["{", "}"],     // Lists and blocks
-                ["[", "]"],     // Maps and indexing
-                ["(", ")"],     // Function calls and grouping
-                ["<", ">"],     // Flyweights
+                ["{", "}"], // Lists and blocks
+                ["[", "]"], // Maps and indexing
+                ["(", ")"], // Function calls and grouping
+                ["<", ">"], // Flyweights
             ],
             autoClosingPairs: [
                 { open: "{", close: "}" },
@@ -255,7 +271,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 { open: "(", close: ")" },
                 { open: "<", close: ">" },
                 { open: "\"", close: "\"" },
-                { open: "`", close: "'" },  // Try expressions
+                { open: "`", close: "'" }, // Try expressions
             ],
             surroundingPairs: [
                 { open: "{", close: "}" },
@@ -265,7 +281,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 { open: "\"", close: "\"" },
             ],
         });
-
     }, []);
 
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
@@ -274,94 +289,357 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         // Add snippet completions directly to the editor
         const snippetCompletions = [
             {
-                label: 'if',
-                insertText: 'if (${1:condition})\n\t${2}\nendif',
+                label: "if",
+                insertText: "if (${1:condition})\n\t${2}\nendif",
                 kind: monaco.languages.CompletionItemKind.Snippet,
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             },
             {
-                label: 'while', 
-                insertText: 'while (${1:condition})\n\t${2}\nendwhile',
+                label: "while",
+                insertText: "while (${1:condition})\n\t${2}\nendwhile",
                 kind: monaco.languages.CompletionItemKind.Snippet,
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             },
             {
-                label: 'for',
-                insertText: 'for ${1:item} in (${2:collection})\n\t${3}\nendfor',
+                label: "for",
+                insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
                 kind: monaco.languages.CompletionItemKind.Snippet,
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            }
+            },
         ];
 
-        // Add completion provider for MOO block structures
-        const disposable = monaco.languages.registerCompletionItemProvider("moo", {
-            provideCompletionItems: (model, position, context, token) => {
-                const suggestions = [
-                    {
-                        label: 'if',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'if (${1:condition})\n\t${2}\nendif',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'if...endif block'
-                    },
-                    {
-                        label: 'while',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'while (${1:condition})\n\t${2}\nendwhile',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'while...endwhile block'
-                    },
-                    {
-                        label: 'for-in',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'for ${1:item} in (${2:collection})\n\t${3}\nendfor',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'for item in (collection) loop'
-                    },
-                    {
-                        label: 'for-range',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'for i in [start..end] range loop'
-                    },
-                    {
-                        label: 'try',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'try...endtry block'
-                    },
-                    {
-                        label: 'fork',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'fork (${1:0})\n\t${2}\nendfork',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'fork...endfork block'
-                    },
-                    {
-                        label: 'fn',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'fn ${1:name}(${2:args})\n\t${3}\nendfn',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'fn...endfn block'
-                    },
-                    {
-                        label: 'begin',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'begin\n\t${1}\nend',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'begin...end block'
-                    }
-                ];
-                
-                return { suggestions };
+        // Cache for verb/property lookups to avoid repeated API calls
+        const completionCache = new Map<
+            string,
+            { verbs?: any[]; properties?: Record<string, any>; timestamp: number }
+        >();
+        const CACHE_TTL = 30000; // 30 seconds
+
+        const getCachedVerbs = async (cacheKey: string, fetchFn: () => Promise<any[]>) => {
+            const cached = completionCache.get(cacheKey);
+            if (cached && cached.verbs && Date.now() - cached.timestamp < CACHE_TTL) {
+                return cached.verbs;
             }
+            const verbs = await fetchFn();
+            completionCache.set(cacheKey, { ...cached, verbs, timestamp: Date.now() });
+            return verbs;
+        };
+
+        const getCachedProperties = async (cacheKey: string, fetchFn: () => Promise<Record<string, any>>) => {
+            const cached = completionCache.get(cacheKey);
+            if (cached && cached.properties && Date.now() - cached.timestamp < CACHE_TTL) {
+                return cached.properties;
+            }
+            const properties = await fetchFn();
+            completionCache.set(cacheKey, { ...cached, properties, timestamp: Date.now() });
+            return properties;
+        };
+
+        // Add completion provider for MOO block structures and smart completions
+        const disposable = monaco.languages.registerCompletionItemProvider("moo", {
+            provideCompletionItems: async (model, position, context, token) => {
+                const suggestions = [];
+                const lineContent = model.getLineContent(position.lineNumber);
+                const beforeCursor = lineContent.substring(0, position.column - 1);
+
+                // Extract actual object ID from uploadAction for "this" completion
+                let actualObjectId: number | null = null;
+                if (uploadAction) {
+                    const programMatch = uploadAction.match(/@program\s+#(\d+):/);
+                    if (programMatch) {
+                        actualObjectId = parseInt(programMatch[1]);
+                    }
+                }
+
+                // Check for smart completion patterns
+                const thisVerbMatch = beforeCursor.match(/\bthis:(\w*)$/);
+                const thisPropMatch = beforeCursor.match(/\bthis\.(\w*)$/);
+                const objVerbMatch = beforeCursor.match(/#(-?\d+):(\w*)$/);
+                const objPropMatch = beforeCursor.match(/#(-?\d+)\.(\w*)$/);
+                const sysVerbMatch = beforeCursor.match(/\$(\w+):(\w*)$/);
+                const sysPropMatch = beforeCursor.match(/\$(\w+)\.(\w*)$/);
+
+                // Smart completion for this: verbs
+                if (thisVerbMatch) {
+                    try {
+                        const { MoorRemoteObject, curieORef } = await import("../lib/rpc");
+                        const { oidRef } = await import("../lib/var");
+                        // Use actual object ID if available, otherwise fallback to objectCurie
+                        const currentObject = actualObjectId
+                            ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
+                            : new MoorRemoteObject(curieORef(objectCurie), authToken);
+                        const cacheKey = actualObjectId ? `#${actualObjectId}:verbs` : `this:verbs`;
+                        const verbs = await getCachedVerbs(cacheKey, () => currentObject.getVerbs());
+
+                        verbs.forEach((verb: any) => {
+                            if (verb.names && Array.isArray(verb.names)) {
+                                verb.names.forEach((verbName: string) => {
+                                    if (verbName.startsWith(thisVerbMatch[1])) {
+                                        suggestions.push({
+                                            label: verbName,
+                                            kind: monaco.languages.CompletionItemKind.Method,
+                                            insertText: verbName,
+                                            documentation: `Verb on this object (owner: #${verb.owner}, ${
+                                                verb.r ? "readable" : "not readable"
+                                            }, ${verb.x ? "executable" : "not executable"})`,
+                                            range: {
+                                                startLineNumber: position.lineNumber,
+                                                endLineNumber: position.lineNumber,
+                                                startColumn: position.column - thisVerbMatch[1].length,
+                                                endColumn: position.column,
+                                            },
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    } catch (error) {
+                        console.warn("Failed to fetch verbs for this:", error);
+                    }
+                } // Smart completion for this. properties
+                else if (thisPropMatch) {
+                    try {
+                        const { MoorRemoteObject, curieORef } = await import("../lib/rpc");
+                        const { oidRef } = await import("../lib/var");
+                        // Use actual object ID if available, otherwise fallback to objectCurie
+                        const currentObject = actualObjectId
+                            ? new MoorRemoteObject(oidRef(actualObjectId), authToken)
+                            : new MoorRemoteObject(curieORef(objectCurie), authToken);
+                        const cacheKey = actualObjectId ? `#${actualObjectId}:properties` : `this:properties`;
+                        const properties = await getCachedProperties(cacheKey, () => currentObject.getProperties());
+
+                        properties.forEach((prop: any) => {
+                            if (prop.name && prop.name.startsWith(thisPropMatch[1])) {
+                                suggestions.push({
+                                    label: prop.name,
+                                    kind: monaco.languages.CompletionItemKind.Property,
+                                    insertText: prop.name,
+                                    documentation: `Property on this object (owner: #${prop.owner}, ${
+                                        prop.r ? "readable" : "not readable"
+                                    }, ${prop.w ? "writable" : "read-only"})`,
+                                    range: {
+                                        startLineNumber: position.lineNumber,
+                                        endLineNumber: position.lineNumber,
+                                        startColumn: position.column - thisPropMatch[1].length,
+                                        endColumn: position.column,
+                                    },
+                                });
+                            }
+                        });
+                    } catch (error) {
+                        console.warn("Failed to fetch properties for this:", error);
+                    }
+                } // Smart completion for #123: object verb calls
+                else if (objVerbMatch) {
+                    try {
+                        const { MoorRemoteObject } = await import("../lib/rpc");
+                        const { oidRef } = await import("../lib/var");
+                        const objectId = parseInt(objVerbMatch[1]);
+                        const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
+                        const verbs = await getCachedVerbs(`#${objectId}:verbs`, () => targetObject.getVerbs());
+
+                        verbs.forEach((verb: any) => {
+                            if (verb.names && Array.isArray(verb.names)) {
+                                verb.names.forEach((verbName: string) => {
+                                    if (verbName.startsWith(objVerbMatch[2])) {
+                                        suggestions.push({
+                                            label: verbName,
+                                            kind: monaco.languages.CompletionItemKind.Method,
+                                            insertText: verbName,
+                                            documentation: `Verb on object #${objectId} (owner: #${verb.owner}, ${
+                                                verb.r ? "readable" : "not readable"
+                                            }, ${verb.x ? "executable" : "not executable"})`,
+                                            range: {
+                                                startLineNumber: position.lineNumber,
+                                                endLineNumber: position.lineNumber,
+                                                startColumn: position.column - objVerbMatch[2].length,
+                                                endColumn: position.column,
+                                            },
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    } catch (error) {
+                        console.warn(`Failed to fetch verbs for object #${objVerbMatch[1]}:`, error);
+                    }
+                } // Smart completion for #123. object property access
+                else if (objPropMatch) {
+                    try {
+                        const { MoorRemoteObject } = await import("../lib/rpc");
+                        const { oidRef } = await import("../lib/var");
+                        const objectId = parseInt(objPropMatch[1]);
+                        const targetObject = new MoorRemoteObject(oidRef(objectId), authToken);
+                        const properties = await getCachedProperties(
+                            `#${objectId}:properties`,
+                            () => targetObject.getProperties(),
+                        );
+
+                        properties.forEach((prop: any) => {
+                            if (prop.name && prop.name.startsWith(objPropMatch[2])) {
+                                suggestions.push({
+                                    label: prop.name,
+                                    kind: monaco.languages.CompletionItemKind.Property,
+                                    insertText: prop.name,
+                                    documentation: `Property on object #${objectId} (owner: #${prop.owner}, ${
+                                        prop.r ? "readable" : "not readable"
+                                    }, ${prop.w ? "writable" : "read-only"})`,
+                                    range: {
+                                        startLineNumber: position.lineNumber,
+                                        endLineNumber: position.lineNumber,
+                                        startColumn: position.column - objPropMatch[2].length,
+                                        endColumn: position.column,
+                                    },
+                                });
+                            }
+                        });
+                    } catch (error) {
+                        console.warn(`Failed to fetch properties for object #${objPropMatch[1]}:`, error);
+                    }
+                } // Smart completion for $thing. property access
+                else if (sysPropMatch) {
+                    try {
+                        const { MoorRemoteObject } = await import("../lib/rpc");
+                        const { sysobjRef } = await import("../lib/var");
+                        const { orefCurie } = await import("../lib/rpc");
+                        // Create system object reference using CURIE system
+                        const objectRef = sysobjRef([sysPropMatch[1]]);
+                        console.log(
+                            `System object reference for $${sysPropMatch[1]}:`,
+                            objectRef,
+                            "CURIE:",
+                            orefCurie(objectRef),
+                        );
+                        const targetObject = new MoorRemoteObject(objectRef, authToken);
+                        const properties = await getCachedProperties(
+                            `$${sysPropMatch[1]}:properties`,
+                            () => targetObject.getProperties(),
+                        );
+
+                        properties.forEach((prop: any) => {
+                            if (prop.name && prop.name.startsWith(sysPropMatch[2])) {
+                                suggestions.push({
+                                    label: prop.name,
+                                    kind: monaco.languages.CompletionItemKind.Property,
+                                    insertText: prop.name,
+                                    documentation: `Property on $${sysPropMatch[1]} (owner: #${prop.owner}, ${
+                                        prop.r ? "readable" : "not readable"
+                                    }, ${prop.w ? "writable" : "read-only"})`,
+                                    range: {
+                                        startLineNumber: position.lineNumber,
+                                        endLineNumber: position.lineNumber,
+                                        startColumn: position.column - sysPropMatch[2].length,
+                                        endColumn: position.column,
+                                    },
+                                });
+                            }
+                        });
+                    } catch (error) {
+                        console.warn(`Failed to fetch properties for $${sysPropMatch[1]}:`, error);
+                    }
+                } // Smart completion for $thing: verb calls
+                else if (sysVerbMatch) {
+                    try {
+                        const { MoorRemoteObject } = await import("../lib/rpc");
+                        const { sysobjRef } = await import("../lib/var");
+                        // Create system object reference using CURIE system
+                        const targetObject = new MoorRemoteObject(sysobjRef([sysVerbMatch[1]]), authToken);
+                        const verbs = await getCachedVerbs(`$${sysVerbMatch[1]}:verbs`, () => targetObject.getVerbs());
+
+                        verbs.forEach((verb: any) => {
+                            if (verb.names && Array.isArray(verb.names)) {
+                                verb.names.forEach((verbName: string) => {
+                                    if (verbName.startsWith(sysVerbMatch[2])) {
+                                        suggestions.push({
+                                            label: verbName,
+                                            kind: monaco.languages.CompletionItemKind.Method,
+                                            insertText: verbName,
+                                            documentation: `Verb on $${sysVerbMatch[1]} (owner: #${verb.owner}, ${
+                                                verb.r ? "readable" : "not readable"
+                                            }, ${verb.x ? "executable" : "not executable"})`,
+                                            range: {
+                                                startLineNumber: position.lineNumber,
+                                                endLineNumber: position.lineNumber,
+                                                startColumn: position.column - sysVerbMatch[2].length,
+                                                endColumn: position.column,
+                                            },
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    } catch (error) {
+                        console.warn(`Failed to fetch verbs for $${sysVerbMatch[1]}:`, error);
+                    }
+                } // If no smart completions matched, show block templates
+                else {
+                    suggestions.push(
+                        {
+                            label: "if",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "if (${1:condition})\n\t${2}\nendif",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "if...endif block",
+                        },
+                        {
+                            label: "while",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "while (${1:condition})\n\t${2}\nendwhile",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "while...endwhile block",
+                        },
+                        {
+                            label: "for-in",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "for item in (collection) loop",
+                        },
+                        {
+                            label: "for-range",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "for i in [start..end] range loop",
+                        },
+                        {
+                            label: "try",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "try...endtry block",
+                        },
+                        {
+                            label: "fork",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "fork (${1:0})\n\t${2}\nendfork",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "fork...endfork block",
+                        },
+                        {
+                            label: "fn",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "fn ${1:name}(${2:args})\n\t${3}\nendfn",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "fn...endfn block",
+                        },
+                        {
+                            label: "begin",
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: "begin\n\t${1}\nend",
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: "begin...end block",
+                        },
+                    );
+                }
+
+                return { suggestions };
+            },
         });
 
         // Focus the editor
         editor.focus();
-        
+
         // Force layout update to prevent artifacts
         setTimeout(() => {
             editor.layout();
@@ -583,20 +861,32 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     touchAction: splitMode ? "none" : "auto", // Prevent default touch behaviors when in split mode
                 }}
             >
-                <h3 id="verb-editor-title" style={{ margin: 0, color: "var(--color-text-primary)", display: "flex", alignItems: "baseline", width: "100%" }}>
+                <h3
+                    id="verb-editor-title"
+                    style={{
+                        margin: 0,
+                        color: "var(--color-text-primary)",
+                        display: "flex",
+                        alignItems: "baseline",
+                        width: "100%",
+                    }}
+                >
                     <span style={{ fontWeight: "700" }}>
                         Verb editor
                     </span>
-                    <span style={{ 
-                        fontSize: "0.9em", 
-                        color: "var(--color-text-secondary)", 
-                        fontWeight: "normal",
-                        textAlign: "center",
-                        flex: 1,
-                        marginLeft: "var(--space-sm)",
-                        marginRight: "var(--space-sm)"
-                    }}>
-                        "{title}"
+                    <span
+                        style={{
+                            fontSize: "0.9em",
+                            color: "var(--color-text-secondary)",
+                            fontWeight: "normal",
+                            textAlign: "center",
+                            flex: 1,
+                            marginLeft: "var(--space-sm)",
+                            marginRight: "var(--space-sm)",
+                            fontFamily: "monospace",
+                        }}
+                    >
+                        {enhancedTitle}
                     </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
@@ -623,7 +913,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     >
                         {isCompiling ? "⏳" : "▶"}
                     </button>
-                    
+
                     {/* Split/Float toggle button - only on desktop */}
                     {!isMobile && onToggleSplitMode && (
                         <button
@@ -665,7 +955,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 </div>
             </div>
 
-
             {/* Error panel */}
             {errors.length > 0 && (
                 <div
@@ -693,12 +982,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             )}
 
             {/* Monaco Editor */}
-            <div style={{ 
-                flex: 1, 
-                minHeight: 0,
-                position: "relative",
-                overflow: "hidden" // Prevent rendering artifacts
-            }}>
+            <div
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    position: "relative",
+                    overflow: "hidden", // Prevent rendering artifacts
+                }}
+            >
                 <Editor
                     value={content}
                     language="moo"

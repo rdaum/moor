@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BottomDock } from "./components/docks/BottomDock";
-import { useMediaQuery } from "./hooks/useMediaQuery";
 import { LeftDock } from "./components/docks/LeftDock";
 import { RightDock } from "./components/docks/RightDock";
 import { TopDock } from "./components/docks/TopDock";
@@ -29,6 +28,7 @@ import { PresentationProvider, usePresentationContext } from "./context/Presenta
 import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { MoorRemoteObject } from "./lib/rpc";
 import { oidRef } from "./lib/var";
@@ -45,7 +45,15 @@ function AppContent({
     narrativeRef: React.RefObject<NarrativeRef>;
     narrativeCallbackRef: (node: NarrativeRef | null) => void;
     onLinkClick?: (url: string) => void;
-    onVerbEditorReady?: (showVerbEditor: (title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) => void;
+    onVerbEditorReady?: (
+        showVerbEditor: (
+            title: string,
+            objectCurie: string,
+            verbName: string,
+            content: string,
+            uploadAction?: string,
+        ) => void,
+    ) => void;
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
     const { welcomeMessage, contentType } = useWelcomeMessage();
@@ -56,16 +64,16 @@ function AppContent({
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
     const [splitRatio, setSplitRatio] = useState(() => {
         // Load saved split ratio or default to 60% for room, 40% for editor
-        const saved = localStorage.getItem('moor-split-ratio');
+        const saved = localStorage.getItem("moor-split-ratio");
         return saved ? parseFloat(saved) : 0.6;
     });
-    
+
     const splitRatioRef = useRef(splitRatio);
     splitRatioRef.current = splitRatio;
-    
+
     const isMobile = useMediaQuery("(max-width: 768px)");
     const [forceSplitMode, setForceSplitMode] = useState(false);
-    
+
     const toggleSplitMode = useCallback(() => {
         setForceSplitMode(prev => !prev);
     }, []);
@@ -183,7 +191,7 @@ function AppContent({
 
     // Track if we were previously connected to distinguish reconnection from initial connection
     const wasConnectedRef = useRef(false);
-    
+
     // Reset history loaded flag when WebSocket disconnects to ensure history is refetched on reconnection
     // Only reset if we were previously connected (not during initial connection flow)
     useEffect(() => {
@@ -211,21 +219,20 @@ function AppContent({
         e.stopPropagation();
     }, []);
 
-
     // Add global mouse event listeners for split dragging
     useEffect(() => {
         if (!isDraggingSplit) return;
 
         const updateSplitRatio = (clientY: number) => {
             // Get the main app layout element to calculate relative position
-            const mainElement = document.querySelector('.app_layout') as HTMLElement;
+            const mainElement = document.querySelector(".app_layout") as HTMLElement;
             if (!mainElement) return;
-            
+
             const rect = mainElement.getBoundingClientRect();
             const relativeY = clientY - rect.top;
             const newRatio = relativeY / rect.height;
             const clampedRatio = Math.max(0.2, Math.min(0.8, newRatio)); // Keep between 20% and 80%
-            
+
             setSplitRatio(clampedRatio);
         };
 
@@ -243,23 +250,23 @@ function AppContent({
         const endDrag = () => {
             setIsDraggingSplit(false);
             // Save the split ratio to localStorage
-            localStorage.setItem('moor-split-ratio', splitRatioRef.current.toString());
+            localStorage.setItem("moor-split-ratio", splitRatioRef.current.toString());
         };
 
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', endDrag);
-        document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
-        document.addEventListener('touchend', endDrag, { capture: true });
-        document.body.style.cursor = 'row-resize';
-        document.body.style.userSelect = 'none';
+        document.addEventListener("mousemove", handleMouseMove);
+        document.addEventListener("mouseup", endDrag);
+        document.addEventListener("touchmove", handleTouchMove, { passive: false, capture: true });
+        document.addEventListener("touchend", endDrag, { capture: true });
+        document.body.style.cursor = "row-resize";
+        document.body.style.userSelect = "none";
 
         return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', endDrag);
-            document.removeEventListener('touchmove', handleTouchMove, { capture: true } as any);
-            document.removeEventListener('touchend', endDrag, { capture: true } as any);
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
+            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener("mouseup", endDrag);
+            document.removeEventListener("touchmove", handleTouchMove, { capture: true } as any);
+            document.removeEventListener("touchend", endDrag, { capture: true } as any);
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
         };
     }, [isDraggingSplit]);
 
@@ -325,23 +332,23 @@ function AppContent({
 
             {/* Main app layout with narrative interface */}
             {isConnected && (
-                <main 
-                    className="app_layout" 
+                <main
+                    className="app_layout"
                     role="main"
                     style={{
                         display: "flex",
                         flexDirection: "column",
                         flex: 1,
-                        overflow: "hidden"
+                        overflow: "hidden",
                     }}
                 >
                     {/* Room/Narrative Section */}
-                    <div 
+                    <div
                         style={{
                             height: isSplitMode ? `${splitRatio * 100}%` : "100%",
                             display: "flex",
                             flexDirection: "column",
-                            overflow: "hidden"
+                            overflow: "hidden",
                         }}
                     >
                         {/* Top dock */}
@@ -395,15 +402,14 @@ function AppContent({
                         </aside>
                     </div>
 
-
                     {/* Editor Section (in split mode) */}
                     {isSplitMode && editorSession && authState.player?.authToken && (
-                        <div 
+                        <div
                             style={{
                                 height: `${(1 - splitRatio) * 100}%`,
                                 display: "flex",
                                 flexDirection: "column",
-                                overflow: "hidden"
+                                overflow: "hidden",
                             }}
                         >
                             <VerbEditor
@@ -466,14 +472,18 @@ function AppWrapper() {
     const narrativeRef = useRef<NarrativeRef>(null);
 
     // Store verb editor function from AppContent
-    const showVerbEditorRef = useRef<((title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) | null>(null);
+    const showVerbEditorRef = useRef<
+        ((title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) | null
+    >(null);
 
     // MCP handler for parsing edit commands
-    const { handleNarrativeMessage: mcpHandler } = useMCPHandler((title, objectCurie, verbName, content, uploadAction) => {
-        if (showVerbEditorRef.current) {
-            showVerbEditorRef.current(title, objectCurie, verbName, content, uploadAction);
-        }
-    });
+    const { handleNarrativeMessage: mcpHandler } = useMCPHandler(
+        (title, objectCurie, verbName, content, uploadAction) => {
+            if (showVerbEditorRef.current) {
+                showVerbEditorRef.current(title, objectCurie, verbName, content, uploadAction);
+            }
+        },
+    );
 
     // Handle MOO link clicks
     const handleLinkClick = useCallback(async (url: string) => {
@@ -578,7 +588,9 @@ function AppWrapper() {
                 narrativeRef={narrativeRef}
                 narrativeCallbackRef={narrativeCallbackRef}
                 onLinkClick={handleLinkClick}
-                onVerbEditorReady={(fn) => { showVerbEditorRef.current = fn; }}
+                onVerbEditorReady={(fn) => {
+                    showVerbEditorRef.current = fn;
+                }}
             />
         </WebSocketProvider>
     );

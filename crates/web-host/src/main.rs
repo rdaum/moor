@@ -213,14 +213,14 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             get(host::system_property_handler),
         )
         .route("/eval", post(host::eval_handler))
-        .route("/verbs", get(host::verbs_handler))
+        .route("/verbs/{object}", get(host::verbs_handler))
         .route("/verbs/{object}/{name}", get(host::verb_retrieval_handler))
         .route("/verbs/{object}/{name}", post(host::verb_program_handler))
         .route(
             "/verbs/{object}/{name}/invoke",
             post(host::invoke_verb_handler),
         )
-        .route("/properties", get(host::properties_handler))
+        .route("/properties/{object}", get(host::properties_handler))
         // ?oid=1234 or ?sysobj=foo.bar.baz or ?match=foo
         .route("/objects/{object}", get(host::resolve_objref_handler))
         .route(
