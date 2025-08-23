@@ -39,10 +39,12 @@ function AppContent({
     narrativeRef,
     narrativeCallbackRef,
     onLinkClick,
+    onVerbEditorReady,
 }: {
     narrativeRef: React.RefObject<NarrativeRef>;
     narrativeCallbackRef: (node: NarrativeRef | null) => void;
     onLinkClick?: (url: string) => void;
+    onVerbEditorReady?: (showVerbEditor: (title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) => void;
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
     const { welcomeMessage, contentType } = useWelcomeMessage();
@@ -56,7 +58,15 @@ function AppContent({
     const {
         editorSession,
         closeEditor,
+        showVerbEditor,
     } = useVerbEditor();
+
+    // Notify parent about verb editor availability
+    useEffect(() => {
+        if (onVerbEditorReady) {
+            onVerbEditorReady(showVerbEditor);
+        }
+    }, [onVerbEditorReady, showVerbEditor]);
 
     // History management
     const {
@@ -305,13 +315,15 @@ function AppWrapper() {
     const { showMessage } = useSystemMessage();
     const narrativeRef = useRef<NarrativeRef>(null);
 
-    // We need to get showVerbEditor here to create the MCP handler
-    const {
-        showVerbEditor,
-    } = useVerbEditor();
+    // Store verb editor function from AppContent
+    const showVerbEditorRef = useRef<((title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) | null>(null);
 
     // MCP handler for parsing edit commands
-    const { handleNarrativeMessage: mcpHandler } = useMCPHandler(showVerbEditor);
+    const { handleNarrativeMessage: mcpHandler } = useMCPHandler((title, objectCurie, verbName, content, uploadAction) => {
+        if (showVerbEditorRef.current) {
+            showVerbEditorRef.current(title, objectCurie, verbName, content, uploadAction);
+        }
+    });
 
     // Handle MOO link clicks
     const handleLinkClick = useCallback(async (url: string) => {
@@ -368,7 +380,6 @@ function AppWrapper() {
             // Handle single string content
             if (!mcpHandler(content, isHistorical || false)) {
                 // If mcpHandler returns false, the content was not MCP-related and should be shown
-                console.log("MCP handler says to show content:", content);
                 if (narrativeRef.current) {
                     narrativeRef.current.addNarrativeContent(
                         content,
@@ -377,8 +388,6 @@ function AppWrapper() {
                 } else {
                     setPendingMessages(prev => [...prev, { content, contentType }]);
                 }
-            } else {
-                console.log("MCP handler filtered content:", content);
             }
         }
     }, [mcpHandler]);
@@ -419,6 +428,7 @@ function AppWrapper() {
                 narrativeRef={narrativeRef}
                 narrativeCallbackRef={narrativeCallbackRef}
                 onLinkClick={handleLinkClick}
+                onVerbEditorReady={(fn) => { showVerbEditorRef.current = fn; }}
             />
         </WebSocketProvider>
     );

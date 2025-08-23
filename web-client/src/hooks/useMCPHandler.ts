@@ -69,8 +69,6 @@ export const useMCPHandler = (
 
         // Always filter out any MCP messages (anything starting with "#$#")
         if (content.startsWith("#$#")) {
-            console.log(`MCP Handler: Filtering MCP message (historical: ${isHistorical}):`, content);
-
             // For historical content, just filter it out without processing
             if (isHistorical) {
                 return true; // Indicate this message was handled (filtered)
