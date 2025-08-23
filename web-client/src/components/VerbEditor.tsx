@@ -450,10 +450,47 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     touchAction: splitMode ? "none" : "auto", // Prevent default touch behaviors when in split mode
                 }}
             >
-                <h3 id="verb-editor-title" style={{ margin: 0, color: "var(--color-text-primary)" }}>
-                    {title}
+                <h3 id="verb-editor-title" style={{ margin: 0, color: "var(--color-text-primary)", display: "flex", alignItems: "baseline", width: "100%" }}>
+                    <span style={{ fontWeight: "700" }}>
+                        Verb editor
+                    </span>
+                    <span style={{ 
+                        fontSize: "0.9em", 
+                        color: "var(--color-text-secondary)", 
+                        fontWeight: "normal",
+                        textAlign: "center",
+                        flex: 1,
+                        marginLeft: "var(--space-sm)",
+                        marginRight: "var(--space-sm)"
+                    }}>
+                        "{title}"
+                    </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    {/* Compile button */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent drag handler from firing
+                            compileVerb();
+                        }}
+                        disabled={isCompiling}
+                        aria-label="Compile verb"
+                        title="Compile verb"
+                        style={{
+                            backgroundColor: isCompiling ? "var(--color-bg-secondary)" : "var(--color-button-primary)",
+                            color: "white",
+                            border: "none",
+                            padding: "6px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: isCompiling ? "not-allowed" : "pointer",
+                            opacity: isCompiling ? 0.6 : 1,
+                            fontSize: "12px",
+                            fontWeight: "600",
+                        }}
+                    >
+                        {isCompiling ? "⏳" : "▶"}
+                    </button>
+                    
                     {/* Split/Float toggle button - only on desktop */}
                     {!isMobile && onToggleSplitMode && (
                         <button
@@ -495,24 +532,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 </div>
             </div>
 
-            {/* Compile button */}
-            <div style={{ padding: "var(--space-sm)" }}>
-                <button
-                    onClick={compileVerb}
-                    disabled={isCompiling}
-                    style={{
-                        backgroundColor: "var(--color-button-primary)",
-                        color: "white",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "var(--radius-sm)",
-                        cursor: isCompiling ? "not-allowed" : "pointer",
-                        opacity: isCompiling ? 0.6 : 1,
-                    }}
-                >
-                    {isCompiling ? "Compiling..." : "Compile"}
-                </button>
-            </div>
 
             {/* Error panel */}
             {errors.length > 0 && (
