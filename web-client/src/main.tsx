@@ -165,10 +165,17 @@ function AppContent({
         showMessage,
     ]);
 
+    // Track if we were previously connected to distinguish reconnection from initial connection
+    const wasConnectedRef = useRef(false);
+    
     // Reset history loaded flag when WebSocket disconnects to ensure history is refetched on reconnection
+    // Only reset if we were previously connected (not during initial connection flow)
     useEffect(() => {
-        if (wsState.connectionStatus === "disconnected" && historyLoaded) {
+        if (wsState.connectionStatus === "connected") {
+            wasConnectedRef.current = true;
+        } else if (wsState.connectionStatus === "disconnected" && wasConnectedRef.current && historyLoaded) {
             setHistoryLoaded(false);
+            wasConnectedRef.current = false;
         }
     }, [wsState.connectionStatus, historyLoaded]);
 
