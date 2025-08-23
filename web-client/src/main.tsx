@@ -165,6 +165,13 @@ function AppContent({
         showMessage,
     ]);
 
+    // Reset history loaded flag when WebSocket disconnects to ensure history is refetched on reconnection
+    useEffect(() => {
+        if (wsState.connectionStatus === "disconnected" && historyLoaded) {
+            setHistoryLoaded(false);
+        }
+    }, [wsState.connectionStatus, historyLoaded]);
+
     const isConnected = authState.player?.connected || false;
 
     // Add pending historical messages when narrative component becomes available
