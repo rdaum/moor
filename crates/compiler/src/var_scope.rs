@@ -79,11 +79,10 @@ impl VarScope {
         // Check the current scopes, starting at the back (innermost scope)
         for scope in self.scopes.iter().rev() {
             for v in scope {
-                if let Named(sym) = v.nr {
-                    if sym == name {
+                if let Named(sym) = v.nr
+                    && sym == name {
                         return Some(*v);
                     }
-                }
             }
         }
 

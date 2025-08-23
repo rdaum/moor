@@ -220,6 +220,7 @@ pub async fn compile(
                 client_token.clone(),
                 auth_token.clone(),
                 ObjectRef::Id(oid),
+                false, // inherited = false for testing
             ),
         )
         .await

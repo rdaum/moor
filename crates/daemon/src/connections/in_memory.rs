@@ -317,8 +317,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         let mut player_changes = PlayerConnectionChanges::new();
 
         // Also update player connection record if logged in
-        if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied() {
-            if let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
+        if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied()
+            && let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
                 if let Some(client) = player_connections
                     .connections
                     .iter_mut()
@@ -328,7 +328,6 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                 }
                 player_changes.update(player_obj, player_connections.clone());
             }
-        }
 
         drop(inner);
         self.persist_changes(ClientMappingChanges::new(), player_changes)?;
@@ -357,8 +356,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         let mut player_changes = PlayerConnectionChanges::new();
 
         // Also update player connection record if logged in
-        if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied() {
-            if let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
+        if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied()
+            && let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
                 if let Some(cr) = player_connections
                     .connections
                     .iter_mut()
@@ -368,7 +367,6 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                 }
                 player_changes.update(player_obj, player_connections.clone());
             }
-        }
 
         drop(inner);
         self.persist_changes(ClientMappingChanges::new(), player_changes)?;
@@ -403,8 +401,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                 client_changes.remove(client_uuid);
 
                 // Remove from player connections if logged in
-                if let Some(player_obj) = player_obj {
-                    if let Some(player_connections) = inner.player_connections.get_mut(&player_obj)
+                if let Some(player_obj) = player_obj
+                    && let Some(player_connections) = inner.player_connections.get_mut(&player_obj)
                     {
                         player_connections
                             .connections
@@ -416,7 +414,6 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                             player_changes.update(player_obj, player_connections.clone());
                         }
                     }
-                }
             }
 
             // Remove from connection records
@@ -584,8 +581,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         }
 
         // Remove from player connections if logged in
-        if let Some(player_obj) = player_obj {
-            if let Some(connections_record) = inner.player_connections.get_mut(&player_obj) {
+        if let Some(player_obj) = player_obj
+            && let Some(connections_record) = inner.player_connections.get_mut(&player_obj) {
                 connections_record
                     .connections
                     .retain(|cr| cr.client_id != client_id.as_u128());
@@ -596,7 +593,6 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                     player_changes.update(player_obj, connections_record.clone());
                 }
             }
-        }
 
         drop(inner);
         self.persist_changes(client_changes, player_changes)?;

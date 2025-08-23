@@ -195,11 +195,10 @@ impl MessageHandler for RpcMessageHandler {
         // Check cache first.
         {
             let guard = self.host_token_cache.pin();
-            if let Some((t, host_type)) = guard.get(token) {
-                if t.elapsed().as_secs() <= 60 {
+            if let Some((t, host_type)) = guard.get(token)
+                && t.elapsed().as_secs() <= 60 {
                     return Ok(*host_type);
                 }
-            }
         }
         let pk: PasetoAsymmetricPublicKey<V4, Public> =
             PasetoAsymmetricPublicKey::from(&self.public_key);
@@ -233,11 +232,10 @@ impl MessageHandler for RpcMessageHandler {
     ) -> Result<(), RpcMessageError> {
         {
             let guard = self.client_token_cache.pin();
-            if let Some(t) = guard.get(&token) {
-                if t.elapsed().as_secs() <= 60 {
+            if let Some(t) = guard.get(&token)
+                && t.elapsed().as_secs() <= 60 {
                     return Ok(());
                 }
-            }
         }
 
         let pk: PasetoAsymmetricPublicKey<V4, Public> =
@@ -845,8 +843,8 @@ impl RpcMessageHandler {
                 )?;
                 let client_token = self.make_client_token(client_id);
 
-                if let Some(connect_type) = connect_type {
-                    if let Err(e) = self.submit_connected_task(
+                if let Some(connect_type) = connect_type
+                    && let Err(e) = self.submit_connected_task(
                         &handler_object,
                         scheduler_client,
                         client_id,
@@ -858,7 +856,6 @@ impl RpcMessageHandler {
                         // Note we still continue to return a successful login result here, hoping for the best
                         // but we do log the error.
                     }
-                }
                 Ok(DaemonToClientReply::AttachResult(Some((
                     client_token,
                     player,
@@ -1190,9 +1187,9 @@ impl RpcMessageHandler {
 
                 // Submit disconnected only if there's a logged-in player, and if the intent is
                 // to actually disconnect.
-                if disconnected {
-                    if let Some(player) = self.connections.player_object_for_client(client_id) {
-                        if let Err(e) = self.submit_disconnected_task(
+                if disconnected
+                    && let Some(player) = self.connections.player_object_for_client(client_id)
+                        && let Err(e) = self.submit_disconnected_task(
                             &SYSTEM_OBJECT,
                             scheduler_client,
                             client_id,
@@ -1200,8 +1197,6 @@ impl RpcMessageHandler {
                         ) {
                             error!(error = ?e, "Error submitting user_disconnected task");
                         }
-                    }
-                }
                 // Detach this client id from the connection DB and any connection object
                 // associations it may have.
                 let Ok(_) = self.connections.remove_client_connection(client_id) else {
@@ -1237,11 +1232,10 @@ impl RpcMessageHandler {
     ) -> Result<Obj, RpcMessageError> {
         {
             let guard = self.auth_token_cache.pin();
-            if let Some((t, o)) = guard.get(&token) {
-                if t.elapsed().as_secs() <= 60 {
+            if let Some((t, o)) = guard.get(&token)
+                && t.elapsed().as_secs() <= 60 {
                     return Ok(*o);
                 }
-            }
         }
         let pk: PasetoAsymmetricPublicKey<V4, Public> =
             PasetoAsymmetricPublicKey::from(&self.public_key);
@@ -1415,8 +1409,8 @@ impl RpcMessageHandler {
             ));
         };
 
-        if attach {
-            if let Err(e) = self.submit_connected_task(
+        if attach
+            && let Err(e) = self.submit_connected_task(
                 handler_object,
                 scheduler_client,
                 client_id,
@@ -1428,7 +1422,6 @@ impl RpcMessageHandler {
                 // Note we still continue to return a successful login result here, hoping for the best
                 // but we do log the error.
             }
-        }
 
         let auth_token = self.make_auth_token(&player);
 

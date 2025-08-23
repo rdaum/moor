@@ -181,11 +181,10 @@ where
         }
 
         // Not in the index, we check the backing source.
-        if let Some((read_ts, _)) = self.backing_source.get(&domain)? {
-            if read_ts < self.tx.ts {
+        if let Some((read_ts, _)) = self.backing_source.get(&domain)?
+            && read_ts < self.tx.ts {
                 return Err(Error::Duplicate);
             }
-        }
 
         // Not in the index, not in the backing source, we can insert freely.
         // Local index + also the operations log.
@@ -205,8 +204,8 @@ where
     pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         // Check our local index first, but only if we have mutations.
         // If we have an entry for this domain, we can update it.
-        if self.index.has_local_mutations {
-            if let Some(entry) = self.index.local_operations.get_mut(domain) {
+        if self.index.has_local_mutations
+            && let Some(entry) = self.index.local_operations.get_mut(domain) {
                 // If the operation is a delete, we can't update it.
                 if entry.operation.is_delete() {
                     return Ok(None);
@@ -228,7 +227,6 @@ where
                 self.index.has_local_mutations = true;
                 return Ok(Some(old_value));
             }
-        }
 
         // Is this already in the *master* index?
         if let Some(entry) = self.index.master_entries.index_lookup(domain) {
@@ -292,8 +290,8 @@ where
 
     pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         // Check local operations first - single lookup that handles all cases, but only if we have mutations
-        if self.index.has_local_mutations {
-            if let Some(entry) = self.index.local_operations.get_mut(&domain) {
+        if self.index.has_local_mutations
+            && let Some(entry) = self.index.local_operations.get_mut(&domain) {
                 match &entry.operation {
                     OpType::Delete => {
                         // Convert delete to insert - avoids duplicate key errors
@@ -326,7 +324,6 @@ where
                     }
                 }
             }
-        }
 
         // Check master entries for existing data
         if let Some(entry) = self.index.master_entries.index_lookup(&domain) {
@@ -346,8 +343,8 @@ where
         }
 
         // Check backing source for existing data
-        if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)? {
-            if read_ts < self.tx.ts {
+        if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)?
+            && read_ts < self.tx.ts {
                 // Existing entry in backing - do update via local operation
                 self.index.local_operations.insert(
                     domain.clone(),
@@ -361,7 +358,6 @@ where
                 // Update local secondary index
                 return Ok(Some(backing_value));
             }
-        }
 
         // No existing entry anywhere - do insert via local operation
         self.index.local_operations.insert(
@@ -410,8 +406,8 @@ where
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
         // Check local operations first, but only if we have mutations.
-        if self.index.has_local_mutations {
-            if let Some(op) = self.index.local_operations.get(domain) {
+        if self.index.has_local_mutations
+            && let Some(op) = self.index.local_operations.get(domain) {
                 match &op.operation {
                     // If it's a delete, we don't have it.
                     OpType::Delete => return Ok(None),
@@ -421,7 +417,6 @@ where
                     }
                 }
             }
-        }
 
         // Check entries
         if let Some(entry) = self.index.master_entries.index_lookup(domain) {
@@ -439,8 +434,8 @@ where
         // This is like update, but we're removing.
         // Check our local index first, but only if we have mutations.
         // If we have an entry for this domain, we can delete it and move on
-        if self.index.has_local_mutations {
-            if let Some(entry) = self.index.local_operations.get_mut(domain) {
+        if self.index.has_local_mutations
+            && let Some(entry) = self.index.local_operations.get_mut(domain) {
                 // If the operation is a delete, we can't delete it again.
                 if entry.operation.is_delete() {
                     return Ok(None);
@@ -457,7 +452,6 @@ where
                 self.index.has_local_mutations = true;
                 return Ok(Some(old_value));
             }
-        }
 
         if let Some(entry) = self.index.master_entries.index_lookup(domain) {
             let old_value = entry.value.clone();

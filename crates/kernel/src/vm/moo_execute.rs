@@ -984,12 +984,11 @@ pub fn moo_frame_execute(
                         if result.needs_defaults {
                             // Find the first optional parameter that needs defaults
                             for label in table.labels.iter() {
-                                if let ScatterLabel::Optional(_, jump_to) = label {
-                                    if jump_where.is_none() && jump_to.is_some() {
+                                if let ScatterLabel::Optional(_, jump_to) = label
+                                    && jump_where.is_none() && jump_to.is_some() {
                                         jump_where = *jump_to;
                                         break;
                                     }
-                                }
                             }
                         }
 

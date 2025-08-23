@@ -226,11 +226,10 @@ impl WorldState for DbWorldState {
         }
 
         // If a specific ID is requested, check if it already exists
-        if let Some(obj_id) = id {
-            if self.valid(&obj_id)? {
+        if let Some(obj_id) = id
+            && self.valid(&obj_id)? {
                 return Err(WorldStateError::ObjectAlreadyExists(obj_id));
             }
-        }
 
         self.check_parent(perms, parent, owner)?;
 

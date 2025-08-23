@@ -112,8 +112,8 @@ impl MoorDB {
             self.last_write_commit
                 .load(std::sync::atomic::Ordering::Acquire),
         );
-        if last_write_timestamp.0 > 0 {
-            if let Err(e) = self
+        if last_write_timestamp.0 > 0
+            && let Err(e) = self
                 .relations
                 .wait_for_write_barrier(last_write_timestamp, std::time::Duration::from_secs(10))
             {
@@ -123,7 +123,6 @@ impl MoorDB {
                 );
                 // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
             }
-        }
 
         // Get a consistent instant from the keyspace
         let instant = self.keyspace.instant();

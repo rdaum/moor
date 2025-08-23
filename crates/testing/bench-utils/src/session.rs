@@ -74,12 +74,11 @@ fn get_target_directory() -> std::path::PathBuf {
     }
 
     // Try cargo metadata to get target directory
-    if let Ok(cargo) = std::env::var("CARGO") {
-        if let Ok(output) = std::process::Command::new(cargo)
+    if let Ok(cargo) = std::env::var("CARGO")
+        && let Ok(output) = std::process::Command::new(cargo)
             .args(["metadata", "--format-version", "1"])
             .output()
-        {
-            if let Ok(metadata_str) = String::from_utf8(output.stdout) {
+            && let Ok(metadata_str) = String::from_utf8(output.stdout) {
                 // Simple JSON parsing to extract target_directory
                 if let Some(start) = metadata_str.find("\"target_directory\":\"") {
                     let start = start + "\"target_directory\":\"".len();
@@ -89,8 +88,6 @@ fn get_target_directory() -> std::path::PathBuf {
                     }
                 }
             }
-        }
-    }
 
     // Fallback to ./target
     std::path::PathBuf::from("target")

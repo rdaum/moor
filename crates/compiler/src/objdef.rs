@@ -157,8 +157,8 @@ fn parse_literal_lambda(
     let mut captured_env = vec![];
     let mut self_var = None;
 
-    if let Some(metadata_pair) = pairs.next() {
-        if metadata_pair.as_rule() == Rule::lambda_metadata {
+    if let Some(metadata_pair) = pairs.next()
+        && metadata_pair.as_rule() == Rule::lambda_metadata {
             for meta_item in metadata_pair.into_inner() {
                 match meta_item.as_rule() {
                     Rule::lambda_captured => {
@@ -171,7 +171,6 @@ fn parse_literal_lambda(
                 }
             }
         }
-    }
 
     Ok(moor_var::Var::mk_lambda(
         params,
