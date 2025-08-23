@@ -286,27 +286,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
         editorRef.current = editor;
 
-        // Add snippet completions directly to the editor
-        const snippetCompletions = [
-            {
-                label: "if",
-                insertText: "if (${1:condition})\n\t${2}\nendif",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            },
-            {
-                label: "while",
-                insertText: "while (${1:condition})\n\t${2}\nendwhile",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            },
-            {
-                label: "for",
-                insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            },
-        ];
 
         // Cache for verb/property lookups to avoid repeated API calls
         const completionCache = new Map<
@@ -336,8 +315,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         };
 
         // Add completion provider for MOO block structures and smart completions
-        const disposable = monaco.languages.registerCompletionItemProvider("moo", {
-            provideCompletionItems: async (model, position, context, token) => {
+        monaco.languages.registerCompletionItemProvider("moo", {
+            provideCompletionItems: async (model, position) => {
                 const suggestions = [];
                 const lineContent = model.getLineContent(position.lineNumber);
                 const beforeCursor = lineContent.substring(0, position.column - 1);
@@ -573,6 +552,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     }
                 } // If no smart completions matched, show block templates
                 else {
+                    const defaultRange = {
+                        startLineNumber: position.lineNumber,
+                        endLineNumber: position.lineNumber,
+                        startColumn: position.column,
+                        endColumn: position.column,
+                    };
+                    
                     suggestions.push(
                         {
                             label: "if",
@@ -580,6 +566,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "if (${1:condition})\n\t${2}\nendif",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "if...endif block",
+                            range: defaultRange,
                         },
                         {
                             label: "while",
@@ -587,6 +574,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "while (${1:condition})\n\t${2}\nendwhile",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "while...endwhile block",
+                            range: defaultRange,
                         },
                         {
                             label: "for-in",
@@ -594,6 +582,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "for item in (collection) loop",
+                            range: defaultRange,
                         },
                         {
                             label: "for-range",
@@ -601,6 +590,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "for i in [start..end] range loop",
+                            range: defaultRange,
                         },
                         {
                             label: "try",
@@ -608,6 +598,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "try...endtry block",
+                            range: defaultRange,
                         },
                         {
                             label: "fork",
@@ -615,6 +606,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "fork (${1:0})\n\t${2}\nendfork",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "fork...endfork block",
+                            range: defaultRange,
                         },
                         {
                             label: "fn",
@@ -622,6 +614,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "fn ${1:name}(${2:args})\n\t${3}\nendfn",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "fn...endfn block",
+                            range: defaultRange,
                         },
                         {
                             label: "begin",
@@ -629,6 +622,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             insertText: "begin\n\t${1}\nend",
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             documentation: "begin...end block",
+                            range: defaultRange,
                         },
                     );
                 }
