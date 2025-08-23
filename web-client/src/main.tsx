@@ -197,7 +197,6 @@ function AppContent({
 
     // Handle split divider dragging
     const [isDraggingSplit, setIsDraggingSplit] = useState(false);
-    const splitDividerRef = useRef<HTMLDivElement>(null);
 
     const handleSplitMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;

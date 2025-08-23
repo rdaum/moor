@@ -151,42 +151,76 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         monaco.languages.setMonarchTokensProvider("moo", {
             tokenizer: {
                 root: [
-                    // Keywords
-                    [
-                        /\b(if|else|elseif|endif|while|endwhile|for|endfor|return|break|continue|try|except|endtry|finally|endfork|fork|let|const|global)\b/,
-                        "keyword",
-                    ],
+                    // Control flow keywords
+                    [/\b(if|elseif|else|endif|while|endwhile|for|endfor|try|except|endtry|finally|fork|endfork|begin|end)\b/, "keyword.control"],
+                    
+                    // Flow control
+                    [/\b(return|break|continue|pass)\b/, "keyword.control"],
+                    
+                    // Declaration keywords
+                    [/\b(let|const|global|fn|endfn)\b/, "keyword.declaration"],
+                    
+                    // Special keywords
+                    [/\b(any|in)\b/, "keyword.operator"],
 
-                    // Error constants
-                    [
-                        /\b(E_TYPE|E_DIV|E_PERM|E_PROPNF|E_VERBNF|E_VARNF|E_INVIND|E_RECMOVE|E_MAXREC|E_RANGE|E_ARGS|E_NACC|E_INVARG|E_QUOTA|E_FLOAT)\b/,
-                        "constant",
-                    ],
+                    // Built-in constants
+                    [/\b(true|false)\b/, "constant.language"],
+                    
+                    // Type constants
+                    [/\b(INT|NUM|FLOAT|STR|ERR|OBJ|LIST|MAP|BOOL|FLYWEIGHT|SYM)\b/, "type"],
 
-                    // Object references
-                    [/#-?\d+/, "number.object"],
+                    // Error constants with optional message
+                    [/\bE_[A-Z_]+\([^)]*\)/, "constant.other"],
+                    [/\bE_[A-Z_]+/, "constant.other"],
 
-                    // System references
-                    [/\$\w+/, "variable.system"],
+                    // Binary literals (base64-encoded)
+                    [/b"[A-Za-z0-9+\/=_-]*"/, "string.regexp"],
+
+                    // Object references (#123, #-1)
+                    [/#-?\d+/, "number.hex"],
+
+                    // System properties and verbs ($property)
+                    [/\$[a-zA-Z_][a-zA-Z0-9_]*/, "variable.predefined"],
+                    
+                    // Symbols ('symbol)
+                    [/'[a-zA-Z_][a-zA-Z0-9_]*/, "string.key"],
+                    
+                    // Try expressions (backtick to single quote)
+                    [/`[^']*'/, "string.escape"],
+                    
+                    // Range end marker ($)
+                    [/\$(?=\s*[\]\})])/, "constant.numeric"],
 
                     // Strings
                     [/"([^"\\]|\\.)*$/, "string.invalid"],
                     [/"/, "string", "@string"],
 
-                    // Numbers
+                    // Numbers - floats first to avoid conflicts
                     [/\d*\.\d+([eE][\-+]?\d+)?/, "number.float"],
-                    [/0[xX][0-9a-fA-F]+/, "number.hex"],
+                    [/\d+[eE][\-+]?\d+/, "number.float"],
                     [/\d+/, "number"],
 
-                    // Operators
-                    [/[=!<>]=?/, "operator.comparison"],
-                    [/[+\-*/%^]/, "operator.arithmetic"],
-                    [/[&|]/, "operator.logical"],
-                    [/[=]/, "operator.assignment"],
+                    // Operators - order matters, specific to general
+                    [/\.\./, "keyword.operator"],  // Range operator
+                    [/->/, "keyword.operator"],    // Map arrow
+                    [/=>/, "keyword.operator"],    // Lambda arrow
+                    [/(==|!=|<=|>=)/, "operator.comparison"],
+                    [/(&&|\|\|)/, "operator.logical"],
+                    [/[<>]/, "operator.comparison"],
+                    [/=/, "operator.assignment"],
+                    [/!/, "operator.logical"],
+                    [/[+\-*\/%^]/, "operator.arithmetic"],
+                    [/[?|]/, "operator.conditional"],  // Ternary operators
+                    [/:/, "keyword.operator"],      // Verb call
+                    [/\./, "operator.accessor"],    // Property access
+                    [/@/, "keyword.operator"],      // Scatter/splat operator
 
                     // Comments
                     [/\/\*/, "comment", "@comment"],
                     [/\/\/.*$/, "comment"],
+                    
+                    // Identifiers
+                    [/[a-zA-Z_][a-zA-Z0-9_]*/, "identifier"],
                 ],
 
                 string: [
@@ -210,21 +244,120 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 blockComment: ["/*", "*/"],
             },
             brackets: [
-                ["{", "}"],
-                ["[", "]"],
-                ["(", ")"],
+                ["{", "}"],     // Lists and blocks
+                ["[", "]"],     // Maps and indexing
+                ["(", ")"],     // Function calls and grouping
+                ["<", ">"],     // Flyweights
             ],
             autoClosingPairs: [
                 { open: "{", close: "}" },
                 { open: "[", close: "]" },
                 { open: "(", close: ")" },
+                { open: "<", close: ">" },
+                { open: "\"", close: "\"" },
+                { open: "`", close: "'" },  // Try expressions
+            ],
+            surroundingPairs: [
+                { open: "{", close: "}" },
+                { open: "[", close: "]" },
+                { open: "(", close: ")" },
+                { open: "<", close: ">" },
                 { open: "\"", close: "\"" },
             ],
         });
+
     }, []);
 
-    const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor) => {
+    const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
         editorRef.current = editor;
+
+        // Add snippet completions directly to the editor
+        const snippetCompletions = [
+            {
+                label: 'if',
+                insertText: 'if (${1:condition})\n\t${2}\nendif',
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            },
+            {
+                label: 'while', 
+                insertText: 'while (${1:condition})\n\t${2}\nendwhile',
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            },
+            {
+                label: 'for',
+                insertText: 'for ${1:item} in (${2:collection})\n\t${3}\nendfor',
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            }
+        ];
+
+        // Add completion provider for MOO block structures
+        const disposable = monaco.languages.registerCompletionItemProvider("moo", {
+            provideCompletionItems: (model, position, context, token) => {
+                const suggestions = [
+                    {
+                        label: 'if',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'if (${1:condition})\n\t${2}\nendif',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'if...endif block'
+                    },
+                    {
+                        label: 'while',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'while (${1:condition})\n\t${2}\nendwhile',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'while...endwhile block'
+                    },
+                    {
+                        label: 'for-in',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'for ${1:item} in (${2:collection})\n\t${3}\nendfor',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'for item in (collection) loop'
+                    },
+                    {
+                        label: 'for-range',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'for i in [start..end] range loop'
+                    },
+                    {
+                        label: 'try',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'try...endtry block'
+                    },
+                    {
+                        label: 'fork',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'fork (${1:0})\n\t${2}\nendfork',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'fork...endfork block'
+                    },
+                    {
+                        label: 'fn',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'fn ${1:name}(${2:args})\n\t${3}\nendfn',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'fn...endfn block'
+                    },
+                    {
+                        label: 'begin',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'begin\n\t${1}\nend',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        documentation: 'begin...end block'
+                    }
+                ];
+                
+                return { suggestions };
+            }
+        });
 
         // Focus the editor
         editor.focus();
