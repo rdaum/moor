@@ -38,7 +38,7 @@ export const useMCPHandler = (
         const cleanCommand = command.replace(/^#\$#\s+/, "");
 
         // Extract the name part (format: "edit name: Object:verb")
-        const nameMatch = cleanCommand.match(/edit\s+name:\s*([^:]+):(\w+)/);
+        const nameMatch = cleanCommand.match(/edit\s+name:\s*([^:]+):(@?\w+)/);
         if (!nameMatch) {
             console.warn("Invalid MCP edit command format:", command);
             return null;
