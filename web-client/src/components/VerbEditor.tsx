@@ -67,6 +67,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+    const editorThemeObserverRef = useRef<MutationObserver | null>(null);
+    const editorThemeListenerRef = useRef<(() => void) | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Parse actual object ID from uploadAction and create enhanced title
@@ -86,6 +88,23 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     useEffect(() => {
         setContent(initialContent);
     }, [initialContent]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (editorThemeObserverRef.current) {
+                editorThemeObserverRef.current.disconnect();
+                editorThemeObserverRef.current = null;
+            }
+            if (editorThemeListenerRef.current) {
+                window.removeEventListener("storage", editorThemeListenerRef.current);
+                editorThemeListenerRef.current = null;
+            }
+            if (editorRef.current) {
+                editorRef.current.dispose();
+            }
+        };
+    }, []);
 
     // Mouse event handlers for dragging
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -303,6 +322,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         // Listen for storage changes (theme toggle)
         window.addEventListener("storage", handleThemeChange);
+        editorThemeListenerRef.current = handleThemeChange; // ref for later disposal
 
         // Also listen for changes to the light-theme class on body
         const observer = new MutationObserver((mutations) => {
@@ -312,6 +332,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 }
             });
         });
+        editorThemeObserverRef.current = observer; // ref for later disposal
         observer.observe(document.body, { attributes: true });
 
         // Cache for verb/property lookups to avoid repeated API calls
