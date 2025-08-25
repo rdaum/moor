@@ -50,6 +50,7 @@ mod tests {
             var_names,
             scatter_tables: vec![],
             for_sequence_operands: vec![],
+            for_range_operands: vec![],
             range_comprehensions: vec![],
             list_comprehensions: vec![],
             error_operands: vec![],

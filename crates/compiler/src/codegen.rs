@@ -35,8 +35,8 @@ use moor_var::program::labels::{JumpLabel, Label, Offset};
 use moor_var::program::names::{Name, Names, Variable};
 use moor_var::program::opcode::Op::Jump;
 use moor_var::program::opcode::{
-    ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
-    ScatterLabel,
+    ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend,
+    ScatterArgs, ScatterLabel,
 };
 use moor_var::program::program::{PrgInner, Program};
 
@@ -58,6 +58,7 @@ pub struct CodegenState {
     pub(crate) saved_stack: Option<Offset>,
     pub(crate) scatter_tables: Vec<ScatterArgs>,
     pub(crate) for_sequence_operands: Vec<ForSequenceOperand>,
+    pub(crate) for_range_operands: Vec<ForRangeOperand>,
     pub(crate) range_comprehensions: Vec<RangeComprehend>,
     pub(crate) list_comprehensions: Vec<ListComprehend>,
     pub(crate) error_operands: Vec<ErrorCode>,
@@ -85,6 +86,7 @@ impl CodegenState {
             fork_vectors: vec![],
             scatter_tables: vec![],
             for_sequence_operands: vec![],
+            for_range_operands: vec![],
             range_comprehensions: vec![],
             line_number_spans: vec![],
             fork_line_number_spans: vec![],
@@ -169,6 +171,12 @@ impl CodegenState {
         let fs_pos = self.for_sequence_operands.len();
         self.for_sequence_operands.push(operand);
         Offset(fs_pos as u16)
+    }
+
+    fn add_for_range_operand(&mut self, operand: ForRangeOperand) -> Offset {
+        let fr_pos = self.for_range_operands.len();
+        self.for_range_operands.push(operand);
+        Offset(fr_pos as u16)
     }
 
     fn emit(&mut self, op: Op) {
@@ -884,41 +892,54 @@ impl CodegenState {
                 body,
                 environment_width,
             } => {
+                // Generate the sequence expression
                 self.generate_expr(expr)?;
 
-                // Note that MOO is 1-indexed, so this is counter value is 1 in LambdaMOO;
-                // we use 0 here to make it easier to implement the ForList instruction.
-                self.emit(Op::ImmInt(0)); /* loop list index... */
-                self.push_stack(1);
                 let value_bind = self.find_name(value_binding);
                 let key_bind = key_binding.map(|id| self.find_name(&id));
-                let loop_top = self.make_jump_label(Some(value_bind));
-                self.commit_jump_label(loop_top);
                 let end_label = self.make_jump_label(Some(value_bind));
+
+                // Create operand for the for-sequence state
                 let offset = self.add_for_sequence_operand(ForSequenceOperand {
                     value_bind,
                     key_bind,
                     end_label,
                     environment_width: *environment_width as u16,
                 });
-                self.emit(Op::ForSequence(offset));
+
+                // Begin the for-sequence loop (pops sequence, creates scope)
+                self.emit(Op::BeginForSequence { operand: offset });
+                self.pop_stack(1); // sequence popped by BeginForSequence
+
+                // Iteration point - this is where we jump back to
+                let loop_top = self.make_jump_label(Some(value_bind));
+                self.commit_jump_label(loop_top);
+
+                // Check bounds and iterate (or jump to end if done)
+                self.emit(Op::IterateForSequence);
+
+                // Track loop for break/continue
                 self.loops.push(Loop {
                     loop_name: Some(value_bind),
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
-                    bottom_stack: (self.cur_stack - 2).into(),
+                    bottom_stack: self.cur_stack.into(), // No stack items to unwind
                 });
 
+                // Generate loop body
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
+
+                // Jump back to iteration check
+                self.emit(Jump { label: loop_top });
+
+                // End of loop - emit EndScope first, then the label after it
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
                 });
-                self.emit(Jump { label: loop_top });
                 self.commit_jump_label(end_label);
-                self.pop_stack(2);
                 self.loops.pop();
             }
             StmtNode::ForRange {
@@ -928,16 +949,27 @@ impl CodegenState {
                 body,
                 environment_width,
             } => {
+                // Generate from and to expressions (stack: [to, from])
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.make_jump_label(Some(self.find_name(id)));
+
                 let end_label = self.make_jump_label(Some(self.find_name(id)));
-                self.commit_jump_label(loop_top);
-                self.emit(Op::ForRange {
-                    id: self.find_name(id),
+
+                // Create operand for BeginForRange
+                let offset = self.add_for_range_operand(ForRangeOperand {
+                    loop_variable: self.find_name(id),
                     end_label,
                     environment_width: *environment_width as u16,
                 });
+
+                // Emit BeginForRange to pop stack values and create scope
+                self.emit(Op::BeginForRange { operand: offset });
+
+                // Loop top: IterateForRange checks bounds and sets loop variable
+                let loop_top = self.make_jump_label(Some(self.find_name(id)));
+                self.commit_jump_label(loop_top);
+                self.emit(Op::IterateForRange);
+
                 self.loops.push(Loop {
                     loop_name: Some(self.find_name(id)),
                     top_label: loop_top,
@@ -945,13 +977,19 @@ impl CodegenState {
                     bottom_label: end_label,
                     bottom_stack: (self.cur_stack - 2).into(),
                 });
+
+                // Generate loop body
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
+
+                // Jump back to iteration check
+                self.emit(Jump { label: loop_top });
+
+                // End of loop - emit EndScope first, then the label after it
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
                 });
-                self.emit(Jump { label: loop_top });
                 self.commit_jump_label(end_label);
                 self.pop_stack(2);
                 self.loops.pop();
@@ -1207,6 +1245,7 @@ impl CodegenState {
         let stashed_jumps = std::mem::take(&mut self.jumps);
         let stashed_scatter_tables = std::mem::take(&mut self.scatter_tables);
         let stashed_for_sequence_operands = std::mem::take(&mut self.for_sequence_operands);
+        let stashed_for_range_operands = std::mem::take(&mut self.for_range_operands);
         let stashed_range_comprehensions = std::mem::take(&mut self.range_comprehensions);
         let stashed_list_comprehensions = std::mem::take(&mut self.list_comprehensions);
         let stashed_error_operands = std::mem::take(&mut self.error_operands);
@@ -1221,6 +1260,7 @@ impl CodegenState {
         self.jumps = vec![];
         self.scatter_tables = vec![];
         self.for_sequence_operands = vec![];
+        self.for_range_operands = vec![];
         self.range_comprehensions = vec![];
         self.list_comprehensions = vec![];
         self.error_operands = vec![];
@@ -1239,6 +1279,7 @@ impl CodegenState {
             var_names: self.var_names.clone(),
             scatter_tables: std::mem::take(&mut self.scatter_tables),
             for_sequence_operands: std::mem::take(&mut self.for_sequence_operands),
+            for_range_operands: std::mem::take(&mut self.for_range_operands),
             range_comprehensions: std::mem::take(&mut self.range_comprehensions),
             list_comprehensions: std::mem::take(&mut self.list_comprehensions),
             error_operands: std::mem::take(&mut self.error_operands),
@@ -1256,6 +1297,7 @@ impl CodegenState {
         self.jumps = stashed_jumps;
         self.scatter_tables = stashed_scatter_tables;
         self.for_sequence_operands = stashed_for_sequence_operands;
+        self.for_range_operands = stashed_for_range_operands;
         self.range_comprehensions = stashed_range_comprehensions;
         self.list_comprehensions = stashed_list_comprehensions;
         self.error_operands = stashed_error_operands;
@@ -1314,6 +1356,7 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         range_comprehensions: cg_state.range_comprehensions,
         list_comprehensions: cg_state.list_comprehensions,
         for_sequence_operands: cg_state.for_sequence_operands,
+        for_range_operands: cg_state.for_range_operands,
         error_operands: cg_state.error_operands,
         lambda_programs: cg_state.lambda_programs,
         main_vector: cg_state.ops,

@@ -38,12 +38,18 @@ pub enum Op {
     },
     ExitId(Label),
     Exp,
-    ForSequence(Offset),
-    ForRange {
-        id: Name,
-        end_label: Label,
-        environment_width: u16,
+    /// Begin a for-sequence loop: pops sequence from stack, creates ForSequence scope
+    BeginForSequence {
+        operand: Offset,
     },
+    /// Iterate for-sequence loop: checks bounds, gets element, increments index
+    IterateForSequence,
+    /// Begin a for-range loop: pops end_value and start_value from stack, creates ForRange scope
+    BeginForRange {
+        operand: Offset,
+    },
+    /// Iterate for-range loop: checks bounds, sets loop variable, increments current value
+    IterateForRange,
     Fork {
         fv_offset: Offset,
         id: Option<Name>,
@@ -164,6 +170,13 @@ pub enum Op {
 pub struct ForSequenceOperand {
     pub value_bind: Name,
     pub key_bind: Option<Name>,
+    pub end_label: Label,
+    pub environment_width: u16,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub struct ForRangeOperand {
+    pub loop_variable: Name,
     pub end_label: Label,
     pub environment_width: u16,
 }

@@ -78,6 +78,22 @@ pub(crate) enum ScopeType {
     Eif,
     While,
     For,
+    /// For-sequence iteration state stored in scope instead of on stack
+    ForSequence {
+        sequence: moor_var::Var,
+        current_index: usize,
+        value_bind: moor_var::program::names::Name,
+        key_bind: Option<moor_var::program::names::Name>,
+        end_label: moor_compiler::Label,
+    },
+    /// For-range iteration state stored in scope instead of on stack
+    ForRange {
+        current_value: i64,
+        end_value: i64,
+        loop_variable: moor_var::program::names::Name,
+        end_label: moor_compiler::Label,
+        is_obj_range: bool,
+    },
     Block,
     Comprehension,
 }
@@ -285,6 +301,83 @@ impl MooStackFrame {
         }
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
+    }
+
+    /// Enter a ForSequence scope that holds iteration state
+    pub fn push_for_sequence_scope(
+        &mut self,
+        sequence: moor_var::Var,
+        value_bind: moor_var::program::names::Name,
+        key_bind: Option<moor_var::program::names::Name>,
+        end_label: &moor_compiler::Label,
+        environment_width: u16,
+    ) {
+        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let scope_type = ScopeType::ForSequence {
+            sequence,
+            current_index: 0,
+            value_bind,
+            key_bind,
+            end_label: *end_label,
+        };
+        self.scope_stack.push(Scope {
+            scope_type,
+            valstack_pos: self.valstack.len(),
+            end_pos,
+            environment: true,
+        });
+        let new_scope = vec![None; environment_width as usize];
+        self.environment.push(new_scope);
+    }
+
+    /// Get the current ForSequence scope for iteration
+    pub fn get_for_sequence_scope_mut(&mut self) -> Option<&mut ScopeType> {
+        // Scan upwards through scope stack to find ForSequence scope
+        for scope in self.scope_stack.iter_mut().rev() {
+            if matches!(scope.scope_type, ScopeType::ForSequence { .. }) {
+                return Some(&mut scope.scope_type);
+            }
+        }
+        None
+    }
+
+    /// Enter a ForRange scope that holds iteration state
+    pub fn push_for_range_scope(
+        &mut self,
+        start_value: i64,
+        end_value: i64,
+        loop_variable: moor_var::program::names::Name,
+        end_label: &moor_compiler::Label,
+        environment_width: u16,
+        is_obj_range: bool,
+    ) {
+        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let scope_type = ScopeType::ForRange {
+            current_value: start_value,
+            end_value,
+            loop_variable,
+            end_label: *end_label,
+            is_obj_range,
+        };
+        self.scope_stack.push(Scope {
+            scope_type,
+            valstack_pos: self.valstack.len(),
+            end_pos,
+            environment: true,
+        });
+        let new_scope = vec![None; environment_width as usize];
+        self.environment.push(new_scope);
+    }
+
+    /// Get the current ForRange scope for iteration
+    pub fn get_for_range_scope_mut(&mut self) -> Option<&mut ScopeType> {
+        // Scan upwards through scope stack to find ForRange scope
+        for scope in self.scope_stack.iter_mut().rev() {
+            if matches!(scope.scope_type, ScopeType::ForRange { .. }) {
+                return Some(&mut scope.scope_type);
+            }
+        }
+        None
     }
 }
 

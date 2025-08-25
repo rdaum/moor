@@ -28,7 +28,6 @@ use moor_var::{
     v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
 use moor_var::{Symbol, VarType};
-use std::ops::Add;
 use std::time::Duration;
 
 lazy_static! {
@@ -208,139 +207,183 @@ pub fn moo_frame_execute(
                     f.jump(&end_label);
                 }
             }
-            Op::ForSequence(offset) => {
-                let offset = *offset;
-                let operand = f.program.for_sequence_operand(offset).clone();
-                f.push_scope(
-                    ScopeType::For,
-                    operand.environment_width,
-                    &operand.end_label,
-                );
+            Op::BeginForSequence { operand } => {
+                let operand_offset = *operand;
+                let operand = f.program.for_sequence_operand(operand_offset).clone();
 
-                let (count, seq) = f.peek2();
-                let Some(count_i) = count.as_integer() else {
-                    f.pop();
-                    f.pop();
+                // Pop sequence from stack
+                let sequence = f.pop();
 
-                    // If the result of raising error was just to push the value -- that is, we
-                    // didn't 'throw' and unwind the stack -- we need to get out of the loop.
-                    // So we preemptively jump (here and below for List) and then raise the error.
-                    f.jump(&operand.end_label);
-                    return ExecutionResult::RaiseError(
-                        E_TYPE.msg("invalid count value in for loop"),
-                    );
-                };
-                let count_i = count_i as usize;
-                if (!seq.is_sequence() && !seq.is_associative())
-                    || seq.type_code() == VarType::TYPE_STR
+                // Validate sequence
+                if (!sequence.is_sequence() && !sequence.is_associative())
+                    || sequence.type_code() == VarType::TYPE_STR
                 {
-                    f.pop();
-                    f.pop();
-
                     f.jump(&operand.end_label);
                     return ExecutionResult::RaiseError(
                         E_TYPE.msg("invalid sequence type in for loop"),
                     );
-                };
+                }
 
-                let Ok(list_len) = seq.len() else {
+                let Ok(list_len) = sequence.len() else {
                     return ExecutionResult::RaiseError(
                         E_TYPE.msg("invalid sequence length in for loop"),
                     );
                 };
 
-                // If we've exhausted the list, pop the count and list and jump out.
-                if count_i >= list_len {
-                    f.pop();
-                    f.pop();
-
+                // If sequence is empty, jump to end immediately
+                if list_len == 0 {
                     f.jump(&operand.end_label);
                     continue;
                 }
 
-                // Track iteration count for range; set id to current list element for the count,
-                // then increment the count, rewind the program counter to the top of the loop, and
-                // continue.
-                let k_v = match seq.type_class() {
+                // Create ForSequence scope with initial state
+                f.push_for_sequence_scope(
+                    sequence,
+                    operand.value_bind,
+                    operand.key_bind,
+                    &operand.end_label,
+                    operand.environment_width,
+                );
+            }
+            Op::IterateForSequence => {
+                // Get ForSequence scope or error early
+                let Some(ScopeType::ForSequence {
+                    sequence,
+                    current_index,
+                    value_bind,
+                    key_bind,
+                    end_label,
+                }) = f.get_for_sequence_scope_mut() else {
+                    return ExecutionResult::RaiseError(
+                        E_ARGS.msg("IterateForSequence without ForSequence scope"),
+                    );
+                };
+
+                let Ok(list_len) = sequence.len() else {
+                    return ExecutionResult::RaiseError(
+                        E_TYPE.msg("invalid sequence length in for loop"),
+                    );
+                };
+
+                // Check if we've exhausted the sequence
+                if *current_index >= list_len {
+                    let end_lbl = *end_label;
+                    f.jump(&end_lbl);
+                    continue;
+                }
+
+                // Get current element
+                let k_v = match sequence.type_class() {
                     TypeClass::Sequence(s) => s
-                        .index(count_i)
-                        .map(|v| (count.add(&v_int(1)).unwrap(), v.clone())),
-                    TypeClass::Associative(a) => a.index(count_i),
+                        .index(*current_index)
+                        .map(|v| (v_int(*current_index as i64 + 1), v.clone())),
+                    TypeClass::Associative(a) => a.index(*current_index),
                     TypeClass::Scalar => {
                         return ExecutionResult::RaiseError(
                             E_TYPE.msg("invalid sequence type in for loop"),
                         );
                     }
                 };
+
                 let k_v = match k_v {
                     Ok(k_v) => k_v,
                     Err(e) => {
-                        f.pop();
-                        f.pop();
-                        f.jump(&operand.end_label);
+                        let end_lbl = *end_label;
+                        f.jump(&end_lbl);
                         return ExecutionResult::RaiseError(e);
                     }
                 };
-                f.set_variable(&operand.value_bind, k_v.1);
-                if let Some(key_bind) = operand.key_bind {
-                    f.set_variable(&key_bind, k_v.0.clone());
+
+                // Extract values we need for variable setting
+                let value_bind = *value_bind;
+                let key_bind = *key_bind;
+
+                // Increment index for next iteration
+                *current_index += 1;
+
+                // Set loop variables (separate borrow)
+                f.set_variable(&value_bind, k_v.1);
+                if let Some(key_bind) = key_bind {
+                    f.set_variable(&key_bind, k_v.0);
                 }
-                f.poke(0, v_int((count_i + 1) as i64));
             }
-            Op::ForRange {
-                end_label,
-                id,
-                environment_width,
-            } => {
-                let (id, environment_width, end_label) = (*id, *environment_width, *end_label);
-                f.push_scope(ScopeType::For, environment_width, &end_label);
+            Op::BeginForRange { operand } => {
+                let operand_offset = *operand;
+                let operand = f.program.for_range_operand(operand_offset).clone();
 
-                // Pull the range ends off the stack.
-                let (from, next_val) = {
-                    let (to, from) = f.peek2();
+                // Pop end_value and start_value from stack (stack: [from, to])
+                let end_value = f.pop();
+                let start_value = f.pop();
 
-                    // TODO: Handling for MAXINT/MAXOBJ in various opcodes
-                    //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
-                    //   we also don't want to *crash* on obscene common, so impl that here.
-
-                    let next_val = match (to.variant(), from.variant()) {
-                        (Variant::Int(to_i), Variant::Int(from_i)) => {
-                            if from_i > to_i {
-                                f.pop();
-                                f.pop();
-                                f.jump(&end_label);
-
-                                continue;
-                            }
-                            v_int(from_i + 1)
-                        }
-                        (Variant::Obj(to_o), Variant::Obj(from_o)) => {
-                            if from_o > to_o {
-                                f.pop();
-                                f.pop();
-                                f.jump(&end_label);
-
-                                continue;
-                            }
-                            v_obj((*from_o).add(Obj::mk_id(1)))
-                        }
-                        (_, _) => {
-                            f.pop();
-                            f.pop();
-                            // Make sure we've jumped out of the loop before raising the error,
-                            // because in verbs that aren't `d' we could end up continuing on in
-                            // the loop (with a messed up stack) otherwise.
-                            f.jump(&end_label);
-
-                            return ExecutionResult::RaiseError(
-                                E_TYPE.msg("invalid range type in for loop"),
-                            );
-                        }
-                    };
-                    (from.clone(), next_val)
+                // Validate range values are integers or objects
+                let (start_val, end_val) = match (start_value.variant(), end_value.variant()) {
+                    (Variant::Int(start_i), Variant::Int(end_i)) => (*start_i, *end_i),
+                    (Variant::Obj(start_o), Variant::Obj(end_o)) => {
+                        (start_o.id().0 as i64, end_o.id().0 as i64)
+                    }
+                    (_, _) => {
+                        f.jump(&operand.end_label);
+                        return ExecutionResult::RaiseError(
+                            E_TYPE.msg("invalid range type in for loop"),
+                        );
+                    }
                 };
-                f.poke(1, next_val);
-                f.set_variable(&id, from);
+
+                // If start > end, jump to end immediately (empty range)
+                if start_val > end_val {
+                    f.jump(&operand.end_label);
+                    continue;
+                }
+
+                // Determine if this is an object range
+                let is_obj_range = matches!(start_value.variant(), Variant::Obj(_));
+
+                // Create ForRange scope with initial state
+                f.push_for_range_scope(
+                    start_val,
+                    end_val,
+                    operand.loop_variable,
+                    &operand.end_label,
+                    operand.environment_width,
+                    is_obj_range,
+                );
+            }
+            Op::IterateForRange => {
+                let Some(ScopeType::ForRange {
+                    current_value,
+                    end_value,
+                    loop_variable,
+                    end_label,
+                    is_obj_range,
+                }) = f.get_for_range_scope_mut()
+                else {
+                    return ExecutionResult::RaiseError(
+                        E_INVARG.msg("IterateForRange without ForRange scope"),
+                    );
+                };
+
+                // Check bounds and handle end condition
+                if *current_value > *end_value {
+                    let end_lbl = *end_label;
+                    f.jump(&end_lbl);
+                    continue;
+                }
+
+                // Extract values we need for variable setting
+                let current_val = *current_value;
+                let loop_var = *loop_variable;
+                let is_obj = *is_obj_range;
+
+                // Increment for next iteration
+                *current_value += 1;
+
+                // Set loop variable (separate borrow)
+                let var_value = if is_obj {
+                    v_obj(Obj::mk_id(current_val as i32))
+                } else {
+                    v_int(current_val)
+                };
+                f.set_variable(&loop_var, var_value);
             }
             Op::Pop => {
                 f.pop();

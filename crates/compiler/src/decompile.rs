@@ -25,7 +25,8 @@ use moor_var::program::DeclType;
 use moor_var::program::labels::{JumpLabel, Label, Offset};
 use moor_var::program::names::{Name, Variable};
 use moor_var::program::opcode::{
-    ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
+    ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend,
+    ScatterLabel,
 };
 use moor_var::program::program::Program;
 use moor_var::{Symbol, Var, v_int, v_none, v_obj, v_str};
@@ -260,25 +261,22 @@ impl Decompile {
                 };
                 arms.push(cond_arm);
             }
-            Op::ForSequence(offset) => {
-                let one = self.pop_expr()?;
-                let Expr::Value(v) = one else {
-                    return Err(MalformedProgram(
-                        "expected literal '0' in for loop".to_string(),
-                    ));
-                };
-                let Some(0) = v.as_integer() else {
-                    return Err(MalformedProgram(
-                        "expected literal '0' in for loop".to_string(),
-                    ));
-                };
+            Op::BeginForSequence { operand } => {
                 let list = self.pop_expr()?;
                 let ForSequenceOperand {
                     value_bind,
                     key_bind,
                     end_label: label,
                     environment_width,
-                } = self.program.for_sequence_operand(offset).clone();
+                } = self.program.for_sequence_operand(operand).clone();
+
+                // Next opcode should be IterateForSequence
+                let Op::IterateForSequence = self.next()? else {
+                    return Err(MalformedProgram(
+                        "expected IterateForSequence after BeginForSequence".to_string(),
+                    ));
+                };
+
                 let body = self.decompile_statements_until(&label)?;
                 let value_id = self.decompile_name(&value_bind)?;
                 let key_id = match key_bind {
@@ -297,15 +295,31 @@ impl Decompile {
                     line_num,
                 ));
             }
-            Op::ForRange {
-                id,
-                end_label,
-                environment_width,
-            } => {
+            Op::IterateForSequence => {
+                // This should have been handled by BeginForSequence
+                return Err(MalformedProgram(
+                    "IterateForSequence without preceding BeginForSequence".to_string(),
+                ));
+            }
+            Op::BeginForRange { operand } => {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
-                let body = self.decompile_statements_until(&end_label)?;
-                let id = self.decompile_name(&id)?;
+                let ForRangeOperand {
+                    loop_variable,
+                    end_label: label,
+                    environment_width,
+                } = self.program.for_range_operand(operand).clone();
+
+                // Next opcode should be IterateForRange
+                let Op::IterateForRange = self.next()? else {
+                    return Err(MalformedProgram(
+                        "expected IterateForRange after BeginForRange".to_string(),
+                    ));
+                };
+
+                let body = self.decompile_statements_until(&label)?;
+                let id = self.decompile_name(&loop_variable)?;
+
                 self.statements.push(Stmt::new(
                     StmtNode::ForRange {
                         id,
@@ -315,6 +329,12 @@ impl Decompile {
                         environment_width: environment_width as usize,
                     },
                     line_num,
+                ));
+            }
+            Op::IterateForRange => {
+                // This should have been handled by BeginForRange
+                return Err(MalformedProgram(
+                    "IterateForRange without preceding BeginForRange".to_string(),
                 ));
             }
             Op::While {

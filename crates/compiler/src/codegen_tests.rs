@@ -20,7 +20,9 @@ mod tests {
     use moor_var::Symbol;
     use moor_var::program::labels::{Label, Offset};
     use moor_var::program::opcode::Op::*;
-    use moor_var::program::opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel};
+    use moor_var::program::opcode::{
+        ForRangeOperand, ForSequenceOperand, ScatterArgs, ScatterLabel,
+    };
     use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj};
 
     #[test]
@@ -148,15 +150,15 @@ mod tests {
                 ListAddTail,
                 ImmInt(3),
                 ListAddTail,
-                ImmInt(0),
-                ForSequence(Offset(0)),
+                BeginForSequence { operand: Offset(0) },
+                IterateForSequence,
                 Push(x),
                 ImmInt(5),
                 Add,
                 Put(b),
                 Pop,
+                Jump { label: 1.into() },
                 EndScope { num_bindings: 0 },
-                Jump { label: 0.into() },
                 Done
             ]
         );
@@ -165,11 +167,11 @@ mod tests {
             &ForSequenceOperand {
                 value_bind: x,
                 key_bind: None,
-                end_label: 1.into(),
+                end_label: 0.into(),
                 environment_width: 0,
             }
         );
-        assert_eq!(binary.jump_label(Label(0)).position.0, 7);
+        assert_eq!(binary.jump_label(Label(0)).position.0, 15);
     }
 
     #[test]
@@ -198,21 +200,26 @@ mod tests {
             vec![
                 ImmInt(1),
                 ImmInt(5),
-                ForRange {
-                    id: n,
-                    end_label: 1.into(),
-                    environment_width: 0,
-                },
+                BeginForRange { operand: Offset(0) },
+                IterateForRange,
                 Push(player),
                 ImmSymbol(Symbol::mk("tell")),
                 Push(a),
                 MakeSingletonList,
                 CallVerb,
                 Pop,
+                Jump { label: 1.into() },
                 EndScope { num_bindings: 0 },
-                Jump { label: 0.into() },
                 Done
             ]
+        );
+        assert_eq!(
+            binary.for_range_operand(Offset(0)),
+            &ForRangeOperand {
+                loop_variable: n,
+                end_label: 0.into(),
+                environment_width: 0,
+            }
         );
     }
 

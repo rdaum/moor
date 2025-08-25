@@ -14,7 +14,7 @@
 use crate::program::labels::{JumpLabel, Label, Offset};
 use crate::program::names::{Name, Names};
 use crate::program::opcode::{
-    ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
+    ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
 };
 use crate::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, Symbol};
 use crate::{ErrorCode, Var};
@@ -44,6 +44,8 @@ pub struct PrgInner {
     pub scatter_tables: Vec<ScatterArgs>,
     /// Table of the operands for the ForSequence opcode.
     pub for_sequence_operands: Vec<ForSequenceOperand>,
+    /// Table of the operands for the ForRange opcode.
+    pub for_range_operands: Vec<ForRangeOperand>,
     /// Range comprehensions, referenced by the range comprehension opcode.
     pub range_comprehensions: Vec<RangeComprehend>,
     /// List comprehensions, referenced by the list comprehension opcode.
@@ -70,6 +72,7 @@ impl Program {
             var_names: Names::new(0),
             scatter_tables: vec![],
             for_sequence_operands: vec![],
+            for_range_operands: vec![],
             range_comprehensions: vec![],
             list_comprehensions: vec![],
             error_operands: vec![],
@@ -129,6 +132,10 @@ impl Program {
 
     pub fn for_sequence_operand(&self, offset: Offset) -> &ForSequenceOperand {
         &self.0.for_sequence_operands[offset.0 as usize]
+    }
+
+    pub fn for_range_operand(&self, offset: Offset) -> &ForRangeOperand {
+        &self.0.for_range_operands[offset.0 as usize]
     }
 
     pub fn range_comprehension(&self, offset: Offset) -> &RangeComprehend {
