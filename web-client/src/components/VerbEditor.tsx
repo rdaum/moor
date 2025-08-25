@@ -314,12 +314,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         });
         observer.observe(document.body, { attributes: true });
 
-        // Cleanup function
-        const cleanup = () => {
-            window.removeEventListener("storage", handleThemeChange);
-            observer.disconnect();
-        };
-
         // Cache for verb/property lookups to avoid repeated API calls
         const completionCache = new Map<
             string,
