@@ -190,7 +190,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/\bE_[A-Z_]+/, "constant.other"],
 
                     // Binary literals (base64-encoded)
-                    [/b"[A-Za-z0-9+\/=_-]*"/, "string.regexp"],
+                    [/b"[A-Za-z0-9+/=_-]*"/, "string.regexp"],
 
                     // Object references (#123, #-1)
                     [/#-?\d+/, "number.hex"],
@@ -205,15 +205,15 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/`[^']*'/, "string.escape"],
 
                     // Range end marker ($)
-                    [/\$(?=\s*[\]\})])/, "constant.numeric"],
+                    [/\$(?=\s*[\]})])/, "constant.numeric"],
 
                     // Strings
                     [/"([^"\\]|\\.)*$/, "string.invalid"],
                     [/"/, "string", "@string"],
 
                     // Numbers - floats first to avoid conflicts
-                    [/\d*\.\d+([eE][\-+]?\d+)?/, "number.float"],
-                    [/\d+[eE][\-+]?\d+/, "number.float"],
+                    [/\d*\.\d+([eE][-+]?\d+)?/, "number.float"],
+                    [/\d+[eE][-+]?\d+/, "number.float"],
                     [/\d+/, "number"],
 
                     // Operators - order matters, specific to general
@@ -225,7 +225,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/[<>]/, "operator.comparison"],
                     [/=/, "operator.assignment"],
                     [/!/, "operator.logical"],
-                    [/[+\-*\/%^]/, "operator.arithmetic"],
+                    [/[+\-*/%^]/, "operator.arithmetic"],
                     [/[?|]/, "operator.conditional"], // Ternary operators
                     [/:/, "keyword.operator"], // Verb call
                     [/\./, "operator.accessor"], // Property access
@@ -246,9 +246,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 ],
 
                 comment: [
-                    [/[^\/*]+/, "comment"],
+                    [/[^/*]+/, "comment"],
                     [/\*\//, "comment", "@pop"],
-                    [/[\/*]/, "comment"],
+                    [/[/*]/, "comment"],
                 ],
             },
         });
