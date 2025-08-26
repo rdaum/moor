@@ -167,9 +167,6 @@ impl Task {
         builtin_registry: &BuiltinRegistry,
         config: &FeaturesConfig,
     ) -> Option<(Box<Self>, Box<dyn WorldState>)> {
-        let perfc = sched_counters();
-        let _t = PerfTimerGuard::new(&perfc.vm_dispatch);
-
         // Call the VM
         let vm_exec_result = self.vm_host.exec_interpreter(
             self.task_id,
@@ -179,9 +176,6 @@ impl Task {
             builtin_registry,
             config,
         );
-        drop(_t);
-
-        let _t = PerfTimerGuard::new(&perfc.post_vm_dispatch);
 
         // Having done that, what should we now do?
         match vm_exec_result {

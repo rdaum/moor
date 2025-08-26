@@ -470,11 +470,8 @@ pub struct WorldStatePerf {
     pub tx_commit_send_working_set_phase: PerfCounter,
     pub tx_commit_wait_result_phase: PerfCounter,
 
-    pub relation_cache_check: PerfCounter,
-    pub relation_cache_miss: PerfCounter,
     pub provider_tuple_load: PerfCounter,
     pub provider_tuple_check: PerfCounter,
-    pub provider_tuple_miss: PerfCounter,
 }
 
 impl Default for WorldStatePerf {
@@ -537,12 +534,8 @@ impl WorldStatePerf {
             tx_commit_send_working_set_phase: PerfCounter::new("tx_commit_send_working_set_phase"),
             tx_commit_wait_result_phase: PerfCounter::new("tx_commit_wait_result_phase"),
 
-            relation_cache_check: PerfCounter::new("relation_cache_check"),
-            relation_cache_miss: PerfCounter::new("relation_cache_miss"),
-
             provider_tuple_load: PerfCounter::new("provider_tuple_load"),
             provider_tuple_check: PerfCounter::new("provider_tuple_check"),
-            provider_tuple_miss: PerfCounter::new("provider_tuple_miss"),
         }
     }
 
@@ -599,10 +592,7 @@ impl WorldStatePerf {
             &self.tx_commit_send_working_set_phase,
             &self.tx_commit_wait_result_phase,
             &self.provider_tuple_load,
-            &self.relation_cache_check,
-            &self.relation_cache_miss,
             &self.provider_tuple_check,
-            &self.provider_tuple_miss,
         ]
     }
 }

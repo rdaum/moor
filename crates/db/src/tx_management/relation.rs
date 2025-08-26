@@ -13,12 +13,10 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::db_counters;
 use crate::tx_management::indexes::{HashRelationIndex, RelationIndex};
 use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, Timestamp, Tx};
 use minstant::Instant;
-use moor_common::util::PerfTimerGuard;
 use moor_var::Symbol;
 use std::hash::Hash;
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
@@ -246,7 +244,6 @@ where
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         // First try with read lock
         {
-            let _t = PerfTimerGuard::new(&db_counters().relation_cache_check);
             let inner = self.index.read().unwrap();
             if let Some(entry) = inner.index_lookup(domain) {
                 return Ok(Some((entry.ts, entry.value.clone())));
@@ -254,7 +251,6 @@ where
         }
 
         // Not in cache, need write lock to potentially insert from backing store
-        let _t = PerfTimerGuard::new(&db_counters().relation_cache_miss);
         let mut inner = self.index.write().unwrap();
         // Double-check since another thread might have inserted while we waited for write lock
         if let Some(entry) = inner.index_lookup(domain) {
