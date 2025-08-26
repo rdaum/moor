@@ -554,6 +554,24 @@ impl WorldState for DbWorldState {
         initial_value: Option<Var>,
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.define_property);
+
+        // Check if trying to define a builtin property name
+        if pname == *NAME_SYM
+            || pname == *LOCATION_SYM
+            || pname == *CONTENTS_SYM
+            || pname == *OWNER_SYM
+            || pname == *PROGRAMMER_SYM
+            || pname == *WIZARD_SYM
+            || pname == *R_SYM
+            || pname == *W_SYM
+            || pname == *F_SYM
+            || pname == *PARENT_SYM
+            || pname == *CHILDREN_SYM
+            || pname == *ALIASES_SYM
+        {
+            return Err(WorldStateError::PropertyPermissionDenied);
+        }
+
         // Perms needs to be wizard, or have write permission on object *and* the owner in prop_flags
         // must be the perms
         let (flags, objowner) = (self.flags_of(location)?, self.owner_of(location)?);
