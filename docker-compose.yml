@@ -43,7 +43,7 @@ services:
         --workers-response-listen=tcp://0.0.0.0:7897 
         --workers-request-listen=tcp://0.0.0.0:7896 
         --import=/db/JHCore-DEV-2.db --import-format=textdump 
-        --export=export --export-format objdef 
+        --export=/db/export --export-format objdef 
         --checkpoint-interval-seconds=360
     ports:
       # ZMQ ports
