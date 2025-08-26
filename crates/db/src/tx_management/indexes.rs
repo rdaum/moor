@@ -124,7 +124,6 @@ where
         codomain: Codomain,
     ) -> Option<Entry<Codomain>> {
         // Update primary index
-
         self.entries.insert(
             domain.clone(),
             Entry {
@@ -238,14 +237,10 @@ where
         // Get old entry for secondary index cleanup
         let old_entry = self.inner.entries.get(&domain).cloned();
 
-        // Update primary index
-        let result = self.inner.entries.insert(
-            domain.clone(),
-            Entry {
-                ts,
-                value: codomain.clone(),
-            },
-        );
+        // Update primary index using inner's method (handles tombstones automatically)
+        let result = self
+            .inner
+            .insert_entry(ts, domain.clone(), codomain.clone());
 
         // Update secondary index
         if let Some(ref old) = old_entry {
@@ -258,16 +253,19 @@ where
         result
     }
 
-    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
-        // Get old entry (MUST happen before removal)
-        let old_entry = self.inner.entries.remove(&domain);
+    fn insert_tombstone(&mut self, ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
+        // Get old entry for secondary index cleanup
+        let old_entry = self.inner.entries.get(&domain).cloned();
+
+        // Update primary index using inner's method (handles tombstones automatically)
+        let result = self.inner.insert_tombstone(ts, domain.clone());
 
         // Clean up secondary index
         if let Some(ref old) = old_entry {
             self.remove_from_secondary(&old.value, &domain);
         }
 
-        old_entry
+        result
     }
 
     fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {

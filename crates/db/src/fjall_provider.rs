@@ -11,11 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::db_counters;
 use crate::tx_management::{Error, Provider, Timestamp};
 use byteview::ByteView;
 use fjall::UserValue;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
+use moor_common::util::PerfTimerGuard;
 use moor_var::AsByteBuffer;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64};
@@ -71,6 +73,9 @@ where
     kill_switch: Arc<AtomicBool>,
     /// Shared state tracking operations in-flight to background thread
     pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
+    /// Set of domains that have been checked and found to not exist (tombstones/misses)
+    /// This is shared across all transactions to avoid redundant database lookups
+    tombstones: Arc<RwLock<HashSet<Domain>>>,
     /// Atomic tracking of the highest completed barrier timestamp
     completed_barrier: Arc<AtomicU64>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
@@ -106,6 +111,7 @@ where
         let kill_switch = Arc::new(AtomicBool::new(false));
         let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain, Codomain>>();
         let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
+        let tombstones = Arc::new(RwLock::new(HashSet::new()));
         let completed_barrier = Arc::new(AtomicU64::new(0));
 
         let fj = fjall_partition.clone();
@@ -195,6 +201,7 @@ where
             ops: ops_tx,
             kill_switch,
             pending_ops,
+            tombstones,
             completed_barrier,
             jh: Arc::new(Mutex::new(Some(jh))),
         }
@@ -263,16 +270,23 @@ where
     }
 }
 
+const MAX_TOMBSTONE_COUNT: usize = 100_000;
+
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
     Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
-        // 1. Check pending operations first
+        let _t = PerfTimerGuard::new(&db_counters().provider_tuple_check);
+
+        // 1. Check both pending operations and tombstones together for consistency
         {
             let pending = self.pending_ops.read().map_err(|_| {
                 Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
+            })?;
+            let tombstones = self.tombstones.read().map_err(|_| {
+                Error::StorageFailure("Failed to acquire tombstones read lock".to_string())
             })?;
 
             // If pending delete, definitely doesn't exist
@@ -284,15 +298,32 @@ where
             if let Some((ts, value)) = pending.pending_writes.get(domain) {
                 return Ok(Some((*ts, value.clone())));
             }
+
+            // If tombstoned, we know it doesn't exist - no need to hit database
+            if tombstones.contains(domain) {
+                return Ok(None);
+            }
         }
 
-        // 2. Only then check backing store
+        // 2. Only hit backing store if not in pending ops or tombstones
+        let _t = PerfTimerGuard::new(&db_counters().provider_tuple_load);
         let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
         let Some(result) = self
             .fjall_partition
             .get(key)
             .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
+            // Database miss - add to tombstones to avoid future lookups
+            let mut tombstones = self.tombstones.write().map_err(|_| {
+                Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
+            })?;
+            tombstones.insert(domain.clone());
+
+            // If tombstones set gets too large, clear it to bound memory usage
+            if tombstones.len() > MAX_TOMBSTONE_COUNT {
+                tombstones.clear();
+            }
+
             return Ok(None);
         };
         let (ts, codomain) = decode::<Codomain>(result)?;
@@ -300,16 +331,22 @@ where
     }
 
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
-        // Add to pending writes immediately
+        // Add to pending writes and clear from tombstones immediately
         {
             let mut pending = self.pending_ops.write().map_err(|_| {
                 Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
             })?;
+            let mut tombstones = self.tombstones.write().map_err(|_| {
+                Error::StorageFailure("Failed to acquire tombstones write lock".to_string())
+            })?;
+
             pending
                 .pending_writes
                 .insert(domain.clone(), (timestamp, codomain.clone()));
             // Also remove from pending deletes if it was there (overwriting a deleted key)
             pending.pending_deletes.remove(domain);
+            // Remove from tombstones since this key now exists
+            tombstones.remove(domain);
         }
 
         // Send async operation
