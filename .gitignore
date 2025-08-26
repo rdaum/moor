@@ -1,7 +1,7 @@
 target/
 .target
 .vscode/
-.cargo
+.cargo/
 
 /.idea/.gitignore
 /.idea/modules.xml
@@ -9,12 +9,16 @@ target/
 /.idea/vcs.xml
 /.idea
 
-connections.json
-development.db
-connections.db
-tasks.db
-textdumps
 *.pem
 .aider*
+perf.data
 
 mise.toml
+
+development-export/
+node_modules/
+dist/
+
+CLAUDE.md
+
+moor-data/
