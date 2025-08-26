@@ -2307,4 +2307,107 @@ mod tests {
             "Lambda should have empty captured environment since it doesn't reference outer_var"
         );
     }
+
+    #[test]
+    fn test_for_loop_continue_regression() {
+        // Test the failing continue case from looping.moot
+        let program = r#"x = {}; for i in ({1, 2, 3, 4, 5}); if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Should return {3, 4, 5} - only values >= 3 should be added to x
+        assert_eq!(result, Ok(v_list(&[v_int(3), v_int(4), v_int(5)])));
+    }
+
+    #[test]
+    fn test_for_range_continue_regression() {
+        // Test continue in for-range loops
+        let program = r#"x = {}; for i in [1..5]; if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Should return {3, 4, 5} - only values >= 3 should be added to x
+        assert_eq!(result, Ok(v_list(&[v_int(3), v_int(4), v_int(5)])));
+    }
+
+    #[test]
+    fn test_nested_loop_unlabeled_continue() {
+        // Test that unlabeled continue works in nested loops (should continue inner loop)
+        let program = r#"
+            result = {};
+            for x in [1..2]
+                for y in [5..6]
+                    if (y == 6)
+                        continue; // Should continue the inner y loop
+                    endif
+                    result = {@result, @{x, y}};
+                endfor
+                result = {@result, 999}; // This should NOT be skipped for unlabeled continue
+            endfor
+            return result;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Unlabeled continue should only skip {x,6} but still add 999 markers
+        let expected = v_list(&[
+            v_int(1),
+            v_int(5),
+            v_int(999),
+            v_int(2),
+            v_int(5),
+            v_int(999),
+        ]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_nested_loop_labeled_continue() {
+        // Test nested loops with labeled continue to outer loop
+        let program = r#"
+            result = {};
+            for x in [1..2]
+                for y in [5..6]
+                    if (y == 6)
+                        continue x;
+                    endif
+                    result = {@result, @{x, y}};
+                endfor
+                result = {@result, 999}; // This should be skipped when we continue x
+            endfor
+            return result;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // When y == 6, we continue x, so we should skip adding {x,6} and the 999
+        // Expected: for x=1: {1,5}; for x=2: {2,5}
+        // The 999 markers should be skipped due to continue x
+        let expected = v_list(&[v_int(1), v_int(5), v_int(2), v_int(5)]);
+        assert_eq!(result, Ok(expected));
+    }
 }

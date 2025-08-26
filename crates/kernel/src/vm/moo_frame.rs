@@ -106,6 +106,7 @@ pub(crate) enum ScopeType {
 pub(crate) struct Scope {
     pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
+    pub(crate) start_pos: usize,
     pub(crate) end_pos: usize,
     /// True if this scope has a variable environment.
     pub(crate) environment: bool,
@@ -260,11 +261,14 @@ impl MooStackFrame {
         let label = &self.program.jump_label(*label_id);
 
         self.pc = label.position.0 as usize;
-        // Pop all scopes until we find one whose end_pos is > our jump point
+        // Pop all scopes that the jump target is outside of
         while let Some(scope) = self.scope_stack.last() {
-            if scope.end_pos > self.pc {
+            // If jump target is within the scope range, keep the scope
+            if self.pc >= scope.start_pos && self.pc < scope.end_pos {
                 break;
             }
+
+            // Jump target is outside scope range - pop it
             self.pop_scope();
         }
     }
@@ -272,9 +276,11 @@ impl MooStackFrame {
     /// Enter a new lexical scope and/or try/catch handling block.
     pub fn push_scope(&mut self, scope: ScopeType, scope_width: u16, end_label: &Label) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let start_pos = self.pc;
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),
+            start_pos,
             end_pos,
             environment: true,
         });
@@ -286,9 +292,11 @@ impl MooStackFrame {
     /// The scope is just used for unwinding to the catch handler purposes.
     pub fn push_non_var_scope(&mut self, scope: ScopeType, end_label: &Label) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let start_pos = self.pc;
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),
+            start_pos,
             end_pos,
             environment: false,
         });
@@ -313,6 +321,7 @@ impl MooStackFrame {
         environment_width: u16,
     ) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let start_pos = self.pc;
         let scope_type = ScopeType::ForSequence {
             sequence,
             current_index: 0,
@@ -323,6 +332,7 @@ impl MooStackFrame {
         self.scope_stack.push(Scope {
             scope_type,
             valstack_pos: self.valstack.len(),
+            start_pos,
             end_pos,
             environment: true,
         });
@@ -352,6 +362,7 @@ impl MooStackFrame {
         is_obj_range: bool,
     ) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        let start_pos = self.pc;
         let scope_type = ScopeType::ForRange {
             current_value: start_value,
             end_value,
@@ -362,6 +373,7 @@ impl MooStackFrame {
         self.scope_stack.push(Scope {
             scope_type,
             valstack_pos: self.valstack.len(),
+            start_pos,
             end_pos,
             environment: true,
         });

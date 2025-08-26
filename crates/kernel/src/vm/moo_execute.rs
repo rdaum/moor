@@ -253,7 +253,8 @@ pub fn moo_frame_execute(
                     value_bind,
                     key_bind,
                     end_label,
-                }) = f.get_for_sequence_scope_mut() else {
+                }) = f.get_for_sequence_scope_mut()
+                else {
                     return ExecutionResult::RaiseError(
                         E_ARGS.msg("IterateForSequence without ForSequence scope"),
                     );

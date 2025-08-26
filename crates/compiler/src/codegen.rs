@@ -1169,9 +1169,11 @@ impl CodegenState {
                 })
             }
             StmtNode::Continue { exit: Some(l) } => {
-                let l = self.find_name(l);
-                let l = self.find_loop(&l).expect("invalid loop for break/continue");
-                self.emit(Op::ExitId(l.top_label));
+                let loop_name = self.find_name(l);
+                let loop_info = self
+                    .find_loop(&loop_name)
+                    .expect("invalid loop for break/continue");
+                self.emit(Op::ExitId(loop_info.top_label));
             }
             StmtNode::Expr(e) => {
                 self.generate_expr(e)?;
