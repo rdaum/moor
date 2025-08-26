@@ -313,22 +313,15 @@ pub fn moo_frame_execute(
                 let operand = f.program.for_range_operand(operand_offset).clone();
 
                 // Pop end_value and start_value from stack (stack: [from, to])
-                let end_value = f.pop();
-                let start_value = f.pop();
+                let end_val = f.pop();
+                let start_val = f.pop();
 
                 // Validate range values are integers or objects
-                let (start_val, end_val) = match (start_value.variant(), end_value.variant()) {
-                    (Variant::Int(start_i), Variant::Int(end_i)) => (*start_i, *end_i),
-                    (Variant::Obj(start_o), Variant::Obj(end_o)) => {
-                        (start_o.id().0 as i64, end_o.id().0 as i64)
-                    }
-                    (_, _) => {
-                        f.jump(&operand.end_label);
-                        return ExecutionResult::RaiseError(
-                            E_TYPE.msg("invalid range type in for loop"),
-                        );
-                    }
-                };
+                if !start_val.is_scalar() || !end_val.is_scalar() {
+                    return ExecutionResult::RaiseError(
+                        E_TYPE.msg("invalid range type in for loop"),
+                    );
+                }
 
                 // If start > end, jump to end immediately (empty range)
                 if start_val > end_val {
@@ -336,17 +329,13 @@ pub fn moo_frame_execute(
                     continue;
                 }
 
-                // Determine if this is an object range
-                let is_obj_range = matches!(start_value.variant(), Variant::Obj(_));
-
                 // Create ForRange scope with initial state
                 f.push_for_range_scope(
-                    start_val,
-                    end_val,
+                    &start_val,
+                    &end_val,
                     operand.loop_variable,
                     &operand.end_label,
                     operand.environment_width,
-                    is_obj_range,
                 );
             }
             Op::IterateForRange => {
@@ -355,7 +344,6 @@ pub fn moo_frame_execute(
                     end_value,
                     loop_variable,
                     end_label,
-                    is_obj_range,
                 }) = f.get_for_range_scope_mut()
                 else {
                     return ExecutionResult::RaiseError(
@@ -371,20 +359,13 @@ pub fn moo_frame_execute(
                 }
 
                 // Extract values we need for variable setting
-                let current_val = *current_value;
+                let current_val = current_value.clone();
                 let loop_var = *loop_variable;
-                let is_obj = *is_obj_range;
 
                 // Increment for next iteration
-                *current_value += 1;
+                *current_value = current_val.add(&v_int(1)).unwrap();
 
-                // Set loop variable (separate borrow)
-                let var_value = if is_obj {
-                    v_obj(Obj::mk_id(current_val as i32))
-                } else {
-                    v_int(current_val)
-                };
-                f.set_variable(&loop_var, var_value);
+                f.set_variable(&loop_var, current_val);
             }
             Op::Pop => {
                 f.pop();

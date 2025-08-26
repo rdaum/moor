@@ -88,11 +88,10 @@ pub(crate) enum ScopeType {
     },
     /// For-range iteration state stored in scope instead of on stack
     ForRange {
-        current_value: i64,
-        end_value: i64,
+        current_value: Var,
+        end_value: Var,
         loop_variable: moor_var::program::names::Name,
         end_label: moor_compiler::Label,
-        is_obj_range: bool,
     },
     Block,
     Comprehension,
@@ -354,21 +353,19 @@ impl MooStackFrame {
     /// Enter a ForRange scope that holds iteration state
     pub fn push_for_range_scope(
         &mut self,
-        start_value: i64,
-        end_value: i64,
+        start_value: &Var,
+        end_value: &Var,
         loop_variable: moor_var::program::names::Name,
         end_label: &moor_compiler::Label,
         environment_width: u16,
-        is_obj_range: bool,
     ) {
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
         let start_pos = self.pc;
         let scope_type = ScopeType::ForRange {
-            current_value: start_value,
-            end_value,
+            current_value: start_value.clone(),
+            end_value: end_value.clone(),
             loop_variable,
             end_label: *end_label,
-            is_obj_range,
         };
         self.scope_stack.push(Scope {
             scope_type,
