@@ -475,6 +475,13 @@ pub enum TaskControlMsg {
     RequestNewTransaction(oneshot::Sender<Result<Box<dyn WorldState>, SchedulerError>>),
 }
 
+impl TaskSchedulerClient {
+    /// Get the control sender for testing purposes
+    pub fn control_sender(&self) -> &Sender<(TaskId, TaskControlMsg)> {
+        &self.scheduler_sender
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// Measure size of TaskControlMsg

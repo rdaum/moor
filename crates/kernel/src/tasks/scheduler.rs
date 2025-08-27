@@ -12,6 +12,7 @@
 //
 
 use flume::{Receiver, Sender};
+use crate::transaction_context::TransactionGuard;
 use lazy_static::lazy_static;
 use minstant::Instant;
 use std::fs::File;
@@ -1539,13 +1540,15 @@ impl TaskQ {
                 }
             };
 
-            if !task.setup_task_start(control_sender, world_state.as_mut()) {
+            // Set up transaction context for task setup
+            let _tx_guard = TransactionGuard::new(world_state);
+            if !task.setup_task_start(control_sender) {
                 error!(task_id, "Could not setup task start");
                 return Err(SchedulerError::CouldNotStartTask);
             }
             task.retry_state = task.vm_host.snapshot_state();
 
-            match world_state.commit() {
+            match crate::transaction_context::commit_current_transaction() {
                 Ok(CommitResult::Success) => {}
                 // TODO: perform a retry here in a modest loop.
                 Ok(CommitResult::ConflictRetry) => {
@@ -1577,7 +1580,7 @@ impl TaskQ {
 
         let control_sender = control_sender.clone();
 
-        let mut world_state = match database.new_world_state() {
+        let world_state = match database.new_world_state() {
             Ok(ws) => ws,
             Err(e) => {
                 error!(error = ?e, "Could not start transaction for task due to DB error");
@@ -1585,9 +1588,14 @@ impl TaskQ {
             }
         };
         self.thread_pool.spawn(move || {
+            // Set up transaction context for this thread
+            let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
+            
             // Start the db transaction, which will initially be used to resolve the verb before the task
             // starts executing.
-            if !task.setup_task_start(&control_sender, world_state.as_mut()) {
+            let setup_success = task.setup_task_start(&control_sender);
+            
+            if !setup_success {
                 // Log level should be low here as this happens on every command if `do_command`
                 // is not found.
                 return;
@@ -1598,7 +1606,6 @@ impl TaskQ {
                 task,
                 &task_scheduler_client,
                 session,
-                world_state,
                 builtin_registry,
                 config,
             );
@@ -1656,11 +1663,13 @@ impl TaskQ {
         let control_sender = control_sender.clone();
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
+            // Set up transaction context for this thread
+            let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
+            
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 session,
-                world_state,
                 builtin_registry,
                 config,
             );
@@ -1755,12 +1764,14 @@ impl TaskQ {
         };
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
+            // Set up transaction context for this thread
+            let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
+            
             info!(?task.task_id, "Restarting retry task");
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
                 new_session,
-                world_state,
                 builtin_registry,
                 config,
             );

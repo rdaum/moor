@@ -18,11 +18,12 @@ use std::time::Duration;
 
 use moor_common::model::WorldState;
 use moor_compiler::Program;
-use moor_var::{List, SYSTEM_OBJECT};
+use moor_var::{E_INVIND, List, SYSTEM_OBJECT};
 use moor_var::{Obj, Var};
 use moor_var::{Symbol, v_obj};
 
 use crate::config::FeaturesConfig;
+use crate::transaction_context::TransactionGuard;
 use crate::vm::VMHostResponse;
 use crate::vm::VerbCall;
 use crate::vm::builtins::BuiltinRegistry;
@@ -34,12 +35,13 @@ use moor_common::tasks::Session;
 pub type ExecResult = Result<Var, Exception>;
 
 fn execute_fork(
-    world_state: &mut dyn WorldState,
     session: Arc<dyn Session>,
     builtins: &BuiltinRegistry,
     fork_request: crate::vm::Fork,
     task_id: usize,
 ) -> ExecResult {
+    // For testing, forks execute in the same transaction context as the parent
+    
     let (scs_tx, _scs_rx) = flume::unbounded();
     let task_scheduler_client =
         crate::tasks::task_scheduler_client::TaskSchedulerClient::new(task_id, scs_tx);
@@ -51,26 +53,23 @@ fn execute_fork(
 
     // Execute the forked task until completion
     loop {
-        match vm_host.exec_interpreter(
+        let exec_result = vm_host.exec_interpreter(
             task_id,
-            world_state,
             &task_scheduler_client,
             session.as_ref(),
             builtins,
             config.as_ref(),
-        ) {
+        );
+        match exec_result {
             VMHostResponse::ContinueOk => {
                 continue;
             }
             VMHostResponse::DispatchFork(nested_fork) => {
-                // Recursively handle nested forks
-                execute_fork(
-                    world_state,
-                    session.clone(),
-                    builtins,
-                    *nested_fork,
-                    task_id + 1,
-                )?;
+                // Execute nested fork - if it fails, propagate the error
+                let nested_result = execute_fork(session.clone(), builtins, *nested_fork, task_id + 1);
+                if let Err(nested_error) = nested_result {
+                    return Err(nested_error);
+                }
                 continue;
             }
             VMHostResponse::AbortLimit(a) => {
@@ -102,39 +101,46 @@ fn execute_fork(
 }
 
 fn execute<F>(
-    world_state: &mut dyn WorldState,
+    world_state: Box<dyn WorldState>,
     session: Arc<dyn Session>,
     builtins: BuiltinRegistry,
     fun: F,
 ) -> ExecResult
 where
-    F: FnOnce(&mut dyn WorldState, &mut VmHost),
+    F: FnOnce(&mut VmHost),
 {
     let (scs_tx, _scs_rx) = flume::unbounded();
     let task_scheduler_client =
         crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
     let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
 
-    fun(world_state, &mut vm_host);
+    let _tx_guard = TransactionGuard::new(world_state);
+
+    fun(&mut vm_host);
 
     let config = Arc::new(FeaturesConfig::default());
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        match vm_host.exec_interpreter(
+        let exec_result = vm_host.exec_interpreter(
             0,
-            world_state,
             &task_scheduler_client,
             session.as_ref(),
             &builtins,
             config.as_ref(),
-        ) {
+        );
+        match exec_result {
             VMHostResponse::ContinueOk => {
                 continue;
             }
             VMHostResponse::DispatchFork(f) => {
-                // Handle fork for testing purposes by executing sequentially
-                execute_fork(world_state, session.clone(), &builtins, *f, 1)?;
+                // For testing, execute the fork separately (sequentially) 
+                // If the fork fails, propagate the error to terminate main execution
+                let fork_result = execute_fork(session.clone(), &builtins, *f, 1);
+                if let Err(fork_error) = fork_result {
+                    return Err(fork_error);
+                }
+                // Continue main execution after successful fork dispatch
                 continue;
             }
             VMHostResponse::AbortLimit(a) => {
@@ -166,17 +172,19 @@ where
 }
 
 pub fn call_verb(
-    world_state: &mut dyn WorldState,
+    mut world_state: Box<dyn WorldState>,
     session: Arc<dyn Session>,
     builtins: BuiltinRegistry,
     verb_name: &str,
     args: List,
 ) -> ExecResult {
-    execute(world_state, session, builtins, |world_state, vm_host| {
-        let verb_name = Symbol::mk(verb_name);
-        let (program, verbdef) = world_state
-            .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
-            .unwrap();
+    // Set up the verb call before starting transaction context
+    let verb_name = Symbol::mk(verb_name);
+    let (program, verbdef) = world_state
+        .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
+        .unwrap();
+
+    execute(world_state, session, builtins, |vm_host| {
         vm_host.start_call_method_verb(
             0,
             &SYSTEM_OBJECT,
@@ -195,22 +203,21 @@ pub fn call_verb(
 }
 
 pub fn call_eval_builtin(
-    world_state: &mut dyn WorldState,
+    world_state: Box<dyn WorldState>,
     session: Arc<dyn Session>,
     builtins: BuiltinRegistry,
     player: Obj,
     program: Program,
 ) -> ExecResult {
-    execute(world_state, session, builtins, |world_state, vm_host| {
-        vm_host.start_eval(0, &player, program, world_state);
+    execute(world_state, session, builtins, |vm_host| {
+        vm_host.start_eval(0, &player, program);
     })
 }
 
 pub fn call_fork(
-    world_state: &mut dyn WorldState,
     session: Arc<dyn Session>,
     builtins: BuiltinRegistry,
     fork_request: crate::vm::Fork,
 ) -> ExecResult {
-    execute_fork(world_state, session, &builtins, fork_request, 0)
+    execute_fork(session, &builtins, fork_request, 0)
 }

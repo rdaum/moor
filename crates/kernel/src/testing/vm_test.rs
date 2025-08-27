@@ -130,7 +130,7 @@ mod tests {
         let mut state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -152,7 +152,7 @@ mod tests {
         let mut state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -183,7 +183,7 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -207,7 +207,7 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -242,7 +242,7 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -260,7 +260,7 @@ mod tests {
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -280,7 +280,7 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -316,7 +316,7 @@ mod tests {
         }
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -357,7 +357,7 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test_call_verb",
@@ -384,7 +384,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -400,7 +400,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -416,7 +416,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -432,7 +432,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -461,7 +461,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -489,7 +489,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -515,7 +515,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -543,7 +543,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             builtin_registry,
             "test",
@@ -563,7 +563,7 @@ mod tests {
         let builtin_registry = BuiltinRegistry::new();
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -582,7 +582,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -600,7 +600,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -620,7 +620,7 @@ mod tests {
         let builtin_registry = BuiltinRegistry::new();
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -660,7 +660,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -680,7 +680,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -697,7 +697,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -722,7 +722,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -748,7 +748,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -774,7 +774,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -804,7 +804,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -831,7 +831,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -855,7 +855,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -879,7 +879,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -905,7 +905,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -925,7 +925,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -947,7 +947,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             builtin_registry,
             "test",
@@ -1065,7 +1065,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1080,7 +1080,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1098,7 +1098,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1120,7 +1120,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1139,7 +1139,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1164,7 +1164,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1180,7 +1180,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1196,7 +1196,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1251,7 +1251,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1266,7 +1266,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1290,7 +1290,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1311,7 +1311,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1335,7 +1335,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1359,7 +1359,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1378,7 +1378,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1398,7 +1398,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1424,7 +1424,7 @@ mod tests {
 
         // First run the normal way to trigger the fork execution
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1482,7 +1482,7 @@ mod tests {
 
         // Test the first fork (should error on line 4)
         let result = call_verb(
-            state.as_mut(),
+            state,
             session.clone(),
             BuiltinRegistry::new(),
             "test",
@@ -1531,7 +1531,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1580,7 +1580,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1629,7 +1629,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1670,7 +1670,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1719,7 +1719,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1759,7 +1759,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1778,7 +1778,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1797,7 +1797,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1818,7 +1818,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1844,7 +1844,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1865,7 +1865,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1887,7 +1887,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1909,7 +1909,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1931,7 +1931,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1956,7 +1956,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1982,7 +1982,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2005,7 +2005,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2031,7 +2031,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2057,7 +2057,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2085,7 +2085,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2125,7 +2125,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2168,7 +2168,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2209,7 +2209,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2242,7 +2242,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2276,7 +2276,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2305,7 +2305,7 @@ mod tests {
         let mut state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2331,7 +2331,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2355,7 +2355,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2372,7 +2372,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2401,7 +2401,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -2438,7 +2438,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",

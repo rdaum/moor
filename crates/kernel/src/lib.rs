@@ -22,6 +22,7 @@ use std::marker::PhantomData;
 
 pub mod config;
 pub mod tasks;
+pub mod transaction_context;
 pub mod vm;
 
 pub mod testing;

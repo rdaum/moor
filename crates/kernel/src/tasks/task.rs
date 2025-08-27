@@ -26,6 +26,11 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
+use crate::transaction_context::{
+    with_current_transaction, with_current_transaction_mut, commit_current_transaction, 
+    rollback_current_transaction, replace_current_transaction, TransactionGuard
+};
+
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -124,10 +129,11 @@ impl Task {
         mut task: Box<Task>,
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
-        mut world_state: Box<dyn WorldState>,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) {
+        // Transaction context is already set up by the caller
+        
         // Try to pick a high thread priority for user tasks.
         gdt_cpus::set_thread_priority(gdt_cpus::ThreadPriority::AboveNormal).ok();
 
@@ -137,18 +143,20 @@ impl Task {
                 task_scheduler_client.abort_cancelled();
                 break;
             }
+            
             if let Some(continuation_task) = task.vm_dispatch(
                 task_scheduler_client,
                 session.as_ref(),
-                world_state,
                 &builtin_registry,
                 config.features.as_ref(),
             ) {
-                (task, world_state) = continuation_task;
+                task = continuation_task;
             } else {
                 break;
             }
         }
+        
+        // Transaction is automatically cleaned up by _tx_guard drop
     }
 
     /// Call out to the vm_host and ask it to execute the next instructions, and it will return
@@ -163,14 +171,12 @@ impl Task {
         mut self: Box<Self>,
         task_scheduler_client: &TaskSchedulerClient,
         session: &dyn Session,
-        mut world_state: Box<dyn WorldState>,
         builtin_registry: &BuiltinRegistry,
         config: &FeaturesConfig,
-    ) -> Option<(Box<Self>, Box<dyn WorldState>)> {
-        // Call the VM
+    ) -> Option<Box<Self>> {
+        // Call the VM using transaction context
         let vm_exec_result = self.vm_host.exec_interpreter(
             self.task_id,
-            world_state.as_mut(),
             task_scheduler_client,
             session,
             builtin_registry,
@@ -190,13 +196,13 @@ impl Task {
                     self.vm_host
                         .set_variable(&task_id_var, v_int(task_id as i64));
                 }
-                Some((self, world_state))
+                Some(self)
             }
             VMHostResponse::Suspend(delay) => {
                 // VMHost is now suspended for execution, and we'll be waiting for a Resume
-                let commit_result = world_state
-                    .commit()
+                let commit_result = commit_current_transaction()
                     .expect("Could not commit world state before suspend");
+                
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
                     session.rollback().unwrap();
@@ -217,7 +223,9 @@ impl Task {
                         Ok(new_world_state) => {
                             self.retry_state = self.vm_host.snapshot_state();
                             self.vm_host.resume_execution(v_int(0));
-                            return Some((self, new_world_state));
+                            // Set the new transaction (no active transaction after commit)
+                            replace_current_transaction(new_world_state);
+                            return Some(self);
                         }
                         Err(e) => {
                             error!(
@@ -245,9 +253,9 @@ impl Task {
                 // VMHost is now suspended for input, and we'll be waiting for a ResumeReceiveInput
 
                 // Attempt commit... See comments/notes on Suspend above.
-                let commit_result = world_state
-                    .commit()
+                let commit_result = commit_current_transaction()
                     .expect("Could not commit world state before suspend");
+                
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
                     return self.try_immediate_retry(
@@ -263,7 +271,7 @@ impl Task {
                 task_scheduler_client.request_input(self);
                 None
             }
-            VMHostResponse::ContinueOk => Some((self, world_state)),
+            VMHostResponse::ContinueOk => Some(self),
 
             VMHostResponse::CompleteSuccess(result) => {
                 // Special case: in case of return from $do_command @ top-level, we need to look at the results:
@@ -284,17 +292,19 @@ impl Task {
                             command: command.clone(),
                         };
 
-                        if let Err(e) =
-                            self.setup_start_parse_command(&player, &command, world_state.as_mut())
-                        {
+                        if let Err(e) = with_current_transaction_mut(|world_state| {
+                            self.setup_start_parse_command(&player, &command, world_state)
+                        }) {
                             task_scheduler_client.command_error(e);
                         }
-                        return Some((self, world_state));
+                        return Some(self);
                     }
                 }
 
-                let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
-                else {
+                let commit_result = commit_current_transaction()
+                    .expect("Could not attempt commit");
+                
+                let CommitResult::Success = commit_result else {
                     warn!("Conflict during commit before complete, asking scheduler to retry task");
                     return self.try_immediate_retry(
                         task_scheduler_client,
@@ -311,8 +321,7 @@ impl Task {
             VMHostResponse::CompleteAbort => {
                 error!(task_id = self.task_id, "Task aborted");
 
-                world_state
-                    .rollback()
+                rollback_current_transaction()
                     .expect("Could not rollback world state transaction");
 
                 self.vm_host.stop();
@@ -330,8 +339,10 @@ impl Task {
                 //   We may revisit this later and add a user-selectable mode for this, and
                 //   evaluate this behaviour generally.
 
-                let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
-                else {
+                let commit_result = commit_current_transaction()
+                    .expect("Could not attempt commit");
+                
+                let CommitResult::Success = commit_result else {
                     warn!(
                         "Conflict during commit before complete, asking scheduler to retry task ({})",
                         self.task_id
@@ -351,8 +362,7 @@ impl Task {
             }
             VMHostResponse::CompleteRollback(commit_session) => {
                 // Rollback the transaction
-                world_state
-                    .rollback()
+                rollback_current_transaction()
                     .expect("Could not rollback world state transaction");
 
                 // And then decide if we are going to rollback th session as well.
@@ -374,8 +384,7 @@ impl Task {
                 let line_number = self.vm_host.line_number();
 
                 self.vm_host.stop();
-                world_state
-                    .rollback()
+                rollback_current_transaction()
                     .expect("Could not rollback world state");
                 task_scheduler_client.abort_limits_reached(reason, this, verb_name, line_number);
                 None
@@ -384,8 +393,7 @@ impl Task {
                 warn!(task_id = self.task_id, "Task rollback requested, retrying");
 
                 self.vm_host.stop();
-                world_state
-                    .rollback()
+                rollback_current_transaction()
                     .expect("Could not rollback world state");
 
                 // Try immediate retry for rollback requests
@@ -401,12 +409,13 @@ impl Task {
         task_scheduler_client: &TaskSchedulerClient,
         session: &dyn Session,
         reason: &str,
-    ) -> Option<(Box<Self>, Box<dyn WorldState>)> {
+    ) -> Option<Box<Self>> {
         match task_scheduler_client.begin_new_transaction() {
             Ok(new_world_state) => {
                 // Immediate retry succeeded
                 self.vm_host.restore_state(&self.retry_state);
-                Some((self, new_world_state))
+                replace_current_transaction(new_world_state);
+                Some(self)
             }
             Err(e) => {
                 // Fall back to scheduler retry
@@ -425,7 +434,6 @@ impl Task {
     pub(crate) fn setup_task_start(
         &mut self,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
-        world_state: &mut dyn WorldState,
     ) -> bool {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.setup_task);
@@ -438,9 +446,9 @@ impl Task {
                 command,
             } => {
                 let (handler_object, player, command) = (*handler_object, *player, command.clone());
-                if let Err(e) =
+                if let Err(e) = with_current_transaction_mut(|world_state| {
                     self.start_command(&handler_object, &player, command.as_str(), world_state)
-                {
+                }) {
                     control_sender
                         .send((self.task_id, TaskControlMsg::TaskCommandError(e)))
                         .expect("Could not send start response");
@@ -480,11 +488,13 @@ impl Task {
                         return false;
                     }
                 };
-                match world_state.find_method_verb_on(
-                    &self.perms,
-                    &object_location,
-                    verb_call.verb_name,
-                ) {
+                match with_current_transaction(|world_state| {
+                    world_state.find_method_verb_on(
+                        &self.perms,
+                        &object_location,
+                        verb_call.verb_name,
+                    )
+                }) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         control_sender
                             .send((
@@ -522,7 +532,7 @@ impl Task {
             }
             TaskStart::StartEval { player, program } => {
                 self.vm_host
-                    .start_eval(self.task_id, player, program.clone(), world_state);
+                    .start_eval(self.task_id, player, program.clone());
             }
             TaskStart::StartDoCommand { .. } => {
                 panic!("StartDoCommand invocation should not happen on initial setup_task_start");
@@ -788,6 +798,8 @@ mod tests {
     use std::sync::atomic::AtomicBool;
 
     use flume::{Receiver, unbounded};
+    use crate::transaction_context::TransactionGuard;
+    
 
     use moor_common::model::{
         ArgSpec, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
@@ -888,7 +900,6 @@ mod tests {
             )
             .unwrap();
         }
-        task.setup_task_start(&control_sender, tx.as_mut());
 
         (
             kill_switch,
@@ -944,18 +955,21 @@ mod tests {
     /// the result back to the scheduler.
     #[test]
     fn test_simple_run_return() {
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("return 1 + 1;");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -969,18 +983,21 @@ mod tests {
     /// Trigger a MOO VM exception, and verify it gets sent to scheduler
     #[test]
     fn test_simple_run_exception() {
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("return 1 / 0;");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -994,18 +1011,21 @@ mod tests {
     // notify() will dispatch to the scheduler
     #[test]
     fn test_notify_invocation() {
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval(r#"notify(#0, "12345"); return 123;"#);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1029,18 +1049,21 @@ mod tests {
     /// Trigger a task-suspend-resume
     #[test]
     fn test_simple_run_suspend() {
-        let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("suspend(1); return 123;");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session.clone(),
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session.clone(),
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a TaskSuspend message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1054,14 +1077,16 @@ mod tests {
         resume_task.vm_host.resume_execution(v_int(0));
 
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(
-            resume_task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            Task::run_task_loop(
+                resume_task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
@@ -1073,18 +1098,21 @@ mod tests {
     /// Trigger a simulated read()
     #[test]
     fn test_simple_run_read() {
-        let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("return read();");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session.clone(),
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session.clone(),
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1099,14 +1127,16 @@ mod tests {
 
         // And run its task loop again, with a new transaction.
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(
-            resume_task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            Task::run_task_loop(
+                resume_task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1120,7 +1150,7 @@ mod tests {
     /// Trigger a task-fork
     #[test]
     fn test_simple_run_fork() {
-        let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("fork (1) return 1 + 1; endfork return 123;");
         tx.commit().unwrap();
 
@@ -1135,14 +1165,17 @@ mod tests {
         let jh = std::thread::spawn(move || {
             let tx = db.new_world_state().unwrap();
             let session = Arc::new(NoopClientSession::new());
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                tx,
-                BuiltinRegistry::new(),
-                Arc::new(Config::default()),
-            );
+            {
+                let _tx_guard = TransactionGuard::new(tx);
+                task.setup_task_start(task_scheduler_client.control_sender());
+                Task::run_task_loop(
+                    task,
+                    &task_scheduler_client,
+                    session,
+                    BuiltinRegistry::new(),
+                    Arc::new(Config::default()),
+                );
+            }
         });
 
         // Scheduler should have received a TaskRequestFork message.
@@ -1180,18 +1213,21 @@ mod tests {
     /// Verifies path through the command parser, and no match on verb
     #[test]
     fn test_command_no_match() {
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_command("look here", &[]);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // Scheduler should have received a NoCommandMatch
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1213,18 +1249,21 @@ mod tests {
                 iobj: ArgSpec::None,
             },
         };
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_command("look #0", &[look_this]);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1244,18 +1283,21 @@ mod tests {
             argspec: VerbArgsSpec::this_none_this(),
         };
 
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_command("look here", &[do_command_verb]);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1276,18 +1318,21 @@ mod tests {
             argspec: VerbArgsSpec::this_none_this(),
         };
 
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_command("look here", &[do_command_verb]);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1316,18 +1361,21 @@ mod tests {
                 iobj: ArgSpec::None,
             },
         };
-        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, mut task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_command("look #0", &[do_command_verb, look_this]);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(
-            task,
-            &task_scheduler_client,
-            session,
-            tx,
-            BuiltinRegistry::new(),
-            Arc::new(Config::default()),
-        );
+        {
+            let _tx_guard = TransactionGuard::new(tx);
+            task.setup_task_start(task_scheduler_client.control_sender());
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                BuiltinRegistry::new(),
+                Arc::new(Config::default()),
+            );
+        }
 
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();

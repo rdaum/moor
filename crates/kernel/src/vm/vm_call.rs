@@ -13,6 +13,7 @@
 
 use crate::config::FeaturesConfig;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::transaction_context::with_current_transaction_mut;
 use crate::vm::Fork;
 use crate::vm::VerbCall;
 use crate::vm::activation::{Activation, Frame};
@@ -25,7 +26,6 @@ use lazy_static::lazy_static;
 use minstant::Instant;
 use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
-use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::tasks::Session;
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
@@ -77,7 +77,6 @@ impl VMExecState {
     pub(crate) fn verb_dispatch(
         &mut self,
         exec_params: &VmExecParams,
-        world_state: &mut dyn WorldState,
         target: Var,
         verb: Symbol,
         args: List,
@@ -116,13 +115,12 @@ impl VMExecState {
                     }
                 };
                 let perms = self.top().permissions;
-                let prop_val =
+                let prop_val = with_current_transaction_mut(|world_state| {
                     match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
-                        Ok(prop_val) => prop_val,
-                        Err(e) => {
-                            return Err(e.to_error());
-                        }
-                    };
+                        Ok(prop_val) => Ok(prop_val),
+                        Err(e) => Err(e.to_error()),
+                    }
+                })?;
                 let Some(prop_val) = prop_val.as_object() else {
                     return Err(E_TYPE.with_msg(|| {
                         format!(
@@ -145,12 +143,11 @@ impl VMExecState {
                 (arguments.clone(), v_obj(prop_val), prop_val)
             }
         };
-        Ok(self.prepare_call_verb(world_state, location, this, verb, args))
+        Ok(self.prepare_call_verb(location, this, verb, args))
     }
 
     fn prepare_call_verb(
         &mut self,
-        world_state: &mut dyn WorldState,
         location: Obj,
         this: Var,
         verb_name: Symbol,
@@ -168,40 +165,44 @@ impl VMExecState {
             caller: self.caller(),
         });
 
-        let self_valid = world_state
-            .valid(&location)
-            .expect("Error checking object validity");
+        let self_valid = with_current_transaction_mut(|world_state| {
+            world_state.valid(&location)
+        })
+        .expect("Error checking object validity");
         if !self_valid {
             return self.push_error(
                 E_INVIND.with_msg(|| format!("Invalid object ({location}) for verb dispatch")),
             );
         }
         // Find the callable verb ...
-        let (program, resolved_verb) =
-            match world_state.find_method_verb_on(&self.top().permissions, &location, verb_name) {
-                Ok(vi) => vi,
-                Err(WorldStateError::ObjectPermissionDenied) => {
-                    return self.push_error(E_PERM.into());
-                }
-                Err(WorldStateError::RollbackRetry) => {
-                    return ExecutionResult::TaskRollbackRestart;
-                }
-                Err(WorldStateError::VerbPermissionDenied) => {
-                    return self.push_error(E_PERM.into());
-                }
-                Err(WorldStateError::VerbNotFound(_, _)) => {
-                    return self.push_error(E_VERBNF.with_msg(|| {
-                        format!(
-                            "Verb {}:{} not found",
-                            to_literal(&v_obj(location)),
-                            verb_name,
-                        )
-                    }));
-                }
-                Err(e) => {
-                    panic!("Unexpected error from find_method_verb_on: {e:?}")
-                }
-            };
+        let verb_result = with_current_transaction_mut(|world_state| {
+            world_state.find_method_verb_on(&self.top().permissions, &location, verb_name)
+        });
+        
+        let (program, resolved_verb) = match verb_result {
+            Ok(vi) => vi,
+            Err(WorldStateError::ObjectPermissionDenied) => {
+                return self.push_error(E_PERM.into());
+            }
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::TaskRollbackRestart;
+            }
+            Err(WorldStateError::VerbPermissionDenied) => {
+                return self.push_error(E_PERM.into());
+            }
+            Err(WorldStateError::VerbNotFound(_, _)) => {
+                return self.push_error(E_VERBNF.with_msg(|| {
+                    format!(
+                        "Verb {}:{} not found",
+                        to_literal(&v_obj(location)),
+                        verb_name,
+                    )
+                }));
+            }
+            Err(e) => {
+                panic!("Unexpected error from find_method_verb_on: {e:?}")
+            }
+        };
 
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
@@ -220,14 +221,16 @@ impl VMExecState {
     /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
     pub(crate) fn prepare_pass_verb(
         &mut self,
-        world_state: &mut dyn WorldState,
         args: &List,
     ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = &self.top().permissions;
 
-        let parent = match world_state.parent_of(permissions, &definer) {
+        let parent_result = with_current_transaction_mut(|world_state| {
+            world_state.parent_of(permissions, &definer)
+        });
+        let parent = match parent_result {
             Ok(parent) => parent,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
@@ -237,22 +240,25 @@ impl VMExecState {
         let verb = self.top().verb_name;
 
         // if `parent` is not a valid object, raise E_INVIND
-        if !world_state
-            .valid(&parent)
-            .expect("Error checking object validity")
-        {
+        let parent_valid = with_current_transaction_mut(|world_state| {
+            world_state.valid(&parent)
+        })
+        .expect("Error checking object validity");
+        if !parent_valid {
             return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
         }
 
         // call verb on parent, but with our current 'this'
-        let (program, resolved_verb) =
-            match world_state.find_method_verb_on(permissions, &parent, verb) {
-                Ok(vi) => vi,
-                Err(WorldStateError::RollbackRetry) => {
-                    return ExecutionResult::TaskRollbackRestart;
-                }
-                Err(e) => return self.raise_error(e.to_error()),
-            };
+        let verb_result = with_current_transaction_mut(|world_state| {
+            world_state.find_method_verb_on(permissions, &parent, verb)
+        });
+        let (program, resolved_verb) = match verb_result {
+            Ok(vi) => vi,
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::TaskRollbackRestart;
+            }
+            Err(e) => return self.raise_error(e.to_error()),
+        };
 
         let caller = self.caller();
         let call = VerbCall {
@@ -336,7 +342,6 @@ impl VMExecState {
         &mut self,
         bf_override_name: Symbol,
         args: &List,
-        world_state: &mut dyn WorldState,
     ) -> Option<ExecutionResult> {
         // Reject invocations of maybe-wrapper functions if the caller is #0.
         // This prevents recursion through them.
@@ -348,9 +353,9 @@ impl VMExecState {
         }
 
         // Look for it...
-        let (program, resolved_verb) = world_state
-            .find_method_verb_on(&self.top().permissions, &SYSTEM_OBJECT, bf_override_name)
-            .ok()?;
+        let (program, resolved_verb) = with_current_transaction_mut(|world_state| {
+            world_state.find_method_verb_on(&self.top().permissions, &SYSTEM_OBJECT, bf_override_name)
+        }).ok()?;
 
         let call = VerbCall {
             verb_name: bf_override_name,
@@ -379,7 +384,6 @@ impl VMExecState {
         bf_id: BuiltinId,
         args: List,
         exec_args: &VmExecParams,
-        world_state: &mut dyn WorldState,
         session: &dyn Session,
     ) -> ExecutionResult {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
@@ -390,7 +394,7 @@ impl VMExecState {
         // TODO: check for $server_options.protect_[func]
         // Check for builtin override at #0.
         if let Some(proxy_result) =
-            self.maybe_invoke_bf_proxy(bf_desc.bf_override_name, &args, world_state)
+            self.maybe_invoke_bf_proxy(bf_desc.bf_override_name, &args)
         {
             return proxy_result;
         }
@@ -406,24 +410,28 @@ impl VMExecState {
             flags,
             self.top().player,
         ));
-        let mut bf_args = BfCallState {
-            exec_state: self,
-            name: bf_name,
-            world_state,
-            session,
-            args: &args,
-            task_scheduler_client: exec_args.task_scheduler_client,
-            config: exec_args.config,
-        };
-        let bf_counters = bf_perf_counters();
-        bf_counters.counter_for(bf_id).invocations().add(1);
+        let result = with_current_transaction_mut(|world_state| {
+            let mut bf_args = BfCallState {
+                exec_state: self,
+                name: bf_name,
+                world_state,
+                session,
+                args: &args,
+                task_scheduler_client: exec_args.task_scheduler_client,
+                config: exec_args.config,
+            };
+            let bf_counters = bf_perf_counters();
+            bf_counters.counter_for(bf_id).invocations().add(1);
 
-        let result = bf(&mut bf_args);
-        let elapsed_nanos = start.elapsed().as_nanos();
-        bf_counters
-            .counter_for(bf_id)
-            .cumulative_duration_nanos()
-            .add(elapsed_nanos as isize);
+            let bf_result = bf(&mut bf_args);
+            let elapsed_nanos = start.elapsed().as_nanos();
+            bf_counters
+                .counter_for(bf_id)
+                .cumulative_duration_nanos()
+                .add(elapsed_nanos as isize);
+            bf_result
+        });
+        
         match result {
             Ok(BfRet::Ret(result)) => {
                 debug_assert_ne!(
@@ -446,7 +454,6 @@ impl VMExecState {
     pub(crate) fn reenter_builtin_function(
         &mut self,
         exec_args: &VmExecParams,
-        world_state: &mut dyn WorldState,
         session: &dyn Session,
     ) -> ExecutionResult {
         let start = Instant::now();
@@ -468,24 +475,28 @@ impl VMExecState {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let verb_name = self.top().verb_name;
         let args = self.top().args.clone();
-        let mut bf_args = BfCallState {
-            exec_state: self,
-            name: verb_name,
-            world_state,
-            session,
-            // TODO: avoid copy here by using List inside BfCallState
-            args: &args,
-            task_scheduler_client: exec_args.task_scheduler_client,
-            config: exec_args.config,
-        };
+        
+        let result = with_current_transaction_mut(|world_state| {
+            let mut bf_args = BfCallState {
+                exec_state: self,
+                name: verb_name,
+                world_state,
+                session,
+                // TODO: avoid copy here by using List inside BfCallState
+                args: &args,
+                task_scheduler_client: exec_args.task_scheduler_client,
+                config: exec_args.config,
+            };
 
-        let result = bf(&mut bf_args);
-        let elapsed_nanos = start.elapsed().as_nanos();
-        let bf_counters = bf_perf_counters();
-        bf_counters
-            .counter_for(bf_id)
-            .cumulative_duration_nanos()
-            .add(elapsed_nanos as isize);
+            let bf_result = bf(&mut bf_args);
+            let elapsed_nanos = start.elapsed().as_nanos();
+            let bf_counters = bf_perf_counters();
+            bf_counters
+                .counter_for(bf_id)
+                .cumulative_duration_nanos()
+                .add(elapsed_nanos as isize);
+            bf_result
+        });
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Ok(BfRet::RetNil) => self.unwind_stack(FinallyReason::Return(v_int(0))),

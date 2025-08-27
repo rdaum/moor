@@ -12,12 +12,12 @@
 //
 
 use crate::config::FeaturesConfig;
+use crate::transaction_context::with_current_transaction_mut;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::scatter_assign::scatter_assign;
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
-use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel, to_literal};
 use moor_var::program::names::Name;
 use moor_var::{
@@ -132,7 +132,6 @@ pub fn moo_frame_execute(
     tick_count: &mut usize,
     permissions: Obj,
     f: &mut MooStackFrame,
-    world_state: &mut dyn WorldState,
     features_config: &FeaturesConfig,
 ) -> ExecutionResult {
     // Special case for empty opcodes set, just return immediately.
@@ -724,7 +723,7 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                let value = get_property(world_state, &permissions, obj, propname, features_config);
+                let value = get_property(&permissions, obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
@@ -745,7 +744,7 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                let value = get_property(world_state, &permissions, obj, propname, features_config);
+                let value = get_property(&permissions, obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.push(v);
@@ -770,8 +769,9 @@ pub fn moo_frame_execute(
                         }),
                     );
                 };
-                let update_result =
-                    world_state.update_property(&permissions, &obj, propname, &rhs.clone());
+                let update_result = with_current_transaction_mut(|world_state| {
+                    world_state.update_property(&permissions, &obj, propname, &rhs.clone())
+                });
 
                 match update_result {
                     Ok(()) => {
@@ -1208,7 +1208,6 @@ pub fn moo_frame_execute(
 }
 
 fn get_property(
-    world_state: &mut dyn WorldState,
     permissions: &Obj,
     obj: &Var,
     propname: Symbol,
@@ -1216,7 +1215,9 @@ fn get_property(
 ) -> Result<Var, Error> {
     match obj.variant() {
         Variant::Obj(obj) => {
-            let result = world_state.retrieve_property(permissions, obj, propname);
+            let result = with_current_transaction_mut(|world_state| {
+                world_state.retrieve_property(permissions, obj, propname)
+            });
             match result {
                 Ok(v) => Ok(v),
                 Err(e) => Err(e.to_error()),
@@ -1249,7 +1250,9 @@ fn get_property(
             } else {
                 // Now check the delegate
                 let delegate = flyweight.delegate();
-                let result = world_state.retrieve_property(permissions, delegate, propname);
+                let result = with_current_transaction_mut(|world_state| {
+                    world_state.retrieve_property(permissions, delegate, propname)
+                });
                 match result {
                     Ok(v) => v,
                     Err(e) => return Err(e.to_error()),

@@ -34,6 +34,7 @@ use moor_var::{Symbol, v_none};
 
 use crate::PhantomUnsync;
 use crate::config::FeaturesConfig;
+use crate::transaction_context::with_current_transaction;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::FinallyReason;
 use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
@@ -237,13 +238,14 @@ impl VmHost {
         task_id: TaskId,
         player: &Obj,
         program: Program,
-        world_state: &dyn WorldState,
     ) {
-        let is_programmer = world_state
-            .flags_of(player)
-            .inspect_err(|e| error!(?e, "Failed to read player flags"))
-            .map(|flags| flags.contains(ObjFlag::Programmer))
-            .unwrap_or(false);
+        let is_programmer = with_current_transaction(|world_state| {
+            world_state
+                .flags_of(player)
+                .inspect_err(|e| error!(?e, "Failed to read player flags"))
+                .map(|flags| flags.contains(ObjFlag::Programmer))
+                .unwrap_or(false)
+        });
         let program = if is_programmer {
             program
         } else {
@@ -263,7 +265,6 @@ impl VmHost {
     pub fn exec_interpreter(
         &mut self,
         task_id: TaskId,
-        world_state: &mut dyn WorldState,
         task_scheduler_client: &TaskSchedulerClient,
         session: &dyn Session,
         builtin_registry: &BuiltinRegistry,
@@ -293,7 +294,7 @@ impl VmHost {
         self.vm_exec_state.tick_slice = self.max_ticks - self.vm_exec_state.tick_count;
 
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
-        let mut result = self.run_interpreter(&exec_params, world_state, session);
+        let mut result = self.run_interpreter(&exec_params, session);
         while self.is_running() {
             match result {
                 ExecutionResult::More => return ContinueOk,
@@ -318,7 +319,7 @@ impl VmHost {
                 ExecutionResult::DispatchVerbPass(pass_args) => {
                     result = self
                         .vm_exec_state
-                        .prepare_pass_verb(world_state, &pass_args);
+                        .prepare_pass_verb(&pass_args);
                     continue;
                 }
                 ExecutionResult::PrepareVerbDispatch {
@@ -328,7 +329,7 @@ impl VmHost {
                 } => {
                     result = self
                         .vm_exec_state
-                        .verb_dispatch(&exec_params, world_state, this, verb_name, args)
+                        .verb_dispatch(&exec_params, this, verb_name, args)
                         .unwrap_or_else(ExecutionResult::PushError);
                     continue;
                 }
@@ -362,7 +363,6 @@ impl VmHost {
                         bf_offset,
                         args,
                         &exec_params,
-                        world_state,
                         session,
                     );
                     continue;
@@ -374,7 +374,7 @@ impl VmHost {
                     // Handle lambda execution by pushing a new lambda activation
                     match self.vm_exec_state.exec_lambda_request(lambda, args) {
                         Ok(_) => {
-                            result = self.run_interpreter(&exec_params, world_state, session);
+                            result = self.run_interpreter(&exec_params, session);
                             continue;
                         }
                         Err(e) => {
@@ -439,7 +439,6 @@ impl VmHost {
     pub(crate) fn run_interpreter(
         &mut self,
         vm_exec_params: &VmExecParams,
-        world_state: &mut dyn WorldState,
         session: &dyn Session,
     ) -> ExecutionResult {
         // No activations? Nothing to do.
@@ -466,7 +465,6 @@ impl VmHost {
                     &mut tick_count,
                     activation.permissions,
                     fr,
-                    world_state,
                     vm_exec_params.config,
                 );
                 (result, tick_count)
@@ -474,7 +472,6 @@ impl VmHost {
             Frame::Bf(_) => {
                 let result = self.vm_exec_state.reenter_builtin_function(
                     vm_exec_params,
-                    world_state,
                     session,
                 );
                 (result, tick_count)
