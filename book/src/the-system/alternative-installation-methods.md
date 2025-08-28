@@ -8,7 +8,7 @@ For Debian-based systems (including Ubuntu), mooR provides pre-built packages th
 
 ### About Debian Packages
 
-The Debian packages are built from the `debian` directory in various mooR repositories and are available on the releases page of the mooR GitHub repository. These packages handle:
+The Debian packages are built from the `debian` directory in various mooR repositories and are available on the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases). These packages handle:
 
 - Installing binaries in standard system locations
 - Setting up system services and users
@@ -17,7 +17,7 @@ The Debian packages are built from the `debian` directory in various mooR reposi
 
 ### Installation Process
 
-1. **Download the packages** from the mooR GitHub releases page
+1. **Download the packages** from the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases)
 2. **Install using your package manager**:
    ```bash
    sudo dpkg -i moor-*.deb
@@ -54,7 +54,7 @@ source ~/.cargo/env
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/rdaum/moor.git
+   git clone https://codeberg.org/timbran/moor.git
    cd moor
    ```
 
@@ -107,7 +107,7 @@ Regardless of your installation method, you'll need to configure mooR's componen
 ## Getting Help
 
 For installation issues:
-- Check the mooR GitHub repository for the latest installation instructions
+- Check the mooR Codeberg repository for the latest installation instructions
 - Review the `docker-compose.yml` file for configuration examples
 - Consult the community forums or Discord for platform-specific guidance
 

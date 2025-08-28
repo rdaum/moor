@@ -48,5 +48,5 @@ Once you have mooR running, you'll need to:
 If you run into issues:
 - Check the specific installation guide for your chosen method
 - Review the server configuration documentation
-- Consult the mooR GitHub repository for troubleshooting tips
+- Consult the mooR Codeberg repository for troubleshooting tips
 - Ask the community for help in the forums or Discord

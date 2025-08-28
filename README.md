@@ -14,6 +14,10 @@ enhancements.
 
 📖 **For comprehensive documentation, see our [mooR Book](https://rdaum.github.io/moor/).**
 
+> **📦 Repository Migration Notice (August 2025):** We've recently moved our primary repository from
+> GitHub to [Codeberg](https://codeberg.org/timbran/moor). If you're viewing this on GitHub, please
+> consider switching to Codeberg for the latest updates, issue tracking, and contributions.
+
 ## What Makes MOOs Special
 
 MOOs offer a unique digital experience through:
@@ -44,6 +48,9 @@ world workloads, and lives through our cruel stress and performance testing regi
 
 Database formats and APIs may still change before the stable release, and we reserve the right to
 keep adding features right up until the last minute.
+
+**Repository**: The primary mooR repository is hosted on
+[Codeberg](https://codeberg.org/timbran/moor) with a mirror on GitHub.
 
 ## Key Features & Enhancements
 
@@ -102,6 +109,18 @@ Connect via:
 
 The server comes pre-loaded with JaysHouseCore, providing a ready-to-explore virtual world.
 
+### Alternative: Frontend Development Setup
+
+For frontend development and testing, you can run just the daemon and web client without Docker:
+
+```bash
+npm run full:dev
+```
+
+This starts the moor-daemon and web development server, accessible at
+[http://localhost:5173](http://localhost:5173). This setup excludes telnet but provides
+hot-reloading for frontend development.
+
 For more detailed setup instructions, see the
 [Docker Compose Setup](https://rdaum.github.io/moor/the-system/docker-compose-setup.html) section in
 the mooR Book.
@@ -131,11 +150,24 @@ mooR offers several opportunities for contribution:
 
 ### Getting Involved
 
-- **Issues**: Check our [GitHub Issues](https://github.com/rdaum/moor/issues) for current needs
+- **Issues**: Check our [Codeberg Issues](https://codeberg.org/timbran/moor/issues) for current
+  needs
 - **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
 - **Development**: See the [mooR Book](https://rdaum.github.io/moor/) for architecture details
 - **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with
   ongoing development
+
+## Bug Reports
+
+Found a bug or have a feature request? Please file an issue on our
+[Codeberg issue tracker](https://codeberg.org/timbran/moor/issues).
+
+When reporting bugs, please include:
+
+- Steps to reproduce the issue
+- Expected vs actual behavior
+- Your system information (OS, Docker version if applicable)
+- Relevant log output or error messages
 
 ## Resources
 

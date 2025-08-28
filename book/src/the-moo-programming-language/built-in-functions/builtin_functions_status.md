@@ -8,8 +8,8 @@ extensions added in mooR itself.)
 The table is broken down by category, and each function is marked with a checkmark if it is implemented.
 
 If there are any notes about the implementation, they will be included in the notes column. If you notice anything
-missing, or if you have any questions about the implementation, please feel free to open an issue on the [mooR GitHub
-repository issue tracker](http://www.github.com/rdaum/moor/issues).
+missing, or if you have any questions about the implementation, please feel free to open an issue on the [mooR Codeberg
+repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ## LambdaMOO 1.8 builtin function list and status
 

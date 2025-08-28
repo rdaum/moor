@@ -146,4 +146,4 @@ file.
 For more information about Docker Compose itself, see
 the [official Docker Compose documentation](https://docs.docker.com/compose/).
 
-For mooR-specific issues, check the project's GitHub repository or community forums.
+For mooR-specific issues, check the project's Codeberg repository or community forums.
