@@ -12,7 +12,8 @@ mooR is a modern, from-scratch rewrite of [LambdaMOO](https://en.wikipedia.org/w
 maintaining full compatibility with existing LambdaMOO 1.8.x databases while adding significant
 enhancements.
 
-📖 **For comprehensive documentation, see our [mooR Book](https://rdaum.github.io/moor/).**
+📖 **For comprehensive documentation, see our
+[mooR Book](https://timbran.codeberg.page/moor-book-html/).**
 
 > **📦 Repository Migration Notice (August 2025):** We've recently moved our primary repository from
 > GitHub to [Codeberg](https://codeberg.org/timbran/moor). If you're viewing this on GitHub, please
@@ -122,8 +123,8 @@ This starts the moor-daemon and web development server, accessible at
 hot-reloading for frontend development.
 
 For more detailed setup instructions, see the
-[Docker Compose Setup](https://rdaum.github.io/moor/the-system/docker-compose-setup.html) section in
-the mooR Book.
+[Docker Compose Setup](https://timbran.codeberg.page/moor-book-html/the-system/docker-compose-setup.html)
+section in the mooR Book.
 
 ## For Developers & Contributors
 
@@ -153,7 +154,8 @@ mooR offers several opportunities for contribution:
 - **Issues**: Check our [Codeberg Issues](https://codeberg.org/timbran/moor/issues) for current
   needs
 - **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
-- **Development**: See the [mooR Book](https://rdaum.github.io/moor/) for architecture details
+- **Development**: See the [mooR Book](https://timbran.codeberg.page/moor-book-html/) for
+  architecture details
 - **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with
   ongoing development
 
@@ -171,13 +173,15 @@ When reporting bugs, please include:
 
 ## Resources
 
-- 📖 **[Complete Documentation](https://rdaum.github.io/moor/)** - The comprehensive mooR Book
-- 🏗️ **[Server Architecture](https://rdaum.github.io/moor/moor-architecture.html)** - Technical
-  overview
+- 📖 **[Complete Documentation](https://timbran.codeberg.page/moor-book-html/)** - The comprehensive
+  mooR Book
+- 🏗️ **[Server Architecture](https://timbran.codeberg.page/moor-book-html/moor-architecture.html)** -
+  Technical overview
 - 💻
-  **[MOO Programming Language](https://rdaum.github.io/moor/the-moo-programming-language.html)** -
+  **[MOO Programming Language](https://timbran.codeberg.page/moor-book-html/the-moo-programming-language.html)** -
   Language reference
-- 🚀 **[Running a Server](https://rdaum.github.io/moor/the-system/running-the-server.html)** -
+- 🚀
+  **[Running a Server](https://timbran.codeberg.page/moor-book-html/the-system/running-the-server.html)** -
   Deployment guide
 
 ## License
