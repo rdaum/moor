@@ -1,18 +1,15 @@
 # Server Assumptions About the Database
 
-There are a small number of circumstances under which the server directly and specifically accesses a particular verb or
-property in the database. This section gives a complete list of such circumstances.
+There are a small number of circumstances under which the mooR server directly and specifically accesses a particular verb or
+property in the database. This section gives a complete list of such circumstances for the mooR server.
 
 ## Server Options Set in the Database
 
-Many optional behaviors of the server can be controlled from within the database by creating the property
+The mooR server can be controlled from within the database by creating the property
 `#0.server_options` (also known as `$server_options`), assigning as its value a valid object number, and then defining
-various properties on that object. At a number of times, the server checks for whether the property `$server_options`
-exists and has an object number as its value. If so, then the server looks for a variety of other properties on that
-`$server_options` object and, if they exist, uses their values to control how the server operates.
-
-The specific properties searched for are each described in the appropriate section below, but here is a brief list of
-all of the relevant properties for ease of reference:
+various properties on that object. The server checks for whether the property `$server_options`
+exists and has an object number as its value. If so, then the server looks for the following properties on that
+`$server_options` object and uses their values to control server operation:
 
 | Property        | Description                                                               |
 |-----------------|---------------------------------------------------------------------------|
@@ -21,9 +18,16 @@ all of the relevant properties for ease of reference:
 | fg_seconds      | The number of seconds allotted to foreground tasks.                      |
 | fg_ticks        | The number of ticks allotted to foreground tasks.                        |
 | max_stack_depth | The maximum number of levels of nested verb calls.                       |
-| dump_interval   | The interval in seconds for automatic database checkpoints.              |
 
-> Note: LambdaMOO and ToastStunt support `protect_*` properties (e.g., `protect_location`) for restricting access to built-in functions and properties. The mooR server does not implement this functionality.
+> **Note**: The mooR server does NOT implement the `protect_*` properties (e.g., `protect_location`) that were available in LambdaMOO and ToastStunt for restricting access to built-in functions and properties.
+
+## Other System Properties
+
+Some server options are read directly from system object `#0`, not from the `$server_options` object:
+
+| Property        | Location        | Description                                                               |
+|-----------------|-----------------|---------------------------------------------------------------------------|
+| dump_interval   | `#0.dump_interval` | The interval in seconds for automatic database checkpoints.           |
 
 ## Command-Line Overrides
 
@@ -36,54 +40,49 @@ Some server options can be overridden by command-line arguments when starting th
 
 ## Server Messages Set in the Database
 
-TODO: Most of these are not yet implemented for the mooR server, but will be in the future.
+> **Note**: The mooR server does NOT currently implement customizable server messages. The message customization system described below was available in LambdaMOO and ToastStunt but is not yet implemented in mooR.
 
-There are a number of circumstances under which the server itself generates messages on network connections. Most of
-these can be customized or even eliminated from within the database. In each such case, a property on `$server_options`
-is checked at the time the message would be printed. If the property does not exist, a default message is printed. If
-the property exists and its value is not a string or a list containing strings, then no message is printed at all.
-Otherwise, the string(s) are printed in place of the default message, one string per line. None of these messages are
-ever printed on an outbound network connection created by the function `open_network_connection()`.
+In LambdaMOO and ToastStunt, there were a number of circumstances under which the server itself generated customizable messages on network connections. Properties on `$server_options` could be used to customize these messages. The mooR server may implement this functionality in the future.
 
-The following list covers all of the customizable messages, showing for each the name of the relevant property on
-`$server_options`, the default message, and the circumstances under which the message is printed:
+For reference, the LambdaMOO/ToastStunt customizable messages were:
 
-| Default Message                                                                                                                  | Description                                                                                                                                                      |
-|----------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| boot_msg = &quot;*** Disconnected ***&quot;                                                                                      | The function boot_player() was called on this connection.                                                                                                        |
-| connect_msg = &quot;*** Connected ***&quot;                                                                                      | The user object that just logged in on this connection existed before $do_login_command() was called.                                                            |
-| create_msg = &quot;*** Created ***&quot;                                                                                         | The user object that just logged in on this connection did not exist before $do_login_command() was called.                                                      |
-| recycle_msg = &quot;*** Recycled ***&quot;                                                                                       | The logged-in user of this connection has been recycled or renumbered (via the renumber() function).                                                             |
-| redirect_from_msg = &quot;*** Redirecting connection to new port ***&quot;                                                       | The logged-in user of this connection has just logged in on some other connection.                                                                               |
-| redirect_to_msg = &quot;*** Redirecting old connection to this port ***&quot;                                                    | The user who just logged in on this connection was already logged in on some other connection.                                                                   |
-| server_full_msg Default: *** Sorry, but the server cannot accept any more connections right now.<br> *** Please try again later. | This connection arrived when the server really couldn&apos;t accept any more connections, due to running out of a critical operating system resource.            |
-| timeout_msg = &quot;*** Timed-out waiting for login. ***&quot;                                                                   | This in-bound network connection was idle and un-logged-in for too long and was disconnected. |
-
-> Fine point: If the network connection in question was received at a listening point (established by the `listen()`
-> function) handled by an object obj other than `#0`, then system messages for that connection are looked for on
-`obj.server_options`; if that property does not exist, then `$server_options` is used instead.
+| Property Name   | Default Message                     | Description                                                                  |
+|-----------------|-------------------------------------|------------------------------------------------------------------------------|
+| boot_msg        | "*** Disconnected ***"             | The function boot_player() was called on this connection.                   |
+| connect_msg     | "*** Connected ***"                 | User logged in (existing user object).                                      |
+| create_msg      | "*** Created ***"                   | User logged in (new user object created).                                   |
+| recycle_msg     | "*** Recycled ***"                  | The logged-in user of this connection has been recycled or renumbered.      |
+| redirect_from_msg | "*** Redirecting connection to new port ***" | User logged in on another connection.                      |
+| redirect_to_msg | "*** Redirecting old connection to this port ***" | User was already logged in elsewhere.                   |
+| server_full_msg | "*** Sorry, but the server cannot accept any more connections right now. ***" | Server cannot accept more connections. |
+| timeout_msg     | "*** Timed-out waiting for login. ***" | Connection idle and un-logged-in for too long.                          |
 
 ## Checkpointing (or backing up) the Database
 
-The server maintains the entire MOO database in main memory and on disk in a binary format. Restarting the server will
+The mooR server maintains the entire MOO database in main memory and on disk in a binary format. Restarting the server will
 always restore the system to the state it was in when the server was last run. However, this binary format is not
 human-readable, and can change between different versions of the server. Thus, it is important to periodically
 _checkpoint_ the database, which means writing a copy of the current state of the database to disk in a human-readable
 format.
 
-This can be done by the server automatically at regular intervals, and can also be done manually by the user.
+### Automatic Checkpointing
 
-There are two formats in which the server can write checkpoints: the _textdump_ format and the _objdef_ format. Both
-are human-readable text formats.
+The mooR server supports automatic checkpointing at regular intervals. The interval can be configured in two ways (in order of precedence):
 
-The textdump format is the "legacy" LambdaMOO-compatible format, and the format in which non-mooR "core" files or
-checkpoints are likely to have been written in. In the past this was the only format available, but it is now
-deprecated in favor of the objdef format.
+1. **Command-line**: Using `--checkpoint-interval-seconds` when starting the daemon
+2. **Database**: Setting `#0.dump_interval` to the number of seconds between checkpoints
 
-The objdef format is a directory oriented format that is more human-readable, and is structured such that each object
-is stored in its own file, with the object number (or $sysobj-style name). Attributes of the object, as well as its
-properties and verbs are listed inside the file in a readable and editable way. As such the objdef format is well-suited
-for use with version control systems such as git, can be effectively used with diff/merge tools, and is the default
-format
-for checkpoints in the mooR server.
+If neither is configured, automatic checkpointing is disabled.
+
+### Manual Checkpointing  
+
+Checkpoints can also be requested manually using the `dump_database()` built-in function.
+
+### Checkpoint Formats
+
+There are two formats in which the mooR server can write checkpoints:
+
+**Objdef Format** (default): A directory-oriented format where each object is stored in its own file. The file contains the object number (or $sysobj-style name) and lists the object's attributes, properties, and verbs in a readable and editable format. This format is well-suited for use with version control systems such as git and can be effectively used with diff/merge tools.
+
+**Textdump Format**: The "legacy" LambdaMOO-compatible format. Non-mooR "core" files or checkpoints are likely to have been written in this format. This format outputs a single large text file containing the entire database.
 

@@ -205,6 +205,7 @@ mod tests {
                 fg_seconds: 0,
                 fg_ticks: 0,
                 max_stack_depth: 0,
+                dump_interval: None,
             };
 
             let task = Task::new(
@@ -262,6 +263,7 @@ mod tests {
                 fg_seconds: 0,
                 fg_ticks: 0,
                 max_stack_depth: 0,
+                dump_interval: None,
             };
 
             let task = Task::new(
