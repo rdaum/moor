@@ -44,7 +44,6 @@ services:
         --workers-request-listen=tcp://0.0.0.0:7896 
         --import=/db/JHCore-DEV-2.db --import-format=textdump 
         --export=/db/export --export-format objdef 
-        --checkpoint-interval-seconds=360
     ports:
       # ZMQ ports
       - "7899:7899" # RPC listener
