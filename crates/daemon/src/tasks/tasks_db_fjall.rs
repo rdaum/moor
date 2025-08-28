@@ -146,6 +146,7 @@ mod tests {
             fg_seconds: 0,
             fg_ticks: 0,
             max_stack_depth: 0,
+            dump_interval: None,
         };
 
         /*
@@ -331,6 +332,7 @@ mod tests {
             fg_seconds: 0,
             fg_ticks: 0,
             max_stack_depth: 0,
+            dump_interval: None,
         };
 
         // Create tasks with various time-based wake conditions
@@ -438,6 +440,7 @@ mod tests {
             fg_seconds: 0,
             fg_ticks: 0,
             max_stack_depth: 0,
+            dump_interval: None,
         };
 
         let now = minstant::Instant::now();
@@ -507,6 +510,7 @@ mod tests {
             fg_seconds: 0,
             fg_ticks: 0,
             max_stack_depth: 0,
+            dump_interval: None,
         };
 
         // Create a task with a future wake time
