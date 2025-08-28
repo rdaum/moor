@@ -124,6 +124,8 @@ pub struct ServerOptions {
     pub fg_ticks: usize,
     /// The maximum number of levels of nested verb calls.
     pub max_stack_depth: usize,
+    /// The interval in seconds for automatic database checkpoints.
+    pub dump_interval: Option<u64>,
 }
 
 impl ServerOptions {

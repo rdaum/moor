@@ -160,7 +160,7 @@ impl Default for ImportExportConfig {
             input_path: None,
             output_path: None,
             output_encoding: EncodingMode::UTF8,
-            checkpoint_interval: Some(Duration::from_secs(60)),
+            checkpoint_interval: None,
             version_override: None,
             import_format: ImportExportFormat::Textdump,
             export_format: ImportExportFormat::Textdump,

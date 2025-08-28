@@ -31,7 +31,7 @@ use moor_common::tasks::Session;
 /// Handles requests for task submission, shutdown, etc.
 #[derive(Clone)]
 pub struct SchedulerClient {
-    scheduler_sender: Sender<SchedulerClientMsg>,
+    pub(crate) scheduler_sender: Sender<SchedulerClientMsg>,
 }
 
 impl SchedulerClient {

@@ -437,7 +437,7 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(
+    let mut scheduler = Scheduler::new(
         version,
         database,
         tasks_db,
@@ -450,24 +450,28 @@ fn main() -> Result<(), Report> {
         .client()
         .map_err(|e| eyre!("Failed to get scheduler client: {}", e))?;
 
-    // The scheduler thread:
-    let scheduler_rpc_server = rpc_server.clone();
-    let scheduler_loop_jh = std::thread::Builder::new()
-        .name("moor-scheduler".to_string())
-        .spawn(move || scheduler.run(scheduler_rpc_server))?;
+    // Background DB checkpoint thread
+    (|| -> Result<(), Report> {
+        let Some(output_path) = config.import_export.output_path.clone() else {
+            info!("Checkpointing disabled - no output path configured.");
+            return Ok(());
+        };
 
-    // Background DB checkpoint thread.
-    if let (Some(checkpoint_interval), Some(output_path)) = (
-        config.import_export.checkpoint_interval,
-        config.import_export.output_path.clone(),
-    ) {
+        let Some(checkpoint_interval) =
+            scheduler.get_checkpoint_interval(config.import_export.checkpoint_interval)
+        else {
+            info!("Checkpointing disabled - no interval configured.");
+            return Ok(());
+        };
+
         let checkpoint_kill_switch = kill_switch.clone();
         let checkpoint_scheduler_client = scheduler_client.clone();
         info!(
             "Checkpointing enabled to {}. Interval: {:?}",
-            output_path.as_path().display(),
+            output_path.display(),
             checkpoint_interval
         );
+
         std::thread::Builder::new()
             .name("moor-checkpoint".to_string())
             .spawn(move || {
@@ -482,9 +486,14 @@ fn main() -> Result<(), Report> {
                     std::thread::sleep(checkpoint_interval);
                 }
             })?;
-    } else {
-        info!("Checkpointing disabled.");
-    }
+        Ok(())
+    })()?;
+
+    // The scheduler thread:
+    let scheduler_rpc_server = rpc_server.clone();
+    let scheduler_loop_jh = std::thread::Builder::new()
+        .name("moor-scheduler".to_string())
+        .spawn(move || scheduler.run(scheduler_rpc_server))?;
 
     let rpc_loop_scheduler_client = scheduler_client.clone();
     let rpc_listen = args.rpc_listen.clone();

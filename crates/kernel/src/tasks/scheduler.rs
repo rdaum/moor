@@ -71,6 +71,7 @@ lazy_static! {
     static ref FG_SECONDS: Symbol = Symbol::mk("fg_seconds");
     static ref FG_TICKS: Symbol = Symbol::mk("fg_ticks");
     static ref MAX_STACK_DEPTH: Symbol = Symbol::mk("max_stack_depth");
+    static ref DUMP_INTERVAL: Symbol = Symbol::mk("dump_interval");
     static ref DO_OUT_OF_BAND_COMMAND: Symbol = Symbol::mk("do_out_of_band_command");
 }
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
@@ -139,6 +140,7 @@ impl Scheduler {
             fg_seconds: DEFAULT_FG_SECONDS,
             fg_ticks: DEFAULT_FG_TICKS,
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
+            dump_interval: None,
         };
         let builtin_registry = BuiltinRegistry::new();
 
@@ -285,6 +287,7 @@ impl Scheduler {
             tx.rollback().unwrap();
             return;
         };
+        info!("Found server options object: #{}", server_options_obj);
 
         if let Some(bg_seconds) = load_int_sysprop(&server_options_obj, *BG_SECONDS, tx.as_ref()) {
             so.bg_seconds = bg_seconds;
@@ -303,6 +306,15 @@ impl Scheduler {
         {
             so.max_stack_depth = max_stack_depth as usize;
         }
+        if let Some(dump_interval) = load_int_sysprop(&SYSTEM_OBJECT, *DUMP_INTERVAL, tx.as_ref()) {
+            info!(
+                "Loaded dump_interval from database: {} seconds",
+                dump_interval
+            );
+            so.dump_interval = Some(dump_interval);
+        } else {
+            info!("No dump_interval found on #0");
+        }
         tx.rollback().unwrap();
 
         self.server_options = so;
@@ -312,6 +324,32 @@ impl Scheduler {
 
     pub fn client(&self) -> Result<SchedulerClient, SchedulerError> {
         Ok(SchedulerClient::new(self.scheduler_sender.clone()))
+    }
+
+    pub fn get_checkpoint_interval(
+        &mut self,
+        cli_checkpoint_interval: Option<std::time::Duration>,
+    ) -> Option<std::time::Duration> {
+        // Reload server options to get fresh dump_interval from database
+        self.reload_server_options();
+
+        // Determine the checkpoint interval using the proper precedence:
+        // 1. Command-line config overrides all
+        // 2. Database dump_interval setting
+        // 3. Default disabled
+        if let Some(cli_interval) = cli_checkpoint_interval {
+            info!(
+                "Using checkpoint_interval from command-line config: {:?}",
+                cli_interval
+            );
+            Some(cli_interval)
+        } else if let Some(db_secs) = self.server_options.dump_interval {
+            let db_interval = std::time::Duration::from_secs(db_secs);
+            info!("Using dump_interval from database: {:?}", db_interval);
+            Some(db_interval)
+        } else {
+            None
+        }
     }
 }
 
