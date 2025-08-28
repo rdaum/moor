@@ -210,6 +210,12 @@ impl CodegenState {
     }
 
     fn pop_stack(&mut self, n: usize) {
+        if self.cur_stack < n {
+            panic!(
+                "Stack underflow: trying to pop {} items but stack only has {} items",
+                n, self.cur_stack
+            );
+        }
         self.cur_stack -= n;
     }
 
@@ -964,6 +970,7 @@ impl CodegenState {
 
                 // Emit BeginForRange to pop stack values and create scope
                 self.emit(Op::BeginForRange { operand: offset });
+                self.pop_stack(2); // BeginForRange pops the from and to values
 
                 // Loop top: IterateForRange checks bounds and sets loop variable
                 let loop_top = self.make_jump_label(Some(self.find_name(id)));
@@ -975,7 +982,7 @@ impl CodegenState {
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
-                    bottom_stack: (self.cur_stack - 2).into(),
+                    bottom_stack: self.cur_stack.into(),
                 });
 
                 // Generate loop body
@@ -991,7 +998,6 @@ impl CodegenState {
                     num_bindings: *environment_width as u16,
                 });
                 self.commit_jump_label(end_label);
-                self.pop_stack(2);
                 self.loops.pop();
             }
             StmtNode::While {

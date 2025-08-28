@@ -1205,6 +1205,46 @@ mod tests {
         assert_eq!(result.unwrap(), v_str("another_seq"));
     }
 
+    /// Regression test for issue #482 - ForRange with $ operator crashes
+    #[test]
+    fn test_for_range_length_dollar_regression() {
+        let program = r#"
+            for i in [1..3]
+                return "hello"[1..$];
+            endfor
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_str("hello"));
+    }
+
+    /// Regression test for issue #482 - ForSequence with $ operator crashes  
+    #[test]
+    fn test_for_sequence_length_dollar_regression() {
+        let program = r#"
+            for i in ({"a", "b", "c"})
+                return "hello"[1..$];
+            endfor
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_str("hello"));
+    }
+
     #[test]
     fn test_for_range_comprehension() {
         let program = r#"return { x * 2 for x in [1..3] };"#;
