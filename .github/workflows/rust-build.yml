@@ -9,47 +9,45 @@ env:
 jobs:
   build_default_linux:
     runs-on: ubuntu-latest
+    container: rust:1.88
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
-      - name: Install Rust 1.88
-        run: rustup update 1.88.0	  
       - name: Build
-        run: cargo +1.88.0 build --verbose
+        run: cargo build --verbose
       - name: Run tests
-        run: cargo +1.88.0 test --verbose
+        run: cargo test --verbose
   build_all_linux:
     runs-on: ubuntu-latest
+    container: rust:1.88
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
-      - name: Install Rust 1.88
-        run: rustup update 1.88.0	  
       - name: Build
-        run: cargo +1.88.0 build --verbose --all-features --all-targets
+        run: cargo build --verbose --all-features --all-targets
       - name: Run tests
-        run: cargo +1.88.0 test --verbose --all-features --all-targets
+        run: cargo test --verbose --all-features --all-targets
 
   build_default_macos:
     runs-on: macos-latest
+    container: rust:1.88
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
-      - name: Install Rust 1.88
-        run: rustup update 1.88.0	  
       - name: Build
-        run: cargo +1.88.0 build --verbose --all-features --all-targets
+        run: cargo build --verbose --all-features --all-targets
       - name: Run tests
-        run: cargo +1.88.0 test --verbose --all-features --all-targets
+        run: cargo test --verbose --all-features --all-targets
 
   clippy_check:
     runs-on: ubuntu-latest
+    container: rust:1.88
     steps:
       - uses: actions/checkout@v4
       - name: Install clippy
-        run: rustup +1.88.0 component add clippy
+        run: rustup component add clippy
       - name: Run Clippy
-        run: cargo +1.88.0 clippy --all-targets --all-features
+        run: cargo clippy --all-targets --all-features
