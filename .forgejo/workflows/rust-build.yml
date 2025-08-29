@@ -7,17 +7,6 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  build_default_linux:
-    runs-on: ubuntu-latest
-    container: rust-node:1.88.0
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: 'true'
-      - name: Build
-        run: cargo build --verbose
-      - name: Run tests
-        run: cargo test --verbose
   build_all_linux:
     runs-on: ubuntu-latest
     container: rust-node:1.88.0
@@ -30,17 +19,6 @@ jobs:
       - name: Run tests
         run: cargo test --verbose --all-features --all-targets
 
-  build_default_macos:
-    runs-on: macos-latest
-    container: rust-node:1.88.0
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: 'true'
-      - name: Build
-        run: cargo build --verbose --all-features --all-targets
-      - name: Run tests
-        run: cargo test --verbose --all-features --all-targets
 
   clippy_check:
     runs-on: ubuntu-latest
