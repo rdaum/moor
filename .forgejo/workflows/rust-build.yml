@@ -1,0 +1,31 @@
+name: Rust
+
+on: [ push, pull_request ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  build_all_linux:
+    runs-on: ubuntu-latest
+    container: rust-node:1.88.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Build
+        run: cargo build --verbose --all-features --all-targets
+      - name: Run tests
+        run: cargo test --verbose --all-features --all-targets
+
+
+  clippy_check:
+    runs-on: ubuntu-latest
+    container: rust-node:1.88.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clippy
+        run: rustup component add clippy
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features

@@ -10,6 +10,7 @@ env:
 jobs:
   check_license:
     runs-on: ubuntu-latest
+    container: rust-node:1.88.0
     steps:
       - uses: actions/checkout@v4
       - name: Install licensure
