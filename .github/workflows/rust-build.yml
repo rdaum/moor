@@ -9,7 +9,7 @@ env:
 jobs:
   build_default_linux:
     runs-on: ubuntu-latest
-    container: rust:1.88
+    container: rust-node:1.88.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,7 +20,7 @@ jobs:
         run: cargo test --verbose
   build_all_linux:
     runs-on: ubuntu-latest
-    container: rust:1.88
+    container: rust-node:1.88.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +32,7 @@ jobs:
 
   build_default_macos:
     runs-on: macos-latest
-    container: rust:1.88
+    container: rust-node:1.88.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,7 +44,7 @@ jobs:
 
   clippy_check:
     runs-on: ubuntu-latest
-    container: rust:1.88
+    container: rust-node:1.88.0
     steps:
       - uses: actions/checkout@v4
       - name: Install clippy
