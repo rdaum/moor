@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use flume::{Receiver, Sender};
 use crate::transaction_context::TransactionGuard;
+use flume::{Receiver, Sender};
 use lazy_static::lazy_static;
 use minstant::Instant;
 use std::fs::File;
@@ -1129,7 +1129,7 @@ impl Scheduler {
                 target_object,
                 constants,
             )
-            .map_err(|e| moor_var::E_INVARG.with_msg(|| format!("Failed to load object: {}", e)))?;
+            .map_err(|e| moor_var::E_INVARG.with_msg(|| format!("Failed to load object: {e}")))?;
 
         // Commit the changes
         loader_client.commit().map_err(|e| {
@@ -1574,7 +1574,7 @@ impl TaskQ {
         if let Some(delay) = delay_start {
             // However we'll need the task to be in a resumable state, which means executing
             //  setup_task_start in a transaction.
-            let mut world_state = match database.new_world_state() {
+            let world_state = match database.new_world_state() {
                 Ok(ws) => ws,
                 Err(e) => {
                     error!(error = ?e, "Could not start transaction for delayed task");
@@ -1632,11 +1632,11 @@ impl TaskQ {
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
             let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
-            
+
             // Start the db transaction, which will initially be used to resolve the verb before the task
             // starts executing.
             let setup_success = task.setup_task_start(&control_sender);
-            
+
             if !setup_success {
                 // Log level should be low here as this happens on every command if `do_command`
                 // is not found.
@@ -1707,7 +1707,7 @@ impl TaskQ {
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
             let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
-            
+
             Task::run_task_loop(
                 task,
                 &task_scheduler_client,
@@ -1808,7 +1808,7 @@ impl TaskQ {
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
             let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
-            
+
             info!(?task.task_id, "Restarting retry task");
             Task::run_task_loop(
                 task,

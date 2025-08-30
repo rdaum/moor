@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use moor_common::model::WorldState;
 use moor_compiler::Program;
-use moor_var::{E_INVIND, List, SYSTEM_OBJECT};
+use moor_var::{List, SYSTEM_OBJECT};
 use moor_var::{Obj, Var};
 use moor_var::{Symbol, v_obj};
 
@@ -41,7 +41,7 @@ fn execute_fork(
     task_id: usize,
 ) -> ExecResult {
     // For testing, forks execute in the same transaction context as the parent
-    
+
     let (scs_tx, _scs_rx) = flume::unbounded();
     let task_scheduler_client =
         crate::tasks::task_scheduler_client::TaskSchedulerClient::new(task_id, scs_tx);
@@ -66,10 +66,9 @@ fn execute_fork(
             }
             VMHostResponse::DispatchFork(nested_fork) => {
                 // Execute nested fork - if it fails, propagate the error
-                let nested_result = execute_fork(session.clone(), builtins, *nested_fork, task_id + 1);
-                if let Err(nested_error) = nested_result {
-                    return Err(nested_error);
-                }
+                let nested_result =
+                    execute_fork(session.clone(), builtins, *nested_fork, task_id + 1);
+                nested_result?;
                 continue;
             }
             VMHostResponse::AbortLimit(a) => {
@@ -134,12 +133,10 @@ where
                 continue;
             }
             VMHostResponse::DispatchFork(f) => {
-                // For testing, execute the fork separately (sequentially) 
+                // For testing, execute the fork separately (sequentially)
                 // If the fork fails, propagate the error to terminate main execution
                 let fork_result = execute_fork(session.clone(), &builtins, *f, 1);
-                if let Err(fork_error) = fork_result {
-                    return Err(fork_error);
-                }
+                fork_result?;
                 // Continue main execution after successful fork dispatch
                 continue;
             }
@@ -172,7 +169,7 @@ where
 }
 
 pub fn call_verb(
-    mut world_state: Box<dyn WorldState>,
+    world_state: Box<dyn WorldState>,
     session: Arc<dyn Session>,
     builtins: BuiltinRegistry,
     verb_name: &str,

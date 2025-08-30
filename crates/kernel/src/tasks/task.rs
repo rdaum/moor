@@ -27,8 +27,8 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use crate::transaction_context::{
-    with_current_transaction, with_current_transaction_mut, commit_current_transaction, 
-    rollback_current_transaction, replace_current_transaction, TransactionGuard
+    commit_current_transaction, replace_current_transaction, rollback_current_transaction,
+    with_current_transaction, with_current_transaction_mut,
 };
 
 use bincode::de::{BorrowDecoder, Decoder};
@@ -133,7 +133,7 @@ impl Task {
         config: Arc<Config>,
     ) {
         // Transaction context is already set up by the caller
-        
+
         // Try to pick a high thread priority for user tasks.
         gdt_cpus::set_thread_priority(gdt_cpus::ThreadPriority::AboveNormal).ok();
 
@@ -143,7 +143,7 @@ impl Task {
                 task_scheduler_client.abort_cancelled();
                 break;
             }
-            
+
             if let Some(continuation_task) = task.vm_dispatch(
                 task_scheduler_client,
                 session.as_ref(),
@@ -155,7 +155,7 @@ impl Task {
                 break;
             }
         }
-        
+
         // Transaction is automatically cleaned up by _tx_guard drop
     }
 
@@ -202,7 +202,7 @@ impl Task {
                 // VMHost is now suspended for execution, and we'll be waiting for a Resume
                 let commit_result = commit_current_transaction()
                     .expect("Could not commit world state before suspend");
-                
+
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
                     session.rollback().unwrap();
@@ -255,7 +255,7 @@ impl Task {
                 // Attempt commit... See comments/notes on Suspend above.
                 let commit_result = commit_current_transaction()
                     .expect("Could not commit world state before suspend");
-                
+
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
                     return self.try_immediate_retry(
@@ -301,9 +301,8 @@ impl Task {
                     }
                 }
 
-                let commit_result = commit_current_transaction()
-                    .expect("Could not attempt commit");
-                
+                let commit_result = commit_current_transaction().expect("Could not attempt commit");
+
                 let CommitResult::Success = commit_result else {
                     warn!("Conflict during commit before complete, asking scheduler to retry task");
                     return self.try_immediate_retry(
@@ -321,8 +320,7 @@ impl Task {
             VMHostResponse::CompleteAbort => {
                 error!(task_id = self.task_id, "Task aborted");
 
-                rollback_current_transaction()
-                    .expect("Could not rollback world state transaction");
+                rollback_current_transaction().expect("Could not rollback world state transaction");
 
                 self.vm_host.stop();
 
@@ -339,9 +337,8 @@ impl Task {
                 //   We may revisit this later and add a user-selectable mode for this, and
                 //   evaluate this behaviour generally.
 
-                let commit_result = commit_current_transaction()
-                    .expect("Could not attempt commit");
-                
+                let commit_result = commit_current_transaction().expect("Could not attempt commit");
+
                 let CommitResult::Success = commit_result else {
                     warn!(
                         "Conflict during commit before complete, asking scheduler to retry task ({})",
@@ -362,8 +359,7 @@ impl Task {
             }
             VMHostResponse::CompleteRollback(commit_session) => {
                 // Rollback the transaction
-                rollback_current_transaction()
-                    .expect("Could not rollback world state transaction");
+                rollback_current_transaction().expect("Could not rollback world state transaction");
 
                 // And then decide if we are going to rollback th session as well.
                 if !commit_session {
@@ -384,8 +380,7 @@ impl Task {
                 let line_number = self.vm_host.line_number();
 
                 self.vm_host.stop();
-                rollback_current_transaction()
-                    .expect("Could not rollback world state");
+                rollback_current_transaction().expect("Could not rollback world state");
                 task_scheduler_client.abort_limits_reached(reason, this, verb_name, line_number);
                 None
             }
@@ -393,8 +388,7 @@ impl Task {
                 warn!(task_id = self.task_id, "Task rollback requested, retrying");
 
                 self.vm_host.stop();
-                rollback_current_transaction()
-                    .expect("Could not rollback world state");
+                rollback_current_transaction().expect("Could not rollback world state");
 
                 // Try immediate retry for rollback requests
                 self.try_immediate_retry(task_scheduler_client, session, "rollback retry")
@@ -797,9 +791,8 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
 
-    use flume::{Receiver, unbounded};
     use crate::transaction_context::TransactionGuard;
-    
+    use flume::{Receiver, unbounded};
 
     use moor_common::model::{
         ArgSpec, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
@@ -851,7 +844,7 @@ mod tests {
             dump_interval: None,
         };
         let task_scheduler_client = TaskSchedulerClient::new(1, control_sender.clone());
-        let mut task = Task::new(
+        let task = Task::new(
             1,
             SYSTEM_OBJECT,
             task_start.clone(),

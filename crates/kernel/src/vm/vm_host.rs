@@ -21,7 +21,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use tracing::{debug, error, warn};
 
 use moor_common::model::ObjFlag;
-use moor_common::model::{VerbDef, WorldState};
+use moor_common::model::VerbDef;
 use moor_common::tasks::{AbortLimitReason, TaskId};
 use moor_compiler::Program;
 use moor_compiler::{BuiltinId, Offset};
@@ -34,8 +34,8 @@ use moor_var::{Symbol, v_none};
 
 use crate::PhantomUnsync;
 use crate::config::FeaturesConfig;
-use crate::transaction_context::with_current_transaction;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::transaction_context::with_current_transaction;
 use crate::vm::FinallyReason;
 use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::activation::Frame;
@@ -233,12 +233,7 @@ impl VmHost {
     }
 
     /// Start execution of an eval request.
-    pub fn start_eval(
-        &mut self,
-        task_id: TaskId,
-        player: &Obj,
-        program: Program,
-    ) {
+    pub fn start_eval(&mut self, task_id: TaskId, player: &Obj, program: Program) {
         let is_programmer = with_current_transaction(|world_state| {
             world_state
                 .flags_of(player)
@@ -317,9 +312,7 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerbPass(pass_args) => {
-                    result = self
-                        .vm_exec_state
-                        .prepare_pass_verb(&pass_args);
+                    result = self.vm_exec_state.prepare_pass_verb(&pass_args);
                     continue;
                 }
                 ExecutionResult::PrepareVerbDispatch {
@@ -470,10 +463,9 @@ impl VmHost {
                 (result, tick_count)
             }
             Frame::Bf(_) => {
-                let result = self.vm_exec_state.reenter_builtin_function(
-                    vm_exec_params,
-                    session,
-                );
+                let result = self
+                    .vm_exec_state
+                    .reenter_builtin_function(vm_exec_params, session);
                 (result, tick_count)
             }
         };

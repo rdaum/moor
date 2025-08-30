@@ -33,6 +33,7 @@ use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::config::FeaturesConfig;
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
+use moor_kernel::transaction_context::TransactionGuard;
 use moor_kernel::vm::VMHostResponse;
 use moor_kernel::vm::VerbCall;
 use moor_kernel::vm::builtins::BuiltinRegistry;
@@ -110,7 +111,6 @@ fn prepare_vm_execution(
 
 /// Run the vm host until it runs out of ticks
 fn execute(
-    world_state: &mut dyn WorldState,
     task_scheduler_client: TaskSchedulerClient,
     session: Arc<dyn Session>,
     vm_host: &mut VmHost,
@@ -124,7 +124,6 @@ fn execute(
     loop {
         match vm_host.exec_interpreter(
             0,
-            world_state,
             &task_scheduler_client,
             session.as_ref(),
             &BuiltinRegistry::new(),
@@ -176,15 +175,17 @@ fn do_program(
     let mut cumulative_time = Duration::new(0, 0);
     let mut cumulative_ticks = 0;
     let mut vm_host = prepare_vm_execution(&state_source, program, max_ticks);
-    let mut tx = state_source.new_world_state().unwrap();
+    let tx = state_source.new_world_state().unwrap();
     let session = Arc::new(NoopClientSession::new());
     let (scs_tx, _scs_rx) = flume::unbounded();
     let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
 
+    // Set up transaction context for benchmarking
+    let _tx_guard = TransactionGuard::new(tx);
+
     for _ in 0..iters {
         let start = std::time::Instant::now();
         let t = black_box(execute(
-            tx.as_mut(),
             task_scheduler_client.clone(),
             session.clone(),
             &mut vm_host,
@@ -192,7 +193,8 @@ fn do_program(
         cumulative_ticks += t;
         cumulative_time += start.elapsed();
     }
-    tx.rollback().unwrap();
+
+    // Transaction will be cleaned up automatically by tx_guard drop
 
     drop(state_source);
     (cumulative_time, cumulative_ticks)

@@ -127,8 +127,7 @@ pub fn eval(
     let binary = compile(expression, CompileOptions::default())?;
     let state = db.new_world_state()?;
     let builtin_registry = BuiltinRegistry::new();
-    let result =
-        vm_test_utils::call_eval_builtin(state, session, builtin_registry, player, binary);
+    let result = vm_test_utils::call_eval_builtin(state, session, builtin_registry, player, binary);
     Ok(result)
 }
 

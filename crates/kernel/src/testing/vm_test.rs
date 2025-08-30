@@ -127,7 +127,7 @@ mod tests {
             Names::new(64),
         );
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -149,7 +149,7 @@ mod tests {
                 Names::new(64),
             ),
         );
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_string_value_range_indexing() {
-        let mut state = test_db_with_verb(
+        let state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_list_value_simple_indexing() {
-        let mut state = test_db_with_verb(
+        let state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_list_value_range_indexing() {
-        let mut state = test_db_with_verb(
+        let state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![
@@ -255,7 +255,7 @@ mod tests {
     fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program, CompileOptions::default()).unwrap();
-        let mut state = test_db_with_verb("test", &binary)
+        let state = test_db_with_verb("test", &binary)
             .new_world_state()
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
-        let mut state = test_db_with_verb(
+        let state = test_db_with_verb(
             "test",
             &compile(program, CompileOptions::default()).unwrap(),
         )
@@ -349,7 +349,7 @@ mod tests {
             vec![v_objid(0), v_str("test_return_verb"), v_empty_list()],
             Names::new(64),
         );
-        let mut state = test_db_with_verbs(&[
+        let state = test_db_with_verbs(&[
             ("test_return_verb", &return_verb_binary),
             ("test_call_verb", &call_verb_binary),
         ])
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -397,7 +397,7 @@ mod tests {
     fn test_while_loop() {
         let program =
             "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn test_while_labelled_loop() {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
 
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
@@ -429,7 +429,7 @@ mod tests {
     #[test]
     fn test_while_breaks() {
         let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -458,7 +458,7 @@ mod tests {
         endwhile
         return x;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -486,7 +486,7 @@ mod tests {
             endfor
             return ret;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -512,7 +512,7 @@ mod tests {
                 return 6;
             endif
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -539,7 +539,7 @@ mod tests {
                          except (E_INVARG)
                            return 0;
                          endtry"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -558,7 +558,7 @@ mod tests {
         // https://github.com//moor/issues/23
         let program =
             r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
 
@@ -578,7 +578,7 @@ mod tests {
         let program =
             r#"a = 1; try return "hello world"[2..$]; a = 3; finally a = 2; endtry return a;"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -596,7 +596,7 @@ mod tests {
     fn test_try_expr_regression() {
         let program = r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -613,7 +613,7 @@ mod tests {
     #[test]
     fn test_regression_zero_body_function() {
         let binary = Program::new();
-        let mut state = test_db_with_verb("test", &binary)
+        let state = test_db_with_verb("test", &binary)
             .new_world_state()
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
@@ -647,7 +647,7 @@ mod tests {
             "#;
         let bottom_of_stack = r#"raise(E_ARGS);"#;
 
-        let mut state = world_with_test_programs(&[
+        let state = world_with_test_programs(&[
             (
                 "raise_error",
                 &compile(bottom_of_stack, CompileOptions::default()).unwrap(),
@@ -676,7 +676,7 @@ mod tests {
         except (E_RANGE)
         endtry"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -693,7 +693,7 @@ mod tests {
     fn test_try_finally_returns() {
         let program = r#"try return 666; finally return 333; endtry"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -718,7 +718,7 @@ mod tests {
         return x;
         "#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -744,7 +744,7 @@ mod tests {
         return x;
         "#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -770,7 +770,7 @@ mod tests {
         end
         "#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -800,7 +800,7 @@ mod tests {
         end
         "#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -827,7 +827,7 @@ mod tests {
             return 0;
         endif"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -851,7 +851,7 @@ mod tests {
             return {y, z};
         endwhile"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -875,7 +875,7 @@ mod tests {
             return {y, z};
         endfor"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -901,7 +901,7 @@ mod tests {
             return 0;
         endtry"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -921,7 +921,7 @@ mod tests {
         return x;
         "#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -943,7 +943,7 @@ mod tests {
         end
         "#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
@@ -1062,7 +1062,7 @@ mod tests {
     )]
     #[test_case("true && return;", v_int(0); "short circuit empty return expr")]
     fn test_run(program: &str, expected_result: Var) {
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1077,7 +1077,7 @@ mod tests {
     #[test]
     fn test_list_assignment_to_range() {
         let program = r#"l = {1,2,3}; l[2..3] = {6, 7, 8, 9}; return l;"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1095,7 +1095,7 @@ mod tests {
     #[test]
     fn test_make_flyweight() {
         let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>;"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1117,7 +1117,7 @@ mod tests {
     #[test]
     fn test_flyweight_slot() {
         let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>.slot;"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1136,7 +1136,7 @@ mod tests {
         let b = remove_slot(a, 'slot);
         let c = add_slot(b, 'bananas, "456");
         return {c, slots(c)};"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1161,7 +1161,7 @@ mod tests {
     #[test]
     fn test_flyweight_sequence() {
         let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>[2];"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1177,7 +1177,7 @@ mod tests {
     #[test]
     fn test_range_in_map_oddities() {
         let program = r#"return[ "z"->5, "b"->"another_seq"[1..$]]["b"];"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1193,7 +1193,7 @@ mod tests {
     fn test_range_flyweight_oddities() {
         let program =
             r#"return <#1, [another_slot -> 5, slot -> "123"], {"another_seq"[1..$]}>[1];"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1213,10 +1213,10 @@ mod tests {
                 return "hello"[1..$];
             endfor
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1233,10 +1233,10 @@ mod tests {
                 return "hello"[1..$];
             endfor
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
-            state.as_mut(),
+            state,
             session,
             BuiltinRegistry::new(),
             "test",
@@ -1248,7 +1248,7 @@ mod tests {
     #[test]
     fn test_for_range_comprehension() {
         let program = r#"return { x * 2 for x in [1..3] };"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1263,7 +1263,7 @@ mod tests {
     #[test]
     fn test_for_list_comprehension() {
         let program = r#"return { x * 2 for x in ({1,2,3}) };"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1287,7 +1287,7 @@ mod tests {
             endif
             return z;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1308,7 +1308,7 @@ mod tests {
         endfor
         return result;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1332,7 +1332,7 @@ mod tests {
         endfor
         return result;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1356,7 +1356,7 @@ mod tests {
         endfor
         return 0;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1375,7 +1375,7 @@ mod tests {
         let program = r#"
         return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1395,7 +1395,7 @@ mod tests {
         endfork
         return 24;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1419,7 +1419,7 @@ mod tests {
         endfork
         return 99;"#;
 
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
 
         // First run the normal way to trigger the fork execution
@@ -1477,7 +1477,7 @@ mod tests {
         endfork
         return 99;"#;
 
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
 
         // Test the first fork (should error on line 4)
@@ -1527,7 +1527,7 @@ mod tests {
         endfork
         return 99;"#;
 
-        let mut state = world_with_test_program(program2);
+        let state = world_with_test_program(program2);
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -1576,7 +1576,7 @@ mod tests {
         endfork
         return 99;"#;
 
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -1625,7 +1625,7 @@ mod tests {
         endfork         // Line 13
         return 99;"#;
 
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -1666,7 +1666,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -1715,7 +1715,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -1756,7 +1756,7 @@ mod tests {
             return add(5, 3);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1775,7 +1775,7 @@ mod tests {
             return double(7);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1794,7 +1794,7 @@ mod tests {
             return hello();
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1815,7 +1815,7 @@ mod tests {
             return {result1, result2};
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1841,7 +1841,7 @@ mod tests {
             return sum(1, 2, 3, 4, 5);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1862,7 +1862,7 @@ mod tests {
             return func(42, 100, "a", "b", "c");
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1884,7 +1884,7 @@ mod tests {
             return adder(5);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1906,7 +1906,7 @@ mod tests {
             return times3(7);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1928,7 +1928,7 @@ mod tests {
             return 1;
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1953,7 +1953,7 @@ mod tests {
             return fib(6);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -1979,7 +1979,7 @@ mod tests {
             return map(square, {1, 2, 3, 4});
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -2001,7 +2001,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2027,7 +2027,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2053,7 +2053,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2081,7 +2081,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2121,7 +2121,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2164,7 +2164,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2205,7 +2205,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2238,7 +2238,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2272,7 +2272,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2302,7 +2302,7 @@ mod tests {
             return f(5);
         "#;
 
-        let mut state = world_with_test_program(program_text);
+        let state = world_with_test_program(program_text);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -2327,7 +2327,7 @@ mod tests {
 
         let program = compile(program_text, CompileOptions::default()).unwrap();
         let state_source = test_db_with_verb("test", &program);
-        let mut state = state_source.new_world_state().unwrap();
+        let state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
 
         let result = call_verb(
@@ -2352,7 +2352,7 @@ mod tests {
     fn test_for_loop_continue_regression() {
         // Test the failing continue case from looping.moot
         let program = r#"x = {}; for i in ({1, 2, 3, 4, 5}); if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -2369,7 +2369,7 @@ mod tests {
     fn test_for_range_continue_regression() {
         // Test continue in for-range loops
         let program = r#"x = {}; for i in [1..5]; if (i < 3); continue; endif; x = {@x, i}; endfor; return x;"#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -2398,7 +2398,7 @@ mod tests {
             endfor
             return result;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,
@@ -2435,7 +2435,7 @@ mod tests {
             endfor
             return result;
         "#;
-        let mut state = world_with_test_program(program);
+        let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state,

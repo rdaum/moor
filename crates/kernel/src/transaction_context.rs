@@ -19,7 +19,10 @@ impl TransactionGuard {
     pub fn new(tx: Box<dyn WorldState>) -> Self {
         CURRENT_TRANSACTION.with(|t| {
             let mut current = t.borrow_mut();
-            assert!(current.is_none(), "Transaction already active on this thread");
+            assert!(
+                current.is_none(),
+                "Transaction already active on this thread"
+            );
             *current = Some(tx);
         });
         TransactionGuard(())
@@ -31,7 +34,9 @@ impl Drop for TransactionGuard {
         // Emergency cleanup - rollback any remaining transaction
         CURRENT_TRANSACTION.with(|t| {
             if let Some(tx) = t.borrow_mut().take() {
-                tracing::warn!("Transaction dropped without explicit commit/rollback, rolling back");
+                tracing::warn!(
+                    "Transaction dropped without explicit commit/rollback, rolling back"
+                );
                 let _ = tx.rollback(); // Best effort cleanup
             }
         });
@@ -43,7 +48,9 @@ impl Drop for TransactionGuard {
 pub fn with_current_transaction<R>(f: impl FnOnce(&dyn WorldState) -> R) -> R {
     CURRENT_TRANSACTION.with(|t| {
         let tx_ref = t.borrow();
-        let tx = tx_ref.as_ref().expect("No active transaction on this thread");
+        let tx = tx_ref
+            .as_ref()
+            .expect("No active transaction on this thread");
         f(tx.as_ref())
     })
 }
@@ -53,7 +60,9 @@ pub fn with_current_transaction<R>(f: impl FnOnce(&dyn WorldState) -> R) -> R {
 pub fn with_current_transaction_mut<R>(f: impl FnOnce(&mut dyn WorldState) -> R) -> R {
     CURRENT_TRANSACTION.with(|t| {
         let mut tx_ref = t.borrow_mut();
-        let tx = tx_ref.as_mut().expect("No active transaction on this thread");
+        let tx = tx_ref
+            .as_mut()
+            .expect("No active transaction on this thread");
         f(tx.as_mut())
     })
 }
@@ -62,7 +71,9 @@ pub fn with_current_transaction_mut<R>(f: impl FnOnce(&mut dyn WorldState) -> R)
 /// Panics if no transaction is active.
 pub fn commit_current_transaction() -> Result<CommitResult, WorldStateError> {
     CURRENT_TRANSACTION.with(|t| {
-        let tx = t.borrow_mut().take()
+        let tx = t
+            .borrow_mut()
+            .take()
             .expect("No active transaction to commit");
         tx.commit()
     })
@@ -72,7 +83,9 @@ pub fn commit_current_transaction() -> Result<CommitResult, WorldStateError> {
 /// Panics if no transaction is active.
 pub fn rollback_current_transaction() -> Result<(), WorldStateError> {
     CURRENT_TRANSACTION.with(|t| {
-        let tx = t.borrow_mut().take()
+        let tx = t
+            .borrow_mut()
+            .take()
             .expect("No active transaction to rollback");
         tx.rollback()
     })
@@ -88,7 +101,8 @@ pub fn has_active_transaction() -> bool {
 /// Panics if no transaction is active.
 pub fn extract_current_transaction() -> Box<dyn WorldState> {
     CURRENT_TRANSACTION.with(|t| {
-        t.borrow_mut().take()
+        t.borrow_mut()
+            .take()
             .expect("No active transaction to extract")
     })
 }
@@ -99,7 +113,10 @@ pub fn extract_current_transaction() -> Box<dyn WorldState> {
 pub fn replace_current_transaction(tx: Box<dyn WorldState>) {
     CURRENT_TRANSACTION.with(|t| {
         let mut current = t.borrow_mut();
-        assert!(current.is_none(), "Transaction already active when trying to replace");
+        assert!(
+            current.is_none(),
+            "Transaction already active when trying to replace"
+        );
         *current = Some(tx);
     });
 }
@@ -107,29 +124,11 @@ pub fn replace_current_transaction(tx: Box<dyn WorldState>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_common::tasks::NoopClientSession;
-    use std::sync::Arc;
 
-    // Mock WorldState for testing
-    struct MockWorldState {
-        committed: bool,
-        rolled_back: bool,
-    }
+    // For now, we just test the basic guard functionality without a full WorldState mock
+    // since implementing the full WorldState trait would be quite large
 
-    impl MockWorldState {
-        fn new() -> Self {
-            Self {
-                committed: false,
-                rolled_back: false,
-            }
-        }
-    }
-
-    // We need a minimal WorldState implementation for testing
-    // This will require implementing the full trait, which is quite large
-    // For now, let me just test the basic guard functionality
-    
-    #[test] 
+    #[test]
     fn test_no_transaction_initially() {
         assert!(!has_active_transaction());
     }

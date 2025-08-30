@@ -165,10 +165,8 @@ impl VMExecState {
             caller: self.caller(),
         });
 
-        let self_valid = with_current_transaction_mut(|world_state| {
-            world_state.valid(&location)
-        })
-        .expect("Error checking object validity");
+        let self_valid = with_current_transaction_mut(|world_state| world_state.valid(&location))
+            .expect("Error checking object validity");
         if !self_valid {
             return self.push_error(
                 E_INVIND.with_msg(|| format!("Invalid object ({location}) for verb dispatch")),
@@ -178,7 +176,7 @@ impl VMExecState {
         let verb_result = with_current_transaction_mut(|world_state| {
             world_state.find_method_verb_on(&self.top().permissions, &location, verb_name)
         });
-        
+
         let (program, resolved_verb) = match verb_result {
             Ok(vi) => vi,
             Err(WorldStateError::ObjectPermissionDenied) => {
@@ -219,10 +217,7 @@ impl VMExecState {
     /// Setup the VM to execute the verb of the same current name, but using the parent's
     /// version.
     /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
-    pub(crate) fn prepare_pass_verb(
-        &mut self,
-        args: &List,
-    ) -> ExecutionResult {
+    pub(crate) fn prepare_pass_verb(&mut self, args: &List) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = &self.top().permissions;
@@ -240,10 +235,8 @@ impl VMExecState {
         let verb = self.top().verb_name;
 
         // if `parent` is not a valid object, raise E_INVIND
-        let parent_valid = with_current_transaction_mut(|world_state| {
-            world_state.valid(&parent)
-        })
-        .expect("Error checking object validity");
+        let parent_valid = with_current_transaction_mut(|world_state| world_state.valid(&parent))
+            .expect("Error checking object validity");
         if !parent_valid {
             return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
         }
@@ -354,8 +347,13 @@ impl VMExecState {
 
         // Look for it...
         let (program, resolved_verb) = with_current_transaction_mut(|world_state| {
-            world_state.find_method_verb_on(&self.top().permissions, &SYSTEM_OBJECT, bf_override_name)
-        }).ok()?;
+            world_state.find_method_verb_on(
+                &self.top().permissions,
+                &SYSTEM_OBJECT,
+                bf_override_name,
+            )
+        })
+        .ok()?;
 
         let call = VerbCall {
             verb_name: bf_override_name,
@@ -393,9 +391,7 @@ impl VMExecState {
 
         // TODO: check for $server_options.protect_[func]
         // Check for builtin override at #0.
-        if let Some(proxy_result) =
-            self.maybe_invoke_bf_proxy(bf_desc.bf_override_name, &args)
-        {
+        if let Some(proxy_result) = self.maybe_invoke_bf_proxy(bf_desc.bf_override_name, &args) {
             return proxy_result;
         }
 
@@ -431,7 +427,7 @@ impl VMExecState {
                 .add(elapsed_nanos as isize);
             bf_result
         });
-        
+
         match result {
             Ok(BfRet::Ret(result)) => {
                 debug_assert_ne!(
@@ -475,7 +471,7 @@ impl VMExecState {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let verb_name = self.top().verb_name;
         let args = self.top().args.clone();
-        
+
         let result = with_current_transaction_mut(|world_state| {
             let mut bf_args = BfCallState {
                 exec_state: self,
