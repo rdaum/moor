@@ -38,13 +38,21 @@ export const useMCPHandler = (
         const cleanCommand = command.replace(/^#\$#\s+/, "");
 
         // Extract the name part (format: "edit name: Object:verb")
-        const nameMatch = cleanCommand.match(/edit\s+name:\s*([^:]+):(@?\w+)/);
+        let nameMatch = cleanCommand.match(/edit\s+name:\s*([^:]+):(@?\w+)/);
+        let isProp = false;
+
+        // If it's not a verb, try a property (format: "edit name: first room.description upload: @set-note-string #70.description")
+        if (!nameMatch) {
+            nameMatch = cleanCommand.match(/edit\s+name:\s*([^.]+).(@?\w+)/);
+            isProp = nameMatch ? true : false;
+        }
+
         if (!nameMatch) {
             console.warn("Invalid MCP edit command format:", command);
             return null;
         }
 
-        // Extract the upload action (format: "upload: @program #object:verb permissions")
+        // Extract the upload action (format: "upload: @program #object:verb permissions" or "upload: @set-note-string #70.description")
         const uploadMatch = cleanCommand.match(/upload:\s*(.+)$/);
         if (!uploadMatch) {
             console.warn("Invalid MCP edit command - no upload action found:", command);
@@ -55,7 +63,7 @@ export const useMCPHandler = (
         const verbName = nameMatch[2].trim();
         const uploadAction = uploadMatch[1].trim();
 
-        const title = `${objectName}:${verbName}`;
+        const title = isProp ? `${objectName}.${verbName}` : `${objectName}:${verbName}`;
 
         return { objectCurie: objectName, verbName, title, uploadAction };
     }, []);
