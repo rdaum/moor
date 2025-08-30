@@ -12,8 +12,7 @@
 //
 
 use crate::config::FeaturesConfig;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::transaction_context::with_current_transaction_mut;
+use crate::task_context::with_current_transaction_mut;
 use crate::vm::Fork;
 use crate::vm::VerbCall;
 use crate::vm::activation::{Activation, Frame};
@@ -65,7 +64,6 @@ pub struct VerbExecutionRequest {
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.
 pub struct VmExecParams<'a> {
-    pub task_scheduler_client: &'a TaskSchedulerClient,
     pub builtin_registry: &'a BuiltinRegistry,
     pub max_stack_depth: usize,
     pub config: &'a FeaturesConfig,
@@ -406,29 +404,24 @@ impl VMExecState {
             flags,
             self.top().player,
         ));
-        let result = with_current_transaction_mut(|world_state| {
-            let mut bf_args = BfCallState {
-                exec_state: self,
-                name: bf_name,
-                world_state,
-                session,
-                args: &args,
-                task_scheduler_client: exec_args.task_scheduler_client,
-                config: exec_args.config,
-            };
-            let bf_counters = bf_perf_counters();
-            bf_counters.counter_for(bf_id).invocations().add(1);
+        let mut bf_args = BfCallState {
+            exec_state: self,
+            name: bf_name,
+            session,
+            args: &args,
+            config: exec_args.config,
+        };
+        let bf_counters = bf_perf_counters();
+        bf_counters.counter_for(bf_id).invocations().add(1);
 
-            let bf_result = bf(&mut bf_args);
-            let elapsed_nanos = start.elapsed().as_nanos();
-            bf_counters
-                .counter_for(bf_id)
-                .cumulative_duration_nanos()
-                .add(elapsed_nanos as isize);
-            bf_result
-        });
+        let bf_result = bf(&mut bf_args);
+        let elapsed_nanos = start.elapsed().as_nanos();
+        bf_counters
+            .counter_for(bf_id)
+            .cumulative_duration_nanos()
+            .add(elapsed_nanos as isize);
 
-        match result {
+        match bf_result {
             Ok(BfRet::Ret(result)) => {
                 debug_assert_ne!(
                     result.type_code(),
@@ -472,28 +465,24 @@ impl VMExecState {
         let verb_name = self.top().verb_name;
         let args = self.top().args.clone();
 
-        let result = with_current_transaction_mut(|world_state| {
-            let mut bf_args = BfCallState {
-                exec_state: self,
-                name: verb_name,
-                world_state,
-                session,
-                // TODO: avoid copy here by using List inside BfCallState
-                args: &args,
-                task_scheduler_client: exec_args.task_scheduler_client,
-                config: exec_args.config,
-            };
+        let mut bf_args = BfCallState {
+            exec_state: self,
+            name: verb_name,
+            session,
+            // TODO: avoid copy here by using List inside BfCallState
+            args: &args,
+            config: exec_args.config,
+        };
 
-            let bf_result = bf(&mut bf_args);
-            let elapsed_nanos = start.elapsed().as_nanos();
-            let bf_counters = bf_perf_counters();
-            bf_counters
-                .counter_for(bf_id)
-                .cumulative_duration_nanos()
-                .add(elapsed_nanos as isize);
-            bf_result
-        });
-        match result {
+        let bf_result = bf(&mut bf_args);
+        let elapsed_nanos = start.elapsed().as_nanos();
+        let bf_counters = bf_perf_counters();
+        bf_counters
+            .counter_for(bf_id)
+            .cumulative_duration_nanos()
+            .add(elapsed_nanos as isize);
+
+        match bf_result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Ok(BfRet::RetNil) => self.unwind_stack(FinallyReason::Return(v_int(0))),
             Err(BfErr::Code(c)) => self.push_bf_error(c.into()),

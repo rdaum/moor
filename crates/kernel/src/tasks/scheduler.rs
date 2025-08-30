@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::transaction_context::TransactionGuard;
+use crate::task_context::TaskGuard;
 use flume::{Receiver, Sender};
 use lazy_static::lazy_static;
 use minstant::Instant;
@@ -1583,14 +1583,15 @@ impl TaskQ {
             };
 
             // Set up transaction context for task setup
-            let _tx_guard = TransactionGuard::new(world_state);
+            let _tx_guard =
+                TaskGuard::new(world_state, task_scheduler_client.clone(), task_id, *player);
             if !task.setup_task_start(control_sender) {
                 error!(task_id, "Could not setup task start");
                 return Err(SchedulerError::CouldNotStartTask);
             }
             task.retry_state = task.vm_host.snapshot_state();
 
-            match crate::transaction_context::commit_current_transaction() {
+            match crate::task_context::commit_current_transaction() {
                 Ok(CommitResult::Success) => {}
                 // TODO: perform a retry here in a modest loop.
                 Ok(CommitResult::ConflictRetry) => {
@@ -1631,7 +1632,12 @@ impl TaskQ {
         };
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
-            let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
+            let _tx_guard = crate::task_context::TaskGuard::new(
+                world_state,
+                task_scheduler_client.clone(),
+                task.task_id,
+                task.player,
+            );
 
             // Start the db transaction, which will initially be used to resolve the verb before the task
             // starts executing.
@@ -1706,7 +1712,12 @@ impl TaskQ {
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
-            let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
+            let _tx_guard = crate::task_context::TaskGuard::new(
+                world_state,
+                task_scheduler_client.clone(),
+                task_id,
+                player,
+            );
 
             Task::run_task_loop(
                 task,
@@ -1807,7 +1818,12 @@ impl TaskQ {
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
-            let _tx_guard = crate::transaction_context::TransactionGuard::new(world_state);
+            let _tx_guard = crate::task_context::TaskGuard::new(
+                world_state,
+                task_scheduler_client.clone(),
+                task_id,
+                task.player,
+            );
 
             info!(?task.task_id, "Restarting retry task");
             Task::run_task_loop(

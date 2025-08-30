@@ -34,8 +34,7 @@ use moor_var::{Symbol, v_none};
 
 use crate::PhantomUnsync;
 use crate::config::FeaturesConfig;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::transaction_context::with_current_transaction;
+use crate::task_context::with_current_transaction;
 use crate::vm::FinallyReason;
 use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::activation::Frame;
@@ -260,7 +259,6 @@ impl VmHost {
     pub fn exec_interpreter(
         &mut self,
         task_id: TaskId,
-        task_scheduler_client: &TaskSchedulerClient,
         session: &dyn Session,
         builtin_registry: &BuiltinRegistry,
         config: &FeaturesConfig,
@@ -268,7 +266,6 @@ impl VmHost {
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
-            task_scheduler_client,
             builtin_registry,
             max_stack_depth: self.max_stack_depth,
             config,

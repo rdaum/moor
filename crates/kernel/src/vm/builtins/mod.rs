@@ -16,7 +16,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::config::FeaturesConfig;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::task_context::with_current_transaction;
 use crate::vm::activation::{BfFrame, Frame};
 use crate::vm::builtins::bf_age_crypto::register_bf_age_crypto;
 use crate::vm::builtins::bf_documents::register_bf_documents;
@@ -33,7 +33,6 @@ use crate::vm::builtins::bf_verbs::register_bf_verbs;
 use crate::vm::exec_state::VMExecState;
 use crate::vm::vm_host::ExecutionResult;
 use moor_common::model::Perms;
-use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::tasks::Session;
 use moor_common::util::PerfCounter;
@@ -133,6 +132,7 @@ impl BuiltinRegistry {
 }
 
 /// The arguments and other state passed to a built-in function.
+/// WorldState and TaskSchedulerClient are now accessed via the global task context.
 pub(crate) struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: Symbol,
@@ -141,12 +141,8 @@ pub(crate) struct BfCallState<'a> {
     /// The current execution state of this task in this VM, including the stack
     /// so that BFs can inspect and manipulate it.
     pub(crate) exec_state: &'a mut VMExecState,
-    /// Handle to the current database transaction.
-    pub(crate) world_state: &'a mut dyn WorldState,
     /// For connection / message management.
     pub(crate) session: &'a dyn Session,
-    /// For sending messages up to the scheduler
-    pub(crate) task_scheduler_client: &'a TaskSchedulerClient,
     /// Config
     pub(crate) config: &'a FeaturesConfig,
 }
@@ -160,7 +156,7 @@ impl BfCallState<'_> {
     }
     pub fn task_perms(&self) -> Result<Perms, WorldStateError> {
         let who = self.task_perms_who();
-        let flags = self.world_state.flags_of(&who)?;
+        let flags = with_current_transaction(|world_state| world_state.flags_of(&who))?;
         Ok(Perms { who, flags })
     }
 

@@ -13,6 +13,7 @@
 
 //! Document format builtins: XML and JSON parsing/generation functions
 
+use crate::task_context::with_current_transaction;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_compiler::offset_for_builtin;
@@ -137,10 +138,14 @@ fn parse_xml_to_flyweights(
                         let key = Symbol::mk(&key);
 
                         // resolve via system object
-                        let prop_value = bf_args
-                            .world_state
-                            .retrieve_property(&bf_args.caller_perms(), &SYSTEM_OBJECT, key)
-                            .map_err(world_state_bf_err)?;
+                        let prop_value = with_current_transaction(|world_state| {
+                            world_state.retrieve_property(
+                                &bf_args.caller_perms(),
+                                &SYSTEM_OBJECT,
+                                key,
+                            )
+                        })
+                        .map_err(world_state_bf_err)?;
 
                         let Some(o) = prop_value.as_object() else {
                             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
@@ -609,10 +614,10 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
             None => {
                 let key = Symbol::mk("tag");
-                let tag = bf_args
-                    .world_state
-                    .retrieve_property(&bf_args.caller_perms(), fl.delegate(), key)
-                    .map_err(world_state_bf_err)?;
+                let tag = with_current_transaction(|world_state| {
+                    world_state.retrieve_property(&bf_args.caller_perms(), fl.delegate(), key)
+                })
+                .map_err(world_state_bf_err)?;
 
                 let Some(s) = tag.as_string() else {
                     return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {

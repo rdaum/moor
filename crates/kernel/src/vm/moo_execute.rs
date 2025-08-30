@@ -12,7 +12,7 @@
 //
 
 use crate::config::FeaturesConfig;
-use crate::transaction_context::with_current_transaction_mut;
+use crate::task_context::with_current_transaction_mut;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::scatter_assign::scatter_assign;
 use crate::vm::vm_host::ExecutionResult;

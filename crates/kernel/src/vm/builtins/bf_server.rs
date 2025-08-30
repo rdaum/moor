@@ -21,6 +21,7 @@ use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
+use crate::task_context::{current_task_scheduler_client, with_current_transaction};
 use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::TaskSuspend;
 use crate::vm::builtins::BfErr::{Code, ErrValue};
@@ -103,9 +104,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.args[1].clone(),
         content_type,
     );
-    bf_args
-        .task_scheduler_client
-        .notify(player, Box::new(event));
+    current_task_scheduler_client().notify(player, Box::new(event));
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -157,9 +156,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             author: bf_args.exec_state.this(),
             event,
         };
-        bf_args
-            .task_scheduler_client
-            .notify(player, Box::new(event));
+        current_task_scheduler_client().notify(player, Box::new(event));
 
         return Ok(Ret(v_int(1)));
     }
@@ -275,9 +272,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         event: Present(event),
     };
 
-    bf_args
-        .task_scheduler_client
-        .notify(player, Box::new(event));
+    current_task_scheduler_client().notify(player, Box::new(event));
 
     Ok(RetNil)
 }
@@ -321,7 +316,7 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    let is_player = match bf_args.world_state.flags_of(&player) {
+    let is_player = match with_current_transaction(|world_state| world_state.flags_of(&player)) {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(WorldStateError::ObjectNotFound(_)) => {
             return Err(ErrValue(
@@ -515,7 +510,7 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    bf_args.task_scheduler_client.shutdown(msg);
+    current_task_scheduler_client().shutdown(msg);
 
     Ok(RetNil)
 }
@@ -781,7 +776,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Ask the scheduler (through its mailbox) to describe all the tasks.
-    let tasks = bf_args.task_scheduler_client.task_list();
+    let tasks = current_task_scheduler_client().task_list();
 
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
@@ -815,7 +810,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// tasks only for the player themselves.
 /// MOO: `list active_tasks()`
 fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    let tasks = match bf_args.task_scheduler_client.active_tasks() {
+    let tasks = match current_task_scheduler_client().active_tasks() {
         Ok(tasks) => tasks,
         Err(e) => {
             return Err(ErrValue(e));
@@ -946,7 +941,7 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Some(player)
     };
 
-    let tasks = bf_args.task_scheduler_client.task_list();
+    let tasks = current_task_scheduler_client().task_list();
     // Two modes: if player is None, we return a list of all players with queued tasks, but we
     // expect wiz perms.
     // If player is set, we return the number of tasks queued for that player.
@@ -1004,7 +999,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Ok(VmInstr(ExecutionResult::Complete(v_int(0))));
     }
 
-    let result = bf_args.task_scheduler_client.kill_task(
+    let result = current_task_scheduler_client().kill_task(
         victim_task_id,
         bf_args.task_perms().map_err(world_state_bf_err)?,
     );
@@ -1043,7 +1038,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    let result = bf_args.task_scheduler_client.resume_task(
+    let result = current_task_scheduler_client().resume_task(
         task_id,
         bf_args.task_perms().map_err(world_state_bf_err)?,
         return_value.clone(),
@@ -1108,7 +1103,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )));
     }
 
-    bf_args.task_scheduler_client.boot_player(player);
+    current_task_scheduler_client().boot_player(player);
 
     Ok(RetNil)
 }
@@ -1373,9 +1368,7 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Ask the scheduler to broadcast a listen request out to all the hosts.
     if let Some(error) =
-        bf_args
-            .task_scheduler_client
-            .listen(object, host_type, port, print_messages)
+        current_task_scheduler_client().listen(object, host_type, port, print_messages)
     {
         return Err(ErrValue(error));
     }
@@ -1394,7 +1387,7 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    let listeners = bf_args.task_scheduler_client.listeners();
+    let listeners = current_task_scheduler_client().listeners();
 
     // If an argument is provided, try to find the specific listener
     if bf_args.args.len() == 1 {
@@ -1479,7 +1472,7 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         "tcp".to_string()
     };
 
-    if let Some(err) = bf_args.task_scheduler_client.unlisten(host_type, port) {
+    if let Some(err) = current_task_scheduler_client().unlisten(host_type, port) {
         return Err(ErrValue(err));
     }
 
@@ -1567,10 +1560,7 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         false
     };
 
-    if let Err(e) = bf_args
-        .task_scheduler_client
-        .checkpoint_with_blocking(blocking)
-    {
+    if let Err(e) = current_task_scheduler_client().checkpoint_with_blocking(blocking) {
         return Err(ErrValue(
             E_INTRPT.with_msg(|| format!("dump_database() checkpoint failed: {e:?}")),
         ));
@@ -1652,7 +1642,8 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    let disk_size = bf_args.world_state.db_usage().map_err(world_state_bf_err)?;
+    let disk_size = with_current_transaction(|world_state| world_state.db_usage())
+        .map_err(world_state_bf_err)?;
 
     Ok(Ret(v_int(disk_size as i64)))
 }
@@ -1673,7 +1664,7 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    bf_args.task_scheduler_client.refresh_server_options();
+    current_task_scheduler_client().refresh_server_options();
 
     Ok(RetNil)
 }
@@ -1774,10 +1765,7 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
 
-    match bf_args
-        .task_scheduler_client
-        .force_input(conn, line.to_string())
-    {
+    match current_task_scheduler_client().force_input(conn, line.to_string()) {
         Ok(task_id) => Ok(Ret(v_int(task_id as i64))),
         Err(e) => Err(ErrValue(e)),
     }
@@ -1946,21 +1934,15 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Validate that the target player object exists and is accessible
-    if !bf_args
-        .world_state
-        .valid(&new_player)
-        .map_err(world_state_bf_err)?
-    {
+    if !with_current_transaction(|ws| ws.valid(&new_player)).map_err(world_state_bf_err)? {
         return Err(ErrValue(
             E_INVARG.msg("switch_player() target player object does not exist"),
         ));
     }
 
     // Check that the new player is a valid player object
-    let player_flags = bf_args
-        .world_state
-        .flags_of(&new_player)
-        .map_err(world_state_bf_err)?;
+    let player_flags =
+        with_current_transaction(|ws| ws.flags_of(&new_player)).map_err(world_state_bf_err)?;
     if !player_flags.contains(moor_common::model::ObjFlag::User) {
         return Err(ErrValue(
             E_INVARG.msg("switch_player() requires a player object"),
@@ -1977,7 +1959,7 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     );
 
     // Request the switch through the task scheduler
-    match bf_args.task_scheduler_client.switch_player(new_player) {
+    match current_task_scheduler_client().switch_player(new_player) {
         Ok(_) => {
             info!(
                 wizard = ?task_perms.who,
@@ -2110,7 +2092,7 @@ fn bf_workers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    let workers_info = bf_args.task_scheduler_client.workers_info();
+    let workers_info = current_task_scheduler_client().workers_info();
 
     // Convert worker information to MOO list format
     // Each entry: [worker_type, worker_count, total_queue_size, avg_response_time, last_ping_ago]

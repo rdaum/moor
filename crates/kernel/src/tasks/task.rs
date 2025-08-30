@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use crate::transaction_context::{
+use crate::task_context::{
     commit_current_transaction, replace_current_transaction, rollback_current_transaction,
     with_current_transaction, with_current_transaction_mut,
 };
@@ -175,13 +175,9 @@ impl Task {
         config: &FeaturesConfig,
     ) -> Option<Box<Self>> {
         // Call the VM using transaction context
-        let vm_exec_result = self.vm_host.exec_interpreter(
-            self.task_id,
-            task_scheduler_client,
-            session,
-            builtin_registry,
-            config,
-        );
+        let vm_exec_result =
+            self.vm_host
+                .exec_interpreter(self.task_id, session, builtin_registry, config);
 
         // Having done that, what should we now do?
         match vm_exec_result {
@@ -791,7 +787,8 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
 
-    use crate::transaction_context::TransactionGuard;
+    use crate::task_context::TaskGuard;
+    use crate::testing::vm_test_utils::setup_task_context;
     use flume::{Receiver, unbounded};
 
     use moor_common::model::{
@@ -953,7 +950,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -981,7 +978,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1009,7 +1006,8 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard =
+                TaskGuard::new(tx, task_scheduler_client.clone(), task.task_id, task.player);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1047,7 +1045,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1071,7 +1069,7 @@ mod tests {
 
         let tx = db.new_world_state().unwrap();
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             Task::run_task_loop(
                 resume_task,
                 &task_scheduler_client,
@@ -1096,7 +1094,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1121,7 +1119,7 @@ mod tests {
         // And run its task loop again, with a new transaction.
         let tx = db.new_world_state().unwrap();
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             Task::run_task_loop(
                 resume_task,
                 &task_scheduler_client,
@@ -1159,7 +1157,7 @@ mod tests {
             let tx = db.new_world_state().unwrap();
             let session = Arc::new(NoopClientSession::new());
             {
-                let _tx_guard = TransactionGuard::new(tx);
+                let _tx_guard = setup_task_context(tx);
                 task.setup_task_start(task_scheduler_client.control_sender());
                 Task::run_task_loop(
                     task,
@@ -1211,7 +1209,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1247,7 +1245,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1281,7 +1279,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1316,7 +1314,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,
@@ -1359,7 +1357,7 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard = TransactionGuard::new(tx);
+            let _tx_guard = setup_task_context(tx);
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,

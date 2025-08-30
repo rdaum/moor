@@ -32,8 +32,7 @@ use moor_common::util::BitEnum;
 use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::config::FeaturesConfig;
-use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
-use moor_kernel::transaction_context::TransactionGuard;
+use moor_kernel::testing::vm_test_utils::setup_task_context;
 use moor_kernel::vm::VMHostResponse;
 use moor_kernel::vm::VerbCall;
 use moor_kernel::vm::builtins::BuiltinRegistry;
@@ -110,11 +109,7 @@ fn prepare_vm_execution(
 }
 
 /// Run the vm host until it runs out of ticks
-fn execute(
-    task_scheduler_client: TaskSchedulerClient,
-    session: Arc<dyn Session>,
-    vm_host: &mut VmHost,
-) -> usize {
+fn execute(session: Arc<dyn Session>, vm_host: &mut VmHost) -> usize {
     vm_host.reset_ticks();
     vm_host.reset_time();
 
@@ -122,13 +117,7 @@ fn execute(
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        match vm_host.exec_interpreter(
-            0,
-            &task_scheduler_client,
-            session.as_ref(),
-            &BuiltinRegistry::new(),
-            &config,
-        ) {
+        match vm_host.exec_interpreter(0, session.as_ref(), &BuiltinRegistry::new(), &config) {
             VMHostResponse::ContinueOk => {
                 continue;
             }
@@ -177,19 +166,12 @@ fn do_program(
     let mut vm_host = prepare_vm_execution(&state_source, program, max_ticks);
     let tx = state_source.new_world_state().unwrap();
     let session = Arc::new(NoopClientSession::new());
-    let (scs_tx, _scs_rx) = flume::unbounded();
-    let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
-
     // Set up transaction context for benchmarking
-    let _tx_guard = TransactionGuard::new(tx);
+    let _tx_guard = setup_task_context(tx);
 
     for _ in 0..iters {
         let start = std::time::Instant::now();
-        let t = black_box(execute(
-            task_scheduler_client.clone(),
-            session.clone(),
-            &mut vm_host,
-        ));
+        let t = black_box(execute(session.clone(), &mut vm_host));
         cumulative_ticks += t;
         cumulative_time += start.elapsed();
     }

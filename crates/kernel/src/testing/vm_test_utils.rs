@@ -23,7 +23,8 @@ use moor_var::{Obj, Var};
 use moor_var::{Symbol, v_obj};
 
 use crate::config::FeaturesConfig;
-use crate::transaction_context::TransactionGuard;
+use crate::task_context::TaskGuard;
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::VMHostResponse;
 use crate::vm::VerbCall;
 use crate::vm::builtins::BuiltinRegistry;
@@ -34,6 +35,13 @@ use moor_common::tasks::Session;
 
 pub type ExecResult = Result<Var, Exception>;
 
+/// Setup test task context with proper task scheduler client
+pub fn setup_task_context(world_state: Box<dyn WorldState>) -> TaskGuard {
+    let (scs_tx, _scs_rx) = flume::unbounded();
+    let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
+    TaskGuard::new(world_state, task_scheduler_client, 0, moor_var::NOTHING)
+}
+
 fn execute_fork(
     session: Arc<dyn Session>,
     builtins: &BuiltinRegistry,
@@ -42,9 +50,6 @@ fn execute_fork(
 ) -> ExecResult {
     // For testing, forks execute in the same transaction context as the parent
 
-    let (scs_tx, _scs_rx) = flume::unbounded();
-    let task_scheduler_client =
-        crate::tasks::task_scheduler_client::TaskSchedulerClient::new(task_id, scs_tx);
     let mut vm_host = VmHost::new(task_id, 20, 90_000, Duration::from_secs(5));
 
     vm_host.start_fork(task_id, &fork_request, false);
@@ -53,13 +58,8 @@ fn execute_fork(
 
     // Execute the forked task until completion
     loop {
-        let exec_result = vm_host.exec_interpreter(
-            task_id,
-            &task_scheduler_client,
-            session.as_ref(),
-            builtins,
-            config.as_ref(),
-        );
+        let exec_result =
+            vm_host.exec_interpreter(task_id, session.as_ref(), builtins, config.as_ref());
         match exec_result {
             VMHostResponse::ContinueOk => {
                 continue;
@@ -108,12 +108,9 @@ fn execute<F>(
 where
     F: FnOnce(&mut VmHost),
 {
-    let (scs_tx, _scs_rx) = flume::unbounded();
-    let task_scheduler_client =
-        crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
     let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
 
-    let _tx_guard = TransactionGuard::new(world_state);
+    let _tx_guard = setup_task_context(world_state);
 
     fun(&mut vm_host);
 
@@ -121,13 +118,7 @@ where
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        let exec_result = vm_host.exec_interpreter(
-            0,
-            &task_scheduler_client,
-            session.as_ref(),
-            &builtins,
-            config.as_ref(),
-        );
+        let exec_result = vm_host.exec_interpreter(0, session.as_ref(), &builtins, config.as_ref());
         match exec_result {
             VMHostResponse::ContinueOk => {
                 continue;

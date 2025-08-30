@@ -22,6 +22,7 @@ use moor_var::{List, v_empty_list};
 use moor_var::{Sequence, Symbol};
 use moor_var::{v_list, v_obj, v_string};
 
+use crate::task_context::{with_current_transaction, with_current_transaction_mut};
 use crate::vm::builtins::BfErr::{Code, ErrValue};
 use crate::vm::builtins::BfRet::{Ret, RetNil};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
@@ -36,10 +37,10 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
-    let (_, perms) = bf_args
-        .world_state
-        .get_property_info(&bf_args.task_perms_who(), &obj, prop_name)
-        .map_err(world_state_bf_err)?;
+    let (_, perms) = with_current_transaction(|world_state| {
+        world_state.get_property_info(&bf_args.task_perms_who(), &obj, prop_name)
+    })
+    .map_err(world_state_bf_err)?;
     let owner = perms.owner();
     let flags = perms.flags();
 
@@ -119,10 +120,10 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         InfoParseResult::Success(a) => a,
     };
 
-    bf_args
-        .world_state
-        .set_property_info(&bf_args.task_perms_who(), &obj, prop_name, attrs)
-        .map_err(world_state_bf_err)?;
+    with_current_transaction_mut(|world_state| {
+        world_state.set_property_info(&bf_args.task_perms_who(), &obj, prop_name, attrs)
+    })
+    .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
 
@@ -136,10 +137,10 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
-    let is_clear = bf_args
-        .world_state
-        .is_property_clear(&bf_args.task_perms_who(), &obj, prop_name)
-        .map_err(world_state_bf_err)?;
+    let is_clear = with_current_transaction(|world_state| {
+        world_state.is_property_clear(&bf_args.task_perms_who(), &obj, prop_name)
+    })
+    .map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_clear)))
 }
 
@@ -153,10 +154,10 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
-    bf_args
-        .world_state
-        .clear_property(&bf_args.task_perms_who(), &obj, prop_name)
-        .map_err(world_state_bf_err)?;
+    with_current_transaction_mut(|world_state| {
+        world_state.clear_property(&bf_args.task_perms_who(), &obj, prop_name)
+    })
+    .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
 
@@ -185,9 +186,8 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         InfoParseResult::Success(a) => a,
     };
 
-    bf_args
-        .world_state
-        .define_property(
+    with_current_transaction_mut(|world_state| {
+        world_state.define_property(
             &bf_args.task_perms_who(),
             location,
             location,
@@ -196,7 +196,8 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             attrs.flags.unwrap(),
             Some(value),
         )
-        .map_err(world_state_bf_err)?;
+    })
+    .map_err(world_state_bf_err)?;
     Ok(RetNil)
 }
 
@@ -210,10 +211,10 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
-    bf_args
-        .world_state
-        .delete_property(&bf_args.task_perms_who(), &obj, prop_name)
-        .map_err(world_state_bf_err)?;
+    with_current_transaction_mut(|world_state| {
+        world_state.delete_property(&bf_args.task_perms_who(), &obj, prop_name)
+    })
+    .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
 

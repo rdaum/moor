@@ -13,6 +13,7 @@
 
 //! Builtin functions for value inspection, conversion, and manipulation.
 
+use crate::task_context::with_current_transaction;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
@@ -299,13 +300,13 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_INVARG.msg("object_bytes() requires an object argument"),
         ));
     };
-    if !bf_args.world_state.valid(&o).map_err(world_state_bf_err)? {
+    if !with_current_transaction(|world_state| world_state.valid(&o)).map_err(world_state_bf_err)? {
         return Err(BfErr::ErrValue(E_INVARG.msg("object is not valid")));
     };
-    let size = bf_args
-        .world_state
-        .object_bytes(&bf_args.caller_perms(), &o)
-        .map_err(world_state_bf_err)?;
+    let size = with_current_transaction(|world_state| {
+        world_state.object_bytes(&bf_args.caller_perms(), &o)
+    })
+    .map_err(world_state_bf_err)?;
     Ok(Ret(v_int(size as i64)))
 }
 
