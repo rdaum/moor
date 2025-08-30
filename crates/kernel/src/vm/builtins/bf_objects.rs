@@ -1180,6 +1180,71 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&string_vars)))
 }
 
+/// Loads a single object definition from a list of strings and creates it in the database.
+/// This creates the object and all its properties/verbs. Wizard-only.
+/// MOO: `obj load_object(list object_lines [, obj target_object [, map constants]])`
+fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("load_object() requires 1-3 arguments"),
+        ));
+    }
+
+    let Some(lines_list) = bf_args.args[0].as_list() else {
+        return Err(BfErr::ErrValue(E_TYPE.msg(
+            "load_object() requires a list of strings as the first argument",
+        )));
+    };
+
+    // Convert list of values to list of strings, joining with newlines
+    let mut lines = Vec::new();
+    for line_val in lines_list.iter() {
+        let Some(line_str) = line_val.as_string() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("load_object() requires a list of strings"),
+            ));
+        };
+        lines.push(line_str.to_string());
+    }
+    let object_definition = lines.join("\n");
+
+    // Parse optional target object (second argument)
+    let target_object = if bf_args.args.len() >= 2 {
+        let Some(target_obj) = bf_args.args[1].as_object() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("load_object() second argument must be an object"),
+            ));
+        };
+        Some(target_obj)
+    } else {
+        None
+    };
+
+    // Parse optional constants map (third argument)
+    let constants = if bf_args.args.len() >= 3 {
+        let Some(constants_map) = bf_args.args[2].as_map() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("load_object() third argument must be a map of constants"),
+            ));
+        };
+        Some(constants_map.clone())
+    } else {
+        None
+    };
+
+    // Check permissions: wizard only (object creation with arbitrary properties/verbs)
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms.check_wizard().map_err(world_state_bf_err)?;
+
+    // Use the task scheduler client to request the load from the scheduler
+    let oid = bf_args
+        .task_scheduler_client
+        .load_object(object_definition, target_object, constants)
+        .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to load object: {e}"))))?;
+
+    Ok(Ret(v_obj(oid)))
+}
+
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
     builtins[offset_for_builtin("create_at")] = Box::new(bf_create_at);
@@ -1200,4 +1265,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("locations")] = Box::new(bf_locations);
     builtins[offset_for_builtin("owned_objects")] = Box::new(bf_owned_objects);
     builtins[offset_for_builtin("dump_object")] = Box::new(bf_dump_object);
+    builtins[offset_for_builtin("load_object")] = Box::new(bf_load_object);
 }

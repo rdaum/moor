@@ -237,7 +237,7 @@ fn main() -> Result<(), eyre::Report> {
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
 
         if let Err(e) = od.read_dirdump(features.compile_options(), objdef_dir.as_ref()) {
-            error!("Compilation failure @ {}", e.path().display());
+            error!("Compilation failure @ {}", e.source());
             error!("{:#}", e);
             return Ok(());
         }

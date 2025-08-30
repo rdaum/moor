@@ -44,6 +44,10 @@ impl ObjFileContext {
     pub fn new() -> Self {
         Self(HashMap::new())
     }
+
+    pub fn add_constant(&mut self, name: Symbol, value: Var) {
+        self.0.insert(name, value);
+    }
 }
 
 pub struct ObjectDefinition {

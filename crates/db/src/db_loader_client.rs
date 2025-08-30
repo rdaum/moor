@@ -98,6 +98,10 @@ impl LoaderInterface for DbWorldState {
         Ok(())
     }
 
+    fn max_object(&self) -> Result<Obj, WorldStateError> {
+        self.get_tx().get_max_object()
+    }
+
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         self.tx.commit()
     }

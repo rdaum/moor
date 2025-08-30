@@ -148,8 +148,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
         compile_options: &CompileOptions,
     ) -> Result<(), DirDumpReaderError> {
         let compiled_defs =
-            compile_object_definitions(object_file_contents, compile_options, context)
-                .map_err(|e| DirDumpReaderError::ObjectFileParseError(path.to_path_buf(), e))?;
+            compile_object_definitions(object_file_contents, compile_options, context).map_err(
+                |e| DirDumpReaderError::ObjectDefParseError(path.to_string_lossy().to_string(), e),
+            )?;
 
         for compiled_def in compiled_defs {
             let oid = compiled_def.oid;
@@ -166,7 +167,11 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ),
                 )
                 .map_err(|wse| {
-                    DirDumpReaderError::CouldNotCreateObject(path.to_path_buf(), oid, wse)
+                    DirDumpReaderError::CouldNotCreateObject(
+                        path.to_string_lossy().to_string(),
+                        oid,
+                        wse,
+                    )
                 })?;
 
             self.object_definitions
@@ -180,17 +185,30 @@ impl<'a> ObjectDefinitionLoader<'a> {
             if def.parent != NOTHING {
                 self.loader
                     .set_object_parent(obj, &def.parent)
-                    .map_err(|e| DirDumpReaderError::CouldNotSetObjectParent(path.clone(), e))?;
+                    .map_err(|e| {
+                        DirDumpReaderError::CouldNotSetObjectParent(
+                            path.to_string_lossy().to_string(),
+                            e,
+                        )
+                    })?;
             }
             if def.location != NOTHING {
                 self.loader
                     .set_object_location(obj, &def.location)
-                    .map_err(|e| DirDumpReaderError::CouldNotSetObjectLocation(path.clone(), e))?;
+                    .map_err(|e| {
+                        DirDumpReaderError::CouldNotSetObjectLocation(
+                            path.to_string_lossy().to_string(),
+                            e,
+                        )
+                    })?;
             }
             if def.owner != NOTHING {
-                self.loader
-                    .set_object_owner(obj, &def.owner)
-                    .map_err(|e| DirDumpReaderError::CouldNotSetObjectOwner(path.clone(), e))?;
+                self.loader.set_object_owner(obj, &def.owner).map_err(|e| {
+                    DirDumpReaderError::CouldNotSetObjectOwner(
+                        path.to_string_lossy().to_string(),
+                        e,
+                    )
+                })?;
             }
         }
         Ok(())
@@ -210,7 +228,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     )
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotDefineVerb(
-                            path.clone(),
+                            path.to_string_lossy().to_string(),
                             *obj,
                             v.names.clone(),
                             wse,
@@ -234,7 +252,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     )
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotDefineProperty(
-                            path.clone(),
+                            path.to_string_lossy().to_string(),
                             *obj,
                             (*pd.name.as_arc_string()).clone(),
                             wse,
@@ -260,7 +278,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     )
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotOverrideProperty(
-                            path.clone(),
+                            path.to_string_lossy().to_string(),
                             *obj,
                             (*pv.name.as_arc_string()).clone(),
                             wse,
@@ -269,6 +287,192 @@ impl<'a> ObjectDefinitionLoader<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Loads a single object definition from a string.
+    /// This is a simplified alternative to `read_dirdump` for loading individual objects.
+    pub fn load_single_object(
+        &mut self,
+        object_definition: &str,
+        compile_options: CompileOptions,
+        target_object: Option<moor_var::Obj>,
+        constants: Option<moor_var::Map>,
+    ) -> Result<Obj, DirDumpReaderError> {
+        let start_time = Instant::now();
+        let source_name = "<string>".to_string();
+
+        // Create a fresh context for this single object
+        let mut context = ObjFileContext::new();
+
+        // Add constants to the context if provided
+        if let Some(constants_map) = constants {
+            for (key, value) in constants_map.iter() {
+                let key_symbol = key.as_symbol().map_err(|_| {
+                    DirDumpReaderError::ObjectDefParseError(
+                        source_name.clone(),
+                        moor_compiler::ObjDefParseError::ConstantNotFound(format!(
+                            "Constants map key must be string or symbol, got: {key:?}"
+                        )),
+                    )
+                })?;
+                context.add_constant(key_symbol, value.clone());
+            }
+        }
+
+        // Parse the object definition
+        let compiled_defs =
+            compile_object_definitions(object_definition, &compile_options, &mut context)
+                .map_err(|e| DirDumpReaderError::ObjectDefParseError(source_name.clone(), e))?;
+
+        // Ensure we got exactly one object
+        if compiled_defs.len() != 1 {
+            return Err(DirDumpReaderError::SingleObjectExpected(
+                source_name,
+                compiled_defs.len(),
+            ));
+        }
+
+        let compiled_def = compiled_defs.into_iter().next().unwrap();
+        let oid = if let Some(target_obj) = target_object {
+            if target_obj.id().0 < 0 {
+                // Negative object ID means allocate next available (max + 1)
+                let max_obj = self.loader.max_object().map_err(|e| {
+                    DirDumpReaderError::ObjectDefParseError(
+                        source_name.clone(),
+                        moor_compiler::ObjDefParseError::ConstantNotFound(format!(
+                            "Failed to get max object: {e}"
+                        )),
+                    )
+                })?;
+                Obj::mk_id(max_obj.id().0 + 1)
+            } else {
+                target_obj
+            }
+        } else {
+            compiled_def.oid
+        };
+
+        // Create the object (using target_object override if provided)
+        self.loader
+            .create_object(
+                Some(oid),
+                &ObjAttrs::new(
+                    NOTHING,
+                    NOTHING,
+                    NOTHING,
+                    compiled_def.flags,
+                    &compiled_def.name,
+                ),
+            )
+            .map_err(|wse| {
+                DirDumpReaderError::CouldNotCreateObject(source_name.clone(), oid, wse)
+            })?;
+
+        // Store the definition for processing
+        self.object_definitions
+            .insert(oid, (PathBuf::from(&source_name), compiled_def));
+
+        // Apply attributes
+        if let Some((_, def)) = self.object_definitions.get(&oid) {
+            if def.parent != NOTHING {
+                self.loader
+                    .set_object_parent(&oid, &def.parent)
+                    .map_err(|e| {
+                        DirDumpReaderError::CouldNotSetObjectParent(source_name.clone(), e)
+                    })?;
+            }
+            if def.location != NOTHING {
+                self.loader
+                    .set_object_location(&oid, &def.location)
+                    .map_err(|e| {
+                        DirDumpReaderError::CouldNotSetObjectLocation(source_name.clone(), e)
+                    })?;
+            }
+            if def.owner != NOTHING {
+                self.loader
+                    .set_object_owner(&oid, &def.owner)
+                    .map_err(|e| {
+                        DirDumpReaderError::CouldNotSetObjectOwner(source_name.clone(), e)
+                    })?;
+            }
+        }
+
+        // Define properties
+        if let Some((_, def)) = self.object_definitions.get(&oid) {
+            for pd in &def.property_definitions {
+                self.loader
+                    .define_property(
+                        &oid,
+                        &oid,
+                        pd.name,
+                        &pd.perms.owner(),
+                        pd.perms.flags(),
+                        pd.value.clone(),
+                    )
+                    .map_err(|wse| {
+                        DirDumpReaderError::CouldNotDefineProperty(
+                            source_name.clone(),
+                            oid,
+                            (*pd.name.as_arc_string()).clone(),
+                            wse,
+                        )
+                    })?;
+            }
+        }
+
+        // Set property overrides
+        if let Some((_, def)) = self.object_definitions.get(&oid) {
+            for pv in &def.property_overrides {
+                let pu = &pv.perms_update;
+                self.loader
+                    .set_property(
+                        &oid,
+                        pv.name,
+                        pu.as_ref().map(|p| p.owner()),
+                        pu.as_ref().map(|p| p.flags()),
+                        pv.value.clone(),
+                    )
+                    .map_err(|wse| {
+                        DirDumpReaderError::CouldNotOverrideProperty(
+                            source_name.clone(),
+                            oid,
+                            (*pv.name.as_arc_string()).clone(),
+                            wse,
+                        )
+                    })?;
+            }
+        }
+
+        // Define verbs
+        if let Some((_, def)) = self.object_definitions.get(&oid) {
+            for v in &def.verbs {
+                self.loader
+                    .add_verb(
+                        &oid,
+                        &v.names,
+                        &v.owner,
+                        v.flags,
+                        v.argspec,
+                        v.program.clone(),
+                    )
+                    .map_err(|wse| {
+                        DirDumpReaderError::CouldNotDefineVerb(
+                            source_name.clone(),
+                            oid,
+                            v.names.clone(),
+                            wse,
+                        )
+                    })?;
+            }
+        }
+
+        info!(
+            "Loaded single object {} in {} ms",
+            oid,
+            start_time.elapsed().as_millis()
+        );
+
+        Ok(oid)
     }
 }
 
@@ -419,5 +623,94 @@ mod tests {
             .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(2), Symbol::mk("description"))
             .unwrap();
         assert_eq!(p, v_str("This is a generic thing"));
+    }
+
+    #[test]
+    fn test_load_single_object() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+        let mut loader = db.loader_client().unwrap();
+
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+
+        let spec = r#"
+                object #42
+                    name: "Single Test Object"
+                    owner: #0
+                    parent: #-1
+                    location: #-1
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    property test_prop (owner: #42, flags: "rc") = "test value";
+
+                    verb "test_verb" (this none none) owner: #42 flags: "rxd"
+                        return "tested";
+                    endverb
+                endobject"#;
+
+        let oid = parser
+            .load_single_object(spec, CompileOptions::default(), None, None)
+            .unwrap();
+        loader.commit().unwrap();
+
+        assert_eq!(oid, Obj::mk_id(42));
+
+        // Verify the object was created correctly
+        let tx = db.new_world_state().unwrap();
+        let name = tx.name_of(&SYSTEM_OBJECT, &oid).unwrap();
+        let prop_value = tx
+            .retrieve_property(&SYSTEM_OBJECT, &oid, Symbol::mk("test_prop"))
+            .unwrap();
+
+        assert_eq!(name, "Single Test Object");
+        assert_eq!(prop_value, v_str("test value"));
+    }
+
+    #[test]
+    fn test_load_single_object_multiple_objects_fails() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+        let mut loader = db.loader_client().unwrap();
+
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+
+        let spec = r#"
+                object #1
+                    name: "Object One"
+                    owner: #0
+                    parent: #-1
+                    location: #-1
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+                endobject
+
+                object #2
+                    name: "Object Two"
+                    owner: #0
+                    parent: #-1
+                    location: #-1
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+                endobject"#;
+
+        let result = parser.load_single_object(spec, CompileOptions::default(), None, None);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            crate::DirDumpReaderError::SingleObjectExpected(_, count) => {
+                assert_eq!(count, 2);
+            }
+            _ => panic!("Expected SingleObjectExpected error"),
+        }
     }
 }

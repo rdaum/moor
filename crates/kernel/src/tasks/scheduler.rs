@@ -1022,6 +1022,17 @@ impl Scheduler {
                     error!(?e, "Could not send dump object reply to requester");
                 }
             }
+            TaskControlMsg::LoadObject {
+                object_definition,
+                target_object,
+                constants,
+                reply,
+            } => {
+                let result = self.handle_load_object(object_definition, target_object, constants);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send load object reply to requester");
+                }
+            }
             TaskControlMsg::GetWorkersInfo { reply } => {
                 let result = self.handle_get_workers_info();
                 if let Err(e) = reply.send(result) {
@@ -1095,6 +1106,37 @@ impl Scheduler {
         })?;
 
         Ok(lines)
+    }
+
+    fn handle_load_object(
+        &self,
+        object_definition: String,
+        target_object: Option<Obj>,
+        constants: Option<moor_var::Map>,
+    ) -> Result<Obj, moor_var::Error> {
+        // Get a loader client from the database
+        let loader_client = self.database.loader_client().map_err(|e| {
+            moor_var::E_INVARG.with_msg(|| format!("Failed to create loader client: {e:?}"))
+        })?;
+        let mut loader_client = loader_client;
+        let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader_client.as_mut());
+
+        // Load the single object with optional target and constants
+        let oid = object_loader
+            .load_single_object(
+                &object_definition,
+                self.config.features.compile_options(),
+                target_object,
+                constants,
+            )
+            .map_err(|e| moor_var::E_INVARG.with_msg(|| format!("Failed to load object: {}", e)))?;
+
+        // Commit the changes
+        loader_client.commit().map_err(|e| {
+            moor_var::E_INVARG.with_msg(|| format!("Failed to commit object load: {e:?}"))
+        })?;
+
+        Ok(oid)
     }
 
     fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {

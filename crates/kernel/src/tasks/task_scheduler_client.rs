@@ -348,6 +348,29 @@ impl TaskSchedulerClient {
             .expect("Could not receive dump object reply -- scheduler shut down?")
     }
 
+    pub fn load_object(
+        &self,
+        object_definition: String,
+        target_object: Option<Obj>,
+        constants: Option<moor_var::Map>,
+    ) -> Result<Obj, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::LoadObject {
+                    object_definition,
+                    target_object,
+                    constants,
+                    reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive load object reply -- scheduler shut down?")
+    }
+
     pub fn workers_info(&self) -> Vec<WorkerInfo> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
@@ -466,6 +489,13 @@ pub enum TaskControlMsg {
     DumpObject {
         obj: Obj,
         reply: oneshot::Sender<Result<Vec<String>, Error>>,
+    },
+    /// Request to load an object from objdef format string
+    LoadObject {
+        object_definition: String,
+        target_object: Option<Obj>,
+        constants: Option<moor_var::Map>,
+        reply: oneshot::Sender<Result<Obj, Error>>,
     },
     /// Request information about all workers
     GetWorkersInfo {

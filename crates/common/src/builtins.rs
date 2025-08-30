@@ -592,6 +592,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin(
+            "load_object",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_LIST), Typed(TYPE_OBJ), Typed(TYPE_MAP)],
+            true,
+        ),
+        mk_builtin(
             "create_at",
             Q(2),
             Q(4),

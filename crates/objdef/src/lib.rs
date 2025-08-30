@@ -32,38 +32,52 @@ pub enum DirDumpReaderError {
     InvalidObjectFilename(PathBuf),
     #[error("Error reading object file: {1}")]
     ObjectFileReadError(PathBuf, io::Error),
-    #[error("Could not parse object file {0}: {1}")]
-    ObjectFileParseError(PathBuf, ObjDefParseError),
-    #[error("Could not create object in {0}: {1}")]
-    CouldNotCreateObject(PathBuf, Obj, WorldStateError),
-    #[error("Could not set object parent in {0}: {1}")]
-    CouldNotSetObjectParent(PathBuf, WorldStateError),
-    #[error("Could not set object location in {0}: {1}")]
-    CouldNotSetObjectLocation(PathBuf, WorldStateError),
-    #[error("Could not set object owner in {0}: {1}")]
-    CouldNotSetObjectOwner(PathBuf, WorldStateError),
-    #[error("Could not define property in {0}: {1}:{2}: {3}")]
-    CouldNotDefineProperty(PathBuf, Obj, String, WorldStateError),
-    #[error("Could not override property in {0}: {1}:{2}: {3}")]
-    CouldNotOverrideProperty(PathBuf, Obj, String, WorldStateError),
-    #[error("Could not define verb in {0}: {1}{2:?}: {3}")]
-    CouldNotDefineVerb(PathBuf, Obj, Vec<Symbol>, WorldStateError),
+    #[error("Could not parse object definition from {0}: {1}")]
+    ObjectDefParseError(String, ObjDefParseError),
+    #[error("Could not create object from {0}: {1}")]
+    CouldNotCreateObject(String, Obj, WorldStateError),
+    #[error("Could not set object parent from {0}: {1}")]
+    CouldNotSetObjectParent(String, WorldStateError),
+    #[error("Could not set object location from {0}: {1}")]
+    CouldNotSetObjectLocation(String, WorldStateError),
+    #[error("Could not set object owner from {0}: {1}")]
+    CouldNotSetObjectOwner(String, WorldStateError),
+    #[error("Could not define property from {0}: {1}:{2}: {3}")]
+    CouldNotDefineProperty(String, Obj, String, WorldStateError),
+    #[error("Could not override property from {0}: {1}:{2}: {3}")]
+    CouldNotOverrideProperty(String, Obj, String, WorldStateError),
+    #[error("Could not define verb from {0}: {1}{2:?}: {3}")]
+    CouldNotDefineVerb(String, Obj, Vec<Symbol>, WorldStateError),
+    #[error("Expected single object definition from {0}, but got {1}")]
+    SingleObjectExpected(String, usize),
 }
 
 impl DirDumpReaderError {
-    pub fn path(&self) -> &PathBuf {
+    pub fn source(&self) -> &str {
+        match self {
+            DirDumpReaderError::DirectoryNotFound(path) => path.to_str().unwrap_or("<unknown>"),
+            DirDumpReaderError::InvalidObjectFilename(path) => path.to_str().unwrap_or("<unknown>"),
+            DirDumpReaderError::ObjectFileReadError(path, _) => {
+                path.to_str().unwrap_or("<unknown>")
+            }
+            DirDumpReaderError::ObjectDefParseError(source, _)
+            | DirDumpReaderError::CouldNotCreateObject(source, _, _)
+            | DirDumpReaderError::CouldNotSetObjectParent(source, _)
+            | DirDumpReaderError::CouldNotSetObjectLocation(source, _)
+            | DirDumpReaderError::CouldNotSetObjectOwner(source, _)
+            | DirDumpReaderError::CouldNotDefineProperty(source, _, _, _)
+            | DirDumpReaderError::CouldNotOverrideProperty(source, _, _, _)
+            | DirDumpReaderError::CouldNotDefineVerb(source, _, _, _)
+            | DirDumpReaderError::SingleObjectExpected(source, _) => source.as_str(),
+        }
+    }
+
+    pub fn path(&self) -> Option<&PathBuf> {
         match self {
             DirDumpReaderError::DirectoryNotFound(path)
             | DirDumpReaderError::InvalidObjectFilename(path)
-            | DirDumpReaderError::ObjectFileReadError(path, _)
-            | DirDumpReaderError::ObjectFileParseError(path, _)
-            | DirDumpReaderError::CouldNotCreateObject(path, _, _)
-            | DirDumpReaderError::CouldNotSetObjectParent(path, _)
-            | DirDumpReaderError::CouldNotSetObjectLocation(path, _)
-            | DirDumpReaderError::CouldNotSetObjectOwner(path, _)
-            | DirDumpReaderError::CouldNotDefineProperty(path, _, _, _)
-            | DirDumpReaderError::CouldNotOverrideProperty(path, _, _, _)
-            | DirDumpReaderError::CouldNotDefineVerb(path, _, _, _) => path,
+            | DirDumpReaderError::ObjectFileReadError(path, _) => Some(path),
+            _ => None,
         }
     }
 }

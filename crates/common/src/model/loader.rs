@@ -113,6 +113,9 @@ pub trait LoaderInterface: Send {
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
 
+    /// Get the highest-numbered object in the database
+    fn max_object(&self) -> Result<Obj, WorldStateError>;
+
     /// Commit all changes made through this loader
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 }
