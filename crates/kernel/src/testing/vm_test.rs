@@ -18,7 +18,7 @@ mod tests {
     use moor_common::model::PropFlag;
     use moor_common::model::VerbArgsSpec;
     use moor_common::model::VerbFlag;
-    use moor_common::model::{WorldState, WorldStateSource};
+    use moor_common::model::{ObjectKind, WorldState, WorldStateSource};
     use moor_common::util::BitEnum;
     use moor_var::{
         List, Obj, Var, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_obj, v_objid,
@@ -72,7 +72,7 @@ mod tests {
                 &NOTHING,
                 &SYSTEM_OBJECT,
                 BitEnum::all(),
-                None,
+                ObjectKind::NextObjid,
             )
             .unwrap();
         tx.update_property(

@@ -22,9 +22,9 @@ use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
-use moor_common::model::CommitResult;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbFlag;
+use moor_common::model::{CommitResult, ObjectKind};
 use moor_common::model::{WorldState, WorldStateSource};
 use moor_common::tasks::AbortLimitReason;
 use moor_common::tasks::{NoopClientSession, Session};
@@ -50,7 +50,7 @@ fn create_db() -> TxDB {
             &NOTHING,
             &SYSTEM_OBJECT,
             BitEnum::all(),
-            None,
+            ObjectKind::NextObjid,
         )
         .unwrap();
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);

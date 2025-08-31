@@ -375,13 +375,6 @@ macro_rules! define_relations {
             /// This constant identifies the sequence used to track the highest object ID
             /// that has been allocated, used for generating new unique object IDs.
             pub const SEQUENCE_MAX_OBJECT: usize = 0;
-
-            /// Sequence constant for maximum uuobjid autoincrement counter tracking.
-            ///
-            /// This constant identifies the sequence used to track the highest uuobjid
-            /// autoincrement counter that has been allocated, used for generating new
-            /// unique uuobjids.
-            pub const SEQUENCE_MAX_UUOBJID: usize = 1;
         }
     };
 

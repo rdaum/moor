@@ -22,7 +22,7 @@ pub use crate::model::propdef::{PropDef, PropDefs};
 pub use crate::model::props::{PropAttr, PropAttrs, PropFlag, PropPerms, prop_flags_string};
 pub use crate::model::verbdef::{VerbDef, VerbDefs};
 pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string};
-pub use crate::model::world_state::{WorldState, WorldStateSource};
+pub use crate::model::world_state::{ObjectKind, WorldState, WorldStateSource};
 use bincode::{Decode, Encode};
 use moor_var::AsByteBuffer;
 use serde::Serialize;

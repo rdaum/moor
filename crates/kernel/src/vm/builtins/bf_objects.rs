@@ -18,7 +18,7 @@ use tracing::{debug, error, trace};
 
 use moor_common::model::Named;
 use moor_common::model::WorldStateError;
-use moor_common::model::{ObjFlag, ValSet};
+use moor_common::model::{ObjFlag, ObjectKind, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_str, v_sym};
@@ -26,7 +26,6 @@ use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Obj, v_int, v_obj};
 use moor_var::{Sequence, Symbol, v_list};
-use moor_db::SEQUENCE_MAX_UUOBJID;
 
 use crate::task_context::{
     current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
@@ -55,17 +54,16 @@ fn create_object_with_initialize(
     obj_id: Option<Obj>,
 ) -> Result<BfRet, BfErr> {
     let new_obj = with_current_transaction_mut(|ws| {
+        let use_uuids = bf_args.config.use_uuobjids;
         ws.create_object(
             &bf_args.task_perms_who(),
             parent,
             owner,
             BitEnum::new(),
             match obj_id {
-                Some(obj_id) => Some(obj_id),
-                None => {
-                    let max = ws.increment_sequence(SEQUENCE_MAX_UUOBJID);
-                    Some(Obj::mk_uuobjid_generated(max as u16))
-                }
+                Some(obj_id) => ObjectKind::Objid(obj_id),
+                None if use_uuids => ObjectKind::UuObjId,
+                None => ObjectKind::NextObjid,
             },
         )
     })
@@ -484,6 +482,13 @@ fn bf_create_at(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("create_at() first argument must be an object"),
         ));
     };
+
+    // create_at only accepts numeric object IDs, not UUID-based ones
+    if obj_id.is_uuobjid() {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("create_at() requires a numeric object ID"),
+        ));
+    }
 
     // Second argument is parent
     let Some(parent) = bf_args.args[1].as_object() else {

@@ -51,7 +51,7 @@ pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
 // Re-export sequence constants for use in VM
-pub use moor_db::{SEQUENCE_MAX_OBJECT, SEQUENCE_MAX_UUOBJID};
+pub use moor_db::SEQUENCE_MAX_OBJECT;
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;

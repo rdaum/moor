@@ -18,8 +18,8 @@ use crate::tx_management::{Relation, RelationTransaction};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
 use moor_common::model::{
-    CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef, PropDefs,
-    PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
+    CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
+    PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
     WorldStateError,
 };
 use moor_common::util::{BitEnum, PerfTimerGuard};
@@ -184,12 +184,12 @@ impl WorldStateTransaction {
 
     pub fn create_object(
         &mut self,
-        id: Option<Obj>,
+        id_kind: ObjectKind,
         attrs: ObjAttrs,
     ) -> Result<Obj, WorldStateError> {
-        let id = match id {
-            Some(id) => id,
-            None => {
+        let id = match id_kind {
+            ObjectKind::Objid(id) => id,
+            ObjectKind::NextObjid => {
                 let max = self.increment_sequence(SEQUENCE_MAX_OBJECT);
                 let max = if max < i32::MIN as i64 || max > i32::MAX as i64 {
                     return Err(WorldStateError::DatabaseError(format!(
@@ -200,6 +200,7 @@ impl WorldStateTransaction {
                 };
                 Obj::mk_id(max)
             }
+            ObjectKind::UuObjId => Obj::mk_uuobjid_generated(),
         };
 
         let owner = attrs.owner().unwrap_or(id);

@@ -30,6 +30,17 @@ use moor_var::program::ProgramType;
 use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Symbol};
 use moor_var::{Error, Obj};
 
+/// Specifies the way the object ID should be allocated when creating when creating a new object.
+#[derive(Debug, Clone, Eq, PartialEq, Decode, Encode)]
+pub enum ObjectKind {
+    /// Create an object with a specific numeric ID (for create_at).
+    Objid(Obj),
+    /// Create an object with the next available numeric ID (for create() when UUID feature is off).
+    NextObjid,
+    /// Create an object with a random generated UUID (for create() when UUID feature is on).
+    UuObjId,
+}
+
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
 pub enum WorldStateError {
@@ -162,8 +173,7 @@ pub trait WorldState: Send {
     /// Return the number of bytes used by the given object and all its attributes.
     fn object_bytes(&self, perms: &Obj, obj: &Obj) -> Result<usize, WorldStateError>;
 
-    /// Create a new object, optionally at a specific object id.
-    /// If id is None, assigns a new unique object id.
+    /// Create a new object with the specified object ID kind.
     /// If owner is #-1, the object's is set to itself.
     /// Note it is the caller's responsibility to execute :initialize).
     fn create_object(
@@ -172,7 +182,7 @@ pub trait WorldState: Send {
         parent: &Obj,
         owner: &Obj,
         flags: BitEnum<ObjFlag>,
-        id: Option<Obj>,
+        id_kind: ObjectKind,
     ) -> Result<Obj, WorldStateError>;
 
     /// Recycles (destroys) the given object, and re-parents all its children to the next parent up

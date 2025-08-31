@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 /// Create an optimized cache key by packing Obj and Symbol into a single u64.
 /// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
 fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
-    ((obj.as_u64() as u64) << 32) | (symbol.compare_id() as u64)
+    (obj.as_u64() << 32) | (symbol.compare_id() as u64)
 }
 
 lazy_static! {

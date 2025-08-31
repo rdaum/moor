@@ -139,13 +139,28 @@ impl<R: Read> TextdumpReader<R> {
     }
     fn read_objid(&mut self) -> Result<Obj, TextdumpReaderError> {
         let buf = self.read_next_line()?;
-        let Ok(u) = buf.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(
-                format!("invalid objid: {buf}"),
-                self.line_num,
-            ));
-        };
-        Ok(Obj::mk_id(u))
+        let trimmed = buf.trim();
+
+        // Check if this is a UUID object (prefixed with 'u')
+        if let Some(uuid_str) = trimmed.strip_prefix('u') {
+            // Parse as UUID format
+            match Obj::try_from(uuid_str) {
+                Ok(obj) => Ok(obj),
+                Err(_) => Err(TextdumpReaderError::ParseError(
+                    format!("invalid UUID objid: {uuid_str}"),
+                    self.line_num,
+                )),
+            }
+        } else {
+            // Parse as regular numeric object ID
+            let Ok(u) = trimmed.parse() else {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid objid: {trimmed}"),
+                    self.line_num,
+                ));
+            };
+            Ok(Obj::mk_id(u))
+        }
     }
     fn read_float(&mut self) -> Result<f64, TextdumpReaderError> {
         let buf = self.read_next_line()?;

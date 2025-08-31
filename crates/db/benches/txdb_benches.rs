@@ -14,7 +14,7 @@
 #![recursion_limit = "256"]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use moor_common::model::{CommitResult, PropFlag, WorldStateSource};
+use moor_common::model::{CommitResult, ObjectKind, PropFlag, WorldStateSource};
 use moor_common::util::BitEnum;
 use moor_db::{DatabaseConfig, TxDB};
 use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int, v_list_iter};
@@ -30,7 +30,7 @@ fn create_db() -> TxDB {
             &NOTHING,
             &SYSTEM_OBJECT,
             BitEnum::all(),
-            None,
+            ObjectKind::NextObjid,
         )
         .unwrap();
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
@@ -46,7 +46,7 @@ fn commit_latency(c: &mut Criterion) {
             &NOTHING,
             &SYSTEM_OBJECT,
             BitEnum::all(),
-            None,
+            ObjectKind::NextObjid,
         )
         .unwrap();
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);

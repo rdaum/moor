@@ -19,7 +19,7 @@ use crate::moor_db::WorldStateTransaction;
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
-use moor_common::model::{ArgSpec, PrepSpec, VerbArgsSpec};
+use moor_common::model::{ArgSpec, ObjectKind, PrepSpec, VerbArgsSpec};
 use moor_common::model::{CommitResult, PropPerms, ValSet};
 use moor_common::model::{HasUuid, ObjectRef};
 use moor_common::model::{ObjAttrs, ObjFlag};
@@ -213,7 +213,7 @@ impl WorldState for DbWorldState {
         parent: &Obj,
         owner: &Obj,
         flags: BitEnum<ObjFlag>,
-        id: Option<Obj>,
+        id_kind: ObjectKind,
     ) -> Result<Obj, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.create_object);
         let is_wizard = self.perms(perms)?.check_is_wizard()?;
@@ -225,11 +225,17 @@ impl WorldState for DbWorldState {
             return Err(WorldStateError::ObjectPermissionDenied);
         }
 
-        // If a specific ID is requested, check if it already exists
-        if let Some(obj_id) = id
-            && self.valid(&obj_id)?
-        {
-            return Err(WorldStateError::ObjectAlreadyExists(obj_id));
+        // Handle different ID kinds - validate specific IDs exist check
+        match &id_kind {
+            ObjectKind::Objid(obj_id) => {
+                // If a specific ID is requested, check if it already exists
+                if self.valid(obj_id)? {
+                    return Err(WorldStateError::ObjectAlreadyExists(*obj_id));
+                }
+            }
+            ObjectKind::NextObjid | ObjectKind::UuObjId => {
+                // No validation needed for auto-generated IDs
+            }
         }
 
         self.check_parent(perms, parent, owner)?;
@@ -239,7 +245,7 @@ impl WorldState for DbWorldState {
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
         let attrs = ObjAttrs::new(*owner, *parent, NOTHING, flags, "");
-        self.get_tx_mut().create_object(id, attrs)
+        self.get_tx_mut().create_object(id_kind, attrs)
     }
 
     fn recycle_object(&mut self, perms: &Obj, obj: &Obj) -> Result<(), WorldStateError> {

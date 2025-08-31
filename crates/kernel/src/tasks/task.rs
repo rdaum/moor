@@ -769,7 +769,7 @@ mod tests {
     use flume::{Receiver, unbounded};
 
     use moor_common::model::{
-        ArgSpec, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
+        ArgSpec, ObjectKind, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
     };
     use moor_common::tasks::{CommandError, Event, TaskId};
     use moor_common::util::BitEnum;
@@ -835,7 +835,7 @@ mod tests {
                 &NOTHING,
                 &SYSTEM_OBJECT,
                 BitEnum::all(),
-                None,
+                ObjectKind::NextObjid,
             )
             .unwrap();
         tx.update_property(

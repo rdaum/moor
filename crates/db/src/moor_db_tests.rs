@@ -16,7 +16,7 @@ mod tests {
     use crate::DatabaseConfig;
 
     use crate::moor_db::MoorDB;
-    use moor_common::model::{CommitResult, WorldStateError};
+    use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
     use moor_common::model::{HasUuid, Named};
     use moor_common::model::{ObjAttrs, PropFlag, ValSet};
     use moor_common::model::{ObjFlag, VerbAttrs};
@@ -41,7 +41,7 @@ mod tests {
         let mut tx = db.start_transaction();
         let oid = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -68,11 +68,13 @@ mod tests {
 
         // Force at 1.
         let oid = tx
-            .create_object(Some(Obj::mk_id(1)), ObjAttrs::default())
+            .create_object(ObjectKind::Objid(Obj::mk_id(1)), ObjAttrs::default())
             .unwrap();
         assert_eq!(oid, Obj::mk_id(1));
         // Now verify the next will be 2.
-        let oid2 = tx.create_object(None, ObjAttrs::default()).unwrap();
+        let oid2 = tx
+            .create_object(ObjectKind::NextObjid, ObjAttrs::default())
+            .unwrap();
         assert_eq!(oid2, Obj::mk_id(2));
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
@@ -85,14 +87,14 @@ mod tests {
         // Single parent/child relationship.
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -110,7 +112,7 @@ mod tests {
         // Add a second child
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -128,7 +130,7 @@ mod tests {
         // Create new obj and reparent one child
         let d = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
@@ -159,7 +161,7 @@ mod tests {
 
         let a = tx
             .create_object(
-                Some(Obj::mk_id(0)),
+                ObjectKind::Objid(Obj::mk_id(0)),
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -167,7 +169,7 @@ mod tests {
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -175,7 +177,7 @@ mod tests {
 
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -183,7 +185,7 @@ mod tests {
 
         let d = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, c, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
@@ -229,14 +231,14 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -252,7 +254,7 @@ mod tests {
 
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -267,7 +269,7 @@ mod tests {
 
         let d = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
@@ -317,21 +319,21 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
             )
             .unwrap();
 
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -398,7 +400,7 @@ mod tests {
 
         let oid = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -428,7 +430,7 @@ mod tests {
 
         let oid = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -502,14 +504,14 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -533,7 +535,7 @@ mod tests {
         // to new parent c.  This should remove the defs for a's properties from b.
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -555,14 +557,14 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -634,14 +636,14 @@ mod tests {
         let mut tx = db.start_transaction();
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -683,14 +685,14 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -739,7 +741,7 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -851,14 +853,14 @@ mod tests {
 
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -919,7 +921,7 @@ mod tests {
         let mut tx = db.start_transaction();
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -991,19 +993,19 @@ mod tests {
         let mut tx = db.start_transaction();
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, b, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -1035,7 +1037,7 @@ mod tests {
         // Now make a new root and reparent B to it
         let d = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
@@ -1096,7 +1098,7 @@ mod tests {
         let mut tx = db.start_transaction();
         let tobj = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -1113,13 +1115,13 @@ mod tests {
         // Create two new objects and root the second off the first.
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
@@ -1142,7 +1144,7 @@ mod tests {
         // Create another one, add a property to the root, and then verify we can recycle the child.
         let c = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
@@ -1179,7 +1181,7 @@ mod tests {
         // Create another, add a property, then recycle the root.
         let d = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
@@ -1225,7 +1227,7 @@ mod tests {
         assert_eq!(max_obj, NOTHING);
         let obj = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -1236,10 +1238,18 @@ mod tests {
     fn test_chown_property() {
         let db = test_db();
         let mut tx = db.start_transaction();
-        let obj = tx.create_object(None, Default::default()).unwrap();
-        let obj2 = tx.create_object(None, Default::default()).unwrap();
-        let obj3 = tx.create_object(None, Default::default()).unwrap();
-        let obj4 = tx.create_object(None, Default::default()).unwrap();
+        let obj = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let obj2 = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let obj3 = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let obj4 = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
         tx.set_object_parent(&obj2, &obj).unwrap();
         tx.set_object_owner(&obj2, &obj4).unwrap();
 
@@ -1264,7 +1274,7 @@ mod tests {
         // Now create a new object, descendant of obj, and the same logic should apply
         let obj5 = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(
                     Obj::mk_id(obj4.id().0 + 1),
                     obj,
@@ -1287,7 +1297,9 @@ mod tests {
     fn test_property_subgraph_reparent() {
         let db = test_db();
         let mut tx = db.start_transaction();
-        let player = tx.create_object(None, Default::default()).unwrap();
+        let player = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
         let uuid = tx
             .define_property(
                 &player,
@@ -1298,9 +1310,15 @@ mod tests {
                 Some(v_int(666)),
             )
             .unwrap();
-        let programmer = tx.create_object(None, Default::default()).unwrap();
-        let builder = tx.create_object(None, Default::default()).unwrap();
-        let user = tx.create_object(None, Default::default()).unwrap();
+        let programmer = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let builder = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let user = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
         tx.set_object_parent(&builder, &player).unwrap();
         tx.set_object_parent(&programmer, &builder).unwrap();
         tx.set_object_parent(&user, &player).unwrap();
@@ -1324,13 +1342,13 @@ mod tests {
         let mut tx = db.start_transaction();
         let a = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(Obj::mk_id(1), NOTHING, NOTHING, BitEnum::all(), "a"),
             )
             .unwrap();
         let b = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(Obj::mk_id(1), a, NOTHING, BitEnum::all(), "b"),
             )
             .unwrap();
@@ -1361,8 +1379,12 @@ mod tests {
     fn test_regression_missing_child_propdef() {
         let db = test_db();
         let mut tx = db.start_transaction();
-        let object_e = tx.create_object(None, Default::default()).unwrap();
-        let object_c = tx.create_object(None, Default::default()).unwrap();
+        let object_e = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
+        let object_c = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
         tx.define_property(
             &object_c,
             &object_c,
@@ -1390,7 +1412,9 @@ mod tests {
         // succeed. IT wasn't before because the verb cache was getting filled with a negative
         // miss.
         let mut tx = db.start_transaction();
-        let a = tx.create_object(None, Default::default()).unwrap();
+        let a = tx
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
         tx.add_object_verb(
             &a,
             &a,
@@ -1418,7 +1442,7 @@ mod tests {
         let db = test_db();
         let mut tx = db.start_transaction();
         let my_obj = tx
-            .create_object(Some(Obj::mk_id(-1)), Default::default())
+            .create_object(ObjectKind::Objid(Obj::mk_id(-1)), Default::default())
             .unwrap();
         tx.recycle_object(&my_obj).unwrap();
         let r = tx.commit().unwrap();
@@ -1431,7 +1455,9 @@ mod tests {
 
         // Create initial object with property
         let mut tx1 = db.start_transaction();
-        let obj = tx1.create_object(None, Default::default()).unwrap();
+        let obj = tx1
+            .create_object(ObjectKind::NextObjid, Default::default())
+            .unwrap();
         let prop_uuid = tx1
             .define_property(
                 &obj,
@@ -1482,7 +1508,7 @@ mod tests {
 
             let parent = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(
                         NOTHING,
                         NOTHING,
@@ -1495,7 +1521,7 @@ mod tests {
 
             let child = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(
                         NOTHING,
                         parent,
@@ -1573,7 +1599,7 @@ mod tests {
 
             let parent = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(
                         NOTHING,
                         NOTHING,
@@ -1586,7 +1612,7 @@ mod tests {
 
             let child = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(
                         NOTHING,
                         parent,
@@ -1670,7 +1696,7 @@ mod tests {
                 let parent_id = 1 + (iteration * 100); // Use different object IDs per iteration
                 parent = tx
                     .create_object(
-                        Some(Obj::mk_id(parent_id)),
+                        ObjectKind::Objid(Obj::mk_id(parent_id)),
                         ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
                     )
                     .unwrap();
@@ -1683,7 +1709,7 @@ mod tests {
                 let mut tx = db.start_transaction();
                 child = tx
                     .create_object(
-                        None,
+                        ObjectKind::NextObjid,
                         ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
                     )
                     .unwrap();
@@ -1810,13 +1836,13 @@ mod tests {
             let mut tx = db.start_transaction();
             parent = tx
                 .create_object(
-                    Some(Obj::mk_id(1)),
+                    ObjectKind::Objid(Obj::mk_id(1)),
                     ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
                 )
                 .unwrap();
             child = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
                 )
                 .unwrap();
@@ -1875,7 +1901,7 @@ mod tests {
         {
             let mut tx = db.start_transaction();
             tx.create_object(
-                Some(obj),
+                ObjectKind::Objid(obj),
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -1930,7 +1956,7 @@ mod tests {
         // Create parent object (#1 equivalent)
         let parent = tx
             .create_object(
-                Some(Obj::mk_id(1)),
+                ObjectKind::Objid(Obj::mk_id(1)),
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
             )
             .unwrap();
@@ -1938,7 +1964,7 @@ mod tests {
         // Create child object parented to parent
         let child = tx
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
             )
             .unwrap();
@@ -2001,7 +2027,7 @@ mod tests {
 
             let parent = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(
                         NOTHING,
                         NOTHING,
@@ -2014,7 +2040,7 @@ mod tests {
 
             let child = tx
                 .create_object(
-                    None,
+                    ObjectKind::NextObjid,
                     ObjAttrs::new(
                         NOTHING,
                         parent,
@@ -2052,7 +2078,7 @@ mod tests {
         {
             let mut tx = db.start_transaction();
             tx.create_object(
-                None,
+                ObjectKind::NextObjid,
                 ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "temp_object"),
             )
             .unwrap();

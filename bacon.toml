@@ -50,6 +50,8 @@ command = [
     "timbren-core/src",
     "--import-format",
     "objdef",
+    "--use-uuobjids",
+    "true",
     "--export",
     "development-export",
     "--export-format",

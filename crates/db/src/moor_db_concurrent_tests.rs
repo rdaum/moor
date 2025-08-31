@@ -17,8 +17,8 @@ mod tests {
     use crate::db_worldstate::DbWorldState;
     use crate::moor_db::MoorDB;
     use moor_common::model::{
-        ArgSpec, CommitResult, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag, WorldState,
-        WorldStateError,
+        ArgSpec, CommitResult, ObjectKind, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag,
+        WorldState, WorldStateError,
     };
     use moor_common::util::BitEnum;
     use moor_var::program::ProgramType;
@@ -42,7 +42,7 @@ mod tests {
                 &NOTHING,
                 &SYSTEM_OBJECT,
                 BitEnum::new(),
-                None,
+                ObjectKind::NextObjid,
             )
             .unwrap();
 
@@ -54,7 +54,7 @@ mod tests {
                     &SYSTEM_OBJECT,
                     &SYSTEM_OBJECT,
                     BitEnum::new(),
-                    None,
+                    ObjectKind::NextObjid,
                 )
                 .unwrap();
             assert_eq!(obj.id().0, i);
@@ -260,7 +260,7 @@ mod tests {
                             &SYSTEM_OBJECT,
                             &SYSTEM_OBJECT,
                             BitEnum::new(),
-                            None,
+                            ObjectKind::NextObjid,
                         )
                         .unwrap();
                     assert_eq!(parent.id().0, 6);
@@ -272,7 +272,7 @@ mod tests {
                                 &parent,
                                 &SYSTEM_OBJECT,
                                 BitEnum::new(),
-                                None,
+                                ObjectKind::NextObjid,
                             )
                             .unwrap();
                         assert_eq!(child.id().0, i);
@@ -478,7 +478,7 @@ mod tests {
                             &SYSTEM_OBJECT,
                             &SYSTEM_OBJECT,
                             BitEnum::new(),
-                            None,
+                            ObjectKind::NextObjid,
                         )
                         .unwrap();
                     let parent2 = ws
@@ -487,7 +487,7 @@ mod tests {
                             &parent1,
                             &SYSTEM_OBJECT,
                             BitEnum::new(),
-                            None,
+                            ObjectKind::NextObjid,
                         )
                         .unwrap();
                     let child = ws
@@ -496,7 +496,7 @@ mod tests {
                             &parent2,
                             &SYSTEM_OBJECT,
                             BitEnum::new(),
-                            None,
+                            ObjectKind::NextObjid,
                         )
                         .unwrap();
 

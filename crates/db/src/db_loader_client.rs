@@ -21,7 +21,7 @@ use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDefs;
 use moor_common::model::VerbFlag;
 use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
-use moor_common::model::{CommitResult, WorldStateError};
+use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
 use moor_common::model::{HasUuid, PropPerms, ValSet};
 use moor_common::model::{PropDef, PropDefs};
 use moor_common::util::BitEnum;
@@ -37,7 +37,11 @@ impl LoaderInterface for DbWorldState {
         objid: Option<Obj>,
         attrs: &ObjAttrs,
     ) -> Result<Obj, WorldStateError> {
-        self.get_tx_mut().create_object(objid, attrs.clone())
+        let id_kind = match objid {
+            Some(id) => ObjectKind::Objid(id),
+            None => ObjectKind::NextObjid,
+        };
+        self.get_tx_mut().create_object(id_kind, attrs.clone())
     }
     fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
         self.get_tx_mut().set_object_parent(obj, parent)

@@ -1430,12 +1430,7 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             binary.main_vector().to_vec(),
-            vec![
-                ImmObjid(Obj::mk_id(123)),
-                Return,
-                Pop,
-                Done
-            ]
+            vec![ImmObjid(Obj::mk_id(123)), Return, Pop, Done]
         );
 
         // Now test with the UUID
@@ -1448,12 +1443,7 @@ mod tests {
 
         assert_eq!(
             binary.main_vector().to_vec(),
-            vec![
-                ImmObjid(expected_obj),
-                Return,
-                Pop,
-                Done
-            ]
+            vec![ImmObjid(expected_obj), Return, Pop, Done]
         );
 
         // Test verb call with UUID

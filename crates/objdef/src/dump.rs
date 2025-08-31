@@ -545,7 +545,7 @@ fn dump_property_override(
 mod tests {
     use crate::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
     use moor_common::model::CommitResult;
-    use moor_common::model::{PropFlag, WorldStateSource};
+    use moor_common::model::{ObjectKind, PropFlag, WorldStateSource};
     use moor_common::util::BitEnum;
     use moor_compiler::{CompileOptions, compile};
     use moor_db::{Database, DatabaseConfig, TxDB};
@@ -623,7 +623,7 @@ mod tests {
                     &Obj::mk_id(-1), // parent: nothing
                     &SYSTEM_OBJECT,  // owner: self
                     BitEnum::new(),  // flags: none
-                    None,
+                    ObjectKind::NextObjid,
                 )
                 .unwrap();
             assert_eq!(system_obj, SYSTEM_OBJECT);

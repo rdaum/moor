@@ -18,7 +18,7 @@
 
 #[cfg(test)]
 mod tests {
-    use moor_common::model::{ObjFlag, PropFlag, WorldStateSource};
+    use moor_common::model::{ObjFlag, ObjectKind, PropFlag, WorldStateSource};
     use moor_common::util::BitEnum;
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
@@ -49,7 +49,7 @@ mod tests {
                     &NOTHING,
                     &SYSTEM_OBJECT,
                     BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
-                    None,
+                    ObjectKind::NextObjid,
                 )
                 .unwrap();
 
