@@ -129,7 +129,7 @@ impl Debug for Obj {
             OBJID_TYPE_CODE => f.write_fmt(format_args!("Obj(#{})", self.decode_as_objid())),
             UUOBJID_TYPE_CODE => {
                 let uuid = self.decode_as_uuobjid();
-                f.write_fmt(format_args!("Obj({})", uuid.to_uuid_string()))
+                f.write_fmt(format_args!("Obj(#{})", uuid.to_uuid_string()))
             }
             _ => f.write_fmt(format_args!("Obj(UnknownType:{})", self.object_type_code())),
         }
@@ -142,7 +142,7 @@ impl Display for Obj {
             OBJID_TYPE_CODE => f.write_fmt(format_args!("#{}", self.decode_as_objid())),
             UUOBJID_TYPE_CODE => {
                 let uuid = self.decode_as_uuobjid();
-                f.write_fmt(format_args!("{}", uuid.to_uuid_string()))
+                f.write_fmt(format_args!("#{}", uuid.to_uuid_string()))
             }
             _ => f.write_fmt(format_args!("UnknownType:{}", self.object_type_code())),
         }
