@@ -329,8 +329,8 @@ impl Scheduler {
 
     pub fn get_checkpoint_interval(
         &mut self,
-        cli_checkpoint_interval: Option<std::time::Duration>,
-    ) -> Option<std::time::Duration> {
+        cli_checkpoint_interval: Option<Duration>,
+    ) -> Option<Duration> {
         // Reload server options to get fresh dump_interval from database
         self.reload_server_options();
 
@@ -345,7 +345,7 @@ impl Scheduler {
             );
             Some(cli_interval)
         } else if let Some(db_secs) = self.server_options.dump_interval {
-            let db_interval = std::time::Duration::from_secs(db_secs);
+            let db_interval = Duration::from_secs(db_secs);
             info!("Using dump_interval from database: {:?}", db_interval);
             Some(db_interval)
         } else {
@@ -729,7 +729,7 @@ impl Scheduler {
                 if let Err(send_error) = task.session.send_event(
                     task.player,
                     Box::new(NarrativeEvent {
-                        event_id: uuid::Uuid::now_v7(),
+                        event_id: Uuid::now_v7(),
                         timestamp: SystemTime::now(),
                         author: v_obj(task.player),
                         event: Event::Traceback(exception.as_ref().clone()),
@@ -1058,14 +1058,12 @@ impl Scheduler {
     ) -> Result<(), moor_var::Error> {
         // Get the current task to access its session
         let Some(task) = self.task_q.active.get_mut(&task_id) else {
-            return Err(
-                moor_var::E_INVARG.with_msg(|| "Task not found for switch_player".to_string())
-            );
+            return Err(E_INVARG.with_msg(|| "Task not found for switch_player".to_string()));
         };
 
         // Get the connection details for the current session (player=None means "this session")
         let connection_details = task.session.connection_details(None).map_err(|e| {
-            moor_var::E_INVARG
+            E_INVARG
                 .with_msg(|| format!("Failed to get connection details for current session: {e:?}"))
         })?;
 
@@ -1073,8 +1071,7 @@ impl Scheduler {
         let connection_obj = connection_details
             .first()
             .ok_or_else(|| {
-                moor_var::E_INVARG
-                    .with_msg(|| "No connection found for current session".to_string())
+                E_INVARG.with_msg(|| "No connection found for current session".to_string())
             })?
             .connection_obj;
 
@@ -1091,19 +1088,17 @@ impl Scheduler {
     fn handle_dump_object(&self, obj: Obj) -> Result<Vec<String>, moor_var::Error> {
         // Create a snapshot to avoid blocking ongoing operations
         let snapshot = self.database.create_snapshot().map_err(|e| {
-            moor_var::E_INVARG.with_msg(|| format!("Failed to create database snapshot: {e:?}"))
+            E_INVARG.with_msg(|| format!("Failed to create database snapshot: {e:?}"))
         })?;
 
         // Collect the object definition
-        let (_, _, _, object_def) = collect_object(snapshot.as_ref(), &obj).map_err(|e| {
-            moor_var::E_INVARG.with_msg(|| format!("Failed to collect object {obj}: {e:?}"))
-        })?;
+        let (_, _, _, object_def) = collect_object(snapshot.as_ref(), &obj)
+            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to collect object {obj}: {e:?}")))?;
 
         // Dump to objdef format
         let index_names = HashMap::new(); // Empty index for now, keeping simple
-        let lines = dump_object(&index_names, &object_def).map_err(|e| {
-            moor_var::E_INVARG.with_msg(|| format!("Failed to dump object {obj}: {e:?}"))
-        })?;
+        let lines = dump_object(&index_names, &object_def)
+            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to dump object {obj}: {e:?}")))?;
 
         Ok(lines)
     }
@@ -1115,9 +1110,10 @@ impl Scheduler {
         constants: Option<moor_var::Map>,
     ) -> Result<Obj, moor_var::Error> {
         // Get a loader client from the database
-        let loader_client = self.database.loader_client().map_err(|e| {
-            moor_var::E_INVARG.with_msg(|| format!("Failed to create loader client: {e:?}"))
-        })?;
+        let loader_client = self
+            .database
+            .loader_client()
+            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to create loader client: {e:?}")))?;
         let mut loader_client = loader_client;
         let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader_client.as_mut());
 
@@ -1129,12 +1125,12 @@ impl Scheduler {
                 target_object,
                 constants,
             )
-            .map_err(|e| moor_var::E_INVARG.with_msg(|| format!("Failed to load object: {e}")))?;
+            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to load object: {e}")))?;
 
         // Commit the changes
-        loader_client.commit().map_err(|e| {
-            moor_var::E_INVARG.with_msg(|| format!("Failed to commit object load: {e:?}"))
-        })?;
+        loader_client
+            .commit()
+            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to commit object load: {e:?}")))?;
 
         Ok(oid)
     }
@@ -1159,7 +1155,7 @@ impl Scheduler {
             return vec![];
         };
 
-        match worker_recv.recv_timeout(std::time::Duration::from_secs(5)) {
+        match worker_recv.recv_timeout(Duration::from_secs(5)) {
             Ok(WorkerResponse::WorkersInfo {
                 request_id: resp_id,
                 workers_info,
@@ -1583,8 +1579,13 @@ impl TaskQ {
             };
 
             // Set up transaction context for task setup
-            let _tx_guard =
-                TaskGuard::new(world_state, task_scheduler_client.clone(), task_id, *player);
+            let _tx_guard = TaskGuard::new(
+                world_state,
+                task_scheduler_client.clone(),
+                task_id,
+                *player,
+                session.clone(),
+            );
             if !task.setup_task_start(control_sender) {
                 error!(task_id, "Could not setup task start");
                 return Err(SchedulerError::CouldNotStartTask);
@@ -1632,11 +1633,12 @@ impl TaskQ {
         };
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
-            let _tx_guard = crate::task_context::TaskGuard::new(
+            let _tx_guard = TaskGuard::new(
                 world_state,
                 task_scheduler_client.clone(),
                 task.task_id,
                 task.player,
+                session.clone(),
             );
 
             // Start the db transaction, which will initially be used to resolve the verb before the task
@@ -1712,11 +1714,12 @@ impl TaskQ {
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
-            let _tx_guard = crate::task_context::TaskGuard::new(
+            let _tx_guard = TaskGuard::new(
                 world_state,
                 task_scheduler_client.clone(),
                 task_id,
                 player,
+                session.clone(),
             );
 
             Task::run_task_loop(
@@ -1818,11 +1821,12 @@ impl TaskQ {
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
-            let _tx_guard = crate::task_context::TaskGuard::new(
+            let _tx_guard = TaskGuard::new(
                 world_state,
                 task_scheduler_client.clone(),
                 task_id,
                 task.player,
+                new_session.clone(),
             );
 
             info!(?task.task_id, "Restarting retry task");
