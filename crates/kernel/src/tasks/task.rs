@@ -27,8 +27,8 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use crate::task_context::{
-    commit_current_transaction, replace_current_transaction, rollback_current_transaction,
-    with_current_transaction, with_current_transaction_mut,
+    commit_current_transaction, rollback_current_transaction, with_current_transaction,
+    with_current_transaction_mut, with_new_transaction,
 };
 
 use bincode::de::{BorrowDecoder, Decoder};
@@ -195,17 +195,6 @@ impl Task {
                 Some(self)
             }
             VMHostResponse::Suspend(delay) => {
-                // VMHost is now suspended for execution, and we'll be waiting for a Resume
-                let commit_result = commit_current_transaction()
-                    .expect("Could not commit world state before suspend");
-
-                if let CommitResult::ConflictRetry = commit_result {
-                    warn!("Conflict during commit before suspend");
-                    session.rollback().unwrap();
-                    task_scheduler_client.conflict_retry(self);
-                    return None;
-                }
-
                 // Check for immediate wake conditions to avoid scheduler round-trip
                 let is_immediate = match delay.as_ref() {
                     TaskSuspend::Commit => true,
@@ -215,13 +204,23 @@ impl Task {
 
                 if is_immediate {
                     // Fast path: get new transaction and continue immediately
-                    match task_scheduler_client.begin_new_transaction() {
-                        Ok(new_world_state) => {
+                    match with_new_transaction(|| {
+                        let new_world_state =
+                            task_scheduler_client.begin_new_transaction().map_err(|e| {
+                                WorldStateError::DatabaseError(format!("Scheduler error: {:?}", e))
+                            })?;
+                        Ok((new_world_state, ()))
+                    }) {
+                        Ok((CommitResult::Success, _)) => {
                             self.retry_state = self.vm_host.snapshot_state();
                             self.vm_host.resume_execution(v_int(0));
-                            // Set the new transaction (no active transaction after commit)
-                            replace_current_transaction(new_world_state);
                             return Some(self);
+                        }
+                        Ok((CommitResult::ConflictRetry, _)) => {
+                            warn!("Conflict during immediate resume transaction");
+                            session.rollback().unwrap();
+                            task_scheduler_client.conflict_retry(self);
+                            return None;
                         }
                         Err(e) => {
                             error!(
@@ -231,6 +230,17 @@ impl Task {
                             // Fall back to normal suspend path
                         }
                     }
+                }
+
+                // VMHost is now suspended for execution, and we'll be waiting for a Resume
+                let commit_result = commit_current_transaction()
+                    .expect("Could not commit world state before suspend");
+
+                if let CommitResult::ConflictRetry = commit_result {
+                    warn!("Conflict during commit before suspend");
+                    session.rollback().unwrap();
+                    task_scheduler_client.conflict_retry(self);
+                    return None;
                 }
 
                 self.retry_state = self.vm_host.snapshot_state();
@@ -254,12 +264,11 @@ impl Task {
 
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
-                    return self.try_immediate_retry(
-                        task_scheduler_client,
-                        session,
-                        "suspend need input",
-                    );
+                    session.rollback().unwrap();
+                    task_scheduler_client.conflict_retry(self);
+                    return None;
                 }
+
                 self.retry_state = self.vm_host.snapshot_state();
                 self.vm_host.stop();
 
@@ -300,12 +309,9 @@ impl Task {
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
                 let CommitResult::Success = commit_result else {
-                    warn!("Conflict during commit before complete, asking scheduler to retry task");
-                    return self.try_immediate_retry(
-                        task_scheduler_client,
-                        session,
-                        "complete success",
-                    );
+                    session.rollback().unwrap();
+                    task_scheduler_client.conflict_retry(self);
+                    return None;
                 };
 
                 self.vm_host.stop();
@@ -340,11 +346,9 @@ impl Task {
                         "Conflict during commit before complete, asking scheduler to retry task ({})",
                         self.task_id
                     );
-                    return self.try_immediate_retry(
-                        task_scheduler_client,
-                        session,
-                        "complete exception",
-                    );
+                    session.rollback().unwrap();
+                    task_scheduler_client.conflict_retry(self);
+                    return None;
                 };
 
                 warn!(task_id = self.task_id, ?exception, "Task exception");
@@ -386,36 +390,9 @@ impl Task {
                 self.vm_host.stop();
                 rollback_current_transaction().expect("Could not rollback world state");
 
-                // Try immediate retry for rollback requests
-                self.try_immediate_retry(task_scheduler_client, session, "rollback retry")
-            }
-        }
-    }
-
-    /// Try to restart immediately with a new transaction, falling back to scheduler retry
-    /// if the immediate restart fails. This optimizes common conflict retry scenarios.
-    fn try_immediate_retry(
-        mut self: Box<Self>,
-        task_scheduler_client: &TaskSchedulerClient,
-        session: &dyn Session,
-        reason: &str,
-    ) -> Option<Box<Self>> {
-        match task_scheduler_client.begin_new_transaction() {
-            Ok(new_world_state) => {
-                // Immediate retry succeeded
-                self.vm_host.restore_state(&self.retry_state);
-                replace_current_transaction(new_world_state);
-                Some(self)
-            }
-            Err(e) => {
-                // Fall back to scheduler retry
-                warn!(
-                    "Failed to begin new transaction for immediate retry ({}): {:?}. Falling back to scheduler retry.",
-                    reason, e
-                );
                 session.rollback().unwrap();
                 task_scheduler_client.conflict_retry(self);
-                None
+                return None;
             }
         }
     }

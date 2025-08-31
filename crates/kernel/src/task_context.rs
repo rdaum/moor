@@ -18,7 +18,6 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use flume;
 use moor_common::model::{CommitResult, WorldState, WorldStateError};
 use moor_common::tasks::{Session, TaskId};
 use moor_var::Obj;
@@ -200,31 +199,57 @@ pub fn extract_current_transaction() -> Box<dyn WorldState> {
     })
 }
 
-/// Replace the current transaction in thread-local storage.
-/// This is a transitional helper for compatibility with existing parameter-passing code.
-/// Panics if a context is already active.
-pub fn replace_current_transaction(world_state: Box<dyn WorldState>) {
-    use moor_common::tasks::NoopClientSession;
-    use moor_var::NOTHING;
-    // Create a dummy channel for the scheduler client
-    let (tx, _rx) = flume::unbounded();
-    let dummy_client = TaskSchedulerClient::new(0, tx);
-    let dummy_session = Arc::new(NoopClientSession::new());
-
-    CURRENT_CONTEXT.with(|ctx| {
-        let mut current = ctx.borrow_mut();
-        assert!(
-            current.is_none(),
-            "Task context already active when trying to replace"
-        );
-        *current = Some(TaskContext {
-            world_state,
-            task_scheduler_client: dummy_client,
-            task_id: 0,
-            player: NOTHING,
-            session: dummy_session,
-        });
+/// Execute a closure that creates a new transaction while preserving the current task context.
+/// This atomically commits the current transaction and starts a new one with preserved context.
+pub fn with_new_transaction<F, R>(
+    create_transaction: F,
+) -> Result<(CommitResult, Option<R>), WorldStateError>
+where
+    F: FnOnce() -> Result<(Box<dyn WorldState>, R), WorldStateError>,
+{
+    // Extract context before commit to preserve it
+    let preserved_context = CURRENT_CONTEXT.with(|ctx| {
+        let task_ctx = ctx.borrow();
+        let task_ctx = task_ctx.as_ref().expect("No active task context");
+        (
+            task_ctx.task_scheduler_client.clone(),
+            task_ctx.task_id,
+            task_ctx.player,
+            task_ctx.session.clone(),
+        )
     });
+
+    // Commit current transaction (this removes the context)
+    let commit_result = commit_current_transaction()?;
+
+    match commit_result {
+        CommitResult::Success => {
+            // Create the new transaction
+            let (new_world_state, result) = create_transaction()?;
+
+            // Restore context with new world state and preserved values
+            CURRENT_CONTEXT.with(|ctx| {
+                let mut current = ctx.borrow_mut();
+                assert!(
+                    current.is_none(),
+                    "Task context unexpectedly active after commit"
+                );
+                *current = Some(TaskContext {
+                    world_state: new_world_state,
+                    task_scheduler_client: preserved_context.0,
+                    task_id: preserved_context.1,
+                    player: preserved_context.2,
+                    session: preserved_context.3,
+                });
+            });
+
+            Ok((CommitResult::Success, Some(result)))
+        }
+        CommitResult::ConflictRetry => {
+            // On conflict, we don't create a new transaction
+            Ok((CommitResult::ConflictRetry, None))
+        }
+    }
 }
 
 #[cfg(test)]
