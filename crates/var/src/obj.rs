@@ -69,6 +69,10 @@ pub struct UuObjid(pub u64);
 // Internal representation is lower 32 bits is db object id (if a db object), top 3 bits is a "type"
 // code, with the remaining 13-bits unused for now.
 impl Obj {
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+    
     fn decode_as_objid(&self) -> i32 {
         // Mask out upper 32 bits
         (self.0 & 0x0000_ffff_ffff) as i32
