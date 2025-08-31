@@ -26,6 +26,7 @@ use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Obj, v_int, v_obj};
 use moor_var::{Sequence, Symbol, v_list};
+use moor_db::SEQUENCE_MAX_UUOBJID;
 
 use crate::task_context::{
     current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
@@ -59,7 +60,13 @@ fn create_object_with_initialize(
             parent,
             owner,
             BitEnum::new(),
-            obj_id,
+            match obj_id {
+                Some(obj_id) => Some(obj_id),
+                None => {
+                    let max = ws.increment_sequence(SEQUENCE_MAX_UUOBJID);
+                    Some(Obj::mk_uuobjid_generated(max as u16))
+                }
+            },
         )
     })
     .map_err(world_state_bf_err)?;
