@@ -199,7 +199,8 @@ ASSIGN = _{ "=" ~ !("=" | ">") }
 err = { errcode ~ ("(" ~ expr ~ ")")? }
 errcode = @{ ^"e_" ~ ident_continue+  }
 
-object  = @{ "#" ~ integer }
+object  = @{ "#" ~ (integer | object_guid) }
+object_guid = @{ ASCII_ALPHANUMERIC{5} ~ "-" ~ ASCII_ALPHANUMERIC{9} }
 keyword = @{
     ^"for"
   | ^"endfor"
