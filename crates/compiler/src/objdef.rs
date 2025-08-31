@@ -25,7 +25,7 @@ use moor_common::util::BitEnum;
 use moor_var::program::ProgramType;
 use moor_var::{
     ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, v_bool, v_err, v_float, v_flyweight,
-    v_int, v_list, v_map, v_obj, v_str, v_sym,
+    v_int, v_list, v_map, v_obj, v_str, v_sym, UuObjid,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -370,9 +370,16 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
     match pair.as_rule() {
         Rule::object => {
             let ostr = &pair.as_str()[1..];
-            let oid = i32::from_str(ostr).unwrap();
-            let objid = Obj::mk_id(oid);
-            Ok(objid)
+            if ostr.len() == 15 && ostr.chars().nth(5) == Some('-') {
+                // This is an uuobjid probably, so we can safely assemble from there.
+                let uuobjid = UuObjid::from_uuid_string(ostr).unwrap();
+                let objid = Obj::mk_uuobjid(uuobjid);
+                Ok(objid)
+            } else {
+                let oid = i32::from_str(ostr).unwrap();
+                let objid = Obj::mk_id(oid);
+                Ok(objid)
+            }            
         }
         _ => {
             panic!("Unexpected object literal: {pair:?}");

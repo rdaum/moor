@@ -26,7 +26,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
 use moor_common::builtins::BUILTINS;
-use moor_var::Obj;
+use moor_var::{Obj, UuObjid};
 use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
@@ -130,9 +130,16 @@ impl TreeTransformer {
             }
             Rule::object => {
                 let ostr = &pair.as_str()[1..];
-                let oid = i32::from_str(ostr).unwrap();
-                let objid = Obj::mk_id(oid);
-                Ok(Expr::Value(v_obj(objid)))
+                if ostr.len() == 15 && ostr.chars().nth(5) == Some('-') {
+                    // This is an uuobjid probably, so we can safely assemble from there.
+                    let uuobjid = UuObjid::from_uuid_string(ostr).unwrap();
+                    let objid = Obj::mk_uuobjid(uuobjid);
+                    Ok(Expr::Value(v_obj(objid)))
+                } else {
+                    let oid = i32::from_str(ostr).unwrap();
+                    let objid = Obj::mk_id(oid);
+                    Ok(Expr::Value(v_obj(objid)))
+                }
             }
             Rule::integer => match pair.as_str().parse::<i64>() {
                 Ok(int) => Ok(Expr::Value(v_int(int))),
