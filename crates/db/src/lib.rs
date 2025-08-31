@@ -50,6 +50,9 @@ use fast_counter::ConcurrentCounter;
 pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
+// Re-export sequence constants for use in VM
+pub use moor_db::{SEQUENCE_MAX_OBJECT, SEQUENCE_MAX_UUOBJID};
+
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
     fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, WorldStateError>;
@@ -253,7 +256,7 @@ impl AsByteBuffer for SystemTimeHolder {
 #[repr(C)]
 pub struct ObjAndUUIDHolder {
     pub uuid: [u8; 16],
-    pub obj: u64,
+    pub obj: Obj,
 }
 
 impl PartialOrd for ObjAndUUIDHolder {
@@ -274,12 +277,12 @@ impl ObjAndUUIDHolder {
     pub fn new(obj: &Obj, uuid: Uuid) -> Self {
         Self {
             uuid: *uuid.as_bytes(),
-            obj: obj.id().0 as u64,
+            obj: *obj,
         }
     }
 
     pub fn obj(&self) -> Obj {
-        Obj::mk_id(self.obj as i32)
+        self.obj
     }
 
     pub fn uuid(&self) -> Uuid {

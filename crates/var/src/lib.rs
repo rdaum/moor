@@ -34,7 +34,7 @@ pub use flyweight::Flyweight;
 pub use lambda::Lambda;
 pub use list::List;
 pub use map::Map;
-pub use obj::{AMBIGUOUS, FAILED_MATCH, NOTHING, Obj, SYSTEM_OBJECT};
+pub use obj::{AMBIGUOUS, FAILED_MATCH, NOTHING, Obj, SYSTEM_OBJECT, UuObjid};
 use std::fmt::Debug;
 pub use string::Str;
 use strum::FromRepr;

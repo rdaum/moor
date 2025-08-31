@@ -1320,7 +1320,7 @@ impl RpcMessageHandler {
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
             .set_payload(Payload::from(
                 json!({
-                    "player": oid.id().0,
+                    "player": oid,
                 })
                 .to_string()
                 .as_str(),

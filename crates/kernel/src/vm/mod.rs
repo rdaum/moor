@@ -19,6 +19,7 @@ use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
 use moor_var::program::names::Name;
 use moor_var::{List, Obj, Symbol, Var};
+use moor_db::{SEQUENCE_MAX_OBJECT, SEQUENCE_MAX_UUOBJID};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 

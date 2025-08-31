@@ -91,6 +91,13 @@ pub struct FeatureArgs {
                 Note that this is the default behaviour in LambdaMOO."
     )]
     pub persistent_tasks: Option<bool>,
+
+    #[arg(
+        long,
+        help = "Create objects using uuobjids (UUID-based object IDs) instead of objids (integer-based object IDs). \
+                This provides better uniqueness guarantees and avoids integer overflow issues."
+    )]
+    pub use_uuobjids: Option<bool>,
 }
 
 impl FeatureArgs {
@@ -130,6 +137,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.list_comprehensions {
             config.list_comprehensions = args;
+        }
+        if let Some(args) = self.use_uuobjids {
+            config.use_uuobjids = args;
         }
         Ok(())
     }

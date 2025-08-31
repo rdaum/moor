@@ -399,6 +399,9 @@ pub trait WorldState: Send {
     /// Returns the (rough) total number of bytes used by database storage subsystem.
     fn db_usage(&self) -> Result<usize, WorldStateError>;
 
+    /// Increment the given sequence, return the new value.
+    fn increment_sequence(&self, seq: usize) -> i64;
+
     /// Commit all modifications made to the state of this world since the start of its transaction.
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 

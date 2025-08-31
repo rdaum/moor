@@ -51,5 +51,6 @@ lazy_static.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
 paste.workspace = true
+rand.workspace = true
 strum.workspace = true
 zerocopy.workspace = true

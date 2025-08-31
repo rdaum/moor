@@ -226,7 +226,10 @@ impl WorldStateTransaction {
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
-        self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
+        // Only do this for objids, not uuobjids
+        if !id.is_uuobjid() {
+            self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
+        }
 
         self.verb_resolution_cache.flush();
         self.ancestry_cache.flush();
@@ -1254,7 +1257,7 @@ impl WorldStateTransaction {
 
 impl WorldStateTransaction {
     /// Increment the given sequence, return the new value.
-    fn increment_sequence(&self, seq: usize) -> i64 {
+    pub fn increment_sequence(&self, seq: usize) -> i64 {
         self.sequences[seq].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.sequences[seq].load(std::sync::atomic::Ordering::Relaxed)
     }

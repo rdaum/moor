@@ -76,7 +76,7 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             })
         }
         Variant::Obj(o) => json!(Oid {
-            oid: o.id().0 as i64
+            oid: o.as_u64() as i64
         }),
         Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),

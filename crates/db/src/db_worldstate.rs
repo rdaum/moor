@@ -900,6 +900,10 @@ impl WorldState for DbWorldState {
         Ok((name, aliases))
     }
 
+    fn increment_sequence(&self, seq: usize) -> i64 {
+        self.get_tx().increment_sequence(seq)
+    }
+
     fn db_usage(&self) -> Result<usize, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.db_usage);
         self.get_tx().db_usage()
