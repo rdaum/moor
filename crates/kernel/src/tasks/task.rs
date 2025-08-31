@@ -1006,8 +1006,13 @@ mod tests {
 
         let session = Arc::new(NoopClientSession::new());
         {
-            let _tx_guard =
-                TaskGuard::new(tx, task_scheduler_client.clone(), task.task_id, task.player);
+            let _tx_guard = TaskGuard::new(
+                tx,
+                task_scheduler_client.clone(),
+                task.task_id,
+                task.player,
+                session.clone(),
+            );
             task.setup_task_start(task_scheduler_client.control_sender());
             Task::run_task_loop(
                 task,

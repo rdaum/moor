@@ -380,7 +380,7 @@ impl VMExecState {
         bf_id: BuiltinId,
         args: List,
         exec_args: &VmExecParams,
-        session: &dyn Session,
+        _session: &dyn Session,
     ) -> ExecutionResult {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let start = Instant::now();
@@ -407,7 +407,6 @@ impl VMExecState {
         let mut bf_args = BfCallState {
             exec_state: self,
             name: bf_name,
-            session,
             args: &args,
             config: exec_args.config,
         };
@@ -443,7 +442,7 @@ impl VMExecState {
     pub(crate) fn reenter_builtin_function(
         &mut self,
         exec_args: &VmExecParams,
-        session: &dyn Session,
+        _session: &dyn Session,
     ) -> ExecutionResult {
         let start = Instant::now();
         let bf_frame = match self.top().frame {
@@ -468,7 +467,6 @@ impl VMExecState {
         let mut bf_args = BfCallState {
             exec_state: self,
             name: verb_name,
-            session,
             // TODO: avoid copy here by using List inside BfCallState
             args: &args,
             config: exec_args.config,

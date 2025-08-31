@@ -34,7 +34,6 @@ use crate::vm::exec_state::VMExecState;
 use crate::vm::vm_host::ExecutionResult;
 use moor_common::model::Perms;
 use moor_common::model::WorldStateError;
-use moor_common::tasks::Session;
 use moor_common::util::PerfCounter;
 use moor_compiler::{BUILTINS, BuiltinId};
 use moor_var::Var;
@@ -132,7 +131,7 @@ impl BuiltinRegistry {
 }
 
 /// The arguments and other state passed to a built-in function.
-/// WorldState and TaskSchedulerClient are now accessed via the global task context.
+/// WorldState, TaskSchedulerClient, and Session are now accessed via the global task context.
 pub(crate) struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: Symbol,
@@ -141,8 +140,6 @@ pub(crate) struct BfCallState<'a> {
     /// The current execution state of this task in this VM, including the stack
     /// so that BFs can inspect and manipulate it.
     pub(crate) exec_state: &'a mut VMExecState,
-    /// For connection / message management.
-    pub(crate) session: &'a dyn Session,
     /// Config
     pub(crate) config: &'a FeaturesConfig,
 }

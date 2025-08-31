@@ -21,7 +21,9 @@ use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
-use crate::task_context::{current_task_scheduler_client, with_current_transaction};
+use crate::task_context::{
+    current_session, current_task_scheduler_client, with_current_transaction,
+};
 use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::TaskSuspend;
 use crate::vm::builtins::BfErr::{Code, ErrValue};
@@ -291,8 +293,7 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         false
     };
 
-    let connected_player_set = bf_args
-        .session
+    let connected_player_set = current_session()
         .connected_players()
         .expect("Connected players should always be available");
     let map = connected_player_set.iter().filter_map(|p| {
@@ -417,7 +418,7 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("idle_seconds() requires an object as the first argument"),
         ));
     };
-    let Ok(idle_seconds) = bf_args.session.idle_seconds(who) else {
+    let Ok(idle_seconds) = current_session().idle_seconds(who) else {
         return Err(ErrValue(E_INVARG.msg(
             "idle_seconds() requires a valid object as the first argument",
         )));
@@ -439,7 +440,7 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             "connected_seconds() requires an object as the first argument",
         )));
     };
-    let Ok(connected_seconds) = bf_args.session.connected_seconds(who) else {
+    let Ok(connected_seconds) = current_session().connected_seconds(who) else {
         return Err(ErrValue(E_INVARG.msg(
             "connected_seconds() requires a valid object as the first argument",
         )));
@@ -478,7 +479,7 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )));
     }
 
-    let Ok(connection_name) = bf_args.session.connection_name(player) else {
+    let Ok(connection_name) = current_session().connection_name(player) else {
         return Err(ErrValue(E_ARGS.msg(
             "connection_name() requires a valid object as the first argument",
         )));
@@ -1867,7 +1868,7 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    let connection_details = match bf_args.session.connection_details(player) {
+    let connection_details = match current_session().connection_details(player) {
         Ok(result) => result,
         Err(SessionError::NoConnectionForPlayer(_)) => {
             return Err(ErrValue(E_INVARG.msg("No connection found for player")));

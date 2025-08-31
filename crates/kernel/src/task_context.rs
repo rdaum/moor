@@ -13,13 +13,14 @@
 
 //! Thread-local task context for eliminating parameter threading.
 //! Provides RAII-based transaction management with automatic cleanup.
-//! Contains WorldState, TaskSchedulerClient, task_id, and player objid.
+//! Contains WorldState, TaskSchedulerClient, task_id, player objid, and Session.
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use flume;
 use moor_common::model::{CommitResult, WorldState, WorldStateError};
-use moor_common::tasks::TaskId;
+use moor_common::tasks::{Session, TaskId};
 use moor_var::Obj;
 
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
@@ -32,6 +33,7 @@ pub struct TaskContext {
     pub task_scheduler_client: TaskSchedulerClient,
     pub task_id: TaskId,
     pub player: Obj,
+    pub session: Arc<dyn Session>,
 }
 
 thread_local! {
@@ -50,6 +52,7 @@ impl TaskGuard {
         task_scheduler_client: TaskSchedulerClient,
         task_id: TaskId,
         player: Obj,
+        session: Arc<dyn Session>,
     ) -> Self {
         CURRENT_CONTEXT.with(|ctx| {
             let mut current = ctx.borrow_mut();
@@ -62,6 +65,7 @@ impl TaskGuard {
                 task_scheduler_client,
                 task_id,
                 player,
+                session,
             });
         });
         TaskGuard(())
@@ -142,6 +146,18 @@ pub fn current_player() -> Obj {
     })
 }
 
+/// Get a clone of the current session.
+/// Panics if no context is active.
+pub fn current_session() -> Arc<dyn Session> {
+    CURRENT_CONTEXT.with(|ctx| {
+        let ctx_ref = ctx.borrow();
+        let task_ctx = ctx_ref
+            .as_ref()
+            .expect("No active task context on this thread");
+        task_ctx.session.clone()
+    })
+}
+
 /// Commit the current thread's active transaction.
 /// Panics if no context is active.
 pub fn commit_current_transaction() -> Result<CommitResult, WorldStateError> {
@@ -188,10 +204,12 @@ pub fn extract_current_transaction() -> Box<dyn WorldState> {
 /// This is a transitional helper for compatibility with existing parameter-passing code.
 /// Panics if a context is already active.
 pub fn replace_current_transaction(world_state: Box<dyn WorldState>) {
+    use moor_common::tasks::NoopClientSession;
     use moor_var::NOTHING;
     // Create a dummy channel for the scheduler client
     let (tx, _rx) = flume::unbounded();
     let dummy_client = TaskSchedulerClient::new(0, tx);
+    let dummy_session = Arc::new(NoopClientSession::new());
 
     CURRENT_CONTEXT.with(|ctx| {
         let mut current = ctx.borrow_mut();
@@ -204,6 +222,7 @@ pub fn replace_current_transaction(world_state: Box<dyn WorldState>) {
             task_scheduler_client: dummy_client,
             task_id: 0,
             player: NOTHING,
+            session: dummy_session,
         });
     });
 }
