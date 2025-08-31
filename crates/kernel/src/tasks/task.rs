@@ -207,7 +207,7 @@ impl Task {
                     match with_new_transaction(|| {
                         let new_world_state =
                             task_scheduler_client.begin_new_transaction().map_err(|e| {
-                                WorldStateError::DatabaseError(format!("Scheduler error: {:?}", e))
+                                WorldStateError::DatabaseError(format!("Scheduler error: {e:?}"))
                             })?;
                         Ok((new_world_state, ()))
                     }) {
@@ -392,7 +392,7 @@ impl Task {
 
                 session.rollback().unwrap();
                 task_scheduler_client.conflict_retry(self);
-                return None;
+                None
             }
         }
     }
