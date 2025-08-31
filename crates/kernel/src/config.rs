@@ -69,6 +69,9 @@ pub struct FeaturesConfig {
     ///
     /// This can break backwards compatibility with existing cores, so is off by default.
     pub use_symbols_in_builtins: bool,
+    /// Whether to create objects using uuobjids (UUID-based object IDs) instead of objids (integer-based object IDs).
+    /// This provides better uniqueness guarantees and avoids integer overflow issues.
+    pub use_uuobjids: bool,
 }
 
 impl Default for FeaturesConfig {
@@ -86,6 +89,7 @@ impl Default for FeaturesConfig {
             use_boolean_returns: false,
             use_symbols_in_builtins: false,
             custom_errors: false,
+            use_uuobjids: false,
         }
     }
 }
