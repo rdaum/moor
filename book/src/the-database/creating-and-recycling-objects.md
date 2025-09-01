@@ -2,33 +2,103 @@
 
 ## Understanding object persistence
 
-In MOO, objects are permanent and persistent—they stick around until someone explicitly destroys them. Each object gets a unique number when it's created (like #123 or #456), and this number becomes that object's permanent identity. Even if you log out, restart the server, or come back months later, object #123 will still be the same object with the same properties and verbs.
+In MOO, objects are permanent and persistent—they stick around until someone explicitly destroys them. This is different from most programming languages where objects automatically disappear when nothing references them anymore.
 
-This persistence is powerful but comes with a cost: each object "takes up" a number slot. When you create a new object, the server assigns it the next available number and that number is forever associated with that object. Even if you later destroy the object with `recycle()`, that number slot remains "taken" and won't be reused (under normal circumstances). This is intentional—it prevents confusion where old references to a recycled object might accidentally point to a completely different new object.
-
-> **Different from Python/JavaScript**
->
-> If you're coming from Python, JavaScript, or similar languages, this persistence model might feel unusual. In those languages, objects automatically disappear ("get garbage collected") when nothing references them anymore. You never have to explicitly delete objects—the language handles cleanup automatically.
->
-> MOO is different: objects stick around forever until you explicitly `recycle()` them, even if no variables point to them. This means you need to be more careful about cleaning up objects you no longer need.
+For a complete explanation of object persistence and how MOO objects work, see [Objects in the MOO Database](objects-in-the-moo-database.md).
 
 ## Creating objects
 
-Objects are brought into existing using the `create()` function, which (usually) takes a single argument: the parent
-object of the new object. The parent object is the object from which the new object will inherit properties and verbs.
-(See the chapter on [Object Parents and Inheritance](object-parents-and-children.md) for more details on how inheritance
-works in MOO.)
+When you're building your world, you'll spend a lot of time creating objects. Every room players can visit, every item
+they can pick up, every character they can talk to—all of these start life as a call to the `create()` function.
 
-The `create()` function returns the number of the newly-created object.
+The `create()` function brings a new object into existence. You give it a "parent" object (which determines what
+properties and verbs your new object will inherit), and it gives you back a brand new object with its own unique
+identifier. Think of this identifier as the object's permanent address — once created, that's how the system (and your
+code)
+will refer to that specific object forever.
+
+For details on how inheritance works and how to choose good parent objects, see
+the [Object Parents and Children](object-parents-and-children.md) chapter.
+
+> **In Practice**: While `create()` is the fundamental built-in function that brings objects into existence, most
+> builders will actually use higher-level commands provided by their MOO's core (like `@create` or `@dig`). These
+> commands handle permissions, setup, and other details for you.
+> We'll cover [how this works in practice](#creating-objects-in-practice) later in this chapter.
+
+## Object identifier types
+
+mooR supports two types of object identifiers: numbered IDs like `#123` and UUID identifiers like `#048D05-1234567890`. Both work exactly the same way in your code, but they're designed for different purposes.
+
+For details about these identifier types and when to use each one, see the [Two Ways to Identify Objects](objects-in-the-moo-database.md#two-ways-to-identify-objects) section.
+
+## Choosing which type to create
+
+When you call `create(parent)`, the system creates whichever type your server is configured for. If your server has
+`use_uuobjids` turned on, you will most likely get an object with a UUID.
+
+The full signature for `create()` is: `create(parent [, owner] [, obj_type] [, init_args])`
+
+So for example if you specifically need UUID objects, you can request them by specifying the object type:
+
+- `create(parent, player, 2)` - creates a UUID object owned by player
+- `create(parent, this, 2)` - creates a UUID object owned by this object
+- `create($thing, #0, 2)` - creates a UUID object owned by the system object
+
+The `obj_type` parameter controls which naming system to use:
+
+- `0` (or `false`) = numbered objects like `#123`
+- `1` (or `true`) = anonymous objects (not yet supported in mooR, but available in ToastStunt)
+- `2` = UUID objects like `#048D05-1234567890`
+
+> **Anonymous Objects**: ToastStunt supports "anonymous" objects (type `1` or `true`) that are automatically garbage
+> collected when no longer referenced, similar to objects in other programming languages. This feature is not yet
+> implemented in mooR, but may be added in the future. If you're looking for a lightweight, garbage-collected
+> object-like
+> thing, see the section about flyweights below.
+
+Your server administrator controls which type is created by default through configuration settings. For details on how
+this works, see the [Server Configuration](../the-system/server-configuration.md) documentation.
+
+## Creating Objects in Practice
+
+While the `create()` and `recycle()` built-in functions are the underlying mechanics for object creation and
+destruction, most MOO cores provide higher-level interfaces for builders and players.
+
+**Administrative Commands**: Most cores provide commands like:
+
+- `@create <parent>` - Creates a new object with the specified parent
+- `@recycle <object>` - Destroys an object safely with permission checks
+- `@dig <room name>` - Creates and sets up a new room
+
+**Object Recyclers**: Many cores implement "recycler" systems—special objects that handle the lifecycle of created
+objects. For example, when you use `@create`, it might:
+
+1. Check your permissions and quotas
+2. Call the appropriate `create()` function
+3. Set up initial properties and ownership
+4. Log the creation for administrative purposes
+5. Handle any initialization or setup routines
+
+**Building Interfaces**: Some cores provide menu-driven or web-based building interfaces that hide the complexity of
+direct object creation, making it easier for non-programmers to build content.
+
+The exact commands and interfaces available depend on which core your MOO is using. See
+the [Understanding MOO Cores](../the-system/understanding-moo-cores.md) chapter for more information about how different
+cores approach object management.
 
 Whenever the `create()` function is used to create a new object, that object's `initialize` verb, if any, is called with
 no arguments. The call is simply skipped if no such verb is defined on the object.
 
-Symmetrically, there is a `recycle()` function that destroys an object, which is usually called with a single argument:
-the object
-to be destroyed. Just before the `recycle()` function actually destroys an object, the object's `recycle` verb, if any,
-is
-called with no arguments. Again, the call is simply skipped if no such verb is defined on the object.
+## Cleaning up and recycling
+
+Since MOO objects don't automatically disappear like they do in other programming languages, you need to explicitly
+clean them up when you no longer need them. This is where the `recycle()` function comes in.
+
+The `recycle()` function destroys an object permanently. Just before it actually destroys the object, it calls the
+object's `recycle` verb (if any) to give the object a chance to clean up after itself—perhaps removing itself from
+lists, notifying other objects, or saving important data elsewhere.
+
+For more details about why you might need to be careful about cleaning up objects, including the "number slot problem" with numbered objects, see [Objects in the MOO Database](objects-in-the-moo-database.md#the-number-slot-problem-numbered-ids-only).
 
 Permissions to create a child of an object, or to recycle an object, are controlled by the permissions and ownerships
 constraints described in the [Objects in the MOO database](objects-in-the-moo-database.md) chapter. In particular,
@@ -52,6 +122,10 @@ The `recycle()` function increases the quota by one and stores it back into the 
 
 > **Lightweight alternatives: Flyweights**
 >
-> Because objects are "expensive" (they take up permanent number slots and require manual cleanup), mooR provides **flyweights** as a lightweight alternative for creating lots of small, temporary objects. Flyweights don't get object numbers, don't persist in the database, and automatically disappear when no longer needed—perfect for things like inventory items, temporary game pieces, or UI elements.
+> Because objects are "expensive" (they take up permanent number slots and require manual cleanup), mooR provides *
+*flyweights** as a lightweight alternative for creating lots of small, temporary objects. Flyweights don't get object
+> numbers, don't persist in the database, and automatically disappear when no longer needed—perfect for things like
+> inventory items, temporary game pieces, or UI elements.
 >
-> For more details, see the [Flyweights section](moo-value-types.md#flyweights---lightweight-objects) in the value types documentation.
+> For more details, see the [Flyweights section](moo-value-types.md#flyweights---lightweight-objects) in the value types
+> documentation.

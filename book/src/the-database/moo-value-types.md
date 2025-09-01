@@ -241,46 +241,53 @@ return E_TOOFAST("The car is going way too fast");
 
 ## Object Type
 
-_Object numbers_ (also called object references) are how you refer to the permanent objects stored in the MOO database.
-The value itself is not the object—it's more like an address or pointer that tells MOO which object you're talking
-about.
+_Object references_ are how you refer to the permanent objects stored in the MOO database. The value itself is not the object—it's more like an address or pointer that tells MOO which object you're talking about.
 
-Every object in the database has a unique number. When you store an object number in a variable or property, you're
-storing a reference that points to that specific object.
+Every object in the database has a unique identifier. When you store an object reference in a variable or property, you're storing a reference that points to that specific object.
 
-In programs, we write a reference to a particular object by putting a hash mark (`#`) followed by the number, like this:
+### Two Types of Object References
 
+mooR supports two different kinds of object identifiers:
+
+**Traditional Object Numbers:**
 ```
 #495
+#123
+#0
 ```
+
+**UUID Object Names:**
+```
+#048D05-1234567890
+#1A2B3C-4567891234
+```
+
+Both work exactly the same way in your code—you can call verbs on them, access properties, and use them anywhere you'd use any object reference.
 
 ### Important notes about object references:
 
-- The value `#495` is just a number that refers to object 495
-- If object 495 gets recycled (deleted), the reference `#495` becomes invalid
+- Traditional object numbers like `#495` refer to object 495 in the sequential numbering system
+- UUID object names like `#048D05-1234567890` refer to objects in the UUID naming system
+- If an object gets recycled (deleted), any references to it become invalid
 - You can pass object references around, store them in lists, use them as map keys, etc.
-- When you call verbs or access properties, you use the object reference: `#495:tell("Hello!")`
-- Object numbers are always integers.
-- Object numbers can be negative, but a negative number object number is never a real "thing" in the world, but instead
-  more of a "concept" (see below).
+- When you call verbs or access properties, you use the object reference: `#495:tell("Hello!")` or `#048D05-1234567890:tell("Hello!")`
+- Traditional object numbers can be negative for special purposes, but UUID object names are never negative
 
-### Special & negative object numbers:
+### Special & negative traditional object numbers:
 
-There are three special object numbers used for specific purposes: `#-1`, `#-2`, and `#-3`, usually referred to in
-the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
+There are three special traditional object numbers used for specific purposes: `#-1`, `#-2`, and `#-3`, usually referred to in the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
 
-Negative object numbers never refer to an actual physical object in the world, but always to some concept (e.g. #-1 for
-nothing) or something external (player connections are given special negative numbers).
+Negative traditional object numbers never refer to an actual physical object in the world, but always to some concept (e.g. #-1 for nothing) or something external (player connections are given special negative numbers).
+
+Note that UUID object names don't have negative equivalents—these special cases only apply to the traditional numbering system.
 
 ### Best practices:
 
-Instead of hard-coding object numbers like `#495` in your code, it's better to use corified references like
-`$my_special_object` (See below). This makes your code more readable and less fragile if object numbers change.
+Instead of hard-coding object references like `#495` or `#048D05-1234567890` in your code, it's better to use system references like `$my_special_object` (See below). This makes your code more readable and less fragile if object identifiers change.
 
-> **Note:** Referencing object numbers directly in your code should be discouraged. An object only exists until it is
-> recycled, and it's technically possible for an object number to change under some circumstances. Thus, you should use
-> a
-> corified reference to an object (`$my_special_object`) instead. More on corified references later.
+> **Note:** Hard-coding object references in your code should be discouraged. An object only exists until it is recycled, and it's technically possible for an object identifier to change under some circumstances. Thus, you should use a system reference to an object (`$my_special_object`) instead. More on system references later.
+>
+> **Object Types:** The choice between traditional numbers and UUID names is typically determined by your server's configuration and the specific use case (world infrastructure vs. dynamic content).
 
 ## System References ($names)
 
