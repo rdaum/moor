@@ -92,7 +92,7 @@ export function curieToObjectRef(curie: string): ObjectRef {
     } else if (curie.startsWith("uuid:")) {
         return uuidRef(curie.substring(5));
     } else {
-        throw new Error(`Unknown CURIE format: ${curie}`);
+        throw new Error(`Unknown CURIE format: ${curie}`, "invalid_curie");
     }
 }
 

@@ -1130,7 +1130,7 @@ mod tests {
 
     #[test]
     fn test_json_uuid_objects() {
-        use moor_var::{UuObjid, Obj, Var};
+        use moor_var::{Obj, UuObjid, Var};
 
         // Test regular object
         let regular_obj = v_objid(42);
@@ -1151,13 +1151,14 @@ mod tests {
         assert_eq!(json_array[1].as_str().unwrap(), "#12345-1234567890");
 
         // Test in a map context (as key)
-        let map_with_obj_keys = v_map(&[
-            (regular_obj, v_str("regular")),
-            (uuid_obj, v_str("uuid"))
-        ]);
+        let map_with_obj_keys =
+            v_map(&[(regular_obj, v_str("regular")), (uuid_obj, v_str("uuid"))]);
         let map_json = moo_value_to_json(&map_with_obj_keys).unwrap();
         let json_obj = map_json.as_object().unwrap();
         assert_eq!(json_obj.get("#42").unwrap().as_str().unwrap(), "regular");
-        assert_eq!(json_obj.get("#12345-1234567890").unwrap().as_str().unwrap(), "uuid");
+        assert_eq!(
+            json_obj.get("#12345-1234567890").unwrap().as_str().unwrap(),
+            "uuid"
+        );
     }
 }
