@@ -18,7 +18,7 @@
  * including object reference handling, remote method invocation, and
  * data transformation between JSON and MOO formats.
  */
-import { matchRef, ObjectRef, oidRef, ORefKind, sysobjRef } from "./var";
+import { curieToObjectRef, matchRef, ObjectRef, oidRef, ORefKind, sysobjRef } from "./var";
 
 /**
  * Recursively transforms a JSON result from server eval into JavaScript objects
@@ -266,7 +266,7 @@ export class MoorRemoteObject {
 export function orefCurie(oref: ObjectRef): string {
     switch (oref.kind) {
         case ORefKind.Oid:
-            return `oid:${oref.oid}`;
+            return oref.curie;
 
         case ORefKind.SysObj:
             return `sysobj:${encodeURIComponent(oref.sysobj.join("."))}`;
@@ -287,27 +287,16 @@ export function orefCurie(oref: ObjectRef): string {
  * @throws Error if the CURIE is invalid or has an unknown type
  */
 export function curieORef(curie: string): ObjectRef {
-    const parts = curie.split(":");
-
-    if (parts.length !== 2) {
-        throw new Error(`Invalid OREF CURIE format: ${curie}`);
-    }
-
-    const type = parts[0];
-    const value = parts[1];
-
-    switch (type) {
-        case "oid":
-            return oidRef(parseInt(value, 10));
-
-        case "sysobj":
-            return sysobjRef(value.split("."));
-
-        case "match_env":
-            return matchRef(value);
-
-        default:
-            throw new Error(`Unknown CURIE type: ${type}`);
+    if (curie.startsWith("oid:") || curie.startsWith("uuid:")) {
+        return curieToObjectRef(curie);
+    } else if (curie.startsWith("sysobj:")) {
+        const value = curie.substring(7);
+        return sysobjRef(value.split("."));
+    } else if (curie.startsWith("match(\"") && curie.endsWith("\")")) {
+        const value = curie.substring(7, curie.length - 2);
+        return matchRef(decodeURIComponent(value));
+    } else {
+        throw new Error(`Unknown CURIE format: ${curie}`);
     }
 }
 

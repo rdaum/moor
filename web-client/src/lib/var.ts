@@ -19,7 +19,7 @@ export enum ORefKind {
 
 export interface Oid {
     kind: ORefKind.Oid;
-    oid: number;
+    curie: string;
 }
 
 export interface SysObj {
@@ -44,8 +44,8 @@ export function jsonToValue(json: any): any {
     } else if (typeof json === "object") {
         if ((json as any)["error"]) {
             return new Error((json as any)["error"], (json as any)["message"]);
-        } else if ((json as any)["oid"] != null) {
-            return oidRef((json as any)["oid"]);
+        } else if ((json as any)["obj"] != null) {
+            return curieToObjectRef((json as any)["obj"]);
         } else if ((json as any)["map_pairs"] != null) {
             const pairs: any[] = [];
             const jsonPairs = (json as any)["map_pairs"];
@@ -70,7 +70,7 @@ export function valueToJson(v: any): any {
     } else if (v instanceof Error) {
         return { error: v.code, message: v.message };
     } else if (v["kind"] === ORefKind.Oid) {
-        return { oid: v.oid };
+        return { obj: v.curie };
     } else if (v instanceof Map) {
         return { map_pairs: v.pairs.map(valueToJson) };
     } else {
@@ -79,7 +79,21 @@ export function valueToJson(v: any): any {
 }
 
 export function oidRef(oid: number): Oid {
-    return { kind: ORefKind.Oid, oid: oid };
+    return { kind: ORefKind.Oid, curie: `oid:${oid}` };
+}
+
+export function uuidRef(uuid: string): Oid {
+    return { kind: ORefKind.Oid, curie: `uuid:${uuid}` };
+}
+
+export function curieToObjectRef(curie: string): ObjectRef {
+    if (curie.startsWith("oid:")) {
+        return oidRef(parseInt(curie.substring(4), 10));
+    } else if (curie.startsWith("uuid:")) {
+        return uuidRef(curie.substring(5));
+    } else {
+        throw new Error(`Unknown CURIE format: ${curie}`);
+    }
 }
 
 export function sysobjRef(sysobj: string[]): SysObj {

@@ -19,7 +19,7 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
+use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -34,11 +34,6 @@ pub use web_host::{
     presentations_handler, resolve_objref_handler, system_property_handler,
     ws_connect_attach_handler, ws_create_attach_handler,
 };
-
-#[derive(serde_derive::Serialize, Deserialize)]
-struct Oid {
-    oid: i64,
-}
 
 #[derive(serde_derive::Serialize, Deserialize)]
 struct Error {
@@ -75,9 +70,10 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
                 "binary": encoded
             })
         }
-        Variant::Obj(o) => json!(Oid {
-            oid: o.as_u64() as i64
-        }),
+        Variant::Obj(o) => {
+            let obj_ref = moor_common::model::ObjectRef::Id(*o);
+            json!({"obj": obj_ref.to_curie()})
+        }
         Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),
         Variant::Err(e) => json!(Error {
@@ -146,23 +142,22 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
             v_float(n.as_f64().unwrap())
         }),
         serde_json::Value::Object(o) => {
-            // An object can be one of three things (for now)
-            // - An object reference, which can be oid: <number>. <TODO: sysrefs as their own type? somehow?>
+            // An object can be one of several things:
+            // - An object reference with "obj" field containing a CURIE (oid:123, uuid:ABC-123, etc.)
             // - An error, which can be error_code: <number>, error_name: <string>, error_msg: <string>
             // - A map, which is a list of key-value pairs in the "pairs" field.
-            if let Some(oid) = o.get("oid") {
-                let Some(oid) = oid.as_number() else {
+            if let Some(obj_curie) = o.get("obj") {
+                let Some(curie_str) = obj_curie.as_str() else {
                     return Err(JsonParseError::InvalidRepresentation);
                 };
-                let Some(oid) = oid.as_i64() else {
+                let Some(obj_ref) = moor_common::model::ObjectRef::parse_curie(curie_str) else {
                     return Err(JsonParseError::InvalidRepresentation);
                 };
-                let oid = if oid < i32::MIN as i64 || oid > i32::MAX as i64 {
-                    return Err(JsonParseError::InvalidRepresentation);
+                if let moor_common::model::ObjectRef::Id(obj) = obj_ref {
+                    return Ok(v_obj(obj));
                 } else {
-                    oid as i32
-                };
-                return Ok(v_objid(oid));
+                    return Err(JsonParseError::InvalidRepresentation);
+                }
             }
 
             if let Some(pairs) = o.get("map_pairs") {
@@ -274,6 +269,15 @@ mod tests {
     #[test]
     fn test_obj_to_fro() {
         let n = moor_var::v_objid(42);
+        let j = super::var_as_json(&n);
+        let n2 = super::json_as_var(&j).unwrap();
+        assert_eq!(n, n2);
+    }
+
+    #[test]
+    fn test_uuid_obj_to_fro() {
+        let uuid = moor_var::UuObjid::new(0x1234, 0x5, 0x1234567890);
+        let n = moor_var::Var::from(moor_var::Obj::mk_uuobjid(uuid));
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);

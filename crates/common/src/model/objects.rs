@@ -44,7 +44,13 @@ pub enum ObjectRef {
 impl ObjectRef {
     pub fn to_curie(&self) -> String {
         match self {
-            ObjectRef::Id(oid) => format!("oid:{}", oid.id()),
+            ObjectRef::Id(oid) => {
+                if oid.is_uuobjid() {
+                    format!("uuid:{}", oid.uuobjid().unwrap().to_uuid_string())
+                } else {
+                    format!("oid:{}", oid.id().0)
+                }
+            }
             ObjectRef::SysObj(symbols) => {
                 let mut s = String::new();
                 for sym in symbols {
@@ -61,6 +67,9 @@ impl ObjectRef {
         if let Some(s) = s.strip_prefix("oid:") {
             let id: i32 = s.parse().ok()?;
             Some(ObjectRef::Id(Obj::mk_id(id)))
+        } else if let Some(s) = s.strip_prefix("uuid:") {
+            let uuid = moor_var::UuObjid::from_uuid_string(s).ok()?;
+            Some(ObjectRef::Id(Obj::mk_uuobjid(uuid)))
         } else if let Some(s) = s.strip_prefix("sysobj:") {
             let symbols = s.split('.').map(Symbol::mk).collect();
             Some(ObjectRef::SysObj(symbols))
