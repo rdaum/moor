@@ -288,7 +288,7 @@ impl Scheduler {
             tx.rollback().unwrap();
             return;
         };
-        info!("Found server options object: #{}", server_options_obj);
+        info!("Found server options object: {}", server_options_obj);
 
         if let Some(bg_seconds) = load_int_sysprop(&server_options_obj, *BG_SECONDS, tx.as_ref()) {
             so.bg_seconds = bg_seconds;

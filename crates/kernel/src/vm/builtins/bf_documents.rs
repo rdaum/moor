@@ -1157,7 +1157,11 @@ mod tests {
         let json_obj = map_json.as_object().unwrap();
         assert_eq!(json_obj.get("#42").unwrap().as_str().unwrap(), "regular");
         assert_eq!(
-            json_obj.get("#048D05-1234567890").unwrap().as_str().unwrap(),
+            json_obj
+                .get("#048D05-1234567890")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "uuid"
         );
     }

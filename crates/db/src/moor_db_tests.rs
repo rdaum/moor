@@ -2012,6 +2012,343 @@ mod tests {
     }
 
     #[test]
+    fn test_create_uuid_object() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let oid = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test_uuid"),
+            )
+            .unwrap();
+
+        // Verify it's a UUID object
+        assert!(oid.is_uuobjid());
+        assert!(oid.is_positive());
+        assert!(tx.object_valid(&oid).unwrap());
+        assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
+        assert_eq!(tx.get_object_parent(&oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_location(&oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_name(&oid).unwrap(), "test_uuid");
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+
+        // Verify existence in a new transaction.
+        let tx = db.start_transaction();
+        assert!(tx.object_valid(&oid).unwrap());
+        assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
+
+        let objects = tx.get_objects().unwrap();
+        assert!(objects.contains(oid));
+    }
+
+    #[test]
+    fn test_uuid_object_parent_child_relationships() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create UUID parent
+        let parent = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "uuid_parent"),
+            )
+            .unwrap();
+
+        // Create UUID child with UUID parent
+        let child = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "uuid_child"),
+            )
+            .unwrap();
+
+        assert!(parent.is_uuobjid());
+        assert!(child.is_uuobjid());
+        assert_eq!(tx.get_object_parent(&child).unwrap(), parent);
+        assert!(
+            tx.get_object_children(&parent)
+                .unwrap()
+                .is_same(ObjSet::from_items(&[child]))
+        );
+
+        // Create regular numbered object as child of UUID parent
+        let numbered_child = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "numbered_child"),
+            )
+            .unwrap();
+
+        assert!(!numbered_child.is_uuobjid());
+        assert_eq!(tx.get_object_parent(&numbered_child).unwrap(), parent);
+        assert!(
+            tx.get_object_children(&parent)
+                .unwrap()
+                .is_same(ObjSet::from_items(&[child, numbered_child]))
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_uuid_object_location_contents() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let container = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "uuid_container"),
+            )
+            .unwrap();
+
+        let item = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, container, BitEnum::new(), "uuid_item"),
+            )
+            .unwrap();
+
+        assert!(container.is_uuobjid());
+        assert!(item.is_uuobjid());
+        assert_eq!(tx.get_object_location(&item).unwrap(), container);
+        assert_eq!(
+            tx.get_object_contents(&container).unwrap(),
+            ObjSet::from_items(&[item])
+        );
+
+        // Move UUID item to numbered container
+        let numbered_container = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(
+                    NOTHING,
+                    NOTHING,
+                    NOTHING,
+                    BitEnum::new(),
+                    "numbered_container",
+                ),
+            )
+            .unwrap();
+
+        tx.set_object_location(&item, &numbered_container).unwrap();
+        assert_eq!(tx.get_object_location(&item).unwrap(), numbered_container);
+        assert_eq!(tx.get_object_contents(&container).unwrap(), ObjSet::empty());
+        assert_eq!(
+            tx.get_object_contents(&numbered_container).unwrap(),
+            ObjSet::from_items(&[item])
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_uuid_object_properties() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let uuid_obj = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "uuid_test"),
+            )
+            .unwrap();
+
+        // Define property on UUID object
+        tx.define_property(
+            &uuid_obj,
+            &uuid_obj,
+            Symbol::mk("uuid_prop"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_str("uuid_value")),
+        )
+        .unwrap();
+
+        let (prop, v, perms, is_clear) = tx
+            .resolve_property(&uuid_obj, Symbol::mk("uuid_prop"))
+            .unwrap();
+        assert_eq!(prop.name(), "uuid_prop".into());
+        assert_eq!(v, v_str("uuid_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(!is_clear);
+
+        // Create child of UUID object and test property inheritance
+        let child = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, uuid_obj, NOTHING, BitEnum::new(), "child_of_uuid"),
+            )
+            .unwrap();
+
+        let (prop, v, perms, is_clear) = tx
+            .resolve_property(&child, Symbol::mk("uuid_prop"))
+            .unwrap();
+        assert_eq!(prop.name(), "uuid_prop".into());
+        assert_eq!(v, v_str("uuid_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(is_clear); // Inherited properties are clear
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_uuid_object_verbs() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let uuid_obj = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "uuid_verb_test"),
+            )
+            .unwrap();
+
+        // Add verb to UUID object
+        tx.add_object_verb(
+            &uuid_obj,
+            &uuid_obj,
+            &[Symbol::mk("uuid_verb")],
+            ProgramType::MooR(Program::new()),
+            BitEnum::new_with(VerbFlag::Exec),
+            VerbArgsSpec::this_none_this(),
+        )
+        .unwrap();
+
+        // Verify verb resolution on UUID object
+        assert_eq!(
+            tx.resolve_verb(
+                &uuid_obj,
+                Symbol::mk("uuid_verb"),
+                None,
+                Some(BitEnum::new_with(VerbFlag::Exec))
+            )
+            .unwrap()
+            .names(),
+            vec!["uuid_verb".into()]
+        );
+
+        // Create child and test verb inheritance
+        let child = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, uuid_obj, NOTHING, BitEnum::new(), "uuid_child"),
+            )
+            .unwrap();
+
+        assert_eq!(
+            tx.resolve_verb(
+                &child,
+                Symbol::mk("uuid_verb"),
+                None,
+                Some(BitEnum::new_with(VerbFlag::Exec))
+            )
+            .unwrap()
+            .names(),
+            vec!["uuid_verb".into()]
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_uuid_object_recycle() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create UUID parent with UUID child
+        let parent = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "uuid_parent"),
+            )
+            .unwrap();
+
+        let child = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "uuid_child"),
+            )
+            .unwrap();
+
+        // Recycle UUID child
+        tx.recycle_object(&child)
+            .expect("Unable to recycle UUID object");
+
+        // Verify it's gone
+        let result = tx.get_object_name(&child);
+        assert_eq!(
+            result.err().unwrap(),
+            WorldStateError::ObjectNotFound(ObjectRef::Id(child))
+        );
+
+        // Verify parent's children list is empty
+        let children = tx.get_object_children(&parent).unwrap();
+        assert!(
+            children.is_empty(),
+            "Children list should be empty after recycling child"
+        );
+
+        // Recycle UUID parent
+        tx.recycle_object(&parent)
+            .expect("Unable to recycle UUID parent");
+
+        // Verify it's gone
+        let result = tx.get_object_name(&parent);
+        assert_eq!(
+            result.err().unwrap(),
+            WorldStateError::ObjectNotFound(ObjectRef::Id(parent))
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_mixed_uuid_numbered_objects() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create mix of UUID and numbered objects
+        let uuid_obj = tx
+            .create_object(
+                ObjectKind::UuObjId,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "uuid_obj"),
+            )
+            .unwrap();
+
+        let numbered_obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "numbered_obj"),
+            )
+            .unwrap();
+
+        assert!(uuid_obj.is_uuobjid());
+        assert!(!numbered_obj.is_uuobjid());
+        assert!(uuid_obj.is_positive());
+        assert!(numbered_obj.is_positive());
+
+        // Verify both are valid and in object set
+        assert!(tx.object_valid(&uuid_obj).unwrap());
+        assert!(tx.object_valid(&numbered_obj).unwrap());
+
+        let objects = tx.get_objects().unwrap();
+        assert!(objects.contains(uuid_obj));
+        assert!(objects.contains(numbered_obj));
+
+        // Test cross-type relationships
+        tx.set_object_parent(&numbered_obj, &uuid_obj).unwrap();
+        assert_eq!(tx.get_object_parent(&numbered_obj).unwrap(), uuid_obj);
+        assert!(
+            tx.get_object_children(&uuid_obj)
+                .unwrap()
+                .is_same(ObjSet::from_items(&[numbered_obj]))
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
     fn test_get_verb_by_name_cache_miss_after_flush_regression() {
         // This test reproduces the exact bug from production logs:
         // 1. Cache gets flushed (due to object creation/modification)

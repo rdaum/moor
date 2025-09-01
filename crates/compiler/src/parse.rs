@@ -130,7 +130,7 @@ impl TreeTransformer {
             }
             Rule::object => {
                 let ostr = &pair.as_str()[1..];
-                if ostr.len() == 16 && ostr.chars().nth(5) == Some('-') {
+                if ostr.len() == 17 && ostr.chars().nth(6) == Some('-') {
                     // This is an uuobjid probably, so we can safely assemble from there.
                     let uuobjid = UuObjid::from_uuid_string(ostr).unwrap();
                     let objid = Obj::mk_uuobjid(uuobjid);

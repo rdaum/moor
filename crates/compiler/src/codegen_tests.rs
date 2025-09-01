@@ -1434,11 +1434,11 @@ mod tests {
         );
 
         // Now test with the UUID
-        let program = "return #001A1-9901A71113;";
+        let program = "return #001A01-9901A71113;";
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         // Parse the UUID string to create the expected Obj
-        let uuid = UuObjid::from_uuid_string("001A1-9901A71113").unwrap();
+        let uuid = UuObjid::from_uuid_string("001A01-9901A71113").unwrap();
         let expected_obj = Obj::mk_uuobjid(uuid);
 
         assert_eq!(
@@ -1447,7 +1447,7 @@ mod tests {
         );
 
         // Test verb call with UUID
-        let program = "#001A1-9901A71113:tell(\"test\");";
+        let program = "#001A01-9901A71113:tell(\"test\");";
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         let test = binary.find_label_for_literal("test".into());

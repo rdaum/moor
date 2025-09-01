@@ -51,20 +51,15 @@ fn create_object_with_initialize(
     parent: &Obj,
     owner: &Obj,
     init_args: Option<&List>,
-    obj_id: Option<Obj>,
+    obj_kind: ObjectKind,
 ) -> Result<BfRet, BfErr> {
     let new_obj = with_current_transaction_mut(|ws| {
-        let use_uuids = bf_args.config.use_uuobjids;
         ws.create_object(
             &bf_args.task_perms_who(),
             parent,
             owner,
             BitEnum::new(),
-            match obj_id {
-                Some(obj_id) => ObjectKind::Objid(obj_id),
-                None if use_uuids => ObjectKind::UuObjId,
-                None => ObjectKind::NextObjid,
-            },
+            obj_kind,
         )
     })
     .map_err(world_state_bf_err)?;
@@ -130,7 +125,7 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("parent() first argument must be an object"),
         ));
     };
-    if !obj.is_positive()
+    if !obj.is_valid_object()
         || !with_current_transaction(|world_state| world_state.valid(&obj))
             .map_err(world_state_bf_err)?
     {
@@ -403,7 +398,9 @@ const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 /// Creates and returns a new object whose parent is parent and whose owner is as described below.
-/// MOO: `obj create(obj parent [, obj owner] [, bool is_anon] [, list init_args])`
+/// MOO: `obj create(obj parent [, obj owner] [, int obj_type] [, list init_args])`
+/// obj_type: 0=numbered, 1=anonymous (unsupported), 2=UUID
+/// Also accepts boolean for backward compatibility: false=numbered, true=anonymous (unsupported)
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 4 {
         return Err(BfErr::ErrValue(
@@ -426,12 +423,57 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.task_perms_who()
     };
 
-    // Third argument is "is-anon" - we don't support this feature, return error if true
-    if bf_args.args.len() >= 3 && bf_args.args[2].is_true() {
-        return Err(BfErr::ErrValue(
-            E_INVARG.msg("anonymous objects are not supported"),
-        ));
-    }
+    // Third argument is object type: 0=numbered, 1=anon (unsupported), 2=uuid
+    // For backward compatibility, also accept boolean (false=numbered, true=anon which is unsupported)
+    let obj_kind = if bf_args.args.len() >= 3 {
+        let arg = &bf_args.args[2];
+
+        let obj_type = match arg.variant() {
+            Variant::Int(i) => *i,
+            Variant::Bool(b) => {
+                if *b {
+                    1
+                } else {
+                    0
+                }
+            }
+            _ => {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("create() third argument must be an integer or bool"),
+                ));
+            }
+        };
+
+        // Convert integer to ObjectKind, validating as we go
+        match obj_type {
+            0 => ObjectKind::NextObjid,
+            1 => {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("anonymous objects are not supported"),
+                ));
+            }
+            2 => {
+                if !bf_args.config.use_uuobjids {
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.msg("UUID objects not available (use_uuobjids is false)"),
+                    ));
+                }
+                ObjectKind::UuObjId
+            }
+            _ => {
+                return Err(BfErr::ErrValue(E_INVARG.msg(
+                    "create() object type must be 0 (numbered), 1 (anonymous), or 2 (UUID)",
+                )));
+            }
+        }
+    } else {
+        // No object type specified, use default based on config
+        if bf_args.config.use_uuobjids {
+            ObjectKind::UuObjId
+        } else {
+            ObjectKind::NextObjid
+        }
+    };
 
     // Fourth argument is "init-args" - must be a list if provided
     let init_args = if bf_args.args.len() == 4 {
@@ -453,7 +495,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match tramp {
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
-            create_object_with_initialize(bf_args, &parent, &owner, init_args, None)
+            create_object_with_initialize(bf_args, &parent, &owner, init_args, obj_kind)
         }
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
             let Some(new_obj) = bf_args.bf_frame().bf_trampoline_arg.clone() else {
@@ -532,9 +574,13 @@ fn bf_create_at(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .unwrap_or(BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE);
 
     match tramp {
-        BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
-            create_object_with_initialize(bf_args, &parent, &owner, init_args, Some(obj_id))
-        }
+        BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => create_object_with_initialize(
+            bf_args,
+            &parent,
+            &owner,
+            init_args,
+            ObjectKind::Objid(obj_id),
+        ),
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
             let Some(new_obj) = bf_args.bf_frame().bf_trampoline_arg.clone() else {
                 panic!("Missing/invalid trampoline argument for bf_create_at");

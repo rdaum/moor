@@ -49,7 +49,7 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 /// Contains multiple kinds of object identifiers:
 /// - Traditional 32-bit DB object IDs (Objid)
 /// - 62-bit UUID-based object IDs (UuObjid)
-/// The top 2 bits encode the object type, with remaining bits for the identifier.
+///   The top 2 bits encode the object type, with remaining bits for the identifier.
 #[derive(
     Copy,
     Clone,
@@ -202,7 +202,13 @@ impl Obj {
     }
 
     pub fn is_positive(&self) -> bool {
-        self.object_type_code() == OBJID_TYPE_CODE && self.decode_as_objid() >= 0
+        if self.object_type_code() == OBJID_TYPE_CODE {
+            self.decode_as_objid() >= 0
+        } else {
+            // uuid objects are always "positive" as in they are not negative connection etc style objs
+            // anonymous objects (when/if we have them would also follow this principle)
+            true
+        }
     }
 
     pub fn id(&self) -> Objid {
@@ -471,6 +477,14 @@ mod tests {
         // Invalid hex
         assert!(UuObjid::from_uuid_string("GGGGGG-1234567890").is_err());
         assert!(UuObjid::from_uuid_string("123456-GGGGGGGGGG").is_err());
+    }
+
+    #[test]
+    fn test_is_valid_etc() {
+        let obj = UuObjid::from_uuid_string("000053-9905B4734F").unwrap();
+        let obj = Obj::mk_uuobjid(obj);
+        assert!(obj.is_valid_object());
+        assert!(obj.is_uuobjid());
     }
 
     #[test]
