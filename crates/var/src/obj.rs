@@ -45,9 +45,11 @@ pub const AMBIGUOUS: Obj = Obj::mk_id(-2);
 /// Used in matching to indicate that the match failed to find any objects in the environment.
 pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 
-/// A reference to an object.
-/// For now this is the global unique DB object id.
-/// In the future this may also encode other object types (anonymous objects, etc)
+/// A reference to an object (object-id/dbref).
+/// Contains multiple kinds of object identifiers:
+/// - Traditional 32-bit DB object IDs (Objid)
+/// - 62-bit UUID-based object IDs (UuObjid)
+/// The top 2 bits encode the object type, with remaining bits for the identifier.
 #[derive(
     Copy,
     Clone,
@@ -76,8 +78,10 @@ pub struct Objid(pub i32);
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct UuObjid(pub u64);
 
-// Internal representation is lower 32 bits is db object id (if a db object), top 3 bits is a "type"
-// code, with the remaining 13-bits unused for now.
+// Internal representation varies by type:
+// - Objid: lower 32 bits contain i32 DB object id, upper 30 bits unused
+// - UuObjid: lower 62 bits contain packed UUID components
+// Top 2 bits always encode the object type.
 impl Obj {
     pub fn as_u64(&self) -> u64 {
         self.0
@@ -93,22 +97,22 @@ impl Obj {
         // Doing "as u32" here would sign extend the i32 to u64, which is not what we want.
         let as_u32 = i32::cast_unsigned(id);
         let as_u64 = as_u32 as u64;
-        Self((as_u64 & 0x0000_ffff_ffff) | ((OBJID_TYPE_CODE as u64) << 61))
+        Self((as_u64 & 0x0000_ffff_ffff) | ((OBJID_TYPE_CODE as u64) << 62))
     }
 
     fn decode_as_uuobjid(&self) -> UuObjid {
-        // Extract the 60-bit UUID value from the lower 60 bits
-        let uuid_value = self.0 & 0x0FFF_FFFF_FFFF_FFFF;
+        // Extract the 62-bit UUID value from the lower 62 bits
+        let uuid_value = self.0 & 0x3FFF_FFFF_FFFF_FFFF;
         UuObjid(uuid_value)
     }
 
     fn encode_as_uuobjid(uuid: UuObjid) -> Self {
-        // Pack the 60-bit UUID value into the lower 60 bits with type code
-        Self((uuid.0 & 0x0FFF_FFFF_FFFF_FFFF) | ((UUOBJID_TYPE_CODE as u64) << 61))
+        // Pack the 62-bit UUID value into the lower 62 bits with type code
+        Self((uuid.0 & 0x3FFF_FFFF_FFFF_FFFF) | ((UUOBJID_TYPE_CODE as u64) << 62))
     }
 
     fn object_type_code(&self) -> u8 {
-        (self.0 >> 61) as u8
+        (self.0 >> 62) as u8
     }
 }
 
@@ -165,6 +169,12 @@ impl Display for Objid {
     }
 }
 
+impl Display for UuObjid {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("#{}", self.to_uuid_string()))
+    }
+}
+
 impl Obj {
     pub const fn mk_id(id: i32) -> Self {
         Self::encode_as_objid(id)
@@ -184,15 +194,15 @@ impl Obj {
 
     #[must_use]
     pub fn is_sysobj(&self) -> bool {
-        self.decode_as_objid() == 0
+        self.object_type_code() == OBJID_TYPE_CODE && self.decode_as_objid() == 0
     }
 
     pub fn is_nothing(&self) -> bool {
-        self.decode_as_objid() == -1
+        self.object_type_code() == OBJID_TYPE_CODE && self.decode_as_objid() == -1
     }
 
     pub fn is_positive(&self) -> bool {
-        self.decode_as_objid() >= 0
+        self.object_type_code() == OBJID_TYPE_CODE && self.decode_as_objid() >= 0
     }
 
     pub fn id(&self) -> Objid {
@@ -223,6 +233,15 @@ impl Obj {
     /// Checks if this Obj is a UuObjid
     pub fn is_uuobjid(&self) -> bool {
         self.object_type_code() == UUOBJID_TYPE_CODE
+    }
+
+    /// Checks if this Obj contains a valid object reference (not special values like NOTHING, AMBIGUOUS, etc.)
+    pub fn is_valid_object(&self) -> bool {
+        match self.object_type_code() {
+            OBJID_TYPE_CODE => self.decode_as_objid() >= 0,
+            UUOBJID_TYPE_CODE => true, // UuObjids are always valid object references
+            _ => false,
+        }
     }
 }
 
@@ -279,7 +298,7 @@ impl TryFrom<&str> for Obj {
             Ok(Self::mk_uuobjid(uuid))
         } else {
             Err(DecodingError::CouldNotDecode(format!(
-                "Expected Objid to start with '#' or be in UUID format FFFFF-FFFFFFFFFF, got {value}"
+                "Expected Objid to start with '#' or be in UUID format FFFFFF-FFFFFFFFFF, got {value}"
             )))
         }
     }
@@ -288,22 +307,22 @@ impl TryFrom<&str> for Obj {
 impl UuObjid {
     /// Creates a new UuObjid with the specified components
     /// - autoincrement: 16 bits (0-65535, wraps around)
-    /// - rng: 4 bits (0-15)
+    /// - rng: 6 bits (0-63)
     /// - epoch_ms: 40 bits (Linux epoch milliseconds, truncated to 40 bits)
     pub fn new(autoincrement: u16, rng: u8, epoch_ms: u64) -> Self {
         // Ensure inputs fit in their allocated bits
-        let rng = (rng & 0x0F) as u64; // 4 bits
+        let rng = (rng & 0x3F) as u64; // 6 bits
         let epoch_ms = epoch_ms & 0x00FF_FFFF_FFFF; // 40 bits
 
-        // Pack into 60 bits: [autoincrement (16)] [rng (4)] [epoch_ms (40)]
-        let packed = (autoincrement as u64) << 44 | (rng << 40) | epoch_ms;
+        // Pack into 62 bits: [autoincrement (16)] [rng (6)] [epoch_ms (40)]
+        let packed = (autoincrement as u64) << 46 | (rng << 40) | epoch_ms;
         Self(packed)
     }
 
     /// Creates a new UuObjid with current time and random components
     pub fn generate(autoincrement: u16) -> Self {
         let mut rng = rand::thread_rng();
-        let rng_val = rng.r#gen::<u8>() & 0x0F; // 4 bits
+        let rng_val = rng.r#gen::<u8>() & 0x3F; // 6 bits
 
         // Get current time in milliseconds since Unix epoch
         let now = SystemTime::now()
@@ -319,19 +338,19 @@ impl UuObjid {
 
     /// Extracts the components from the UuObjid
     pub fn components(&self) -> (u16, u8, u64) {
-        let autoincrement = ((self.0 >> 44) & 0xFFFF) as u16;
-        let rng = ((self.0 >> 40) & 0x0F) as u8;
+        let autoincrement = ((self.0 >> 46) & 0xFFFF) as u16;
+        let rng = ((self.0 >> 40) & 0x3F) as u8;
         let epoch_ms = self.0 & 0x00FF_FFFF_FFFF;
         (autoincrement, rng, epoch_ms)
     }
 
-    /// Formats the UuObjid as a UUID-like string: FFFFF-FFFFFFFFFF
-    /// First group: Autoincrement (16 bits) + RNG (4 bits) = 20 bits total
+    /// Formats the UuObjid as a UUID-like string: FFFFFF-FFFFFFFFFF
+    /// First group: Autoincrement (16 bits) + RNG (6 bits) = 22 bits total
     /// Second group: Epoch milliseconds (40 bits)
     pub fn to_uuid_string(&self) -> String {
         let (autoincrement, rng, epoch_ms) = self.components();
-        let first_group = ((autoincrement as u64) << 4) | (rng as u64);
-        format!("{first_group:05X}-{epoch_ms:010X}")
+        let first_group = ((autoincrement as u64) << 6) | (rng as u64);
+        format!("{first_group:06X}-{epoch_ms:010X}")
     }
 
     /// Parses a UUID-like string back to UuObjid
@@ -339,7 +358,7 @@ impl UuObjid {
         let parts: Vec<&str> = s.split('-').collect();
         if parts.len() != 2 {
             return Err(DecodingError::CouldNotDecode(
-                "Expected format FFFFF-FFFFFFFFFF".to_string(),
+                "Expected format FFFFFF-FFFFFFFFFF".to_string(),
             ));
         }
 
@@ -349,8 +368,8 @@ impl UuObjid {
         let epoch_ms = u64::from_str_radix(parts[1], 16)
             .map_err(|e| DecodingError::CouldNotDecode(format!("Invalid epoch_ms: {e}")))?;
 
-        let autoincrement = ((first_group >> 4) & 0xFFFF) as u16;
-        let rng = (first_group & 0x0F) as u8;
+        let autoincrement = ((first_group >> 6) & 0xFFFF) as u16;
+        let rng = (first_group & 0x3F) as u8;
 
         Ok(Self::new(autoincrement, rng, epoch_ms))
     }
@@ -387,7 +406,7 @@ mod tests {
     fn test_uuobjid() {
         // Test manual creation
         let uuid = UuObjid::new(0x1234, 0x5, 0x1234567890);
-        assert_eq!(uuid.to_uuid_string(), "12345-1234567890");
+        assert_eq!(uuid.to_uuid_string(), "048D05-1234567890");
 
         let (autoincrement, rng, epoch_ms) = uuid.components();
         assert_eq!(autoincrement, 0x1234);
@@ -395,18 +414,18 @@ mod tests {
         assert_eq!(epoch_ms, 0x1234567890);
 
         // Test parsing
-        let parsed = UuObjid::from_uuid_string("12345-1234567890").unwrap();
+        let parsed = UuObjid::from_uuid_string("048D05-1234567890").unwrap();
         assert_eq!(parsed, uuid);
 
         // Test Obj integration
         let obj = Obj::mk_uuobjid(uuid);
         assert!(obj.is_uuobjid());
         assert!(!obj.is_sysobj());
-        assert_eq!(obj.to_literal(), "12345-1234567890");
+        assert_eq!(obj.to_literal(), "048D05-1234567890");
         assert_eq!(obj.uuobjid(), Some(uuid));
 
         // Test string parsing
-        let obj_from_str = Obj::try_from("12345-1234567890").unwrap();
+        let obj_from_str = Obj::try_from("048D05-1234567890").unwrap();
         assert_eq!(obj_from_str, obj);
     }
 
@@ -418,7 +437,7 @@ mod tests {
 
         // Should be a reasonable autoincrement value (starts at 1)
         assert!(autoincrement >= 1);
-        assert!(rng <= 0x0F);
+        assert!(rng <= 0x3F);
 
         // Check that epoch_ms is reasonable (should be recent)
         let now = SystemTime::now()
@@ -434,23 +453,50 @@ mod tests {
     #[test]
     fn test_uuobjid_edge_cases() {
         // Test maximum values
-        let uuid = UuObjid::new(0xFFFF, 0x0F, 0x00FF_FFFF_FFFF);
-        assert_eq!(uuid.to_uuid_string(), "FFFFF-FFFFFFFFFF");
+        let uuid = UuObjid::new(0xFFFF, 0x3F, 0x00FF_FFFF_FFFF);
+        assert_eq!(uuid.to_uuid_string(), "3FFFFF-FFFFFFFFFF");
 
         // Test zero values
         let uuid = UuObjid::new(0, 0, 0);
-        assert_eq!(uuid.to_uuid_string(), "00000-0000000000");
+        assert_eq!(uuid.to_uuid_string(), "000000-0000000000");
     }
 
     #[test]
     fn test_uuobjid_parsing_errors() {
         // Invalid format
         assert!(UuObjid::from_uuid_string("invalid").is_err());
-        assert!(UuObjid::from_uuid_string("12345").is_err());
-        assert!(UuObjid::from_uuid_string("12345-1234567890-extra").is_err());
+        assert!(UuObjid::from_uuid_string("123456").is_err());
+        assert!(UuObjid::from_uuid_string("123456-1234567890-extra").is_err());
 
         // Invalid hex
-        assert!(UuObjid::from_uuid_string("GGGGG-1234567890").is_err());
-        assert!(UuObjid::from_uuid_string("12345-GGGGGGGGGG").is_err());
+        assert!(UuObjid::from_uuid_string("GGGGGG-1234567890").is_err());
+        assert!(UuObjid::from_uuid_string("123456-GGGGGGGGGG").is_err());
+    }
+
+    #[test]
+    fn test_autoincrement_wrapping() {
+        // Test that the atomic counter wraps properly
+        let counter = get_uuobjid_sequence();
+
+        // Set counter near maximum
+        counter.store(65535, Ordering::Relaxed);
+
+        // Generate UUID at max value
+        let seq1 = counter.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(seq1, 65535);
+
+        // Next fetch should wrap to 0
+        let seq2 = counter.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(seq2, 0);
+
+        // Verify the UUIDs are generated with correct autoincrement values
+        let uuid1 = UuObjid::generate(seq1);
+        let uuid2 = UuObjid::generate(seq2);
+
+        let (auto1, _, _) = uuid1.components();
+        let (auto2, _, _) = uuid2.components();
+
+        assert_eq!(auto1, 65535);
+        assert_eq!(auto2, 0);
     }
 }
