@@ -713,7 +713,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
             Ok(JsonValue::Number(num))
         }
         Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),
-        Variant::Obj(o) => Ok(JsonValue::String(format!("#{o}"))),
+        Variant::Obj(o) => Ok(JsonValue::String(format!("{o}"))),
         Variant::List(list) => {
             let mut json_array = Vec::new();
             for item in list.iter() {
@@ -729,7 +729,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
                     Variant::Str(s) => s.as_str().to_string(),
                     Variant::Int(i) => i.to_string(),
                     Variant::Float(f) => f.to_string(),
-                    Variant::Obj(o) => format!("#{o}"),
+                    Variant::Obj(o) => format!("{o}"),
                     _ => return Err(BfErr::Code(E_TYPE)), // Complex keys not supported
                 };
                 json_obj.insert(key, moo_value_to_json(&v)?);
@@ -805,7 +805,7 @@ pub(crate) fn register_bf_documents(builtins: &mut [Box<BuiltinFunction>]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_var::v_sym;
+    use moor_var::{v_objid, v_sym};
 
     #[test]
     fn test_tag_structure_basic() {
@@ -1126,5 +1126,38 @@ mod tests {
         } else {
             panic!("Expected Ret result");
         }
+    }
+
+    #[test]
+    fn test_json_uuid_objects() {
+        use moor_var::{UuObjid, Obj, Var};
+
+        // Test regular object
+        let regular_obj = v_objid(42);
+        let regular_json = moo_value_to_json(&regular_obj).unwrap();
+        assert_eq!(regular_json.as_str().unwrap(), "#42");
+
+        // Test UUID object
+        let uuid = UuObjid::new(0x1234, 0x5, 0x1234567890);
+        let uuid_obj = Var::from(Obj::mk_uuobjid(uuid));
+        let uuid_json = moo_value_to_json(&uuid_obj).unwrap();
+        assert_eq!(uuid_json.as_str().unwrap(), "#12345-1234567890");
+
+        // Test in a list context
+        let list_with_objects = v_list(&[regular_obj.clone(), uuid_obj.clone()]);
+        let list_json = moo_value_to_json(&list_with_objects).unwrap();
+        let json_array = list_json.as_array().unwrap();
+        assert_eq!(json_array[0].as_str().unwrap(), "#42");
+        assert_eq!(json_array[1].as_str().unwrap(), "#12345-1234567890");
+
+        // Test in a map context (as key)
+        let map_with_obj_keys = v_map(&[
+            (regular_obj, v_str("regular")),
+            (uuid_obj, v_str("uuid"))
+        ]);
+        let map_json = moo_value_to_json(&map_with_obj_keys).unwrap();
+        let json_obj = map_json.as_object().unwrap();
+        assert_eq!(json_obj.get("#42").unwrap().as_str().unwrap(), "regular");
+        assert_eq!(json_obj.get("#12345-1234567890").unwrap().as_str().unwrap(), "uuid");
     }
 }
