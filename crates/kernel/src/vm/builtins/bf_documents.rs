@@ -1141,14 +1141,14 @@ mod tests {
         let uuid = UuObjid::new(0x1234, 0x5, 0x1234567890);
         let uuid_obj = Var::from(Obj::mk_uuobjid(uuid));
         let uuid_json = moo_value_to_json(&uuid_obj).unwrap();
-        assert_eq!(uuid_json.as_str().unwrap(), "#12345-1234567890");
+        assert_eq!(uuid_json.as_str().unwrap(), "#048D05-1234567890");
 
         // Test in a list context
         let list_with_objects = v_list(&[regular_obj.clone(), uuid_obj.clone()]);
         let list_json = moo_value_to_json(&list_with_objects).unwrap();
         let json_array = list_json.as_array().unwrap();
         assert_eq!(json_array[0].as_str().unwrap(), "#42");
-        assert_eq!(json_array[1].as_str().unwrap(), "#12345-1234567890");
+        assert_eq!(json_array[1].as_str().unwrap(), "#048D05-1234567890");
 
         // Test in a map context (as key)
         let map_with_obj_keys =
@@ -1157,7 +1157,7 @@ mod tests {
         let json_obj = map_json.as_object().unwrap();
         assert_eq!(json_obj.get("#42").unwrap().as_str().unwrap(), "regular");
         assert_eq!(
-            json_obj.get("#12345-1234567890").unwrap().as_str().unwrap(),
+            json_obj.get("#048D05-1234567890").unwrap().as_str().unwrap(),
             "uuid"
         );
     }
