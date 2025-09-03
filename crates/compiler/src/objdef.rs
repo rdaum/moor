@@ -24,8 +24,8 @@ use moor_common::model::{
 use moor_common::util::BitEnum;
 use moor_var::program::ProgramType;
 use moor_var::{
-    ErrorCode, List, NOTHING, Obj, Symbol, UuObjid, Var, VarType, v_bool, v_err, v_float,
-    v_flyweight, v_int, v_list, v_map, v_obj, v_str, v_sym,
+    AnonymousObjid, ErrorCode, List, NOTHING, Obj, Symbol, UuObjid, Var, VarType, v_bool, v_err,
+    v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str, v_sym,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -97,6 +97,8 @@ pub enum ObjDefParseError {
     ConstantNotFound(String),
     #[error("Bad attribute type: {0:?}")]
     BadAttributeType(VarType),
+    #[error("Invalid object ID: {0}")]
+    InvalidObjectId(String),
 }
 
 fn parse_boolean_literal(pair: Pair<Rule>) -> Result<bool, ObjDefParseError> {
@@ -370,7 +372,31 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
     match pair.as_rule() {
         Rule::object => {
             let ostr = &pair.as_str()[1..];
-            if ostr.len() == 17 && ostr.chars().nth(5) == Some('-') {
+            if ostr.starts_with("anon_") {
+                // Parse anonymous object format: anon_XXXXXX-XXXXXXXXXX
+                let anon_part = &ostr[5..]; // Remove "anon_" prefix
+                if anon_part.len() == 17 && anon_part.chars().nth(6) == Some('-') {
+                    let first_part = &anon_part[..6];
+                    let second_part = &anon_part[7..];
+
+                    let first_hex = u64::from_str_radix(first_part, 16).unwrap();
+                    let second_hex = u64::from_str_radix(second_part, 16).unwrap();
+
+                    // Extract components from the packed representation
+                    let autoincrement = ((first_hex >> 6) & 0x3FFF) as u16;
+                    let rng = (first_hex & 0x3F) as u8;
+                    let epoch_ms = second_hex;
+
+                    let anon_id = AnonymousObjid::new(autoincrement, rng, epoch_ms);
+                    let objid = Obj::mk_anonymous(anon_id);
+                    Ok(objid)
+                } else {
+                    return Err(ObjDefParseError::InvalidObjectId(format!(
+                        "Invalid anonymous object format: {}",
+                        ostr
+                    )));
+                }
+            } else if ostr.len() == 17 && ostr.chars().nth(5) == Some('-') {
                 // This is an uuobjid probably, so we can safely assemble from there.
                 let uuobjid = UuObjid::from_uuid_string(ostr).unwrap();
                 let objid = Obj::mk_uuobjid(uuobjid);

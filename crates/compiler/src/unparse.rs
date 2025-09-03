@@ -1083,6 +1083,15 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
     let f = |o: &Obj| {
         if let Some(name_sub) = name_subs.get(o) {
             name_sub.clone()
+        } else if o.is_anonymous() {
+            // For anonymous objects, use the objdef format with internal ID
+            if let Some(anon_id) = o.anonymous_objid() {
+                let (autoincrement, rng, epoch_ms) = anon_id.components();
+                let first_group = ((autoincrement as u64) << 6) | (rng as u64);
+                format!("#anon_{first_group:06X}-{epoch_ms:010X}")
+            } else {
+                format!("{o}")
+            }
         } else {
             format!("{o}")
         }
