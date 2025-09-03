@@ -234,7 +234,11 @@ pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
             parent,
             child,
             sibling,
-            name: db_obj.name().clone().unwrap_or("".to_string()),
+            name: if db_objid.is_anonymous() {
+                "*anonymous*".to_string()
+            } else {
+                db_obj.name().clone().unwrap_or("".to_string())
+            },
             flags: db_obj.flags().to_u16() as _,
             verbdefs,
             propdefs,

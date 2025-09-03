@@ -15,15 +15,21 @@ use moor_compiler::{program_to_tree, unparse};
 use moor_var::{ErrorCode, Obj, Sequence};
 use moor_var::{Lambda, Var, VarType, Variant};
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io;
 
 use crate::read::TYPE_CLEAR;
 use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_var::Associative;
 
+// Textdump-specific type constant for anonymous objects (matching ToastStunt)
+const TYPE_ANON: i64 = 12;
+
 pub struct TextdumpWriter<W: io::Write> {
     writer: W,
     encoding_mode: EncodingMode,
+    anonymous_obj_ids: HashMap<Obj, i64>,
+    next_anonymous_id: i64,
 }
 
 impl<W: io::Write> TextdumpWriter<W> {
@@ -31,6 +37,8 @@ impl<W: io::Write> TextdumpWriter<W> {
         Self {
             writer,
             encoding_mode,
+            anonymous_obj_ids: HashMap::new(),
+            next_anonymous_id: 0, // Start from 0, following ToastStunt approach
         }
     }
 }
@@ -40,9 +48,31 @@ impl<W: io::Write> TextdumpWriter<W> {
         if obj.is_uuobjid() {
             // Write UUID objects with 'u' prefix followed by UUID string
             writeln!(self.writer, "u{}", obj.to_literal())
+        } else if obj.is_anonymous() {
+            // Write anonymous objects using temporary ID
+            self.write_anonymous_obj(obj)
         } else {
             // Write regular numeric objects as their ID
             writeln!(self.writer, "{}", obj.id().0)
+        }
+    }
+
+    fn write_anonymous_obj(&mut self, obj: &Obj) -> Result<(), io::Error> {
+        // Following ToastStunt approach: assign a temporary sequential ID for anonymous objects
+        // During textdump save/load, anonymous objects get sequential IDs for serialization
+        // The actual anonymous object identity is preserved through its internal structure
+        let temp_id = self.get_or_assign_anonymous_id(obj);
+        writeln!(self.writer, "{}", temp_id)
+    }
+
+    fn get_or_assign_anonymous_id(&mut self, obj: &Obj) -> i64 {
+        if let Some(&existing_id) = self.anonymous_obj_ids.get(obj) {
+            existing_id
+        } else {
+            let new_id = self.next_anonymous_id;
+            self.anonymous_obj_ids.insert(*obj, new_id);
+            self.next_anonymous_id += 1;
+            new_id
         }
     }
 
@@ -140,24 +170,30 @@ impl<W: io::Write> TextdumpWriter<W> {
                 s.as_arc_string()
             )?,
             Variant::Obj(o) => {
-                writeln!(self.writer, "{}", VarType::TYPE_OBJ as u64)?;
-                self.write_obj(o)?;
+                if o.is_anonymous() {
+                    // Write anonymous objects using textdump-specific type code
+                    writeln!(self.writer, "{}", TYPE_ANON)?;
+                    self.write_anonymous_obj(o)?;
+                } else {
+                    writeln!(self.writer, "{}", VarType::TYPE_OBJ as u64)?;
+                    self.write_obj(o)?;
+                }
             }
             Variant::Str(s) => {
                 match self.encoding_mode {
                     EncodingMode::ISO8859_1 => {
-                        //
+                        writeln!(self.writer, "{}", VarType::TYPE_STR as i64)?;
                         let encoding = encoding_rs::WINDOWS_1252;
                         let s = s.as_str();
                         let s = encoding.encode(s);
                         let written = self.writer.write(&s.0).unwrap();
                         assert_eq!(written, s.0.len());
+                        writeln!(self.writer)?; // Add final newline
                     }
                     EncodingMode::UTF8 => {
                         writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
                     }
                 }
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
             }
             Variant::Err(e) => {
                 // integer form errors get written with their classic MOO repr
@@ -229,7 +265,13 @@ impl<W: io::Write> TextdumpWriter<W> {
     }
 
     fn write_object(&mut self, object: &Object) -> Result<(), io::Error> {
-        writeln!(self.writer, "{}\n{}\n", object.id, &object.name)?;
+        if object.id.is_anonymous() {
+            // For anonymous objects, write with temporary ID
+            let temp_id = self.get_or_assign_anonymous_id(&object.id);
+            writeln!(self.writer, "#{}\n{}\n", temp_id, &object.name)?;
+        } else {
+            writeln!(self.writer, "#{}\n{}\n", object.id.id().0, &object.name)?;
+        }
 
         writeln!(self.writer, "{}", object.flags)?;
         self.write_obj(&object.owner)?;

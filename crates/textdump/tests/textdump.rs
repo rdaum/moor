@@ -43,7 +43,7 @@ mod test {
     use moor_var::program::labels::Label;
     use moor_var::program::names::Name;
     use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
-    use moor_var::{NOTHING, Obj, Var, v_int};
+    use moor_var::{NOTHING, Obj, Sequence, Var, v_int};
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -739,6 +739,354 @@ mod test {
                     assert_eq!(self_var.2, 0, "Self-var should have scope id 0");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_anonymous_object_textdump_roundtrip() {
+        use moor_common::model::ObjectKind;
+        use moor_var::{v_list, v_obj, v_str};
+
+        // Create a database with anonymous objects
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        let db = Arc::new(db);
+        let anon_obj1;
+        let anon_obj2;
+
+        {
+            let mut tx = db.new_world_state().unwrap();
+
+            // Create system object first
+            let system_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &Obj::mk_id(-1), // parent: nothing
+                    &SYSTEM_OBJECT,  // owner: self
+                    BitEnum::new(),  // flags: none
+                    moor_common::model::ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            // Create anonymous objects
+            anon_obj1 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT, // parent: system
+                    &SYSTEM_OBJECT, // owner: system
+                    BitEnum::new(), // flags: none
+                    ObjectKind::Anonymous,
+                )
+                .unwrap();
+
+            anon_obj2 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT, // parent: system
+                    &SYSTEM_OBJECT, // owner: system
+                    BitEnum::new(), // flags: none
+                    ObjectKind::Anonymous,
+                )
+                .unwrap();
+
+            // Verify they're anonymous
+            assert!(anon_obj1.is_anonymous());
+            assert!(anon_obj2.is_anonymous());
+            assert_ne!(anon_obj1, anon_obj2);
+
+            // Add properties with anonymous object references
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("anon_ref"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                Some(v_obj(anon_obj1)),
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("anon_list"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                Some(v_list(&[v_obj(anon_obj1), v_obj(anon_obj2), v_str("test")])),
+            )
+            .unwrap();
+
+            // Add a property to the anonymous object itself
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &anon_obj1,
+                &anon_obj1,
+                Symbol::mk("anon_prop"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                Some(v_str("anonymous property")),
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+        }
+
+        // Create textdump
+        let mut textdump_data = Vec::new();
+        {
+            let snapshot = db.create_snapshot().unwrap();
+            let textdump = make_textdump(
+                snapshot.as_ref(),
+                TextdumpVersion::Moor(
+                    Version::new(0, 1, 0),
+                    CompileOptions::default(),
+                    EncodingMode::UTF8,
+                )
+                .to_version_string(),
+            );
+            let mut writer = TextdumpWriter::new(&mut textdump_data, EncodingMode::UTF8);
+            writer.write_textdump(&textdump).unwrap();
+        }
+
+        // Verify the textdump was created and contains anonymous objects
+        let textdump_str = String::from_utf8(textdump_data.clone()).unwrap();
+
+        assert!(
+            textdump_str.contains("*anonymous*"),
+            "Textdump should contain anonymous objects"
+        );
+        assert!(
+            textdump_str.contains("#0"),
+            "Anonymous objects should have temp IDs"
+        );
+        assert!(
+            textdump_str.contains("12"),
+            "Should contain anonymous object type marker"
+        );
+
+        // Now test full round-trip: load the textdump back into a new database
+        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
+        let db2 = Arc::new(db2);
+        {
+            let mut loader = db2.loader_client().unwrap();
+            let cursor = std::io::BufReader::new(std::io::Cursor::new(&textdump_data));
+
+            read_textdump(
+                loader.as_mut(),
+                cursor,
+                Version::new(0, 1, 0),
+                CompileOptions::default(),
+            )
+            .unwrap();
+            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+        }
+
+        // Verify anonymous objects were preserved correctly
+        {
+            let snapshot = db2.create_snapshot().unwrap();
+            let objects = snapshot.get_objects().unwrap();
+
+            // Should have system object + 2 anonymous objects
+            assert_eq!(
+                objects.len(),
+                3,
+                "Should have loaded 3 objects (system + 2 anonymous)"
+            );
+
+            let anon_objects: Vec<_> = objects.iter().filter(|obj| obj.is_anonymous()).collect();
+            assert_eq!(anon_objects.len(), 2, "Should have 2 anonymous objects");
+
+            let tx = db2.new_world_state().unwrap();
+
+            // Check that anonymous object references work
+            let anon_ref_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("anon_ref"))
+                .unwrap();
+            let loaded_anon_obj1 = anon_ref_prop.as_object().unwrap();
+            assert!(
+                loaded_anon_obj1.is_anonymous(),
+                "Loaded object should be anonymous"
+            );
+
+            // Check the list with multiple anonymous objects
+            let anon_list_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("anon_list"))
+                .unwrap();
+            let list = anon_list_prop.as_list().unwrap();
+            assert_eq!(list.len(), 3, "List should have 3 elements");
+
+            let list_anon_obj1 = list.iter().next().unwrap().as_object().unwrap();
+            let list_anon_obj2 = list.iter().nth(1).unwrap().as_object().unwrap();
+            assert!(
+                list_anon_obj1.is_anonymous(),
+                "First list object should be anonymous"
+            );
+            assert!(
+                list_anon_obj2.is_anonymous(),
+                "Second list object should be anonymous"
+            );
+            assert_ne!(
+                list_anon_obj1, list_anon_obj2,
+                "Anonymous objects should be different"
+            );
+
+            // Check the property on the anonymous object itself
+            let anon_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &loaded_anon_obj1, Symbol::mk("anon_prop"))
+                .unwrap();
+            assert_eq!(
+                anon_prop.as_string().unwrap(),
+                "anonymous property",
+                "Anonymous object property should be preserved"
+            );
+
+            // Verify anonymous objects are valid and functional
+            assert!(
+                tx.valid(&loaded_anon_obj1).unwrap(),
+                "Anonymous object should be valid"
+            );
+            assert_eq!(
+                tx.parent_of(&SYSTEM_OBJECT, &loaded_anon_obj1).unwrap(),
+                SYSTEM_OBJECT,
+                "Anonymous object parent should be preserved"
+            );
+        }
+    }
+
+    #[test]
+    fn test_debug_textdump_format() {
+        // Create a simple database and see what textdump format it produces
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        let db = Arc::new(db);
+
+        {
+            let mut tx = db.new_world_state().unwrap();
+
+            // Create system object first
+            let system_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &Obj::mk_id(-1), // parent: nothing
+                    &SYSTEM_OBJECT,  // owner: self
+                    BitEnum::new(),  // flags: none
+                    moor_common::model::ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            tx.commit().unwrap();
+        }
+
+        // Create textdump
+        let mut textdump_data = Vec::new();
+        {
+            let snapshot = db.create_snapshot().unwrap();
+            let textdump = make_textdump(
+                snapshot.as_ref(),
+                TextdumpVersion::Moor(
+                    Version::new(0, 1, 0),
+                    CompileOptions::default(),
+                    EncodingMode::UTF8,
+                )
+                .to_version_string(),
+            );
+            let mut writer = TextdumpWriter::new(&mut textdump_data, EncodingMode::UTF8);
+            writer.write_textdump(&textdump).unwrap();
+        }
+
+        let textdump_str = String::from_utf8(textdump_data).unwrap();
+        println!("Reference textdump format:\n{}", textdump_str);
+
+        // Now try to load this textdump to make sure the basic format works
+        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
+        let db2 = Arc::new(db2);
+        {
+            let mut loader = db2.loader_client().unwrap();
+            let cursor = std::io::BufReader::new(std::io::Cursor::new(textdump_str.as_bytes()));
+
+            read_textdump(
+                loader.as_mut(),
+                cursor,
+                Version::new(0, 1, 0),
+                CompileOptions::default(),
+            )
+            .unwrap();
+
+            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+        }
+
+        println!("Basic textdump format works!");
+    }
+
+    #[test]
+    fn test_simple_anonymous_object_parsing() {
+        use std::io::Cursor;
+
+        // Create a minimal textdump with just one anonymous object
+        let simple_textdump = r#"Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true map_type=true", encoding: UTF8
+1
+0
+0
+0
+#0
+*anonymous*
+
+0
+0
+-1
+-1
+-1
+-1
+-1
+-1
+0
+0
+0
+0 clocks
+0 queued tasks
+0 suspended tasks
+"#;
+
+        // Try to parse just this simple case
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        let db = Arc::new(db);
+
+        {
+            let mut loader = db.loader_client().unwrap();
+            let cursor = std::io::BufReader::new(Cursor::new(simple_textdump.as_bytes()));
+
+            println!("Attempting to load simple anonymous object textdump...");
+
+            // Add timeout or debug info to see where it hangs
+            match read_textdump(
+                loader.as_mut(),
+                cursor,
+                Version::new(0, 1, 0),
+                CompileOptions::default(),
+            ) {
+                Ok(_) => {
+                    println!("Successfully loaded simple textdump");
+                    assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+                }
+                Err(e) => {
+                    println!("Failed to load textdump: {:?}", e);
+                    panic!("Textdump loading failed: {:?}", e);
+                }
+            }
+        }
+
+        // Verify the anonymous object was loaded correctly
+        {
+            let snapshot = db.create_snapshot().unwrap();
+            let objects = snapshot.get_objects().unwrap();
+            println!("Loaded objects: {:?}", objects);
+
+            // Should have loaded 1 anonymous object
+            assert_eq!(objects.len(), 1, "Should have loaded 1 object");
+
+            let obj = objects.iter().next().unwrap();
+            assert!(obj.is_anonymous(), "Object should be anonymous");
         }
     }
 }

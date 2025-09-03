@@ -12,6 +12,7 @@
 //
 
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 
 use base64::{Engine, engine::general_purpose};
@@ -40,6 +41,8 @@ use moor_var::{
 use moor_var::{Obj, v_flyweight};
 
 pub const TYPE_CLEAR: i64 = 5;
+// Textdump-specific type constant for anonymous objects (matching ToastStunt)
+const TYPE_ANON: i64 = 12;
 
 pub struct TextdumpReader<R: Read> {
     pub line_num: usize,
@@ -47,6 +50,7 @@ pub struct TextdumpReader<R: Read> {
     pub version_string: String,
     pub reader: BufReader<R>,
     pub encoding_mode: EncodingMode,
+    anonymous_obj_map: HashMap<i64, Obj>,
 }
 
 impl<R: Read> TextdumpReader<R> {
@@ -79,6 +83,7 @@ impl<R: Read> TextdumpReader<R> {
             encoding_mode,
             reader,
             line_num: 2,
+            anonymous_obj_map: HashMap::new(),
         })
     }
 }
@@ -190,6 +195,11 @@ impl<R: Read> TextdumpReader<R> {
         })
     }
     fn read_var_value(&mut self, t_num: i64) -> Result<Var, TextdumpReaderError> {
+        // Handle textdump-specific anonymous object type before VarType parsing
+        if t_num == TYPE_ANON {
+            return self.read_anonymous_obj();
+        }
+
         let vtype: VarType = VarType::from_repr(t_num as u8).expect("Invalid var type");
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
@@ -288,13 +298,6 @@ impl<R: Read> TextdumpReader<R> {
                     let _val = self.read_var()?;
                 }
                 let _terminator = self.read_string()?;
-                v_none()
-            }
-            VarType::_TOAST_TYPE_ANON => {
-                warn!("found ToastStunt ANON type; treating as None");
-                // We turn ANONs into nothing, but have to parse them enough to skip past them.
-                let _oid = self.read_num()?;
-
                 v_none()
             }
             VarType::TYPE_LAMBDA => self.read_lambda()?,
@@ -402,6 +405,20 @@ impl<R: Read> TextdumpReader<R> {
         Ok(Var::mk_lambda(params, program, captured_env, self_var))
     }
 
+    fn read_anonymous_obj(&mut self) -> Result<Var, TextdumpReaderError> {
+        let temp_id = self.read_num()?;
+
+        // Check if we've already created this anonymous object
+        if let Some(&existing_obj) = self.anonymous_obj_map.get(&temp_id) {
+            return Ok(v_obj(existing_obj));
+        }
+
+        // Create new anonymous object
+        let anon_obj = Obj::mk_anonymous_generated();
+        self.anonymous_obj_map.insert(temp_id, anon_obj);
+        Ok(v_obj(anon_obj))
+    }
+
     fn read_var(&mut self) -> Result<Var, TextdumpReaderError> {
         let t_num = self.read_num()?;
         self.read_var_value(t_num)
@@ -457,8 +474,20 @@ impl<R: Read> TextdumpReader<R> {
                 self.line_num,
             ));
         };
-        let oid = Obj::mk_id(oid);
         let name = self.read_string()?;
+        let oid = if name == "*anonymous*" {
+            // This is an anonymous object - check if we've already created it
+            if let Some(&existing_obj) = self.anonymous_obj_map.get(&oid) {
+                existing_obj
+            } else {
+                // Create new anonymous object and map the temporary ID to it
+                let anon_obj = Obj::mk_anonymous_generated();
+                self.anonymous_obj_map.insert(oid, anon_obj);
+                anon_obj
+            }
+        } else {
+            Obj::mk_id(oid.try_into().unwrap())
+        };
         match self.version {
             ToastStunt(v) if v >= ToastDbvNextGen => {}
             _ => {
@@ -895,8 +924,7 @@ impl<R: Read> TextdumpReader<R> {
                 }
                 (objects, users, verbs)
             }
-            // LambdaMOO <= 1.8 and mooR compatible textdumps
-            _ => {
+            TextdumpVersion::LambdaMOO(_) => {
                 let (nobjs, nprogs, _, nusers) = (
                     self.read_num()?,
                     self.read_num()?,
@@ -926,6 +954,43 @@ impl<R: Read> TextdumpReader<R> {
                     let verb = self.read_verb()?;
                     verbs.insert((verb.objid, verb.verbnum), verb);
                 }
+
+                (objects, users, verbs)
+            }
+            TextdumpVersion::Moor(_, _, _) => {
+                let (nobjs, nprogs, _, nusers) = (
+                    self.read_num()?,
+                    self.read_num()?,
+                    self.read_num()?,
+                    self.read_num()?,
+                );
+                info!("# users: {}", nusers);
+                let mut users = Vec::with_capacity(nusers as usize);
+                for _ in 0..nusers {
+                    users.push(self.read_objid()?);
+                }
+
+                info!("# objs: {}", nobjs);
+                info!("# progs: {}", nprogs);
+
+                info!("Parsing objects...");
+                let mut objects = BTreeMap::new();
+                for _i in 0..nobjs {
+                    if let Some(o) = self.read_object()? {
+                        objects.insert(o.id, o);
+                    }
+                }
+
+                info!("Reading verbs...");
+                let mut verbs = BTreeMap::new();
+                for _p in 0..nprogs {
+                    let verb = self.read_verb()?;
+                    verbs.insert((verb.objid, verb.verbnum), verb);
+                }
+
+                // Moor format has simple task queue at the end
+                self.read_task_queue()?;
+
                 (objects, users, verbs)
             }
         };
