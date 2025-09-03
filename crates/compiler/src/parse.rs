@@ -26,7 +26,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
 use moor_common::builtins::BUILTINS;
-use moor_var::{Obj, UuObjid};
+use moor_var::{AnonymousObjid, Obj, UuObjid};
 use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
@@ -130,7 +130,28 @@ impl TreeTransformer {
             }
             Rule::object => {
                 let ostr = &pair.as_str()[1..];
-                if ostr.len() == 17 && ostr.chars().nth(6) == Some('-') {
+                if ostr.starts_with("anon_")
+                    && ostr.len() == 22
+                    && ostr.chars().nth(11) == Some('-')
+                {
+                    // This is an anonymous object: anon_FFFFFF-FFFFFFFFFF
+                    let uuid_part = &ostr[5..]; // Skip "anon_" prefix
+                    let parts: Vec<&str> = uuid_part.split('-').collect();
+                    if parts.len() == 2 {
+                        let first_group = u64::from_str_radix(parts[0], 16).unwrap();
+                        let epoch_ms = u64::from_str_radix(parts[1], 16).unwrap();
+                        let autoincrement = ((first_group >> 6) & 0xFFFF) as u16;
+                        let rng = (first_group & 0x3F) as u8;
+                        let anonymous_id = AnonymousObjid::new(autoincrement, rng, epoch_ms);
+                        let objid = Obj::mk_anonymous(anonymous_id);
+                        Ok(Expr::Value(v_obj(objid)))
+                    } else {
+                        Err(CompileError::StringLexError(
+                            self.compile_context(&pair),
+                            format!("invalid anonymous object literal '{}'", pair.as_str()),
+                        ))
+                    }
+                } else if ostr.len() == 17 && ostr.chars().nth(6) == Some('-') {
                     // This is an uuobjid probably, so we can safely assemble from there.
                     let uuobjid = UuObjid::from_uuid_string(ostr).unwrap();
                     let objid = Obj::mk_uuobjid(uuobjid);

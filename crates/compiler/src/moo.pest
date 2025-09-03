@@ -199,8 +199,9 @@ ASSIGN = _{ "=" ~ !("=" | ">") }
 err = { errcode ~ ("(" ~ expr ~ ")")? }
 errcode = @{ ^"e_" ~ ident_continue+  }
 
-object  = @{ "#" ~ (uuid | integer) }
+object  = @{ "#" ~ (anonymous_uuid | uuid | integer) }
 uuid    = @{ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
+anonymous_uuid = @{ "anon_" ~ ASCII_HEX_DIGIT{6} ~ "-" ~ ASCII_HEX_DIGIT{10} }
 keyword = @{
     ^"for"
   | ^"endfor"

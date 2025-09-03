@@ -163,10 +163,20 @@ pub fn collect_object(
 }
 
 // Return the object number and if this is $nameable thing, put a // $comment
+// For anonymous objects, show the full internal ID in objdef context
 fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
     if let Some(name) = index_names.get(oid) {
         return name.clone();
     };
+
+    // For anonymous objects, show the internal ID in objdef format
+    if oid.is_anonymous() {
+        if let Some(anon_id) = oid.anonymous_objid() {
+            let (autoincrement, rng, epoch_ms) = anon_id.components();
+            let first_group = ((autoincrement as u64) << 6) | (rng as u64);
+            return format!("#anon_{first_group:06X}-{epoch_ms:010X}");
+        }
+    }
 
     format!("{oid}")
 }
@@ -294,13 +304,16 @@ fn collect_nested_constants(
                 format!("{}_{}", path.join("_"), pd.name)
             };
 
-            // Add this candidate
-            candidates.push(ConstantCandidate {
-                obj: oid,
-                constant_name,
-                file_name,
-                path_depth: path.len(),
-            });
+            // Only add non-anonymous objects as constant candidates
+            // Anonymous objects shouldn't have constants since they can't be referenced by name
+            if !oid.is_anonymous() {
+                candidates.push(ConstantCandidate {
+                    obj: oid,
+                    constant_name,
+                    file_name,
+                    path_depth: path.len(),
+                });
+            }
 
             // Recursively traverse nested object properties
             if let Some(nested_obj) = object_defs.iter().find(|od| od.oid == oid) {
@@ -324,7 +337,12 @@ fn generate_constants_file(
     let mut objects: Vec<_> = index_names.iter().collect();
     objects.sort_by(|a, b| a.0.as_u64().cmp(&b.0.as_u64()));
     for i in objects {
-        lines.push(format!("define {} = {};", i.1.to_ascii_uppercase(), i.0));
+        let obj_ref = canon_name(i.0, &HashMap::new()); // Use canon_name for proper objdef format
+        lines.push(format!(
+            "define {} = {};",
+            i.1.to_ascii_uppercase(),
+            obj_ref
+        ));
     }
     let constants = lines.join("\n");
     let constants_file = directory_path.join("constants.moo");
@@ -342,18 +360,22 @@ pub fn dump_object_definitions(
     // TODO: this doesn't help with nested values
     let (index_names, file_names) = extract_system_object_references(object_defs);
 
-    // We will generate one file per object.
-    // Otherwise for large cores it just gets insane.
-    // In the future we could support other user configurable modes (multiple objects in a file,
-    // or split large objects up into a directory with verb per file, etc.)
+    // Separate anonymous objects from regular objects
+    let (anonymous_objects, regular_objects): (Vec<_>, Vec<_>) =
+        object_defs.iter().partition(|o| o.oid.is_anonymous());
+
+    // Store counts for logging before consuming the vectors
+    let regular_count = regular_objects.len();
+    let anonymous_count = anonymous_objects.len();
 
     // Create the directory.
     std::fs::create_dir_all(directory_path)?;
 
-    // Constants index, for friendlier names
+    // Constants index, for friendlier names (only for regular objects)
     generate_constants_file(&index_names, directory_path)?;
 
-    for o in object_defs {
+    // Dump regular objects - one file per object
+    for o in regular_objects {
         // Pick a file name.
         let file_name = match file_names.get(&o.oid) {
             Some(name) => format!("{name}.moo"),
@@ -366,7 +388,29 @@ pub fn dump_object_definitions(
         let objstr = lines.join("\n");
         file.write_all(objstr.as_bytes())?;
     }
-    info!("Dumped {} objects", object_defs.len());
+
+    // Dump all anonymous objects into a single file
+    if !anonymous_objects.is_empty() {
+        let anon_file_path = directory_path.join("_anonymous_objects.moo");
+        let mut anon_file = std::fs::File::create(anon_file_path)?;
+
+        let mut all_anon_lines = Vec::new();
+        for (i, o) in anonymous_objects.iter().enumerate() {
+            if i > 0 {
+                all_anon_lines.push(String::new()); // Empty line between objects
+            }
+            let lines = dump_object(&index_names, o)?;
+            all_anon_lines.extend(lines);
+        }
+
+        let anon_objstr = all_anon_lines.join("\n");
+        anon_file.write_all(anon_objstr.as_bytes())?;
+    }
+
+    info!(
+        "Dumped {} regular objects and {} anonymous objects",
+        regular_count, anonymous_count
+    );
     Ok(())
 }
 
@@ -553,7 +597,7 @@ mod tests {
     use moor_var::program::labels::Label;
     use moor_var::program::names::Name;
     use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
-    use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
+    use moor_var::{Obj, SYSTEM_OBJECT, Sequence, Symbol, Var, v_int, v_list, v_obj, v_str};
     use semver::Version;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -794,6 +838,243 @@ mod tests {
                     "Second captured var should be 123"
                 );
             }
+        }
+    }
+
+    /// Test anonymous object objdef round-trip: create anonymous objects, dump them, reload, and verify
+    #[test]
+    fn test_anonymous_object_objdef_roundtrip() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmpdir_path = tmpdir.path();
+
+        // Create database with anonymous objects and properties
+        let (db1, _) = TxDB::open(None, DatabaseConfig::default());
+        let db1 = Arc::new(db1);
+
+        let anon_obj1;
+        let anon_obj2;
+        {
+            let mut tx = db1.new_world_state().unwrap();
+
+            // Create the system object first
+            let system_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &Obj::mk_id(-1), // parent: nothing
+                    &SYSTEM_OBJECT,  // owner: self
+                    BitEnum::new(),  // flags: none
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            // Create anonymous objects
+            anon_obj1 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT, // parent: system
+                    &SYSTEM_OBJECT, // owner: system
+                    BitEnum::new(), // flags: none
+                    ObjectKind::Anonymous,
+                )
+                .unwrap();
+
+            anon_obj2 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT, // parent: system
+                    &SYSTEM_OBJECT, // owner: system
+                    BitEnum::new(), // flags: none
+                    ObjectKind::Anonymous,
+                )
+                .unwrap();
+
+            // Verify they are anonymous
+            assert!(anon_obj1.is_anonymous());
+            assert!(anon_obj2.is_anonymous());
+            assert_ne!(anon_obj1, anon_obj2);
+
+            // Add properties that reference anonymous objects
+            tx.define_property(
+                &SYSTEM_OBJECT,                                      // perms
+                &SYSTEM_OBJECT,                                      // definer
+                &SYSTEM_OBJECT,                                      // location
+                Symbol::mk("anon_ref1"),                             // pname
+                &SYSTEM_OBJECT,                                      // owner
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
+                Some(v_obj(anon_obj1)),                              // initial_value
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,                                                 // perms
+                &SYSTEM_OBJECT,                                                 // definer
+                &SYSTEM_OBJECT,                                                 // location
+                Symbol::mk("anon_list"),                                        // pname
+                &SYSTEM_OBJECT,                                                 // owner
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,            // prop_flags
+                Some(v_list(&[v_obj(anon_obj1), v_obj(anon_obj2), v_int(42)])), // list with anon refs
+            )
+            .unwrap();
+
+            // Add a property to the anonymous object itself
+            tx.define_property(
+                &SYSTEM_OBJECT,                                      // perms
+                &anon_obj1,                                          // definer
+                &anon_obj1,                                          // location
+                Symbol::mk("anon_prop"),                             // pname
+                &SYSTEM_OBJECT,                                      // owner
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
+                Some(v_str("anonymous object property")),            // initial_value
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+        }
+
+        // Force database checkpoint to ensure data is persisted
+        db1.checkpoint().unwrap();
+
+        // Dump to objdef format
+        {
+            let snapshot = db1.create_snapshot().unwrap();
+            let object_defs = collect_object_definitions(snapshot.as_ref()).unwrap();
+            dump_object_definitions(&object_defs, tmpdir_path).unwrap();
+        }
+
+        // Verify _anonymous_objects.moo file was created
+        let anon_file = tmpdir_path.join("_anonymous_objects.moo");
+        assert!(
+            anon_file.exists(),
+            "_anonymous_objects.moo file should be created"
+        );
+
+        // Read and verify anonymous object syntax in the file
+        let anon_content = std::fs::read_to_string(&anon_file).unwrap();
+        assert!(
+            anon_content.contains("#anon_"),
+            "Should contain anonymous object syntax"
+        );
+        assert!(
+            anon_content.contains("object #anon_"),
+            "Should contain object definitions"
+        );
+        assert!(
+            anon_content.contains("anon_prop"),
+            "Should contain anonymous object properties"
+        );
+
+        // Verify system object file contains references to anonymous objects
+        let system_file = tmpdir_path.join("sysobj.moo");
+        assert!(system_file.exists(), "System object file should be created");
+
+        let system_content = std::fs::read_to_string(&system_file).unwrap();
+        println!("System file content after fix:\n{}", system_content);
+
+        assert!(
+            system_content.contains("anon_ref1"),
+            "Should contain anon_ref1 property"
+        );
+        assert!(
+            system_content.contains("anon_list"),
+            "Should contain anon_list property"
+        );
+
+        // The system file should contain direct anonymous object references since they don't get constants
+        assert!(
+            system_content.contains("#anon_"),
+            "Should contain direct anonymous object references"
+        );
+
+        // Verify constants.moo file exists but doesn't contain anonymous object constants
+        let constants_file = tmpdir_path.join("constants.moo");
+        assert!(
+            constants_file.exists(),
+            "constants.moo file should be created"
+        );
+
+        let constants_content = std::fs::read_to_string(&constants_file).unwrap();
+
+        // Constants file should NOT contain anonymous object constants (they shouldn't have constants)
+        assert!(
+            !constants_content.contains("#anon_"),
+            "constants.moo should not define anonymous object constants"
+        );
+
+        // Load objdef back into new database
+        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
+        let db2 = Arc::new(db2);
+
+        {
+            let mut loader = db2.loader_client().unwrap();
+            let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
+            defloader
+                .read_dirdump(CompileOptions::default(), tmpdir_path)
+                .unwrap();
+            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+        }
+
+        // Verify anonymous objects were loaded correctly
+        {
+            let tx = db2.new_world_state().unwrap();
+
+            // Get the anonymous object reference from system object property
+            let anon_ref_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("anon_ref1"))
+                .unwrap();
+            let loaded_anon_obj1 = anon_ref_prop.as_object().unwrap();
+            assert!(
+                loaded_anon_obj1.is_anonymous(),
+                "Loaded object should be anonymous"
+            );
+
+            // Get the list with anonymous objects
+            let anon_list_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("anon_list"))
+                .unwrap();
+            let list = anon_list_prop.as_list().unwrap();
+            assert_eq!(list.len(), 3, "List should have 3 elements");
+
+            let list_anon_obj1 = list.iter().next().unwrap().as_object().unwrap();
+            let list_anon_obj2 = list.iter().nth(1).unwrap().as_object().unwrap();
+            assert!(
+                list_anon_obj1.is_anonymous(),
+                "First list object should be anonymous"
+            );
+            assert!(
+                list_anon_obj2.is_anonymous(),
+                "Second list object should be anonymous"
+            );
+            assert_ne!(
+                list_anon_obj1, list_anon_obj2,
+                "Anonymous objects should be different"
+            );
+
+            // Verify the property on the anonymous object itself
+            let anon_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &loaded_anon_obj1, Symbol::mk("anon_prop"))
+                .unwrap();
+            assert_eq!(
+                anon_prop.as_string().unwrap(),
+                "anonymous object property",
+                "Anonymous object property should be preserved"
+            );
+
+            // Verify anonymous objects are valid and functional
+            assert!(
+                tx.valid(&loaded_anon_obj1).unwrap(),
+                "Anonymous object should be valid"
+            );
+            assert_eq!(
+                tx.parent_of(&SYSTEM_OBJECT, &loaded_anon_obj1).unwrap(),
+                SYSTEM_OBJECT,
+                "Anonymous object parent should be preserved"
+            );
+            assert_eq!(
+                tx.owner_of(&loaded_anon_obj1).unwrap(),
+                SYSTEM_OBJECT,
+                "Anonymous object owner should be preserved"
+            );
         }
     }
 }
