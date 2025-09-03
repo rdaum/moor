@@ -24,7 +24,7 @@ use eyre::{bail, eyre};
 use fs2::FileExt;
 
 use crate::connections::ConnectionRegistryFactory;
-use crate::event_log::{EventLog, EventLogConfig};
+use crate::event_log::{EventLog, EventLogConfig, EventLogOps, NoOpEventLog};
 use crate::rpc::{RpcServer, Transport, transport::RpcTransport};
 use crate::workers::WorkersServer;
 use base64::{Engine as _, engine::general_purpose};
@@ -387,11 +387,16 @@ fn main() -> Result<(), Report> {
         args.events_listen.as_str(),
     )?;
 
-    // Create the event log
-    let event_log = Arc::new(EventLog::with_config(
-        EventLogConfig::default(),
-        Some(&resolved_events_db_path),
-    ));
+    // Create the event log based on configuration
+    let event_log: Arc<dyn EventLogOps> = if config.features.enable_eventlog {
+        Arc::new(EventLog::with_config(
+            EventLogConfig::default(),
+            Some(&resolved_events_db_path),
+        ))
+    } else {
+        info!("Event logging is disabled - using no-op implementation");
+        Arc::new(NoOpEventLog::new())
+    };
 
     let (rpc_server, task_monitor, system_control) = RpcServer::new(
         kill_switch.clone(),

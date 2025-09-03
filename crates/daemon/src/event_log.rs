@@ -1071,6 +1071,60 @@ impl EventLogOps for EventLog {
     }
 }
 
+/// No-op event log implementation that discards all events
+/// Used when event logging is disabled
+pub struct NoOpEventLog;
+
+impl NoOpEventLog {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for NoOpEventLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventLogOps for NoOpEventLog {
+    fn append(&self, _player: Obj, event: Box<NarrativeEvent>) -> Uuid {
+        event.event_id()
+    }
+
+    fn current_presentations(&self, _player: Obj) -> HashMap<String, Presentation> {
+        HashMap::new()
+    }
+
+    fn dismiss_presentation(&self, _player: Obj, _presentation_id: String) {
+        // No-op
+    }
+
+    fn events_for_player_since(
+        &self,
+        _player: Obj,
+        _since: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent> {
+        Vec::new()
+    }
+
+    fn events_for_player_until(
+        &self,
+        _player: Obj,
+        _until: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent> {
+        Vec::new()
+    }
+
+    fn events_for_player_since_seconds(
+        &self,
+        _player: Obj,
+        _seconds_ago: u64,
+    ) -> Vec<LoggedNarrativeEvent> {
+        Vec::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1962,6 +2016,48 @@ mod tests {
                 "First back-scroll should return events"
             );
         }
+    }
+
+    #[test]
+    fn test_noop_event_log() {
+        let noop_log = NoOpEventLog::new();
+        let player = SYSTEM_OBJECT;
+
+        // Create a test event
+        let event = create_test_notify_event(player, "test message");
+
+        // Test append - should return event ID but not store anything
+        let event_id = noop_log.append(player, event);
+
+        // Test that queries return empty results
+        assert_eq!(noop_log.events_for_player_since(player, None).len(), 0);
+        assert_eq!(
+            noop_log
+                .events_for_player_until(player, Some(event_id))
+                .len(),
+            0
+        );
+        assert_eq!(
+            noop_log.events_for_player_since_seconds(player, 3600).len(),
+            0
+        );
+        assert_eq!(noop_log.current_presentations(player).len(), 0);
+
+        // Test dismiss presentation - should be no-op (shouldn't panic)
+        noop_log.dismiss_presentation(player, "test_id".to_string());
+
+        // Test with presentation events
+        let present_event = create_test_present_event(player, "widget1", "test content");
+        let _id = noop_log.append(player, present_event);
+
+        // Should still have no presentations
+        assert_eq!(noop_log.current_presentations(player).len(), 0);
+
+        let unpresent_event = create_test_unpresent_event(player, "widget1");
+        let _id = noop_log.append(player, unpresent_event);
+
+        // Should still have no presentations
+        assert_eq!(noop_log.current_presentations(player).len(), 0);
     }
 
     #[test]

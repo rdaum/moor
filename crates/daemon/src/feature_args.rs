@@ -98,6 +98,12 @@ pub struct FeatureArgs {
                 This provides better uniqueness guarantees and avoids integer overflow issues."
     )]
     pub use_uuobjids: Option<bool>,
+
+    #[arg(
+        long,
+        help = "Enable persistent event logging. When disabled, events are not persisted to disk and history features are unavailable."
+    )]
+    pub enable_eventlog: Option<bool>,
 }
 
 impl FeatureArgs {
@@ -140,6 +146,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.use_uuobjids {
             config.use_uuobjids = args;
+        }
+        if let Some(args) = self.enable_eventlog {
+            config.enable_eventlog = args;
         }
         Ok(())
     }

@@ -72,6 +72,9 @@ pub struct FeaturesConfig {
     /// Whether to create objects using uuobjids (UUID-based object IDs) instead of objids (integer-based object IDs).
     /// This provides better uniqueness guarantees and avoids integer overflow issues.
     pub use_uuobjids: bool,
+    /// Whether to enable persistent event logging. When disabled, events are not persisted to disk
+    /// and history features are unavailable.
+    pub enable_eventlog: bool,
 }
 
 impl Default for FeaturesConfig {
@@ -90,6 +93,7 @@ impl Default for FeaturesConfig {
             use_symbols_in_builtins: false,
             custom_errors: false,
             use_uuobjids: false,
+            enable_eventlog: true,
         }
     }
 }
