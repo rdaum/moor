@@ -106,6 +106,7 @@ These options enable or disable various MOO language features:
 | Symbols in builtins | `--use-symbols-in-builtins` | `false` | Use symbols instead of strings in builtins                                       |
 | List comprehensions | `--list-comprehensions`     | `true`  | Enable list/range comprehensions                                                 |
 | Persistent tasks    | `--persistent-tasks`        | `true`  | Enable persistent tasks between server restarts                                  |
+| Event logging       | `--enable-eventlog`         | `true`  | Enable persistent event logging and history features                             |
 
 ## Import/Export Configuration
 
@@ -143,6 +144,7 @@ features_config:
   use_boolean_returns: false
   use_symbols_in_builtins: false
   custom_errors: false
+  enable_eventlog: true
 
 # Import/export configuration
 import_export_config:
@@ -171,6 +173,7 @@ features_config:
   use_boolean_returns: false
   use_symbols_in_builtins: false
   custom_errors: false
+  enable_eventlog: true
 
 # LambdaMOO compatible import/export
 import_export_config:

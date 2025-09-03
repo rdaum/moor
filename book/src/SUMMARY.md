@@ -46,6 +46,7 @@
     - [Docker Compose Setup](the-system/docker-compose-setup.md)
     - [Alternative Installation Methods](the-system/alternative-installation-methods.md)
     - [Server Configuration](the-system/server-configuration.md)
+    - [Event Logging](the-system/event-logging.md)
     - [Server Assumptions About the Database](the-system/server-assumptions-about-the-database.md)
     - [Telnet-Host Commands and Assumptions](the-system/telnet-host-commands-and-assumptions.md)
     - [Networking](./the-moo-programming-language/networking.md)
