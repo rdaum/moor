@@ -201,6 +201,7 @@ impl WorldStateTransaction {
                 Obj::mk_id(max)
             }
             ObjectKind::UuObjId => Obj::mk_uuobjid_generated(),
+            ObjectKind::Anonymous => Obj::mk_anonymous_generated(),
         };
 
         let owner = attrs.owner().unwrap_or(id);
@@ -227,8 +228,8 @@ impl WorldStateTransaction {
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
-        // Only do this for objids, not uuobjids
-        if !id.is_uuobjid() {
+        // Only do this for objids, not uuobjids or anonymous objects
+        if !id.is_uuobjid() && !id.is_anonymous() {
             self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
         }
 
