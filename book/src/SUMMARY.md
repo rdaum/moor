@@ -2,6 +2,7 @@
 
 - [Foreword](./foreword.md)
 - [Introduction](./introduction.md)
+- [A Brief History of MUDs and MOOs](./history-of-moos.md)
 - [The World And Database](./the-database.md)
     - [MOO Value Types](./the-database/moo-value-types.md)
     - [Objects in the MOO Database](./the-database/objects-in-the-moo-database.md)
