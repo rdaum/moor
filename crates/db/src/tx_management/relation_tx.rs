@@ -297,11 +297,20 @@ where
         {
             match &entry.operation {
                 OpType::Delete => {
-                    // Convert delete to insert - avoids duplicate key errors
-                    entry.write_ts = self.tx.ts;
-                    entry.operation = OpType::Insert(value.clone());
+                    // Check master index to determine if this should be Insert or Update
+                    if let Some(master_entry) = self.index.master_entries.index_lookup(&domain) {
+                        // Entry exists in master index, convert to Update
+                        entry.read_ts = master_entry.ts;
+                        entry.write_ts = self.tx.ts;
+                        entry.operation = OpType::Update(value.clone());
+                    } else {
+                        // No entry in master index, convert to Insert
+                        entry.read_ts = self.tx.ts;
+                        entry.write_ts = self.tx.ts;
+                        entry.operation = OpType::Insert(value.clone());
+                    }
                     self.index.has_local_mutations = true;
-                    // Update local secondary index (insert after delete)
+                    // Update local secondary index
                     return Ok(None);
                 }
                 OpType::Insert(_) | OpType::Update(_) => {
