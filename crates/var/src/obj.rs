@@ -21,17 +21,14 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// Global atomic counter for UUID object sequence generation
-static UUOBJID_SEQUENCE: OnceLock<Arc<AtomicU16>> = OnceLock::new();
+static UUOBJID_SEQUENCE: AtomicU16 = AtomicU16::new(1);
 
-/// Gets or initializes the UUID object sequence counter
-fn get_uuobjid_sequence() -> &'static Arc<AtomicU16> {
-    UUOBJID_SEQUENCE.get_or_init(|| Arc::new(AtomicU16::new(1)))
-}
+/// Global atomic counter for anonymous object sequence generation
+static ANONYMOUS_SEQUENCE: AtomicU16 = AtomicU16::new(1);
 
 /// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
 /// from where $name style references hang off of. A bit like the Lobby in Self.
@@ -71,6 +68,7 @@ pub struct Obj(u64);
 
 const OBJID_TYPE_CODE: u8 = 0;
 const UUOBJID_TYPE_CODE: u8 = 1;
+const ANONYMOUS_TYPE_CODE: u8 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Objid(pub i32);
@@ -78,9 +76,13 @@ pub struct Objid(pub i32);
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct UuObjid(pub u64);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct AnonymousObjid(pub u64);
+
 // Internal representation varies by type:
 // - Objid: lower 32 bits contain i32 DB object id, upper 30 bits unused
 // - UuObjid: lower 62 bits contain packed UUID components
+// - AnonymousObjid: lower 62 bits contain anonymous object ID
 // Top 2 bits always encode the object type.
 impl Obj {
     pub fn as_u64(&self) -> u64 {
@@ -109,6 +111,17 @@ impl Obj {
     fn encode_as_uuobjid(uuid: UuObjid) -> Self {
         // Pack the 62-bit UUID value into the lower 62 bits with type code
         Self((uuid.0 & 0x3FFF_FFFF_FFFF_FFFF) | ((UUOBJID_TYPE_CODE as u64) << 62))
+    }
+
+    fn decode_as_anonymous(&self) -> AnonymousObjid {
+        // Extract the 62-bit anonymous ID value from the lower 62 bits
+        let id_value = self.0 & 0x3FFF_FFFF_FFFF_FFFF;
+        AnonymousObjid(id_value)
+    }
+
+    fn encode_as_anonymous(anonymous: AnonymousObjid) -> Self {
+        // Pack the 62-bit anonymous ID value into the lower 62 bits with type code
+        Self((anonymous.0 & 0x3FFF_FFFF_FFFF_FFFF) | ((ANONYMOUS_TYPE_CODE as u64) << 62))
     }
 
     fn object_type_code(&self) -> u8 {
@@ -145,6 +158,10 @@ impl Debug for Obj {
                 let uuid = self.decode_as_uuobjid();
                 f.write_fmt(format_args!("Obj(#{})", uuid.to_uuid_string()))
             }
+            ANONYMOUS_TYPE_CODE => {
+                let anonymous = self.decode_as_anonymous();
+                f.write_fmt(format_args!("Obj(*anonymous*:{})", anonymous.0))
+            }
             _ => f.write_fmt(format_args!("Obj(UnknownType:{})", self.object_type_code())),
         }
     }
@@ -158,6 +175,7 @@ impl Display for Obj {
                 let uuid = self.decode_as_uuobjid();
                 f.write_fmt(format_args!("#{}", uuid.to_uuid_string()))
             }
+            ANONYMOUS_TYPE_CODE => f.write_fmt(format_args!("*anonymous*")),
             _ => f.write_fmt(format_args!("UnknownType:{}", self.object_type_code())),
         }
     }
@@ -175,6 +193,12 @@ impl Display for UuObjid {
     }
 }
 
+impl Display for AnonymousObjid {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("*anonymous*:{}", self.0))
+    }
+}
+
 impl Obj {
     pub const fn mk_id(id: i32) -> Self {
         Self::encode_as_objid(id)
@@ -187,6 +211,10 @@ impl Obj {
             UUOBJID_TYPE_CODE => {
                 let uuid = self.decode_as_uuobjid();
                 uuid.to_uuid_string()
+            }
+            ANONYMOUS_TYPE_CODE => {
+                // Anonymous objects show as "*anonymous*" in keeping with toaststunt
+                "*anonymous*".to_string()
             }
             _ => format!("UnknownType:{}", self.object_type_code()),
         }
@@ -223,7 +251,7 @@ impl Obj {
 
     /// Creates a new Obj with a generated UuObjid
     pub fn mk_uuobjid_generated() -> Self {
-        let seq = get_uuobjid_sequence().fetch_add(1, Ordering::Relaxed);
+        let seq = UUOBJID_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         Self::mk_uuobjid(UuObjid::generate(seq))
     }
 
@@ -241,11 +269,37 @@ impl Obj {
         self.object_type_code() == UUOBJID_TYPE_CODE
     }
 
+    /// Creates a new Obj with an AnonymousObjid
+    pub fn mk_anonymous(id: AnonymousObjid) -> Self {
+        Self::encode_as_anonymous(id)
+    }
+
+    /// Creates a new Obj with a generated AnonymousObjid
+    pub fn mk_anonymous_generated() -> Self {
+        let seq = ANONYMOUS_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        Self::mk_anonymous(AnonymousObjid::generate(seq))
+    }
+
+    /// Gets the AnonymousObjid from this Obj if it's an anonymous type
+    pub fn anonymous_objid(&self) -> Option<AnonymousObjid> {
+        if self.object_type_code() == ANONYMOUS_TYPE_CODE {
+            Some(self.decode_as_anonymous())
+        } else {
+            None
+        }
+    }
+
+    /// Checks if this Obj is an anonymous object
+    pub fn is_anonymous(&self) -> bool {
+        self.object_type_code() == ANONYMOUS_TYPE_CODE
+    }
+
     /// Checks if this Obj contains a valid object reference (not special values like NOTHING, AMBIGUOUS, etc.)
     pub fn is_valid_object(&self) -> bool {
         match self.object_type_code() {
             OBJID_TYPE_CODE => self.decode_as_objid() >= 0,
             UUOBJID_TYPE_CODE => true, // UuObjids are always valid object references
+            ANONYMOUS_TYPE_CODE => true, // Anonymous objects are always valid object references
             _ => false,
         }
     }
@@ -381,6 +435,47 @@ impl UuObjid {
     }
 }
 
+impl AnonymousObjid {
+    /// Creates a new AnonymousObjid with the specified components
+    /// - autoincrement: 16 bits (0-65535, wraps around)
+    /// - rng: 6 bits (0-63)
+    /// - epoch_ms: 40 bits (Linux epoch milliseconds, truncated to 40 bits)
+    pub fn new(autoincrement: u16, rng: u8, epoch_ms: u64) -> Self {
+        // Ensure inputs fit in their allocated bits
+        let rng = (rng & 0x3F) as u64; // 6 bits
+        let epoch_ms = epoch_ms & 0x00FF_FFFF_FFFF; // 40 bits
+
+        // Pack into 62 bits: [autoincrement (16)] [rng (6)] [epoch_ms (40)]
+        let packed = (autoincrement as u64) << 46 | (rng << 40) | epoch_ms;
+        Self(packed)
+    }
+
+    /// Creates a new AnonymousObjid with current time and random components
+    pub fn generate(autoincrement: u16) -> Self {
+        let mut rng = rand::thread_rng();
+        let rng_val = rng.r#gen::<u8>() & 0x3F; // 6 bits
+
+        // Get current time in milliseconds since Unix epoch
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        // Truncate to 40 bits (take the lower 40 bits)
+        let epoch_ms = now & 0x00FF_FFFF_FFFF;
+
+        Self::new(autoincrement, rng_val, epoch_ms)
+    }
+
+    /// Extracts the components from the AnonymousObjid
+    pub fn components(&self) -> (u16, u8, u64) {
+        let autoincrement = ((self.0 >> 46) & 0xFFFF) as u16;
+        let rng = ((self.0 >> 40) & 0x3F) as u8;
+        let epoch_ms = self.0 & 0x00FF_FFFF_FFFF;
+        (autoincrement, rng, epoch_ms)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,17 +585,15 @@ mod tests {
     #[test]
     fn test_autoincrement_wrapping() {
         // Test that the atomic counter wraps properly
-        let counter = get_uuobjid_sequence();
-
         // Set counter near maximum
-        counter.store(65535, Ordering::Relaxed);
+        UUOBJID_SEQUENCE.store(65535, Ordering::Relaxed);
 
         // Generate UUID at max value
-        let seq1 = counter.fetch_add(1, Ordering::Relaxed);
+        let seq1 = UUOBJID_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         assert_eq!(seq1, 65535);
 
         // Next fetch should wrap to 0
-        let seq2 = counter.fetch_add(1, Ordering::Relaxed);
+        let seq2 = UUOBJID_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         assert_eq!(seq2, 0);
 
         // Verify the UUIDs are generated with correct autoincrement values
@@ -512,5 +605,118 @@ mod tests {
 
         assert_eq!(auto1, 65535);
         assert_eq!(auto2, 0);
+    }
+
+    #[test]
+    fn test_anonymous_objects() {
+        // Test anonymous object creation
+        let anonymous_id = AnonymousObjid(12345);
+        let obj = Obj::mk_anonymous(anonymous_id);
+
+        // Test type identification
+        assert!(obj.is_anonymous());
+        assert!(!obj.is_uuobjid());
+        assert!(!obj.is_sysobj());
+        assert!(obj.is_valid_object());
+
+        // Test ID retrieval
+        assert_eq!(obj.anonymous_objid(), Some(anonymous_id));
+        assert_eq!(obj.uuobjid(), None);
+
+        // Test literal representation
+        assert_eq!(obj.to_literal(), "*anonymous*");
+
+        // Test Display implementation
+        assert_eq!(format!("{}", obj), "*anonymous*");
+
+        // Test Debug implementation
+        assert_eq!(format!("{:?}", obj), "Obj(*anonymous*:12345)");
+    }
+
+    #[test]
+    fn test_anonymous_objid_display() {
+        let anonymous_id = AnonymousObjid(98765);
+        assert_eq!(format!("{}", anonymous_id), "*anonymous*:98765");
+    }
+
+    #[test]
+    fn test_anonymous_object_encoding() {
+        // Test that anonymous objects use the correct type code
+        let anonymous_id = AnonymousObjid(0x1234567890ABCDEF);
+        let obj = Obj::mk_anonymous(anonymous_id);
+
+        assert_eq!(obj.object_type_code(), ANONYMOUS_TYPE_CODE);
+
+        // Test that the ID is preserved in encoding/decoding
+        let decoded = obj.decode_as_anonymous();
+        assert_eq!(decoded.0, anonymous_id.0);
+    }
+
+    #[test]
+    fn test_anonymous_object_max_id() {
+        // Test with maximum possible 62-bit anonymous ID
+        let max_id = AnonymousObjid(0x3FFF_FFFF_FFFF_FFFF);
+        let obj = Obj::mk_anonymous(max_id);
+
+        assert!(obj.is_anonymous());
+        assert_eq!(obj.anonymous_objid(), Some(max_id));
+    }
+
+    #[test]
+    fn test_anonymous_object_generation() {
+        // Test generated anonymous objects
+        let obj1 = Obj::mk_anonymous_generated();
+        let obj2 = Obj::mk_anonymous_generated();
+
+        // Both should be anonymous
+        assert!(obj1.is_anonymous());
+        assert!(obj2.is_anonymous());
+
+        // They should have different IDs (due to time/random components)
+        let id1 = obj1.anonymous_objid().unwrap();
+        let id2 = obj2.anonymous_objid().unwrap();
+        assert_ne!(id1, id2);
+
+        // Check that autoincrement values are sequential
+        let (auto1, rng1, epoch1) = id1.components();
+        let (auto2, rng2, epoch2) = id2.components();
+        assert_eq!(auto2, auto1 + 1);
+
+        // Random components may differ
+        assert!(rng1 <= 0x3F);
+        assert!(rng2 <= 0x3F);
+
+        // Epoch times should be recent and reasonably close
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let now_truncated = now & 0x00FF_FFFF_FFFF;
+
+        assert!(epoch1 <= now_truncated);
+        assert!(epoch2 <= now_truncated);
+
+        // Both should display as *anonymous*
+        assert_eq!(obj1.to_literal(), "*anonymous*");
+        assert_eq!(obj2.to_literal(), "*anonymous*");
+    }
+
+    #[test]
+    fn test_anonymous_objid_components() {
+        // Test manual creation of AnonymousObjid
+        let anonymous = AnonymousObjid::new(0x1234, 0x15, 0x9876543210);
+        let (autoincrement, rng, epoch_ms) = anonymous.components();
+
+        assert_eq!(autoincrement, 0x1234);
+        assert_eq!(rng, 0x15);
+        assert_eq!(epoch_ms, 0x9876543210);
+
+        // Test generation
+        let generated = AnonymousObjid::generate(42);
+        let (gen_auto, gen_rng, gen_epoch) = generated.components();
+
+        assert_eq!(gen_auto, 42);
+        assert!(gen_rng <= 0x3F);
+        assert!(gen_epoch > 0); // Should be recent timestamp
     }
 }

@@ -39,6 +39,8 @@ pub enum ObjectKind {
     NextObjid,
     /// Create an object with a random generated UUID (for create() when UUID feature is on).
     UuObjId,
+    /// Create an anonymous object with a generated anonymous ID (for create() with anonymous objects).
+    Anonymous,
 }
 
 /// Errors related to the world state and operations on it.

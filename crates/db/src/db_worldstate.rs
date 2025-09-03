@@ -233,7 +233,7 @@ impl WorldState for DbWorldState {
                     return Err(WorldStateError::ObjectAlreadyExists(*obj_id));
                 }
             }
-            ObjectKind::NextObjid | ObjectKind::UuObjId => {
+            ObjectKind::NextObjid | ObjectKind::UuObjId | ObjectKind::Anonymous => {
                 // No validation needed for auto-generated IDs
             }
         }

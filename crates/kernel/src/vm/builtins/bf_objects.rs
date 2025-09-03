@@ -398,8 +398,8 @@ const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 /// Creates and returns a new object whose parent is parent and whose owner is as described below.
 /// MOO: `obj create(obj parent [, obj owner] [, int obj_type] [, list init_args])`
-/// obj_type: 0=numbered, 1=anonymous (unsupported), 2=UUID
-/// Also accepts boolean for backward compatibility: false=numbered, true=anonymous (unsupported)
+/// obj_type: 0=numbered, 1=anonymous, 2=UUID
+/// Also accepts boolean for backward compatibility: false=numbered, true=anonymous
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 4 {
         return Err(BfErr::ErrValue(
@@ -446,11 +446,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         // Convert integer to ObjectKind, validating as we go
         match obj_type {
             0 => ObjectKind::NextObjid,
-            1 => {
-                return Err(BfErr::ErrValue(
-                    E_INVARG.msg("anonymous objects are not supported"),
-                ));
-            }
+            1 => ObjectKind::Anonymous,
             2 => {
                 if !bf_args.config.use_uuobjids {
                     return Err(BfErr::ErrValue(
