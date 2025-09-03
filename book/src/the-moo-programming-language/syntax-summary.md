@@ -71,8 +71,10 @@ MOO supports several basic data types:
     - Object (`OBJ`) - References to objects in the DB, written as `#123` or `$room`. Note that `$` is a special prefix
       for "system" objects, which are objects referenced off the system object `#0`. `$room` is short-hand for
       `#0.room`.
-    - Error (`ERR`) - Error values, literal values starting with `E_`, optionally followed (in parentheses) by a string
-      describing the error. For example, `E_PERM("Permission denied")` or `E_PERM`.
+    - Error (`ERR`) - Error values, literal values starting with `E_`. By default, only predefined error codes like
+      `E_PERM`, `E_TYPE`, etc. are available. With the `custom_errors` feature enabled, any identifier starting with
+      `E_` becomes a valid error code. Errors can optionally include a message and value in parentheses: 
+      `E_PERM("Permission denied")`, `E_RANGE("list too small", the_list)`, or just `E_PERM`.
     - Symbol (`SYM`) - Symbolic identifiers prefixed with a single quote, as in Scheme or Lisp, e.g. `'symbol`
 
 2. **Complex Types**:

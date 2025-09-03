@@ -15,6 +15,7 @@
 - [The MOO Programming Language](./the-moo-programming-language.md)
     - [MOO Language Expressions](./the-moo-programming-language/moo-language-expressions.md)
     - [MOO Language Statements](./the-moo-programming-language/moo-language-statements.md)
+    - [Error Handling](./the-moo-programming-language/error-handling.md)
     - [Variables](./the-moo-programming-language/variables.md)
     - [Calling Verbs](./the-moo-programming-language/calling-verbs.md)
     - [Functions and Lambdas](./the-moo-programming-language/lambda-functions.md)
