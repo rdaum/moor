@@ -29,9 +29,9 @@ use moor_common::model::{PropDef, PropDefs};
 use moor_common::model::{VerbAttrs, VerbFlag};
 use moor_common::model::{VerbDef, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::NOTHING;
 use moor_var::Variant;
 use moor_var::program::ProgramType;
+use moor_var::{NOTHING, SYSTEM_OBJECT};
 use moor_var::{Obj, v_bool_int};
 use moor_var::{Symbol, v_list};
 use moor_var::{Var, v_obj};
@@ -908,6 +908,28 @@ impl WorldState for DbWorldState {
 
     fn increment_sequence(&self, seq: usize) -> i64 {
         self.get_tx().increment_sequence(seq)
+    }
+
+    fn renumber_object(
+        &mut self,
+        perms: &Obj,
+        obj: &Obj,
+        target: Option<&Obj>,
+    ) -> Result<Obj, WorldStateError> {
+        use moor_common::model::ObjectRef;
+
+        // Check permissions - only wizards can renumber objects
+        if !self.controls(perms, &SYSTEM_OBJECT)? {
+            return Err(WorldStateError::ObjectPermissionDenied);
+        }
+
+        // Check that source object exists
+        if !self.get_tx().object_valid(obj)? {
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*obj)));
+        }
+
+        // Delegate to the transaction implementation
+        self.get_tx_mut().renumber_object(obj, target)
     }
 
     fn db_usage(&self) -> Result<usize, WorldStateError> {

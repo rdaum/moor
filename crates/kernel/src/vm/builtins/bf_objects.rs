@@ -125,9 +125,8 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("parent() first argument must be an object"),
         ));
     };
-    if !obj.is_valid_object()
-        || !with_current_transaction(|world_state| world_state.valid(&obj))
-            .map_err(world_state_bf_err)?
+    if !with_current_transaction(|world_state| world_state.valid(&obj))
+        .map_err(world_state_bf_err)?
     {
         return Err(BfErr::ErrValue(
             E_INVARG.msg("parent() argument must be a valid object"),
@@ -1283,6 +1282,60 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(oid)))
 }
 
+/// Renumber an object to a new object number
+/// MOO: `obj renumber(obj)`
+/// MOO: `obj renumber(obj, obj target)`
+fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("renumber() takes 1 or 2 arguments"),
+        ));
+    }
+
+    let Some(obj) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("renumber() first argument must be an object"),
+        ));
+    };
+
+    let target = if bf_args.args.len() == 2 {
+        let Some(target_obj) = bf_args.args[1].as_object() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("renumber() second argument must be an object"),
+            ));
+        };
+        Some(target_obj)
+    } else {
+        None
+    };
+
+    if !with_current_transaction(|world_state| world_state.valid(&obj))
+        .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("renumber() argument must be a valid object"),
+        ));
+    }
+
+    // Check target object if provided - for validation we just check it's a valid object reference
+    if let Some(_target) = &target {
+        // We don't validate if target exists - that's handled by the renumber implementation
+    }
+
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+
+    // Only wizards can renumber objects
+    task_perms.check_wizard().map_err(world_state_bf_err)?;
+
+    // Call the world state renumber_object method
+    let new_obj = with_current_transaction_mut(|world_state| {
+        world_state.renumber_object(&task_perms.who, &obj, target.as_ref())
+    })
+    .map_err(world_state_bf_err)?;
+
+    Ok(Ret(v_obj(new_obj)))
+}
+
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
     builtins[offset_for_builtin("create_at")] = Box::new(bf_create_at);
@@ -1304,4 +1357,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("owned_objects")] = Box::new(bf_owned_objects);
     builtins[offset_for_builtin("dump_object")] = Box::new(bf_dump_object);
     builtins[offset_for_builtin("load_object")] = Box::new(bf_load_object);
+    builtins[offset_for_builtin("renumber")] = Box::new(bf_renumber);
 }

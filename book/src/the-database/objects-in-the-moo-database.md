@@ -116,15 +116,11 @@ millions of objects over time.
 UUID objects avoid this problem entirely. Each UUID is unique by design, so there's no sequential numbering to exhaust
 or manage.
 
-> **Lightweight alternatives: Flyweights**
->
-> Because objects are "permanent residents" of your world (they take up database space and require manual cleanup), mooR
-> provides **flyweights** as a lightweight alternative for creating lots of small, temporary objects. Flyweights don't
-> get object identifiers, don't persist in the database, and automatically disappear when no longer needed—perfect for
-> things like inventory items, temporary game pieces, or UI elements.
->
-> For more details, see the [Flyweights section](moo-value-types.md#flyweights---lightweight-objects) in the value types
-> documentation.
+> **Converting UUID Objects to Numbered Objects**: If you have UUID objects that you want to convert to numbered objects
+> (perhaps for easier reference or integration with existing code), you can use the `renumber()` function. For example,
+> `renumber(#048D05-1234567890)` will convert the UUID object to an available numbered object like `#241`. The system
+> will automatically find the best available numbered slot, or you can specify an exact target with
+> `renumber(#048D05-1234567890, #500)`. This is useful when promoting temporary objects to permanent world fixtures.
 
 ## How Objects Actually Work
 
@@ -185,3 +181,13 @@ For detailed information about how properties and verbs work, see:
 
 - [Object Properties](./object-properties.md) - How objects store and manage data
 - [Object Verbs](./object-verbs.md) - How objects implement behaviors and commands
+
+> **Lightweight alternatives: Flyweights**
+>
+> Because objects are "permanent residents" of your world (they take up database space and require manual cleanup), mooR
+> provides **flyweights** as a lightweight alternative for creating lots of small, temporary objects. Flyweights don't
+> get object identifiers, don't persist in the database, and automatically disappear when no longer needed—perfect for
+> things like inventory items, temporary game pieces, or UI elements.
+>
+> For more details, see the [Flyweights section](moo-value-types.md#flyweights---lightweight-objects) in the value types
+> documentation.

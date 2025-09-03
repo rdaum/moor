@@ -1326,4 +1326,297 @@ impl WorldStateTransaction {
             search_obj = ancestor;
         }
     }
+
+    /// Renumber an object to a new object number, following LambdaMOO semantics.
+    /// Updates structural database relationships but not object references in code/property values.
+    pub fn renumber_object(
+        &mut self,
+        old_obj: &Obj,
+        target: Option<&Obj>,
+    ) -> Result<Obj, WorldStateError> {
+        // Verify old object exists
+        if !self.object_valid(old_obj)? {
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*old_obj)));
+        }
+
+        // Determine new object ID
+        let new_obj = if let Some(target) = target {
+            // Explicit target - ensure it's not already in use
+            if self.object_valid(target)? {
+                return Err(WorldStateError::InvalidRenumber(format!(
+                    "Target object {target} already exists"
+                )));
+            }
+            *target
+        } else {
+            // Auto-selection logic
+            if old_obj.is_uuobjid() {
+                // For UUID objects: scan backwards from max_object, then use max_object + 1 if none found
+                let max_obj = self.get_max_object()?;
+                let mut candidate_id = max_obj.id().0;
+
+                // Scan backwards from max_object to 0
+                loop {
+                    let candidate = Obj::mk_id(candidate_id);
+                    if !self.object_valid(&candidate)? {
+                        break candidate;
+                    }
+                    if candidate_id == 0 {
+                        break Obj::mk_id(max_obj.id().0 + 1);
+                    }
+                    candidate_id -= 1;
+                }
+            } else {
+                // For numbered objects: LambdaMOO algorithm - scan from 0 to old-1
+                let mut found_candidate = None;
+                let mut candidate_id = 0;
+                while candidate_id < old_obj.id().0 {
+                    let candidate = Obj::mk_id(candidate_id);
+                    if !self.object_valid(&candidate)? {
+                        found_candidate = Some(candidate);
+                        break;
+                    }
+                    candidate_id += 1;
+                }
+                found_candidate.ok_or_else(|| {
+                    WorldStateError::InvalidRenumber(
+                        "No available object numbers found".to_string(),
+                    )
+                })?
+            }
+        };
+
+        // Validate cross-type renumbering restrictions
+        match (old_obj.is_uuobjid(), new_obj.is_uuobjid()) {
+            (true, true) => {
+                // renumber(uuid, uuid) - FAIL
+                return Err(WorldStateError::InvalidRenumber(
+                    "Cannot renumber UUID object to another UUID".to_string(),
+                ));
+            }
+            (false, true) => {
+                // renumber(obj, uuid) - FAIL
+                return Err(WorldStateError::InvalidRenumber(
+                    "Cannot renumber numbered object to UUID".to_string(),
+                ));
+            }
+            (true, false) => {
+                // renumber(uuid) or renumber(uuid, obj) - SUCCEED (UUID → Objid allowed)
+            }
+            (false, false) => {
+                // renumber(obj) or renumber(obj, obj) - SUCCEED (Objid → Objid allowed)
+            }
+        }
+
+        // Step 1: Update all relations where old_obj appears as a codomain (target)
+
+        // Update parent relationships (children pointing to old_obj as parent)
+        let parent_refs = self
+            .object_parent
+            .scan(&|_domain, codomain| *codomain == *old_obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning parent relations: {e:?}"))
+            })?;
+        for (child, _) in parent_refs {
+            self.object_parent.delete(&child).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting parent relation: {e:?}"))
+            })?;
+            self.object_parent.upsert(child, new_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating parent relation: {e:?}"))
+            })?;
+        }
+
+        // Update location relationships (contents pointing to old_obj as location)
+        let location_refs = self
+            .object_location
+            .scan(&|_domain, codomain| *codomain == *old_obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning location relations: {e:?}"))
+            })?;
+        for (content, _) in location_refs {
+            self.object_location.delete(&content).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting location relation: {e:?}"))
+            })?;
+            self.object_location.upsert(content, new_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating location relation: {e:?}"))
+            })?;
+        }
+
+        // Update ownership relationships (objects owned by old_obj)
+        let owner_refs = self
+            .object_owner
+            .scan(&|_domain, codomain| *codomain == *old_obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning owner relations: {e:?}"))
+            })?;
+        for (owned, _) in owner_refs {
+            self.object_owner.delete(&owned).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting owner relation: {e:?}"))
+            })?;
+            self.object_owner.upsert(owned, new_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating owner relation: {e:?}"))
+            })?;
+        }
+
+        // Step 2: Update relations where old_obj is the domain (source)
+
+        // Update old_obj's parent relationship
+        if let Ok(Some(parent)) = self.object_parent.get(old_obj) {
+            self.object_parent.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old object parent: {e:?}"))
+            })?;
+            self.object_parent.upsert(new_obj, parent).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting new object parent: {e:?}"))
+            })?;
+        }
+
+        // Update old_obj's location relationship
+        if let Ok(Some(location)) = self.object_location.get(old_obj) {
+            self.object_location.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old object location: {e:?}"))
+            })?;
+            self.object_location
+                .upsert(new_obj, location)
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error setting new object location: {e:?}"
+                    ))
+                })?;
+        }
+
+        // Update old_obj's owner relationship
+        if let Ok(Some(owner)) = self.object_owner.get(old_obj) {
+            self.object_owner.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old object owner: {e:?}"))
+            })?;
+            self.object_owner.upsert(new_obj, owner).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting new object owner: {e:?}"))
+            })?;
+        }
+
+        // Step 3: Update other object data relations (flags, name, etc.)
+
+        // Move flags
+        if let Ok(Some(flags)) = self.object_flags.get(old_obj) {
+            self.object_flags.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old object flags: {e:?}"))
+            })?;
+            self.object_flags.upsert(new_obj, flags).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting new object flags: {e:?}"))
+            })?;
+        }
+
+        // Move name
+        if let Ok(Some(name)) = self.object_name.get(old_obj) {
+            self.object_name.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old object name: {e:?}"))
+            })?;
+            self.object_name.upsert(new_obj, name).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting new object name: {e:?}"))
+            })?;
+        }
+
+        // Move verb definitions
+        if let Ok(Some(verbdefs)) = self.object_verbdefs.get(old_obj) {
+            self.object_verbdefs.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old object verbs: {e:?}"))
+            })?;
+            self.object_verbdefs
+                .upsert(new_obj, verbdefs.clone())
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error setting new object verbs: {e:?}"))
+                })?;
+
+            // Move verb programs for each verb
+            for verb in verbdefs.iter() {
+                let old_holder = ObjAndUUIDHolder::new(old_obj, verb.uuid());
+                let new_holder = ObjAndUUIDHolder::new(&new_obj, verb.uuid());
+
+                // Move verb program if it exists
+                if let Ok(Some(program)) = self.object_verbs.get(&old_holder) {
+                    self.object_verbs.delete(&old_holder).map_err(|e| {
+                        WorldStateError::DatabaseError(format!(
+                            "Error deleting old verb program: {e:?}"
+                        ))
+                    })?;
+                    self.object_verbs.upsert(new_holder, program).map_err(|e| {
+                        WorldStateError::DatabaseError(format!(
+                            "Error setting new verb program: {e:?}"
+                        ))
+                    })?;
+                }
+            }
+        }
+
+        // Move property definitions
+        if let Ok(Some(propdefs)) = self.object_propdefs.get(old_obj) {
+            self.object_propdefs.delete(old_obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!(
+                    "Error deleting old object properties: {e:?}"
+                ))
+            })?;
+            self.object_propdefs
+                .upsert(new_obj, propdefs.clone())
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error setting new object properties: {e:?}"
+                    ))
+                })?;
+
+            // Move property values and flags for each property
+            for prop in propdefs.iter() {
+                let old_holder = ObjAndUUIDHolder::new(old_obj, prop.uuid());
+                let new_holder = ObjAndUUIDHolder::new(&new_obj, prop.uuid());
+
+                // Move property value if it exists
+                if let Ok(Some(value)) = self.object_propvalues.get(&old_holder) {
+                    self.object_propvalues.delete(&old_holder).map_err(|e| {
+                        WorldStateError::DatabaseError(format!(
+                            "Error deleting old property value: {e:?}"
+                        ))
+                    })?;
+                    self.object_propvalues
+                        .upsert(new_holder.clone(), value)
+                        .map_err(|e| {
+                            WorldStateError::DatabaseError(format!(
+                                "Error setting new property value: {e:?}"
+                            ))
+                        })?;
+                }
+
+                // Move property flags/permissions if they exist
+                if let Ok(Some(flags)) = self.object_propflags.get(&old_holder) {
+                    self.object_propflags.delete(&old_holder).map_err(|e| {
+                        WorldStateError::DatabaseError(format!(
+                            "Error deleting old property flags: {e:?}"
+                        ))
+                    })?;
+                    self.object_propflags
+                        .upsert(new_holder, flags)
+                        .map_err(|e| {
+                            WorldStateError::DatabaseError(format!(
+                                "Error setting new property flags: {e:?}"
+                            ))
+                        })?;
+                }
+            }
+        }
+
+        self.has_mutations = true;
+
+        // Update max_object if the new object ID is higher
+        if !new_obj.is_uuobjid() {
+            let current_max = self.get_max_object()?;
+            if new_obj.id().0 > current_max.id().0 {
+                self.update_sequence_max(SEQUENCE_MAX_OBJECT, new_obj.id().0 as i64);
+            }
+        }
+
+        // Flush caches to ensure resolution changes are visible
+        self.verb_resolution_cache.flush();
+        self.prop_resolution_cache.flush();
+        self.ancestry_cache.flush();
+
+        Ok(new_obj)
+    }
 }

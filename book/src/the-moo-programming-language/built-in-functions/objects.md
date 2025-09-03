@@ -11,9 +11,13 @@ functions for manipulating them.
 obj create(obj parent [, obj owner] [, int is-anon] [, list init-args])
 ```
 
-Creates and returns a new object whose parent is parent and whose owner is as described below. If the given parent is neither valid nor #-1, then E_INVARG is raised. The parent object must be valid and must be usable as a parent (i.e., its `f` bit must be true) or else the programmer must own parent or be a wizard; otherwise E_PERM is raised. If the `f` bit is not present, E_PERM is raised unless the programmer owns parent or is a wizard.
+Creates and returns a new object whose parent is parent and whose owner is as described below. If the given parent is
+neither valid nor #-1, then E_INVARG is raised. The parent object must be valid and must be usable as a parent (i.e.,
+its `f` bit must be true) or else the programmer must own parent or be a wizard; otherwise E_PERM is raised. If the `f`
+bit is not present, E_PERM is raised unless the programmer owns parent or is a wizard.
 
-The `is-anon` argument is accepted for backwards compatibility. If provided and true, `E_INVARG` is raised as anonymous objects are not supported.
+The `is-anon` argument is accepted for backwards compatibility. If provided and true, `E_INVARG` is raised as anonymous
+objects are not supported.
 
 E_PERM is also raised if owner is provided and not the same as the programmer, unless the programmer is a wizard.
 
@@ -274,6 +278,65 @@ Note that the object with this number may no longer exist; it may have been recy
 assigned the object number one larger than the value of `max_object()`. The next object getting the number one larger
 than `max_object()` only applies if you are using built-in functions for creating objects and does not apply if you are
 using the `$recycler` to create objects.
+
+### `renumber`
+
+```
+obj renumber(obj old_obj [, obj target])
+```
+
+Renumbers an object to a new object ID. This moves the object itself and everything defined on it, but does not update
+references to the object stored elsewhere.
+
+If `target` is provided, the object `old_obj` is renumbered to have the ID `target`. The target object ID must not
+already exist, or `E_INVARG` is raised.
+
+If `target` is not provided (auto-selection), the server chooses an appropriate new object ID:
+
+- For numbered objects: Scans from `#0` to `old_obj - 1` to find the first available slot (following LambdaMOO
+  semantics)
+- For UUID objects: Scans backwards from `max_object()` to `#0` to find the first available numbered slot; if none
+  found,
+  uses `max_object() + 1`
+
+**What renumber updates automatically:**
+
+- The object's properties, verbs, and other content move with it to the new ID
+- Structural database relationships where other objects point to this object:
+    - Parent-child relationships (objects that have this object as their parent)
+    - Location-contents relationships (objects that are located in this object)
+    - Owner relationships (objects that are owned by this object)
+
+**What renumber does NOT update:**
+
+- References to this object stored in property values on other objects
+- References to this object in verb code anywhere in the database
+- Any other stored references to the old object ID
+
+After renumbering, the old object ID becomes invalid and the object is only accessible by its new ID. Any remaining
+references to the old ID will need to be manually updated by the programmer.
+
+Cross-type renumbering restrictions:
+
+- `renumber(uuid, uuid)` - Not allowed, raises `E_INVARG`
+- `renumber(obj, uuid)` - Not allowed, raises `E_INVARG`
+- `renumber(uuid)` - Allowed, converts UUID to numbered object with auto-selection
+- `renumber(uuid, obj)` - Allowed, converts UUID to specific numbered object
+- `renumber(obj)` - Allowed, finds new numbered slot for numbered object
+- `renumber(obj, obj)` - Allowed, moves numbered object to specific numbered slot
+
+The programmer must own the object being renumbered or be a wizard, otherwise `E_PERM` is raised. If `old_obj` is not
+valid, `E_INVARG` is raised.
+
+After renumbering, `max_object()` is updated if the new object ID is higher than the current maximum (for numbered
+objects only).
+
+```
+renumber(#123)                    =>   #45 (found first available slot)
+renumber(#048D05-1234567890)      =>   #241 (UUID converted to numbered)
+renumber(#123, #500)              =>   #500 (explicit target)
+renumber(#048D05-1234567890, #99) =>   #99 (UUID converted to specific numbered)
+```
 
 ## Object Movement
 

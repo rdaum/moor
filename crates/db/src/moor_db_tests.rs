@@ -2447,4 +2447,657 @@ mod tests {
             assert_eq!(resolve_result.unwrap().location(), parent_obj);
         }
     }
+
+    #[test]
+    fn test_renumber_object() {
+        let db = test_db();
+
+        // Test 1: Basic renumber of simple object
+        {
+            let mut tx = db.start_transaction();
+
+            // Create object #0
+            let obj = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test_obj"),
+                )
+                .unwrap();
+            assert_eq!(obj, Obj::mk_id(0));
+
+            // Renumber to explicit target #5
+            let new_obj = tx.renumber_object(&obj, Some(&Obj::mk_id(5))).unwrap();
+            assert_eq!(new_obj, Obj::mk_id(5));
+
+            // Verify old object is gone and new object exists
+            assert!(!tx.object_valid(&obj).unwrap());
+            assert!(tx.object_valid(&new_obj).unwrap());
+            assert_eq!(tx.get_object_name(&new_obj).unwrap(), "test_obj");
+
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Test 2: Renumber with structural relationships, verbs, and properties
+        {
+            let mut tx = db.start_transaction();
+
+            // Create parent, child, and container objects
+            let parent = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+                )
+                .unwrap();
+
+            let container = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "container"),
+                )
+                .unwrap();
+
+            let old_obj = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, parent, container, BitEnum::new(), "relocatable"),
+                )
+                .unwrap();
+
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, old_obj, old_obj, BitEnum::new(), "child"),
+                )
+                .unwrap();
+
+            // Set ownership relationship
+            tx.set_object_owner(&child, &old_obj).unwrap();
+
+            // Add a verb to the object
+            tx.add_object_verb(
+                &old_obj,
+                &old_obj,
+                &[Symbol::mk("test_verb")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Exec),
+                VerbArgsSpec::this_none_this(),
+            )
+            .unwrap();
+
+            // Add a property to the object
+            let _prop_uuid = tx
+                .define_property(
+                    &old_obj,
+                    &old_obj,
+                    Symbol::mk("test_prop"),
+                    &NOTHING,
+                    BitEnum::new(),
+                    Some(v_str("test_value")),
+                )
+                .unwrap();
+
+            // Verify initial state
+            assert_eq!(tx.get_object_parent(&old_obj).unwrap(), parent);
+            assert_eq!(tx.get_object_location(&old_obj).unwrap(), container);
+            assert_eq!(tx.get_object_parent(&child).unwrap(), old_obj);
+            assert_eq!(tx.get_object_location(&child).unwrap(), old_obj);
+            assert_eq!(tx.get_object_owner(&child).unwrap(), old_obj);
+            assert!(tx.get_object_children(&old_obj).unwrap().contains(child));
+            assert!(tx.get_object_contents(&old_obj).unwrap().contains(child));
+            assert!(tx.get_owned_objects(&old_obj).unwrap().contains(child));
+
+            // Verify verb and property exist on old object
+            assert!(
+                tx.resolve_verb(
+                    &old_obj,
+                    Symbol::mk("test_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            let (prop, value, _perms, _is_clear) = tx
+                .resolve_property(&old_obj, Symbol::mk("test_prop"))
+                .unwrap();
+            assert_eq!(prop.name(), Symbol::mk("test_prop"));
+            assert_eq!(value, v_str("test_value"));
+
+            // Renumber the object
+            let new_obj = tx.renumber_object(&old_obj, Some(&Obj::mk_id(10))).unwrap();
+            assert_eq!(new_obj, Obj::mk_id(10));
+
+            // Verify all relationships updated
+            assert!(!tx.object_valid(&old_obj).unwrap());
+            assert!(tx.object_valid(&new_obj).unwrap());
+            assert_eq!(tx.get_object_name(&new_obj).unwrap(), "relocatable");
+
+            // Check new object has same relationships
+            assert_eq!(tx.get_object_parent(&new_obj).unwrap(), parent);
+            assert_eq!(tx.get_object_location(&new_obj).unwrap(), container);
+
+            // Check child relationships updated to point to new object
+            assert_eq!(tx.get_object_parent(&child).unwrap(), new_obj);
+            assert_eq!(tx.get_object_location(&child).unwrap(), new_obj);
+            assert_eq!(tx.get_object_owner(&child).unwrap(), new_obj);
+
+            // Check reverse relationships
+            assert!(tx.get_object_children(&new_obj).unwrap().contains(child));
+            assert!(tx.get_object_contents(&new_obj).unwrap().contains(child));
+            assert!(tx.get_owned_objects(&new_obj).unwrap().contains(child));
+
+            // Verify verbs and properties moved to new object
+            assert!(
+                tx.resolve_verb(
+                    &new_obj,
+                    Symbol::mk("test_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            let (prop, value, _perms, _is_clear) = tx
+                .resolve_property(&new_obj, Symbol::mk("test_prop"))
+                .unwrap();
+            assert_eq!(prop.name(), Symbol::mk("test_prop"));
+            assert_eq!(value, v_str("test_value"));
+
+            // Verify verb and property no longer exist on old object (it doesn't exist anymore)
+            assert!(
+                tx.resolve_verb(
+                    &old_obj,
+                    Symbol::mk("test_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_err()
+            );
+            assert!(
+                tx.resolve_property(&old_obj, Symbol::mk("test_prop"))
+                    .is_err()
+            );
+
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Test 3: Auto-selection for Objid
+        {
+            let mut tx = db.start_transaction();
+
+            // Create objects #0, #1, #2 first, then create #5
+            let _obj0 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(0)), ObjAttrs::default())
+                .unwrap();
+            let _obj1 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(1)), ObjAttrs::default())
+                .unwrap();
+            let _obj2 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(2)), ObjAttrs::default())
+                .unwrap();
+            let obj5 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(5)), ObjAttrs::default())
+                .unwrap();
+
+            // Delete obj1 to create a gap at #1
+            tx.recycle_object(&_obj1).unwrap();
+
+            // Renumber obj5 with auto-selection - should pick the first available slot (1)
+            let new_obj = tx.renumber_object(&obj5, None).unwrap();
+            // Should pick the first available slot below 5, which is 1 (after obj1 was deleted)
+            assert!(new_obj.id().0 < 5);
+            assert!(!tx.object_valid(&obj5).unwrap());
+            assert!(tx.object_valid(&new_obj).unwrap());
+
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Test 4: Error cases
+        {
+            let mut tx = db.start_transaction();
+
+            let obj1 = tx
+                .create_object(ObjectKind::NextObjid, ObjAttrs::default())
+                .unwrap();
+            let obj2 = tx
+                .create_object(ObjectKind::NextObjid, ObjAttrs::default())
+                .unwrap();
+
+            // Try to renumber to existing object - should fail
+            let result = tx.renumber_object(&obj1, Some(&obj2));
+            assert!(matches!(result, Err(WorldStateError::InvalidRenumber(_))));
+
+            // Try to renumber non-existent object - should fail
+            let nonexistent = Obj::mk_id(999);
+            let result = tx.renumber_object(&nonexistent, Some(&Obj::mk_id(888)));
+            assert!(matches!(result, Err(WorldStateError::ObjectNotFound(_))));
+
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Test 5: Cross-type renumbering (UuObjid to Objid) - only allowed direction
+        {
+            let mut tx = db.start_transaction();
+
+            let uuid_obj = tx
+                .create_object(
+                    ObjectKind::UuObjId,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "cross_type"),
+                )
+                .unwrap();
+
+            // Renumber UUID object to numbered object (allowed)
+            let new_obj = tx
+                .renumber_object(&uuid_obj, Some(&Obj::mk_id(500)))
+                .unwrap();
+            assert_eq!(new_obj, Obj::mk_id(500));
+            assert!(!new_obj.is_uuobjid());
+
+            assert!(!tx.object_valid(&uuid_obj).unwrap());
+            assert!(tx.object_valid(&new_obj).unwrap());
+            assert_eq!(tx.get_object_name(&new_obj).unwrap(), "cross_type");
+
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Test 6: Inheritance behavior after renumbering
+        {
+            let mut tx = db.start_transaction();
+
+            // Create a parent object with verbs and properties
+            let parent = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+                )
+                .unwrap();
+
+            // Create a child object that inherits from parent
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+                )
+                .unwrap();
+
+            // Create a grandchild object that inherits from child
+            let grandchild = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, child, NOTHING, BitEnum::new(), "grandchild"),
+                )
+                .unwrap();
+
+            // Add verb to parent
+            tx.add_object_verb(
+                &parent,
+                &parent,
+                &[Symbol::mk("parent_verb")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Exec),
+                VerbArgsSpec::this_none_this(),
+            )
+            .unwrap();
+
+            // Add property to parent
+            let _parent_prop_uuid = tx
+                .define_property(
+                    &parent,
+                    &parent,
+                    Symbol::mk("parent_prop"),
+                    &NOTHING,
+                    BitEnum::new(),
+                    Some(v_str("parent_value")),
+                )
+                .unwrap();
+
+            // Add verb directly to child
+            tx.add_object_verb(
+                &child,
+                &child,
+                &[Symbol::mk("child_verb")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Exec),
+                VerbArgsSpec::this_none_this(),
+            )
+            .unwrap();
+
+            // Add property directly to child
+            let _child_prop_uuid = tx
+                .define_property(
+                    &child,
+                    &child,
+                    Symbol::mk("child_prop"),
+                    &NOTHING,
+                    BitEnum::new(),
+                    Some(v_str("child_value")),
+                )
+                .unwrap();
+
+            // Verify inheritance relationships before renumbering
+            assert_eq!(tx.get_object_parent(&child).unwrap(), parent);
+            assert_eq!(tx.get_object_parent(&grandchild).unwrap(), child);
+            assert!(tx.get_object_children(&parent).unwrap().contains(child));
+            assert!(tx.get_object_children(&child).unwrap().contains(grandchild));
+
+            // Verify verb inheritance before renumbering
+            assert!(
+                tx.resolve_verb(
+                    &child,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &grandchild,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &grandchild,
+                    Symbol::mk("child_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+
+            // Property inheritance before renumbering is verified by Test 2
+
+            // Verify ancestors/descendants before renumbering
+            let child_ancestors = tx.ancestors(&child, false).unwrap();
+            assert!(child_ancestors.contains(parent));
+            let parent_descendants = tx.descendants(&parent, false).unwrap();
+            assert!(parent_descendants.contains(child));
+            assert!(parent_descendants.contains(grandchild));
+            let child_descendants = tx.descendants(&child, false).unwrap();
+            assert!(child_descendants.contains(grandchild));
+
+            // Now renumber the parent object
+            let new_parent = tx.renumber_object(&parent, Some(&Obj::mk_id(100))).unwrap();
+            assert_eq!(new_parent, Obj::mk_id(100));
+
+            // Verify that child/grandchild relationships updated to point to new parent
+            assert_eq!(tx.get_object_parent(&child).unwrap(), new_parent);
+            assert_eq!(tx.get_object_parent(&grandchild).unwrap(), child); // unchanged
+            assert!(tx.get_object_children(&new_parent).unwrap().contains(child));
+            assert!(tx.get_object_children(&child).unwrap().contains(grandchild));
+
+            // Verify verb inheritance still works after renumbering parent
+            assert!(
+                tx.resolve_verb(
+                    &child,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &grandchild,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &grandchild,
+                    Symbol::mk("child_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+
+            // Verify property inheritance still works after renumbering parent
+            let (_, value, _, is_clear) = tx
+                .resolve_property(&child, Symbol::mk("parent_prop"))
+                .unwrap();
+            assert_eq!(value, v_str("parent_value"));
+            assert!(is_clear);
+            let (_, value, _, is_clear) = tx
+                .resolve_property(&grandchild, Symbol::mk("parent_prop"))
+                .unwrap();
+            assert_eq!(value, v_str("parent_value"));
+            assert!(is_clear);
+            let (_, value, _, is_clear) = tx
+                .resolve_property(&grandchild, Symbol::mk("child_prop"))
+                .unwrap();
+            assert_eq!(value, v_str("child_value"));
+            assert!(is_clear);
+
+            // Verify ancestors/descendants still work after renumbering parent
+            let child_ancestors = tx.ancestors(&child, false).unwrap();
+            assert!(child_ancestors.contains(new_parent));
+            assert!(!child_ancestors.contains(parent)); // old parent should not be in ancestors
+            let parent_descendants = tx.descendants(&new_parent, false).unwrap();
+            assert!(parent_descendants.contains(child));
+            assert!(parent_descendants.contains(grandchild));
+            let child_descendants = tx.descendants(&child, false).unwrap();
+            assert!(child_descendants.contains(grandchild));
+
+            // Now renumber the child object too
+            let new_child = tx.renumber_object(&child, Some(&Obj::mk_id(200))).unwrap();
+            assert_eq!(new_child, Obj::mk_id(200));
+
+            // Verify that grandchild relationship updated to point to new child
+            assert_eq!(tx.get_object_parent(&new_child).unwrap(), new_parent);
+            assert_eq!(tx.get_object_parent(&grandchild).unwrap(), new_child);
+            assert!(
+                tx.get_object_children(&new_parent)
+                    .unwrap()
+                    .contains(new_child)
+            );
+            assert!(!tx.get_object_children(&new_parent).unwrap().contains(child)); // old child should not be child
+            assert!(
+                tx.get_object_children(&new_child)
+                    .unwrap()
+                    .contains(grandchild)
+            );
+
+            // Verify verb inheritance still works after renumbering child
+            assert!(
+                tx.resolve_verb(
+                    &new_child,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &grandchild,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &grandchild,
+                    Symbol::mk("child_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_ok()
+            );
+
+            // Property inheritance after renumbering child is tested above
+
+            // Verify ancestors/descendants still work after renumbering child
+            let child_ancestors = tx.ancestors(&new_child, false).unwrap();
+            assert!(child_ancestors.contains(new_parent));
+            let grandchild_ancestors = tx.ancestors(&grandchild, false).unwrap();
+            assert!(grandchild_ancestors.contains(new_child));
+            assert!(grandchild_ancestors.contains(new_parent));
+            let parent_descendants = tx.descendants(&new_parent, false).unwrap();
+            assert!(parent_descendants.contains(new_child));
+            assert!(parent_descendants.contains(grandchild));
+            let child_descendants = tx.descendants(&new_child, false).unwrap();
+            assert!(child_descendants.contains(grandchild));
+
+            // Verify old objects are no longer valid
+            assert!(!tx.object_valid(&parent).unwrap());
+            assert!(!tx.object_valid(&child).unwrap());
+
+            // Verify old objects no longer have verbs/properties
+            assert!(
+                tx.resolve_verb(
+                    &parent,
+                    Symbol::mk("parent_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_err()
+            );
+            assert!(
+                tx.resolve_verb(
+                    &child,
+                    Symbol::mk("child_verb"),
+                    None,
+                    Some(BitEnum::new_with(VerbFlag::Exec))
+                )
+                .is_err()
+            );
+            assert!(
+                tx.resolve_property(&parent, Symbol::mk("parent_prop"))
+                    .is_err()
+            );
+            assert!(
+                tx.resolve_property(&child, Symbol::mk("child_prop"))
+                    .is_err()
+            );
+
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+    }
+
+    #[test]
+    fn test_renumber_restrictions() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create a numbered object and a UUID object
+        let numbered_obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "numbered"),
+            )
+            .unwrap();
+        let uuid_obj = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+        let recycled_uuid = uuid_obj;
+        tx.recycle_object(&uuid_obj).unwrap(); // Make a recycled UUID available
+        let another_uuid = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+
+        // Test 1: renumber(uuid) - auto renumber UUID should succeed (find available numbered slot)
+        let result = tx.renumber_object(&another_uuid, None);
+        assert!(result.is_ok());
+        let auto_selected = result.unwrap();
+        assert!(!auto_selected.is_uuobjid()); // Should be converted to numbered object
+
+        // Test 2: renumber(uuid, obj) - UUID to numbered object should succeed
+        let test2_uuid = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+        let result = tx.renumber_object(&test2_uuid, Some(&Obj::mk_id(100)));
+        assert!(result.is_ok());
+        let new_numbered = result.unwrap();
+        assert_eq!(new_numbered, Obj::mk_id(100));
+        assert!(!new_numbered.is_uuobjid());
+
+        // Test 3: renumber(uuid, uuid) - UUID to UUID should fail
+        let another_uuid2 = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+        let result = tx.renumber_object(&another_uuid2, Some(&recycled_uuid));
+        assert!(matches!(result, Err(WorldStateError::InvalidRenumber(_))));
+        if let Err(WorldStateError::InvalidRenumber(msg)) = result {
+            assert!(msg.contains("Cannot renumber UUID object to another UUID"));
+        }
+
+        // Test 4: renumber(obj, uuid) - numbered to UUID should fail
+        let result = tx.renumber_object(&numbered_obj, Some(&recycled_uuid));
+        assert!(matches!(result, Err(WorldStateError::InvalidRenumber(_))));
+        if let Err(WorldStateError::InvalidRenumber(msg)) = result {
+            assert!(msg.contains("Cannot renumber numbered object to UUID"));
+        }
+
+        // Test 5: renumber(obj, obj) - numbered to numbered should succeed (already tested in other tests)
+        let result = tx.renumber_object(&numbered_obj, Some(&Obj::mk_id(200)));
+        assert!(result.is_ok());
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_renumber_updates_max_object() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create a UUID object
+        let uuid_obj = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+
+        // Get initial max_object (should be -1 since no numbered objects exist)
+        let initial_max = tx.get_max_object().unwrap();
+        assert_eq!(initial_max.id().0 as i32, -1);
+
+        // Renumber UUID to a high numbered object
+        let high_numbered = Obj::mk_id(500);
+        let result = tx.renumber_object(&uuid_obj, Some(&high_numbered)).unwrap();
+        assert_eq!(result, high_numbered);
+
+        // max_object should now be updated to 500
+        let new_max = tx.get_max_object().unwrap();
+        assert_eq!(new_max.id().0, 500);
+
+        // Test auto-renumber of UUID should now pick 499 (first available slot scanning backwards from 500)
+        let uuid_obj2 = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+        let auto_result = tx.renumber_object(&uuid_obj2, None).unwrap();
+        // Should scan backwards from 500, find 499 available, and use it
+        assert_eq!(auto_result.id().0, 499);
+
+        // max_object should remain 500 since 499 < 500
+        let final_max = tx.get_max_object().unwrap();
+        assert_eq!(final_max.id().0, 500);
+
+        // Test case where all slots are filled - should use max_object + 1
+        // Fill remaining slots 498, 497, etc. down to 0 (499 and 500 are already taken)
+        for i in (0..499).rev() {
+            let uuid_obj = tx
+                .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+                .unwrap();
+            tx.renumber_object(&uuid_obj, Some(&Obj::mk_id(i))).unwrap();
+        }
+
+        // Now auto-renumber should use max_object + 1 = 501
+        let final_uuid = tx
+            .create_object(ObjectKind::UuObjId, ObjAttrs::default())
+            .unwrap();
+        let final_result = tx.renumber_object(&final_uuid, None).unwrap();
+        assert_eq!(final_result.id().0, 501);
+
+        // max_object should now be updated to 501
+        let final_max = tx.get_max_object().unwrap();
+        assert_eq!(final_max.id().0, 501);
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
 }

@@ -15,6 +15,7 @@ use bincode::{Decode, Encode};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::model::Vid;
 use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::objects::ObjFlag;
 use crate::model::objset::ObjSet;
@@ -23,14 +24,13 @@ use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
-use crate::model::{ObjAttr, Vid};
 use crate::util::{BitEnum, PerfCounter};
 use moor_var::Var;
 use moor_var::program::ProgramType;
 use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Symbol};
 use moor_var::{Error, Obj};
 
-/// Specifies the way the object ID should be allocated when creating when creating a new object.
+/// Specifies the way the object ID should be allocated when creating a new object.
 #[derive(Debug, Clone, Eq, PartialEq, Decode, Encode)]
 pub enum ObjectKind {
     /// Create an object with a specific numeric ID (for create_at).
@@ -48,8 +48,6 @@ pub enum WorldStateError {
     ObjectNotFound(ObjectRef),
     #[error("Object already exists: {0}")]
     ObjectAlreadyExists(Obj),
-    #[error("Could not set/get object attribute; {0} on {1}")]
-    ObjectAttributeError(ObjAttr, Obj),
     #[error("Recursive move detected: {0} -> {1}")]
     RecursiveMove(Obj, Obj),
 
@@ -86,6 +84,9 @@ pub enum WorldStateError {
     #[error("Ambiguous object match: {0}")]
     AmbiguousMatch(String),
 
+    #[error("Invalid renumber: {0}")]
+    InvalidRenumber(String),
+
     // Catch-alls for system level object DB errors.
     #[error("DB communications/internal error: {0}")]
     DatabaseError(String),
@@ -98,23 +99,27 @@ pub enum WorldStateError {
 /// Translations from WorldStateError to MOO error codes.
 impl WorldStateError {
     pub fn to_error(&self) -> Error {
-        let err_code = match self {
-            Self::ObjectNotFound(_) => E_INVIND,
-            Self::ObjectAlreadyExists(_) => E_PERM,
-            Self::ObjectPermissionDenied
-            | Self::VerbPermissionDenied
-            | Self::PropertyPermissionDenied => E_PERM,
-            Self::RecursiveMove(_, _) => E_RECMOVE,
-            Self::VerbNotFound(_, _) | Self::InvalidVerb(_) => E_VERBNF,
-            Self::DuplicateVerb(_, _)
-            | Self::DuplicatePropertyDefinition(_, _)
-            | Self::ChparentPropertyNameConflict(_, _, _) => E_INVARG,
-            Self::PropertyNotFound(_, _) | Self::PropertyDefinitionNotFound(_, _) => E_PROPNF,
-            Self::PropertyTypeMismatch => E_TYPE,
+        match self {
+            Self::ObjectNotFound(x) => E_INVIND.with_msg(|| format!("Object {x} not found")),
+            Self::ObjectAlreadyExists(obj) => E_PERM.with_msg(|| format!("Object {obj} already exists")),
+            Self::ObjectPermissionDenied => E_PERM.with_msg(|| "Object permission denied".to_string()),
+            Self::VerbPermissionDenied => E_PERM.with_msg(|| "Verb permission denied".to_string()),
+            Self::PropertyPermissionDenied => E_PERM.with_msg(|| "Property permission denied".to_string()),
+            Self::RecursiveMove(from, to) => E_RECMOVE.with_msg(|| format!("Recursive move detected: {from} -> {to}")),
+            Self::VerbNotFound(obj, verb) => E_VERBNF.with_msg(|| format!("Verb not found: {obj}:{verb}")),
+            Self::InvalidVerb(vid) => E_VERBNF.with_msg(|| format!("Invalid verb: {vid:?}")),
+            Self::VerbDecodeError(obj, verb) => E_VERBNF.with_msg(|| format!("Invalid verb, decode error: {obj}:{verb}")),
+            Self::DuplicateVerb(obj, verb) => E_INVARG.with_msg(|| format!("Verb already exists: {obj}:{verb}")),
+            Self::DuplicatePropertyDefinition(obj, prop) => E_INVARG.with_msg(|| format!("Duplicate property definition: {obj}.{prop}")),
+            Self::ChparentPropertyNameConflict(obj1, obj2, prop) => E_INVARG.with_msg(|| format!("Property name conflict: {obj1}-or-descendants and {obj2}-or-ancestors both define {prop}")),
+            Self::PropertyNotFound(obj, prop) => E_PROPNF.with_msg(|| format!("Property not found: {obj}.{prop}")),
+            Self::PropertyDefinitionNotFound(obj, prop) => E_PROPNF.with_msg(|| format!("Property definition not found: {obj}.{prop}")),
+            Self::PropertyTypeMismatch => E_TYPE.with_msg(|| "Property type mismatch".to_string()),
+            Self::FailedMatch(msg) => E_INVARG.with_msg(|| format!("Failed object match: {msg}")),
+            Self::AmbiguousMatch(msg) => E_INVARG.with_msg(|| format!("Ambiguous object match: {msg}")),
+            Self::InvalidRenumber(msg) => E_INVARG.with_msg(|| msg.clone()),
             _ => panic!("Unhandled error code: {self:?}"),
-        };
-
-        err_code.msg(self.to_string())
+        }
     }
 
     pub fn database_error_msg(&self) -> Option<&str> {
@@ -411,6 +416,25 @@ pub trait WorldState: Send {
 
     /// Increment the given sequence, return the new value.
     fn increment_sequence(&self, seq: usize) -> i64;
+
+    /// Renumber an object to a new object number.
+    ///
+    /// If target is None:
+    /// - For traditional Objid objects: finds lowest available object number below current
+    /// - For UuObjid objects: returns error (must specify explicit target)
+    ///
+    /// If target is Some(new_obj), moves to that specific number (must be valid/available).
+    /// Supports cross-type conversions (Objid ↔ UuObjid).
+    ///
+    /// Updates structural database relationships (parent/child, location/contents, ownership)
+    /// but does not rewrite object references in verb code or property values.
+    /// Returns the new object number.
+    fn renumber_object(
+        &mut self,
+        perms: &Obj,
+        obj: &Obj,
+        target: Option<&Obj>,
+    ) -> Result<Obj, WorldStateError>;
 
     /// Commit all modifications made to the state of this world since the start of its transaction.
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
