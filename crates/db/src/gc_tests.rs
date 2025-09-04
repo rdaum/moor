@@ -120,7 +120,7 @@ mod tests {
         // anon_young already has generation 0 automatically assigned, so only update anon_old
         gc.store_anonymous_object_metadata(&anon_old, AnonymousObjectMetadata::new(1).unwrap())
             .unwrap();
-        
+
         // Commit the changes
         let commit_result = gc.commit().unwrap();
         assert_eq!(commit_result, CommitResult::Success);
@@ -848,11 +848,11 @@ mod tests {
                 AnonymousObjectMetadata::new(1).unwrap(),
             )
             .unwrap();
-            
+
             // Commit the changes
             let commit_result = gc.commit().unwrap();
             assert_eq!(commit_result, CommitResult::Success);
-            
+
             // Get a new GC interface for queries after commit
             let gc = db.gc_interface().unwrap();
 

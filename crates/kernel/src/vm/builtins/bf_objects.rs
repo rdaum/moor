@@ -1332,6 +1332,31 @@ fn bf_renumber(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(new_obj)))
 }
 
+/// Determine if the given OBJ is an anonymous reference or "regular" object id
+fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("is_anonymous() takes 1 argument"),
+        ));
+    }
+
+    let Some(obj) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("is_anonymous() argument must be an object"),
+        ));
+    };
+
+    if !with_current_transaction(|world_state| world_state.valid(&obj))
+        .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("is_anonymous() argument must be a valid object"),
+        ));
+    }
+
+    Ok(Ret(v_bool(obj.is_anonymous())))
+}
+
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
     builtins[offset_for_builtin("create_at")] = Box::new(bf_create_at);
@@ -1354,4 +1379,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("dump_object")] = Box::new(bf_dump_object);
     builtins[offset_for_builtin("load_object")] = Box::new(bf_load_object);
     builtins[offset_for_builtin("renumber")] = Box::new(bf_renumber);
+    builtins[offset_for_builtin("is_anonymous")] = Box::new(bf_is_anonymous);
 }

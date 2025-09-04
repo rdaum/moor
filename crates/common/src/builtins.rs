@@ -619,6 +619,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("workers", Q(0), Q(0), vec![], true),
         mk_builtin("gc_collect", Q(0), Q(0), vec![], true),
+        mk_builtin("is_anonymous", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
     ]
 }
 

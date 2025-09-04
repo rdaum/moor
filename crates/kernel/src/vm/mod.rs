@@ -111,7 +111,6 @@ pub struct VerbCall {
     pub caller: Var,
 }
 
-
 /// Extract anonymous object references from a variable
 fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
     match var.variant() {
@@ -294,8 +293,8 @@ pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
 
 #[cfg(test)]
 mod tests {
-    use std::mem::size_of;
     use crate::vm::VMHostResponse;
+    use std::mem::size_of;
 
     #[test]
     fn test_width_structs_enums() {
