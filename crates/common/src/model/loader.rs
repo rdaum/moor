@@ -59,6 +59,13 @@ pub trait SnapshotInterface: Send {
         &self,
         objid: &Obj,
     ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError>;
+
+    /// Garbage collection support methods for read-only anonymous object scanning
+    fn get_anonymous_object_metadata(
+        &self,
+        objid: &Obj,
+    ) -> Result<Option<Box<dyn std::any::Any + Send>>, WorldStateError>;
+    fn scan_anonymous_object_references(&self) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError>;
 }
 
 /// Interface exposed to be used by the textdump/objdef loader for loading data into the database.

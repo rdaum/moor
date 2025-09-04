@@ -996,7 +996,7 @@ mod test {
         }
 
         let textdump_str = String::from_utf8(textdump_data).unwrap();
-        println!("Reference textdump format:\n{}", textdump_str);
+        println!("Reference textdump format:\n{textdump_str}");
 
         // Now try to load this textdump to make sure the basic format works
         let (db2, _) = TxDB::open(None, DatabaseConfig::default());
@@ -1070,8 +1070,8 @@ mod test {
                     assert_eq!(loader.commit().unwrap(), CommitResult::Success);
                 }
                 Err(e) => {
-                    println!("Failed to load textdump: {:?}", e);
-                    panic!("Textdump loading failed: {:?}", e);
+                    println!("Failed to load textdump: {e:?}");
+                    panic!("Textdump loading failed: {e:?}");
                 }
             }
         }
@@ -1080,7 +1080,7 @@ mod test {
         {
             let snapshot = db.create_snapshot().unwrap();
             let objects = snapshot.get_objects().unwrap();
-            println!("Loaded objects: {:?}", objects);
+            println!("Loaded objects: {objects:?}");
 
             // Should have loaded 1 anonymous object
             assert_eq!(objects.len(), 1, "Should have loaded 1 object");

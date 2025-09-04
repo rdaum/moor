@@ -15,6 +15,7 @@ use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction};
 use crate::tx_management::{Relation, RelationTransaction};
+use crate::AnonymousObjectMetadata;
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
 use moor_common::model::{
@@ -1619,5 +1620,240 @@ impl WorldStateTransaction {
         self.ancestry_cache.flush();
 
         Ok(new_obj)
+    }
+}
+
+impl WorldStateTransaction {
+    pub(crate) fn store_anonymous_object_metadata(
+        &mut self,
+        objid: &Obj,
+        metadata: AnonymousObjectMetadata,
+    ) -> Result<(), WorldStateError> {
+        self.anonymous_object_metadata
+            .upsert(*objid, metadata)
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+        self.has_mutations = true;
+        Ok(())
+    }
+
+    pub(crate) fn get_anonymous_object_metadata(
+        &self,
+        objid: &Obj,
+    ) -> Result<Option<AnonymousObjectMetadata>, WorldStateError> {
+        self.anonymous_object_metadata
+            .get(objid)
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
+    }
+
+    pub(crate) fn scan_anonymous_object_references(
+        &mut self,
+    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+        let mut reference_map = std::collections::HashMap::new();
+
+        // 1. Scan all property values for anonymous object references
+        let prop_tuples = self
+            .object_propvalues
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (key_holder, prop_value) in prop_tuples {
+            // Extract anonymous object references from the property value
+            let anon_refs = crate::extract_anonymous_refs(&prop_value);
+
+            if !anon_refs.is_empty() {
+                let obj = key_holder.obj();
+                reference_map
+                    .entry(obj)
+                    .or_insert_with(Vec::new)
+                    .extend(anon_refs);
+            }
+        }
+
+        // 2. Scan object relationships (parent, location, owner)
+        // Each of these is Obj -> Obj, so check if the target (codomain) is anonymous
+
+        // Parent relationships
+        let parent_tuples = self
+            .object_parent
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (child, parent) in parent_tuples {
+            if parent.is_anonymous() {
+                reference_map
+                    .entry(child)
+                    .or_insert_with(Vec::new)
+                    .push(parent);
+            }
+        }
+
+        // Location relationships
+        let location_tuples = self
+            .object_location
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (obj, location) in location_tuples {
+            if location.is_anonymous() {
+                reference_map
+                    .entry(obj)
+                    .or_insert_with(Vec::new)
+                    .push(location);
+            }
+        }
+
+        // Owner relationships
+        let owner_tuples = self
+            .object_owner
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (obj, owner) in owner_tuples {
+            if owner.is_anonymous() {
+                reference_map
+                    .entry(obj)
+                    .or_insert_with(Vec::new)
+                    .push(owner);
+            }
+        }
+
+        // 3. Scan verb definitions for object references (location and owner fields)
+        let verbdef_tuples = self
+            .object_verbdefs
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (obj, verbdefs) in verbdef_tuples {
+            for verbdef in verbdefs.iter() {
+                // Check location field
+                if verbdef.location().is_anonymous() {
+                    reference_map
+                        .entry(obj)
+                        .or_insert_with(Vec::new)
+                        .push(verbdef.location());
+                }
+                // Check owner field
+                if verbdef.owner().is_anonymous() {
+                    reference_map
+                        .entry(obj)
+                        .or_insert_with(Vec::new)
+                        .push(verbdef.owner());
+                }
+            }
+        }
+
+        // 4. Scan property definitions for object references (definer and location fields)
+        let propdef_tuples = self
+            .object_propdefs
+            .get_all()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        for (obj, propdefs) in propdef_tuples {
+            for propdef in propdefs.iter() {
+                // Check definer field
+                if propdef.definer().is_anonymous() {
+                    reference_map
+                        .entry(obj)
+                        .or_insert_with(Vec::new)
+                        .push(propdef.definer());
+                }
+                // Check location field
+                if propdef.location().is_anonymous() {
+                    reference_map
+                        .entry(obj)
+                        .or_insert_with(Vec::new)
+                        .push(propdef.location());
+                }
+            }
+        }
+
+        Ok(reference_map.into_iter().collect())
+    }
+
+    pub(crate) fn collect_unreachable_anonymous_objects(
+        &mut self,
+        unreachable_objects: &[Obj],
+    ) -> Result<usize, WorldStateError> {
+        let mut collected = 0;
+
+        for obj in unreachable_objects {
+            if obj.is_anonymous() {
+                match self.anonymous_object_metadata.delete(obj) {
+                    Ok(Some(_)) => collected += 1,
+                    Ok(None) => {} // Object didn't have metadata
+                    Err(_) => {}   // Error deleting - might not exist
+                }
+            }
+        }
+
+        if collected > 0 {
+            self.has_mutations = true;
+        }
+
+        Ok(collected)
+    }
+
+    pub(crate) fn scan_anonymous_object_references_generation(
+        &mut self,
+        generation: u8,
+    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+        // Get all references first
+        let all_references = self.scan_anonymous_object_references()?;
+
+        // Filter to only include references to objects of the specified generation
+        let mut filtered_references = Vec::new();
+
+        for (referring_obj, referenced_objs) in all_references {
+            let mut filtered_refs = Vec::new();
+
+            for anon_obj in referenced_objs {
+                if let Ok(Some(metadata)) = self.get_anonymous_object_metadata(&anon_obj) {
+                    if metadata.generation() == generation {
+                        filtered_refs.push(anon_obj);
+                    }
+                }
+            }
+
+            if !filtered_refs.is_empty() {
+                filtered_references.push((referring_obj, filtered_refs));
+            }
+        }
+
+        Ok(filtered_references)
+    }
+
+    pub(crate) fn get_anonymous_objects_by_generation(
+        &self,
+        generation: u8,
+    ) -> Result<Vec<Obj>, WorldStateError> {
+        // Since we need a read-only operation but get_all() requires mutable access,
+        // we'll use scan() instead which works with a read-only reference
+        let metadata_tuples = self
+            .anonymous_object_metadata
+            .scan(&|_, metadata| metadata.generation() == generation)
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+        let objects: Vec<Obj> = metadata_tuples.into_iter().map(|(obj, _)| obj).collect();
+        Ok(objects)
+    }
+
+    pub(crate) fn promote_anonymous_objects(
+        &mut self,
+        objects: &[Obj],
+    ) -> Result<usize, WorldStateError> {
+        let mut promoted = 0;
+
+        for obj in objects {
+            if let Ok(Some(mut metadata)) = self.get_anonymous_object_metadata(obj) {
+                // Only promote if currently young generation
+                if metadata.is_young_generation() {
+                    metadata.set_generation(1); // Move to old generation
+                    self.store_anonymous_object_metadata(obj, metadata)?;
+                    promoted += 1;
+                }
+            }
+        }
+
+        Ok(promoted)
     }
 }

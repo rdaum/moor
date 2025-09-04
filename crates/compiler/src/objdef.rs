@@ -392,8 +392,7 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
                     Ok(objid)
                 } else {
                     Err(ObjDefParseError::InvalidObjectId(format!(
-                        "Invalid anonymous object format: {}",
-                        ostr
+                        "Invalid anonymous object format: {ostr}"
                     )))
                 }
             } else if ostr.len() == 17 && ostr.chars().nth(5) == Some('-') {

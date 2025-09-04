@@ -16,7 +16,7 @@
 use byteview::ByteView;
 use moor_common::model::{CommitResult, WorldStateSource};
 use moor_common::model::{WorldState, WorldStateError};
-use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj};
+use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj, Var};
 use std::cmp::Ordering;
 use std::path::Path;
 use std::sync::Arc;
@@ -33,6 +33,8 @@ pub type SnapshotCallback = Box<
 mod db_loader_client;
 pub mod db_worldstate;
 mod fjall_provider;
+#[cfg(test)]
+mod gc_tests;
 pub(crate) mod moor_db;
 #[cfg(test)]
 mod moor_db_concurrent_tests;
@@ -60,8 +62,46 @@ pub use moor_db::SEQUENCE_MAX_OBJECT;
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
-    fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, WorldStateError>;
     fn create_snapshot_async(&self, callback: SnapshotCallback) -> Result<(), WorldStateError>;
+    fn gc_interface(&self) -> Result<Box<dyn GCInterface>, WorldStateError>;
+}
+
+/// Interface for garbage collection operations on anonymous objects
+pub trait GCInterface {
+    /// Store metadata for an anonymous object (generation, timestamps, etc.)
+    fn store_anonymous_object_metadata(
+        &mut self,
+        objid: &Obj,
+        metadata: AnonymousObjectMetadata,
+    ) -> Result<(), WorldStateError>;
+    /// Retrieve metadata for an anonymous object
+    fn get_anonymous_object_metadata(
+        &self,
+        objid: &Obj,
+    ) -> Result<Option<AnonymousObjectMetadata>, WorldStateError>;
+    /// Scan the database for anonymous object references in properties and other data structures
+    fn scan_anonymous_object_references(&mut self)
+    -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError>;
+
+    /// Scan for references to anonymous objects of a specific generation only
+    fn scan_anonymous_object_references_generation(
+        &mut self,
+        generation: u8,
+    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError>;
+
+    /// Get all anonymous objects in a specific generation
+    fn get_anonymous_objects_by_generation(
+        &self,
+        generation: u8,
+    ) -> Result<Vec<Obj>, WorldStateError>;
+
+    /// Promote surviving anonymous objects to the next generation
+    fn promote_anonymous_objects(&mut self, objects: &[Obj]) -> Result<usize, WorldStateError>;
+    /// Remove unreachable anonymous objects and their metadata from the database
+    fn collect_unreachable_anonymous_objects(
+        &mut self,
+        unreachable_objects: &[Obj],
+    ) -> Result<usize, WorldStateError>;
 }
 
 #[derive(Clone)]
@@ -114,6 +154,73 @@ impl Database for TxDB {
             }
         });
         Ok(())
+    }
+
+    fn gc_interface(&self) -> Result<Box<dyn GCInterface>, WorldStateError> {
+        let tx = self.storage.start_transaction();
+        let tx = DbWorldState { tx };
+        Ok(Box::new(tx))
+    }
+}
+
+/// Helper function to extract anonymous object references from a Var
+fn extract_anonymous_refs(var: &Var) -> Vec<Obj> {
+    let mut refs = Vec::new();
+    extract_anonymous_refs_recursive(var, &mut refs);
+    refs
+}
+
+/// Recursively extract anonymous object references from a Var
+fn extract_anonymous_refs_recursive(var: &Var, refs: &mut Vec<Obj>) {
+    match var.variant() {
+        moor_var::Variant::Obj(obj) => {
+            if obj.is_anonymous() {
+                refs.push(*obj);
+            }
+        }
+        moor_var::Variant::List(list) => {
+            for item in list.iter() {
+                extract_anonymous_refs_recursive(&item, refs);
+            }
+        }
+        moor_var::Variant::Map(map) => {
+            for (key, value) in map.iter() {
+                extract_anonymous_refs_recursive(&key, refs);
+                extract_anonymous_refs_recursive(&value, refs);
+            }
+        }
+        moor_var::Variant::Flyweight(flyweight) => {
+            // Check delegate
+            let delegate = flyweight.delegate();
+            if delegate.is_anonymous() {
+                refs.push(*delegate);
+            }
+
+            // Check slots (Symbol -> Var pairs)
+            for (_symbol, slot_value) in flyweight.slots().iter() {
+                extract_anonymous_refs_recursive(slot_value, refs);
+            }
+
+            // Check contents (List)
+            for item in flyweight.contents().iter() {
+                extract_anonymous_refs_recursive(&item, refs);
+            }
+        }
+        moor_var::Variant::Err(error) => {
+            // Check the error's optional value field
+            if let Some(error_value) = &error.value {
+                extract_anonymous_refs_recursive(error_value, refs);
+            }
+        }
+        moor_var::Variant::Lambda(lambda) => {
+            // Check captured environment (stack frames)
+            for frame in lambda.0.captured_env.iter() {
+                for var in frame.iter() {
+                    extract_anonymous_refs_recursive(var, refs);
+                }
+            }
+        }
+        _ => {} // Other types (None, Bool, Int, Float, Str, Sym, Binary) don't contain object references
     }
 }
 
@@ -279,6 +386,14 @@ pub struct ObjAndUUIDHolder {
     pub obj: Obj,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, IntoBytes, FromBytes, Immutable)]
+#[repr(C, packed)]
+pub struct AnonymousObjectMetadata {
+    generation: u8,             // 0 = young generation, 1 = old generation
+    created_micros: u128,       // microseconds since UNIX_EPOCH
+    last_accessed_micros: u128, // microseconds since UNIX_EPOCH
+}
+
 impl PartialOrd for ObjAndUUIDHolder {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -315,6 +430,132 @@ impl std::hash::Hash for ObjAndUUIDHolder {
         // Use zerocopy to write the entire struct as contiguous bytes
         // This is the ultimate optimization - zero-copy hashing of the entire struct
         state.write(IntoBytes::as_bytes(self));
+    }
+}
+
+impl AnonymousObjectMetadata {
+    pub fn new(generation: u8) -> Result<Self, EncodingError> {
+        let now = std::time::SystemTime::now();
+        let micros = now
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string()))?
+            .as_micros();
+
+        Ok(Self {
+            generation,
+            created_micros: micros,
+            last_accessed_micros: micros,
+        })
+    }
+
+    pub fn generation(&self) -> u8 {
+        self.generation
+    }
+
+    pub fn set_generation(&mut self, generation: u8) {
+        self.generation = generation;
+    }
+
+    pub fn is_young_generation(&self) -> bool {
+        self.generation == 0
+    }
+
+    pub fn is_old_generation(&self) -> bool {
+        self.generation == 1
+    }
+
+    pub fn created_time(&self) -> std::time::SystemTime {
+        let dur = std::time::Duration::from_micros(self.created_micros as u64);
+        std::time::UNIX_EPOCH + dur
+    }
+
+    pub fn last_accessed_time(&self) -> std::time::SystemTime {
+        let dur = std::time::Duration::from_micros(self.last_accessed_micros as u64);
+        std::time::UNIX_EPOCH + dur
+    }
+
+    pub fn touch(&mut self) -> Result<(), EncodingError> {
+        let now = std::time::SystemTime::now();
+        let micros = now
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string()))?
+            .as_micros();
+
+        self.last_accessed_micros = micros;
+        Ok(())
+    }
+
+    pub fn age_millis(&self) -> u128 {
+        let now = std::time::SystemTime::now();
+        if let Ok(dur) = now.duration_since(self.created_time()) {
+            dur.as_millis()
+        } else {
+            0
+        }
+    }
+}
+
+impl PartialOrd for AnonymousObjectMetadata {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AnonymousObjectMetadata {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Copy packed struct fields to avoid unaligned references
+        let self_created = self.created_micros;
+        let other_created = other.created_micros;
+        let self_last_accessed = self.last_accessed_micros;
+        let other_last_accessed = other.last_accessed_micros;
+
+        self.generation
+            .cmp(&other.generation)
+            .then_with(|| self_created.cmp(&other_created))
+            .then_with(|| self_last_accessed.cmp(&other_last_accessed))
+    }
+}
+
+impl std::hash::Hash for AnonymousObjectMetadata {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Use zerocopy to write the entire struct as contiguous bytes
+        state.write(IntoBytes::as_bytes(self));
+    }
+}
+
+impl AsByteBuffer for AnonymousObjectMetadata {
+    fn size_bytes(&self) -> usize {
+        33 // Fixed size: 1 byte (generation) + 16 bytes (created) + 16 bytes (last_accessed)
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        // Zero-copy: direct access to the struct's bytes
+        Ok(f(IntoBytes::as_bytes(self)))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        // Zero-copy to Vec
+        Ok(IntoBytes::as_bytes(self).to_vec())
+    }
+
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
+        let bytes = bytes.as_ref();
+        if bytes.len() != 33 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 33 bytes for AnonymousObjectMetadata, got {}",
+                bytes.len()
+            )));
+        }
+
+        // Use zerocopy to safely transmute from bytes
+        Self::read_from_bytes(bytes).map_err(|_| {
+            DecodingError::CouldNotDecode("Invalid bytes for AnonymousObjectMetadata".to_string())
+        })
+    }
+
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        // Zero-copy: create ByteView directly from struct bytes
+        Ok(ByteView::from(IntoBytes::as_bytes(self).to_vec()))
     }
 }
 

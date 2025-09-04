@@ -175,4 +175,21 @@ impl SnapshotInterface for DbWorldState {
         }
         Ok(properties)
     }
+
+    fn get_anonymous_object_metadata(
+        &self,
+        _objid: &Obj,
+    ) -> Result<Option<Box<dyn std::any::Any + Send>>, WorldStateError> {
+        // DbWorldState doesn't support GC operations, only snapshots do
+        Err(WorldStateError::DatabaseError(
+            "GC operations not supported on transactions, use snapshots".to_string(),
+        ))
+    }
+
+    fn scan_anonymous_object_references(&self) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+        // DbWorldState doesn't support GC operations, only snapshots do
+        Err(WorldStateError::DatabaseError(
+            "GC operations not supported on transactions, use snapshots".to_string(),
+        ))
+    }
 }

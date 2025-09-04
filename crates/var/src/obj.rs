@@ -627,16 +627,16 @@ mod tests {
         assert_eq!(obj.to_literal(), "*anonymous*");
 
         // Test Display implementation
-        assert_eq!(format!("{}", obj), "*anonymous*");
+        assert_eq!(format!("{obj}"), "*anonymous*");
 
         // Test Debug implementation
-        assert_eq!(format!("{:?}", obj), "Obj(*anonymous*:12345)");
+        assert_eq!(format!("{obj:?}"), "Obj(*anonymous*:12345)");
     }
 
     #[test]
     fn test_anonymous_objid_display() {
         let anonymous_id = AnonymousObjid(98765);
-        assert_eq!(format!("{}", anonymous_id), "*anonymous*:98765");
+        assert_eq!(format!("{anonymous_id}"), "*anonymous*:98765");
     }
 
     #[test]

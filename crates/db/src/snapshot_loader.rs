@@ -16,7 +16,7 @@ use fjall::UserValue;
 use uuid::Uuid;
 
 use crate::tx_management::{Error, Timestamp};
-use crate::{ObjAndUUIDHolder, StringHolder};
+use crate::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder};
 use moor_common::model::{
     HasUuid, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropPerms, ValSet, VerbDefs,
     WorldStateError, loader::SnapshotInterface,
@@ -37,6 +37,7 @@ pub struct SnapshotLoader {
     pub object_propdefs_snapshot: fjall::Snapshot,
     pub object_propvalues_snapshot: fjall::Snapshot,
     pub object_propflags_snapshot: fjall::Snapshot,
+    pub anonymous_object_metadata_snapshot: fjall::Snapshot,
     #[allow(dead_code)]
     pub sequences_snapshot: fjall::Snapshot,
 }
@@ -303,5 +304,107 @@ impl SnapshotInterface for SnapshotLoader {
             }
         }
         Ok(properties)
+    }
+
+    fn get_anonymous_object_metadata(
+        &self,
+        objid: &Obj,
+    ) -> Result<Option<Box<dyn std::any::Any + Send>>, WorldStateError> {
+        let metadata = self.get_from_snapshot::<Obj, AnonymousObjectMetadata>(
+            &self.anonymous_object_metadata_snapshot,
+            objid,
+        )?;
+        Ok(metadata.map(|m| Box::new(m) as Box<dyn std::any::Any + Send>))
+    }
+
+    fn scan_anonymous_object_references(&self) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+        let mut references = Vec::new();
+
+        // Scan all property values for anonymous object references
+        for entry in self.object_propvalues_snapshot.iter() {
+            let (key, value) = entry.map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+            // Decode the key to get the object and property UUID
+            let key_holder = ObjAndUUIDHolder::from_bytes(key.into()).map_err(|_| {
+                WorldStateError::DatabaseError("Failed to decode property key".to_string())
+            })?;
+
+            // Decode the value to get the property value
+            let (_ts, prop_value) = self
+                .decode::<Var>(value)
+                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+
+            // Extract anonymous object references from the property value
+            let anon_refs = self.extract_anonymous_refs(&prop_value);
+
+            if !anon_refs.is_empty() {
+                references.push((key_holder.obj(), anon_refs));
+            }
+        }
+
+        Ok(references)
+    }
+}
+
+impl SnapshotLoader {
+    /// Helper method to extract anonymous object references from a Var
+    fn extract_anonymous_refs(&self, var: &Var) -> Vec<Obj> {
+        let mut refs = Vec::new();
+        Self::extract_anonymous_refs_recursive(var, &mut refs);
+        refs
+    }
+
+    /// Recursively extract anonymous object references from a Var
+    fn extract_anonymous_refs_recursive(var: &Var, refs: &mut Vec<Obj>) {
+        match var.variant() {
+            moor_var::Variant::Obj(obj) => {
+                if obj.is_anonymous() {
+                    refs.push(*obj);
+                }
+            }
+            moor_var::Variant::List(list) => {
+                for item in list.iter() {
+                    Self::extract_anonymous_refs_recursive(&item, refs);
+                }
+            }
+            moor_var::Variant::Map(map) => {
+                for (key, value) in map.iter() {
+                    Self::extract_anonymous_refs_recursive(&key, refs);
+                    Self::extract_anonymous_refs_recursive(&value, refs);
+                }
+            }
+            moor_var::Variant::Flyweight(flyweight) => {
+                // Check delegate
+                let delegate = flyweight.delegate();
+                if delegate.is_anonymous() {
+                    refs.push(*delegate);
+                }
+
+                // Check slots (Symbol -> Var pairs)
+                for (_symbol, slot_value) in flyweight.slots().iter() {
+                    Self::extract_anonymous_refs_recursive(slot_value, refs);
+                }
+
+                // Check contents (List)
+                for item in flyweight.contents().iter() {
+                    Self::extract_anonymous_refs_recursive(&item, refs);
+                }
+            }
+            moor_var::Variant::Err(error) => {
+                // Check the error's optional value field
+                if let Some(error_value) = &error.value {
+                    Self::extract_anonymous_refs_recursive(error_value, refs);
+                }
+            }
+            moor_var::Variant::Lambda(lambda) => {
+                // Check captured environment (stack frames)
+                for frame in lambda.0.captured_env.iter() {
+                    for var in frame.iter() {
+                        Self::extract_anonymous_refs_recursive(var, refs);
+                    }
+                }
+            }
+            _ => {} // Other types (None, Bool, Int, Float, Str, Sym, Binary) don't contain object references
+        }
     }
 }

@@ -15,6 +15,7 @@ use ahash::HashSet;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
+use crate::GCInterface;
 use crate::moor_db::WorldStateTransaction;
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
@@ -945,5 +946,57 @@ impl WorldState for DbWorldState {
     fn rollback(self: Box<Self>) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.rollback);
         self.tx.rollback()
+    }
+}
+
+impl GCInterface for DbWorldState {
+    fn store_anonymous_object_metadata(
+        &mut self,
+        objid: &Obj,
+        metadata: crate::AnonymousObjectMetadata,
+    ) -> Result<(), WorldStateError> {
+        self.get_tx_mut()
+            .store_anonymous_object_metadata(objid, metadata)
+    }
+
+    fn get_anonymous_object_metadata(
+        &self,
+        objid: &Obj,
+    ) -> Result<Option<crate::AnonymousObjectMetadata>, WorldStateError> {
+        self.get_tx().get_anonymous_object_metadata(objid)
+    }
+
+    fn scan_anonymous_object_references(
+        &mut self,
+    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+        self.get_tx_mut().scan_anonymous_object_references()
+    }
+
+    fn scan_anonymous_object_references_generation(
+        &mut self,
+        generation: u8,
+    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+        self.get_tx_mut()
+            .scan_anonymous_object_references_generation(generation)
+    }
+
+    fn get_anonymous_objects_by_generation(
+        &self,
+        generation: u8,
+    ) -> Result<Vec<Obj>, WorldStateError> {
+        self.get_tx()
+            .get_anonymous_objects_by_generation(generation)
+    }
+
+    fn promote_anonymous_objects(&mut self, objects: &[Obj]) -> Result<usize, WorldStateError> {
+        self.get_tx_mut().promote_anonymous_objects(objects)
+    }
+
+    fn collect_unreachable_anonymous_objects(
+        &mut self,
+        unreachable_objects: &[Obj],
+    ) -> Result<usize, WorldStateError> {
+        self.get_tx_mut()
+            .collect_unreachable_anonymous_objects(unreachable_objects)
     }
 }
