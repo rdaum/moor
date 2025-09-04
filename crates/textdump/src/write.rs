@@ -62,7 +62,7 @@ impl<W: io::Write> TextdumpWriter<W> {
         // During textdump save/load, anonymous objects get sequential IDs for serialization
         // The actual anonymous object identity is preserved through its internal structure
         let temp_id = self.get_or_assign_anonymous_id(obj);
-        writeln!(self.writer, "{}", temp_id)
+        writeln!(self.writer, "{temp_id}")
     }
 
     fn get_or_assign_anonymous_id(&mut self, obj: &Obj) -> i64 {
@@ -172,7 +172,7 @@ impl<W: io::Write> TextdumpWriter<W> {
             Variant::Obj(o) => {
                 if o.is_anonymous() {
                     // Write anonymous objects using textdump-specific type code
-                    writeln!(self.writer, "{}", TYPE_ANON)?;
+                    writeln!(self.writer, "{TYPE_ANON}")?;
                     self.write_anonymous_obj(o)?;
                 } else {
                     writeln!(self.writer, "{}", VarType::TYPE_OBJ as u64)?;

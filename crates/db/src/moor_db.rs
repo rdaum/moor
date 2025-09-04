@@ -19,7 +19,7 @@ use crate::tx_management::{
     Canonical, CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
 };
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
-use crate::{CommitSet, ObjAndUUIDHolder, StringHolder};
+use crate::{AnonymousObjectMetadata, CommitSet, ObjAndUUIDHolder, StringHolder};
 use arc_swap::ArcSwap;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use flume::Sender;
@@ -52,6 +52,7 @@ define_relations! {
     object_propdefs => Obj, PropDefs,
     object_propvalues => ObjAndUUIDHolder, Var,
     object_propflags => ObjAndUUIDHolder, PropPerms,
+    anonymous_object_metadata => Obj, AnonymousObjectMetadata,
 }
 
 /// Combined cache structure to ensure atomic updates across all caches
@@ -188,6 +189,12 @@ impl MoorDB {
             .source()
             .partition()
             .snapshot_at(instant);
+        let anonymous_object_metadata_snapshot = self
+            .relations
+            .anonymous_object_metadata
+            .source()
+            .partition()
+            .snapshot_at(instant);
 
         // Create snapshot of sequences partition
         let sequences_snapshot = self.sequences_partition.snapshot_at(instant);
@@ -204,6 +211,7 @@ impl MoorDB {
             object_propdefs_snapshot,
             object_propvalues_snapshot,
             object_propflags_snapshot,
+            anonymous_object_metadata_snapshot,
             sequences_snapshot,
         }))
     }
