@@ -492,6 +492,11 @@ impl VmHost {
         self.vm_exec_state.clone()
     }
 
+    /// Get a reference to the current VM execution state for read-only access.
+    pub(crate) fn vm_exec_state(&self) -> &VMExecState {
+        &self.vm_exec_state
+    }
+
     /// Restore from a snapshot.
     pub(crate) fn restore_state(&mut self, state: &VMExecState) {
         self.vm_exec_state = state.clone();

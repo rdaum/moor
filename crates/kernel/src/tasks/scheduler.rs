@@ -1697,13 +1697,25 @@ impl Scheduler {
         // Increment the counter at the start of collection
         self.gc_cycle_count += 1;
 
-        // TODO: Implement actual GC logic here
-        // For now, just a placeholder that logs
+        // Scan VM frames in suspended tasks for anonymous object references
+        let vm_refs = self.task_q.collect_anonymous_object_references();
         info!(
-            "GC cycle placeholder - no anonymous objects collected yet (cycle #{})",
-            self.gc_cycle_count
+            "GC cycle #{}: Found {} anonymous object references in suspended tasks",
+            self.gc_cycle_count,
+            vm_refs.len()
         );
 
+        // Log some sample references for testing (first 5)
+        for (i, obj_ref) in vm_refs.iter().take(5).enumerate() {
+            info!("  VM ref {}: {}", i + 1, obj_ref);
+        }
+        if vm_refs.len() > 5 {
+            info!("  ... and {} more VM references", vm_refs.len() - 5);
+        }
+
+        // TODO: Integrate with DB-level scanning and actual collection
+        // For now, just demonstrate VM scanning works
+        
         self.gc_collection_in_progress = false;
         info!(
             "Completed anonymous object garbage collection cycle #{}",
