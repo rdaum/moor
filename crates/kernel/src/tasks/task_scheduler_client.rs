@@ -503,6 +503,8 @@ pub enum TaskControlMsg {
     },
     /// Request a new database transaction for immediate task continuation
     RequestNewTransaction(oneshot::Sender<Result<Box<dyn WorldState>, SchedulerError>>),
+    /// Request that the scheduler force a garbage collection cycle
+    ForceGC,
 }
 
 impl TaskSchedulerClient {

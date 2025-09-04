@@ -796,4 +796,293 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             }
         }
     }
+
+    #[test]
+    fn test_gc_collect_builtin() {
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None; // Don't need output dir for this test
+        env.output_dir_path = None;
+        wait_for_scheduler_ready(&env.scheduler_client);
+
+        let client_id = Uuid::new_v4();
+
+        // First establish connection
+        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
+            peer_addr: "127.0.0.1:8080".to_string(),
+            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
+        };
+
+        let establish_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            establish_message,
+        );
+
+        let (client_token, _connection_obj) = match establish_result.unwrap() {
+            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+            other => panic!("Expected NewConnection, got {other:?}"),
+        };
+
+        // Welcome message call
+        let welcome_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec![], // Empty args for welcome
+            do_attach: false,
+        };
+
+        let _welcome_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            welcome_message,
+        );
+
+        // Wait for welcome message
+        assert!(
+            env.transport.wait_for_narrative_events(1, 2000),
+            "Should receive welcome message events within 2 seconds"
+        );
+
+        // Login as wizard
+        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec!["connect".to_string(), "wizard".to_string()],
+            do_attach: true,
+        };
+
+        let login_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            login_message,
+        );
+
+        // Wait for login task completion
+        let _login_success = env.transport.wait_for_condition(
+            |transport| {
+                let narrative_events = transport.get_narrative_events();
+                let client_events = transport.get_client_events();
+                !narrative_events.is_empty() || !client_events.is_empty()
+            },
+            5000,
+        );
+
+        let rpc_common::DaemonToClientReply::LoginResult(Some((
+            auth_token,
+            connect_type,
+            player_obj,
+        ))) = login_result.expect("Login should succeed")
+        else {
+            panic!("Expected successful login result");
+        };
+
+        assert_eq!(connect_type, rpc_common::ConnectType::Connected);
+        assert_eq!(player_obj, Obj::mk_id(2));
+
+        // Wait for connection events
+        wait_for_event_content(
+            &env.event_log,
+            player_obj,
+            |event| {
+                if let Event::Notify(content, _) = event {
+                    if let Some(str) = content.as_string() {
+                        str == "This is all there is right now."
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            },
+            5,
+            "connection events with room description",
+        );
+
+        // Get initial GC stats before running collection
+        let initial_stats = env
+            .scheduler_client
+            .get_gc_stats()
+            .expect("Should be able to get GC stats");
+        let initial_count = initial_stats.cycle_count;
+
+        // Test gc_collect() builtin - should trigger GC cycle and return nil
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            ";gc_collect()",
+            "=> 0", // Should return nil (0)
+            "gc_collect() builtin execution",
+        );
+
+        // Verify scheduler is still responsive after GC
+        assert!(
+            env.scheduler_client.check_status().is_ok(),
+            "Scheduler should remain responsive after GC"
+        );
+
+        // Verify GC counter incremented
+        let final_stats = env
+            .scheduler_client
+            .get_gc_stats()
+            .expect("Should be able to get GC stats after GC");
+        assert_eq!(
+            final_stats.cycle_count,
+            initial_count + 1,
+            "GC cycle count should increment from {} to {}",
+            initial_count,
+            final_stats.cycle_count
+        );
+
+        // Test that non-wizard cannot call gc_collect()
+        // First create a regular player by connecting as a different user
+        let non_wizard_client_id = Uuid::new_v4();
+
+        let establish_message_2 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
+            peer_addr: "127.0.0.1:8081".to_string(),
+            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
+        };
+
+        let establish_result_2 = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            non_wizard_client_id,
+            establish_message_2,
+        );
+
+        let (client_token_2, _connection_obj_2) = match establish_result_2.unwrap() {
+            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+            other => panic!("Expected NewConnection, got {other:?}"),
+        };
+
+        // For non-wizard test, we'll connect as a guest (which should be non-wizard)
+        let welcome_message_2 = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token_2.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec![],
+            do_attach: false,
+        };
+
+        let _welcome_result_2 = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            non_wizard_client_id,
+            welcome_message_2,
+        );
+
+        // Try to connect as guest
+        let login_message_2 = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token_2.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec!["connect".to_string(), "guest".to_string()],
+            do_attach: true,
+        };
+
+        let login_result_2 = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            non_wizard_client_id,
+            login_message_2,
+        );
+
+        // If guest login succeeds, test that gc_collect() fails with permission error
+        if let Ok(rpc_common::DaemonToClientReply::LoginResult(Some((
+            auth_token_2,
+            _connect_type_2,
+            player_obj_2,
+        )))) = login_result_2
+        {
+            // Wait for guest connection to complete
+            std::thread::sleep(Duration::from_millis(500));
+
+            // Try gc_collect() as non-wizard - should get permission error
+            let message_2 = rpc_common::HostClientToDaemonMessage::Command(
+                client_token_2.clone(),
+                auth_token_2.clone(),
+                player_obj_2,
+                ";gc_collect()".to_string(),
+            );
+
+            let _result_2 = env.transport.process_client_message(
+                env.message_handler.as_ref(),
+                env.scheduler_client.clone(),
+                non_wizard_client_id,
+                message_2,
+            );
+
+            // Wait for and verify permission error
+            wait_for_event_content(
+                &env.event_log,
+                player_obj_2,
+                |event| {
+                    if let Event::Notify(content, _) = event {
+                        if let Some(str) = content.as_string() {
+                            str.contains("Permission denied") || str.contains("E_PERM")
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                },
+                5,
+                "permission error for non-wizard gc_collect() call",
+            );
+        }
+
+        // Test direct GC calls via scheduler client to verify counter increments properly
+        let current_count = final_stats.cycle_count;
+
+        // Request another GC cycle directly via scheduler client
+        env.scheduler_client
+            .request_gc()
+            .expect("Direct GC request should succeed");
+
+        // Verify counter incremented again
+        let direct_gc_stats = env
+            .scheduler_client
+            .get_gc_stats()
+            .expect("Should be able to get GC stats after direct GC");
+        assert_eq!(
+            direct_gc_stats.cycle_count,
+            current_count + 1,
+            "GC cycle count should increment from {} to {} after direct GC request",
+            current_count,
+            direct_gc_stats.cycle_count
+        );
+
+        // Request one more GC to verify it keeps working
+        env.scheduler_client
+            .request_gc()
+            .expect("Second direct GC request should succeed");
+
+        let final_direct_stats = env
+            .scheduler_client
+            .get_gc_stats()
+            .expect("Should be able to get final GC stats");
+        assert_eq!(
+            final_direct_stats.cycle_count,
+            current_count + 2,
+            "GC cycle count should increment to {} after multiple direct requests",
+            current_count + 2
+        );
+
+        // Verify no unexpected tracebacks in the event log
+        let events = env.event_log.get_all_events();
+        for event in events {
+            if let Event::Traceback(traceback) = event.event.event {
+                // Only panic if it's not a permission-related traceback
+                let traceback_str = format!("{traceback:?}");
+                if !traceback_str.contains("E_PERM") && !traceback_str.contains("Permission denied")
+                {
+                    panic!("Unexpected traceback during GC test: {traceback:?}");
+                }
+            }
+        }
+    }
 }
