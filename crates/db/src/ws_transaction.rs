@@ -17,7 +17,6 @@ use crate::fjall_provider::FjallProvider;
 use crate::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction};
 use crate::tx_management::{Relation, RelationTransaction};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
-use ahash::AHasher;
 use moor_common::model::{
     CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
     PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
@@ -26,8 +25,8 @@ use moor_common::model::{
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::program::ProgramType;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::hash::{BuildHasherDefault, Hash};
+use std::collections::VecDeque;
+use std::hash::Hash;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
@@ -333,154 +332,24 @@ impl WorldStateTransaction {
     }
 
     pub fn set_object_parent(&mut self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
-        // Find the set of old ancestors (terminating at "new_parent" if they intersect, before
-        // changing the inheritance graph
-        let old_ancestors = self.ancestors_up_to(o, new_parent)?;
-
-        // If this is a new object it won't have a parent, old parent this will come up not-found,
-        // and if that's the case we can ignore that.
+        // Check if we're setting the same parent (no-op)
         let old_parent = self.get_object_parent(o)?;
-        if !old_parent.is_nothing() && old_parent.eq(new_parent) {
+        if old_parent.eq(new_parent) {
             return Ok(());
         };
 
-        self.ancestry_cache.flush();
+        // In lazy property inheritance, we only need to:
+        // 1. Update the parent relationship
+        // 2. Flush caches so property resolution will see the new ancestry
+        // All property resolution happens at runtime by walking the ancestry chain
 
-        // Now find the set of new ancestors.
-        let mut new_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
-            self.ancestors_set(new_parent)?;
-        new_ancestors.insert(*new_parent);
-
-        // This is slightly pessimistic because if errors happened below, the write may not actually
-        // happen, but that's ok.
         self.has_mutations = true;
+        self.ancestry_cache.flush();
         self.verb_resolution_cache.flush();
         self.prop_resolution_cache.flush();
 
-        // What's not shared?
-        let unshared_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
-            old_ancestors.difference(&new_ancestors).collect();
-
-        // Go through and find all property definitions that were defined in the old ancestry graph that
-        // no longer apply in the new.
-        let old_props = self.object_propdefs.get(o).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error getting object properties: {e:?}"))
-        })?;
-        let mut dead_properties = vec![];
-        if let Some(old_props) = old_props {
-            for prop in old_props.iter() {
-                if prop.definer() != *o && !unshared_ancestors.contains(&prop.definer()) {
-                    dead_properties.push(prop.uuid());
-                }
-            }
-            let new_props = old_props.with_all_removed(&dead_properties);
-            upsert(&mut self.object_propdefs, *o, new_props).expect("Unable to update propdefs");
-
-            // Remove their values and flags.
-            for prop in dead_properties.iter() {
-                let holder = ObjAndUUIDHolder::new(o, *prop);
-                self.object_propvalues.delete(&holder).ok();
-            }
-        }
-
-        // Now walk all-my-children and destroy all the properties whose definer is me or any
-        // of my ancestors not shared by the new parent.
-        let descendants = self.descendants(o, false)?;
-
-        let mut descendant_props: HashMap<_, _, BuildHasherDefault<AHasher>> = HashMap::default();
-        for c in descendants.iter() {
-            let mut inherited_props = vec![];
-            // Remove the set common.
-            let old_props = self.get_properties(o)?;
-            if !old_props.is_empty() {
-                for p in old_props.iter() {
-                    if new_ancestors.contains(&p.definer()) || p.definer().eq(o) {
-                        continue;
-                    }
-                    if old_ancestors.contains(&p.definer()) {
-                        inherited_props.push(p.uuid());
-                        self.object_propvalues
-                            .delete(&ObjAndUUIDHolder::new(&c.clone(), p.uuid()))
-                            .expect("Unable to delete property value");
-                    }
-                }
-                // And update the property list to not include them
-                let new_props = old_props.with_all_removed(&inherited_props);
-
-                // We're not actually going to *set* these yet because we are going to add, later.
-                descendant_props.insert(c, new_props);
-            }
-        }
-
-        // If this is a new object it won't have a parent, old parent this will come up not-found,
-        // and if that's the case we can ignore that.
-        let old_parent = self.get_object_parent(o)?;
-        if !old_parent.is_nothing() && old_parent.eq(new_parent) {
-            return Ok(());
-        };
-
+        // Update the parent relationship
         upsert(&mut self.object_parent, *o, *new_parent).expect("Unable to update parent");
-
-        // Children lists are automatically updated via object_parent secondary index
-
-        if new_parent.is_nothing() {
-            return Ok(());
-        }
-
-        // Children lists are automatically updated via object_parent secondary index
-
-        // Now walk all my new descendants and give them the properties that derive from any
-        // ancestors they don't already share.
-
-        // Now collect properties defined on the new ancestors so we can define the owners on
-        // the new descendants.
-        let mut new_props = vec![];
-        for a in new_ancestors {
-            let props = self.get_properties(&a)?;
-            if !props.is_empty() {
-                for p in props.iter() {
-                    if p.definer().eq(&a)
-                        && let Some(propperms) = self
-                            .object_propflags
-                            .get(&ObjAndUUIDHolder::new(&a, p.uuid()))
-                            .map_err(|e| {
-                                WorldStateError::DatabaseError(format!(
-                                    "Error getting object flags: {e:?}"
-                                ))
-                            })?
-                    {
-                        let propperms = if propperms.flags().contains(PropFlag::Chown) {
-                            let my_owner = self.get_object_owner(o)?;
-                            propperms.with_owner(my_owner)
-                        } else {
-                            propperms
-                        };
-                        new_props.push((p.clone(), propperms));
-                    }
-                }
-            }
-        }
-        // Then put clear copies on each of the descendants ... and me.
-        // This really just means defining the property with no value, which is what we do.
-        let descendants = self
-            .descendants(o, false)
-            .expect("Unable to get descendants");
-        for c in descendants.iter().chain(std::iter::once(*o)) {
-            for (p, propperms) in new_props.iter() {
-                let propperms = if propperms.flags().contains(PropFlag::Chown) && c != *o {
-                    let owner = self.get_object_owner(&c)?;
-                    propperms.clone().with_owner(owner)
-                } else {
-                    propperms.clone()
-                };
-                upsert(
-                    &mut self.object_propflags,
-                    ObjAndUUIDHolder::new(&c, p.uuid()),
-                    propperms,
-                )
-                .expect("Unable to update property flags");
-            }
-        }
 
         Ok(())
     }
@@ -867,6 +736,7 @@ impl WorldStateTransaction {
         uuid: Uuid,
         value: Var,
     ) -> Result<(), WorldStateError> {
+        // Set the property value
         upsert(
             &mut self.object_propvalues,
             ObjAndUUIDHolder::new(obj, uuid),
@@ -875,6 +745,25 @@ impl WorldStateTransaction {
         .map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property value: {e:?}"))
         })?;
+
+        // In lazy mode, ensure we have a local propflags entry when setting a value locally.
+        // If we don't have one, create it by inheriting from the canonical permissions.
+        let holder = ObjAndUUIDHolder::new(obj, uuid);
+        if self
+            .object_propflags
+            .get(&holder)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error checking property flags: {e:?}"))
+            })?
+            .is_none()
+        {
+            // No local propflags entry - create one based on inherited permissions
+            let inherited_perms = self.retrieve_property_permissions(obj, uuid)?;
+            upsert(&mut self.object_propflags, holder, inherited_perms).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting property flags: {e:?}"))
+            })?;
+        }
+
         self.has_mutations = true;
         Ok(())
     }
@@ -888,8 +777,6 @@ impl WorldStateTransaction {
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<Uuid, WorldStateError> {
-        let descendants = self.descendants(location, false)?;
-
         // If the property is already defined at us or above or below us, that's a failure.
         let props = self.get_properties(location)?;
         if props.find_first_named(name).is_some() {
@@ -922,29 +809,19 @@ impl WorldStateTransaction {
         self.has_mutations = true;
         self.prop_resolution_cache.flush();
 
+        // Always create propflags entry for the defining location (canonical permissions)
+        upsert(
+            &mut self.object_propflags,
+            ObjAndUUIDHolder::new(location, u),
+            PropPerms::new(*owner, perms),
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting property owner: {e:?}"))
+        })?;
+
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
             self.set_property(location, u, value)?;
-        }
-
-        // Put the initial object owner on ourselves and all our descendants.
-        // Unless we're 'Chown' in which case, the owner should be the descendant.
-        let value_locations = ObjSet::from_items(&[*location]).with_concatenated(descendants);
-        for proploc in value_locations.iter() {
-            let actual_owner = if perms.contains(PropFlag::Chown) && proploc != *location {
-                // get the owner of proploc
-                self.get_object_owner(&proploc)?
-            } else {
-                *owner
-            };
-            upsert(
-                &mut self.object_propflags,
-                ObjAndUUIDHolder::new(&proploc, u),
-                PropPerms::new(actual_owner, perms),
-            )
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting property owner: {e:?}"))
-            })?;
         }
 
         Ok(u)
@@ -1056,18 +933,59 @@ impl WorldStateTransaction {
         obj: &Obj,
         uuid: Uuid,
     ) -> Result<PropPerms, WorldStateError> {
-        let r = self
+        // First check if this object has local propflags (set via set_property or update_property_info)
+        if let Ok(Some(perms)) = self.object_propflags.get(&ObjAndUUIDHolder::new(obj, uuid)) {
+            return Ok(perms);
+        }
+
+        // No local propflags entry - need to find the property definition in ancestry chain
+        // and compute permissions lazily
+        let propdef = self.find_property_by_name_with_uuid(obj, uuid)?;
+        let defining_obj = propdef.definer();
+
+        // Get the canonical permissions from the defining object
+        let canonical_perms = self
             .object_propflags
-            .get(&ObjAndUUIDHolder::new(obj, uuid))
+            .get(&ObjAndUUIDHolder::new(&defining_obj, uuid))
             .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error getting property flags: {e:?}"))
+                WorldStateError::DatabaseError(format!("Error getting canonical property flags: {e:?}"))
+            })?
+            .ok_or_else(|| {
+                WorldStateError::DatabaseError(
+                    format!("Canonical property permissions not found on definer {defining_obj} for property {uuid}")
+                )
             })?;
-        let Some(perms) = r else {
-            return Err(WorldStateError::DatabaseError(
-                format!("Property permissions not found: {obj} {uuid}").to_string(),
-            ));
-        };
-        Ok(perms)
+
+        // If the property has Chown flag, use the object's owner as the property owner
+        let final_perms =
+            if canonical_perms.flags().contains(PropFlag::Chown) && *obj != defining_obj {
+                let obj_owner = self.get_object_owner(obj)?;
+                canonical_perms.with_owner(obj_owner)
+            } else {
+                canonical_perms
+            };
+
+        Ok(final_perms)
+    }
+
+    // Helper function to find property definition by UUID instead of name
+    fn find_property_by_name_with_uuid(
+        &self,
+        obj: &Obj,
+        uuid: Uuid,
+    ) -> Result<PropDef, WorldStateError> {
+        // Walk up the ancestry chain looking for the property definition
+        let ancestors = self.ancestors(obj, true)?;
+        for ancestor in ancestors.iter() {
+            let props = self.get_properties(&ancestor)?;
+            if let Some(prop) = props.find(&uuid) {
+                return Ok(prop.clone());
+            }
+        }
+        Err(WorldStateError::PropertyNotFound(
+            *obj,
+            format!("uuid:{uuid}"),
+        ))
     }
 
     fn find_property_by_name(&self, obj: &Obj, name: Symbol) -> Option<PropDef> {
@@ -1294,45 +1212,6 @@ impl WorldStateTransaction {
             {
                 return current;
             }
-        }
-    }
-
-    fn ancestors_up_to(
-        &self,
-        obj: &Obj,
-        limit: &Obj,
-    ) -> Result<HashSet<Obj, BuildHasherDefault<AHasher>>, WorldStateError> {
-        if obj.eq(&NOTHING) || obj.eq(limit) {
-            return Ok(HashSet::default());
-        }
-        let mut ancestor_set = HashSet::default();
-        let mut search_obj = *obj;
-        loop {
-            let ancestor = self.get_object_parent(&search_obj)?;
-            if ancestor.eq(&NOTHING) || ancestor.eq(limit) {
-                return Ok(ancestor_set);
-            }
-            ancestor_set.insert(ancestor);
-            search_obj = ancestor;
-        }
-    }
-
-    fn ancestors_set(
-        &self,
-        obj: &Obj,
-    ) -> Result<HashSet<Obj, BuildHasherDefault<AHasher>>, WorldStateError> {
-        if obj.eq(&NOTHING) {
-            return Ok(HashSet::default());
-        }
-        let mut ancestor_set = HashSet::default();
-        let mut search_obj = *obj;
-        loop {
-            let ancestor = self.get_object_parent(&search_obj)?;
-            if ancestor.eq(&NOTHING) {
-                return Ok(ancestor_set);
-            }
-            ancestor_set.insert(ancestor);
-            search_obj = ancestor;
         }
     }
 
@@ -1605,6 +1484,41 @@ impl WorldStateTransaction {
                         .map_err(|e| {
                             WorldStateError::DatabaseError(format!(
                                 "Error setting new property flags: {e:?}"
+                            ))
+                        })?;
+                }
+            }
+
+            // Update all property definitions in the inheritance hierarchy that reference old_obj as definer
+            let all_propdefs = self.object_propdefs.get_all().map_err(|e| {
+                WorldStateError::DatabaseError(format!(
+                    "Error scanning property definitions: {e:?}"
+                ))
+            })?;
+
+            for (obj, props) in all_propdefs {
+                let mut needs_update = false;
+                let mut updated_props = Vec::new();
+
+                for prop in props {
+                    if prop.definer() == *old_obj {
+                        // Create new PropDef with updated definer
+                        let updated_prop =
+                            PropDef::new(prop.uuid(), new_obj, prop.location(), prop.name());
+                        updated_props.push(updated_prop);
+                        needs_update = true;
+                    } else {
+                        updated_props.push(prop);
+                    }
+                }
+
+                if needs_update {
+                    let updated_defs = PropDefs::from_items(&updated_props);
+                    self.object_propdefs
+                        .upsert(obj, updated_defs)
+                        .map_err(|e| {
+                            WorldStateError::DatabaseError(format!(
+                                "Error updating property definer references: {e:?}"
                             ))
                         })?;
                 }
