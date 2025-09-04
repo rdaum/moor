@@ -111,21 +111,6 @@ pub struct VerbCall {
     pub caller: Var,
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::vm::VMHostResponse;
-
-    #[test]
-    fn test_width_structs_enums() {
-        // This was insanely huge (>4k) so some boxing made it smaller, let's see if we can
-        // keep it small.
-        assert!(
-            size_of::<VMHostResponse>() <= 24,
-            "VMHostResponse is too big: {}",
-            size_of::<VMHostResponse>()
-        );
-    }
-}
 
 /// Extract anonymous object references from a variable
 fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
@@ -185,10 +170,8 @@ fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
 fn extract_anonymous_refs_from_moo_frame(frame: &MooStackFrame, refs: &mut Vec<Obj>) {
     // 1. Scan all variables in the environment stack
     for env_level in &frame.environment {
-        for var_slot in env_level {
-            if let Some(var) = var_slot {
-                extract_anonymous_refs_from_var(var, refs);
-            }
+        for var in env_level.iter().flatten() {
+            extract_anonymous_refs_from_var(var, refs);
         }
     }
 
@@ -203,10 +186,21 @@ fn extract_anonymous_refs_from_moo_frame(frame: &MooStackFrame, refs: &mut Vec<O
     // 4. Scan scope stack for any stored variables
     for scope in &frame.scope_stack {
         match &scope.scope_type {
-            ScopeType::ForSequence { sequence, value_bind: _, key_bind: _, current_index: _, end_label: _ } => {
+            ScopeType::ForSequence {
+                sequence,
+                value_bind: _,
+                key_bind: _,
+                current_index: _,
+                end_label: _,
+            } => {
                 extract_anonymous_refs_from_var(sequence, refs);
             }
-            ScopeType::ForRange { current_value, end_value, loop_variable: _, end_label: _ } => {
+            ScopeType::ForRange {
+                current_value,
+                end_value,
+                loop_variable: _,
+                end_label: _,
+            } => {
                 extract_anonymous_refs_from_var(current_value, refs);
                 extract_anonymous_refs_from_var(end_value, refs);
             }
@@ -242,13 +236,13 @@ fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Ve
     // 2. Scan activation-level variables
     // Check 'this' object
     extract_anonymous_refs_from_var(&activation.this, refs);
-    
+
     // Check player (already an Obj, so check directly)
     if activation.player.is_anonymous() {
         refs.push(activation.player);
     }
 
-    // Check permissions (already an Obj, so check directly)  
+    // Check permissions (already an Obj, so check directly)
     if activation.permissions.is_anonymous() {
         refs.push(activation.permissions);
     }
@@ -288,9 +282,29 @@ fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Ve
 }
 
 /// Extract anonymous object references from VM execution state
-pub(crate) fn extract_anonymous_refs_from_vm_exec_state(vm_state: &exec_state::VMExecState, refs: &mut Vec<Obj>) {
+pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
+    vm_state: &exec_state::VMExecState,
+    refs: &mut Vec<Obj>,
+) {
     // Scan all activations in the call stack
     for activation in &vm_state.stack {
         extract_anonymous_refs_from_activation(activation, refs);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::mem::size_of;
+    use crate::vm::VMHostResponse;
+
+    #[test]
+    fn test_width_structs_enums() {
+        // This was insanely huge (>4k) so some boxing made it smaller, let's see if we can
+        // keep it small.
+        assert!(
+            size_of::<VMHostResponse>() <= 24,
+            "VMHostResponse is too big: {}",
+            size_of::<VMHostResponse>()
+        );
     }
 }

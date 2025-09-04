@@ -42,6 +42,7 @@ pub const DEFAULT_BG_TICKS: usize = 30_000;
 pub const DEFAULT_FG_SECONDS: u64 = 5;
 pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
+pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 30;
 
 lazy_static! {
     static ref SCHED_COUNTERS: SchedulerPerfCounters = SchedulerPerfCounters::new();
@@ -126,6 +127,8 @@ pub struct ServerOptions {
     pub max_stack_depth: usize,
     /// The interval in seconds for automatic database checkpoints.
     pub dump_interval: Option<u64>,
+    /// The interval in seconds for automatic garbage collection.
+    pub gc_interval: Option<u64>,
 }
 
 impl ServerOptions {

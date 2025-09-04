@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::AnonymousObjectMetadata;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction};
 use crate::tx_management::{Relation, RelationTransaction};
-use crate::AnonymousObjectMetadata;
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
 use moor_common::model::{
@@ -232,6 +232,13 @@ impl WorldStateTransaction {
         // Only do this for objids, not uuobjids or anonymous objects
         if !id.is_uuobjid() && !id.is_anonymous() {
             self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
+        }
+
+        // Automatically store GC metadata for anonymous objects (start them in young generation)
+        if id.is_anonymous() {
+            let initial_metadata = AnonymousObjectMetadata::new(0).unwrap(); // Start in generation 0 (young)
+            self.store_anonymous_object_metadata(&id, initial_metadata)
+                .expect("Failed to store initial GC metadata for anonymous object");
         }
 
         self.verb_resolution_cache.flush();
@@ -1702,20 +1709,9 @@ impl WorldStateTransaction {
             }
         }
 
-        // Owner relationships
-        let owner_tuples = self
-            .object_owner
-            .get_all()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-        for (obj, owner) in owner_tuples {
-            if owner.is_anonymous() {
-                reference_map
-                    .entry(obj)
-                    .or_insert_with(Vec::new)
-                    .push(owner);
-            }
-        }
+        // Note: We intentionally do NOT scan owner relationships as they are not
+        // live references for GC purposes - ownership is just metadata about who
+        // controls the object, not a reference that keeps it alive
 
         // 3. Scan verb definitions for object references (location and owner fields)
         let verbdef_tuples = self

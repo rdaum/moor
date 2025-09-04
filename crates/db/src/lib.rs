@@ -20,6 +20,14 @@ use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj, Var};
 use std::cmp::Ordering;
 use std::path::Path;
 use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+pub enum GCError {
+    StorageError(String),
+    TransactionConflict,
+    ObjectNotFound(String),
+    CommitFailed(String),
+}
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -102,6 +110,8 @@ pub trait GCInterface {
         &mut self,
         unreachable_objects: &[Obj],
     ) -> Result<usize, WorldStateError>;
+    /// Commit any pending changes to the database
+    fn commit(self: Box<Self>) -> Result<CommitResult, GCError>;
 }
 
 #[derive(Clone)]

@@ -831,6 +831,7 @@ mod tests {
             fg_ticks: 50000,
             max_stack_depth: 5,
             dump_interval: None,
+            gc_interval: None,
         };
         let task_scheduler_client = TaskSchedulerClient::new(1, control_sender.clone());
         let task = Task::new(

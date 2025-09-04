@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::yield_now;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use moor_common::model::{CommitResult, Perms};
@@ -39,7 +39,8 @@ use crate::tasks::world_state_action::{WorldStateAction, WorldStateResponse};
 use crate::tasks::world_state_executor::{WorldStateActionExecutor, match_object_ref};
 use crate::tasks::{
     DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-    DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
+    DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult,
+    TaskStart, sched_counters,
 };
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::{Fork, TaskSuspend};
@@ -73,6 +74,7 @@ lazy_static! {
     static ref FG_TICKS: Symbol = Symbol::mk("fg_ticks");
     static ref MAX_STACK_DEPTH: Symbol = Symbol::mk("max_stack_depth");
     static ref DUMP_INTERVAL: Symbol = Symbol::mk("dump_interval");
+    static ref GC_INTERVAL: Symbol = Symbol::mk("gc_interval");
     static ref DO_OUT_OF_BAND_COMMAND: Symbol = Symbol::mk("do_out_of_band_command");
 }
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
@@ -113,6 +115,8 @@ pub struct Scheduler {
     gc_force_collect: bool,
     /// Counter tracking the number of GC cycles completed
     gc_cycle_count: u64,
+    /// Time of last GC cycle (for interval-based collection)
+    gc_last_cycle_time: std::time::Instant,
 
     /// Tracks whether a checkpoint operation is currently in progress to prevent overlapping checkpoints
     checkpoint_in_progress: Arc<AtomicBool>,
@@ -152,6 +156,7 @@ impl Scheduler {
             fg_ticks: DEFAULT_FG_TICKS,
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
             dump_interval: None,
+            gc_interval: None,
         };
         let builtin_registry = BuiltinRegistry::new();
 
@@ -174,6 +179,7 @@ impl Scheduler {
             gc_collection_in_progress: false,
             gc_force_collect: false,
             gc_cycle_count: 0,
+            gc_last_cycle_time: std::time::Instant::now(),
             checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
         };
         s.reload_server_options();
@@ -347,6 +353,16 @@ impl Scheduler {
         } else {
             info!("No dump_interval found on #0");
         }
+        if let Some(gc_interval) = load_int_sysprop(&SYSTEM_OBJECT, *GC_INTERVAL, tx.as_ref()) {
+            info!("Loaded gc_interval from database: {} seconds", gc_interval);
+            so.gc_interval = Some(gc_interval);
+        } else {
+            info!(
+                "No gc_interval found on #0, using default of {} seconds",
+                DEFAULT_GC_INTERVAL_SECONDS
+            );
+            so.gc_interval = Some(DEFAULT_GC_INTERVAL_SECONDS);
+        }
         tx.rollback().unwrap();
 
         self.server_options = so;
@@ -381,6 +397,32 @@ impl Scheduler {
             Some(db_interval)
         } else {
             None
+        }
+    }
+
+    pub fn get_gc_interval(&mut self) -> Option<Duration> {
+        // Reload server options to get fresh gc_interval from database
+        self.reload_server_options();
+
+        // Determine the GC interval using the proper precedence:
+        // 1. Command-line config overrides all
+        // 2. Database gc_interval setting
+        // 3. Default of 30 seconds
+        if let Some(config_interval) = self.config.import_export.gc_interval {
+            info!(
+                "Using gc_interval from command-line config: {:?}",
+                config_interval
+            );
+            Some(config_interval)
+        } else if let Some(db_secs) = self.server_options.gc_interval {
+            let db_interval = Duration::from_secs(db_secs);
+            info!("Using gc_interval from database: {:?}", db_interval);
+            Some(db_interval)
+        } else {
+            // Default to 30 seconds if not configured
+            let default_interval = Duration::from_secs(DEFAULT_GC_INTERVAL_SECONDS);
+            info!("Using default gc_interval: {:?}", default_interval);
+            Some(default_interval)
         }
     }
 }
@@ -1683,44 +1725,338 @@ impl Scheduler {
             return true;
         }
 
-        // For now, automatic GC is disabled
-        // TODO: Add memory pressure checks, object count thresholds, etc.
+        // Run automatic GC based on conditions
+        self.should_run_automatic_gc()
+    }
+
+    /// Check if automatic GC should run based on heuristics
+    fn should_run_automatic_gc(&self) -> bool {
+        // Use the cached GC interval from server options (reloaded periodically by scheduler)
+        let Some(gc_interval_seconds) = self.server_options.gc_interval else {
+            return false; // GC disabled if no interval configured
+        };
+
+        let gc_interval = Duration::from_secs(gc_interval_seconds);
+        let time_since_last_gc = self.gc_last_cycle_time.elapsed();
+
+        if time_since_last_gc >= gc_interval {
+            debug!(
+                "Triggering automatic GC after {} seconds of inactivity (interval: {} seconds)",
+                time_since_last_gc.as_secs(),
+                gc_interval.as_secs()
+            );
+            return true;
+        }
+
+        // In the future, this could also check:
+        // - Number of anonymous objects created since last GC
+        // - Memory pressure
+        // - Task activity levels
         false
     }
 
-    /// Run a garbage collection cycle
+    /// Run a garbage collection cycle - decides between minor and major GC
     fn run_gc_cycle(&mut self) {
-        info!("Starting anonymous object garbage collection cycle");
         self.gc_collection_in_progress = true;
+        let was_forced = self.gc_force_collect;
         self.gc_force_collect = false; // Clear force flag
-
-        // Increment the counter at the start of collection
         self.gc_cycle_count += 1;
 
-        // Scan VM frames in suspended tasks for anonymous object references
-        let vm_refs = self.task_q.collect_anonymous_object_references();
+        // Decide between minor and major GC with retry logic for conflicts
+        // Forced GC (via gc_collect() builtin) always does major GC
+        // Otherwise, run major GC every 10 cycles, minor GC otherwise
+        let max_retries = 3;
+        for attempt in 1..=max_retries {
+            let result = if was_forced || self.gc_cycle_count % 10 == 0 {
+                self.run_major_gc_cycle()
+            } else {
+                self.run_minor_gc_cycle()
+            };
+
+            match result {
+                Ok(()) => break, // Success, exit retry loop
+                Err(e)
+                    if e.to_string().contains("GC transaction conflict")
+                        && attempt < max_retries =>
+                {
+                    warn!(
+                        "GC cycle attempt {} failed with conflict, retrying in {}ms",
+                        attempt,
+                        attempt * 10
+                    );
+                    std::thread::sleep(Duration::from_millis((attempt * 10) as u64));
+                    continue;
+                }
+                Err(e) => {
+                    error!("GC cycle failed after {} attempts: {}", attempt, e);
+                    break;
+                }
+            }
+        }
+
+        self.gc_collection_in_progress = false;
+        // Update the timestamp AFTER GC completes, not before
+        self.gc_last_cycle_time = std::time::Instant::now();
+    }
+
+    /// Run minor GC - collect young generation only
+    fn run_minor_gc_cycle(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        debug!(
+            "Starting minor GC cycle #{} (young generation)",
+            self.gc_cycle_count
+        );
+
+        // Collect all VM references once
+        let all_vm_refs = self.task_q.collect_anonymous_object_references();
+        let total_vm_refs = all_vm_refs.len();
+        debug!(
+            "Tracing: found {} total anonymous object references in VM frames",
+            total_vm_refs
+        );
+
+        // Get GC interface
+        let mut gc = self.database.gc_interface()?;
+
+        // Get all young generation objects from DB
+        let young_objects = gc.get_anonymous_objects_by_generation(0)?;
+        debug!(
+            "DB scan: found {} young generation (gen 0) objects in database",
+            young_objects.len()
+        );
+
+        // Filter VM references to young generation only
+        let young_vm_refs: Vec<_> = all_vm_refs
+            .into_iter()
+            .filter(|obj| {
+                gc.get_anonymous_object_metadata(obj)
+                    .map(|opt| opt.is_some_and(|meta| meta.generation() == 0))
+                    .unwrap_or(false)
+            })
+            .collect();
+        debug!(
+            "Tracing: {} of {} VM references are to young generation objects",
+            young_vm_refs.len(),
+            total_vm_refs
+        );
+
+        // Get DB references to young generation objects
+        let db_young_refs = gc.scan_anonymous_object_references_generation(0)?;
+        let total_db_refs: usize = db_young_refs.iter().map(|(_, refs)| refs.len()).sum();
+        debug!(
+            "DB scan: found {} referrer objects with {} total references to young generation",
+            db_young_refs.len(),
+            total_db_refs
+        );
+
+        // Mark reachable young objects
+        let mut reachable_young = std::collections::HashSet::new();
+        let initial_vm_refs = young_vm_refs.len();
+
+        // Mark objects referenced from VM
+        reachable_young.extend(young_vm_refs);
+
+        // Mark objects referenced from DB
+        let mut db_marked = 0;
+        for (_referrer, referenced_objects) in &db_young_refs {
+            for referenced in referenced_objects {
+                if let Ok(Some(metadata)) = gc.get_anonymous_object_metadata(referenced) {
+                    if metadata.generation() == 0 && reachable_young.insert(*referenced) {
+                        db_marked += 1;
+                    }
+                }
+            }
+        }
+
+        // Find unreachable young objects
+        let unreachable_young: Vec<_> = young_objects
+            .into_iter()
+            .filter(|obj| !reachable_young.contains(obj))
+            .collect();
+
+        debug!(
+            "Marking: {} objects reachable ({} from VM, {} additional from DB), {} unreachable",
+            reachable_young.len(),
+            initial_vm_refs,
+            db_marked,
+            unreachable_young.len()
+        );
+
+        // Collect unreachable young objects
+        let collected = if !unreachable_young.is_empty() {
+            debug!(
+                "Collecting {} unreachable young objects",
+                unreachable_young.len()
+            );
+            gc.collect_unreachable_anonymous_objects(&unreachable_young)?
+        } else {
+            debug!("No unreachable young objects to collect");
+            0
+        };
+
+        // Promote surviving young objects to generation 1
+        let reachable_vec: Vec<_> = reachable_young.into_iter().collect();
+        let promoted = if !reachable_vec.is_empty() {
+            debug!(
+                "Promoting {} surviving young objects to generation 1",
+                reachable_vec.len()
+            );
+            gc.promote_anonymous_objects(&reachable_vec)?
+        } else {
+            debug!("No young objects to promote");
+            0
+        };
+
         info!(
-            "GC cycle #{}: Found {} anonymous object references in suspended tasks",
-            self.gc_cycle_count,
+            "Minor GC cycle #{} completed: collected {} objects, promoted {} objects",
+            self.gc_cycle_count, collected, promoted
+        );
+
+        // Commit the GC transaction
+        match gc.commit() {
+            Ok(CommitResult::Success) => {
+                debug!("Minor GC transaction committed successfully");
+            }
+            Ok(CommitResult::ConflictRetry) => {
+                // Transaction conflict - the entire GC cycle needs to be retried
+                // since the database state may have changed
+                debug!(
+                    "Minor GC transaction conflict - returning ConflictRetry to caller for retry"
+                );
+                return Err(Box::new(std::io::Error::other(
+                    "GC transaction conflict - retry needed",
+                )));
+            }
+            Err(e) => {
+                error!("Failed to commit minor GC transaction: {:?}", e);
+                return Err(Box::new(std::io::Error::other(format!(
+                    "GC commit failed: {e:?}"
+                ))));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Run major GC - collect all generations
+    fn run_major_gc_cycle(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        debug!(
+            "Starting major GC cycle #{} (all generations)",
+            self.gc_cycle_count
+        );
+
+        // Collect all VM references once
+        let vm_refs = self.task_q.collect_anonymous_object_references();
+        debug!(
+            "Tracing: found {} total anonymous object references in VM frames",
             vm_refs.len()
         );
 
-        // Log some sample references for testing (first 5)
-        for (i, obj_ref) in vm_refs.iter().take(5).enumerate() {
-            info!("  VM ref {}: {}", i + 1, obj_ref);
+        // Get GC interface
+        let mut gc = self.database.gc_interface()?;
+
+        // Get all anonymous objects from all generations
+        let mut all_anon_objects = Vec::new();
+        let mut objects_by_generation = Vec::new();
+        for generation in 0..=2 {
+            // Support up to generation 2
+            let gen_objects = gc.get_anonymous_objects_by_generation(generation)?;
+            debug!(
+                "DB scan: found {} objects in generation {}",
+                gen_objects.len(),
+                generation
+            );
+            objects_by_generation.push(gen_objects.len());
+            all_anon_objects.extend(gen_objects);
         }
-        if vm_refs.len() > 5 {
-            info!("  ... and {} more VM references", vm_refs.len() - 5);
+        debug!(
+            "DB scan: {} total anonymous objects across all generations (gen0: {}, gen1: {}, gen2: {})",
+            all_anon_objects.len(),
+            objects_by_generation[0],
+            objects_by_generation[1],
+            objects_by_generation[2]
+        );
+
+        // Get all DB references (all generations)
+        let db_refs = gc.scan_anonymous_object_references()?;
+        let total_db_refs: usize = db_refs.iter().map(|(_, refs)| refs.len()).sum();
+        debug!(
+            "DB scan: found {} referrer objects with {} total references",
+            db_refs.len(),
+            total_db_refs
+        );
+
+        // Mark reachable objects from all sources
+        let mut reachable_objects = std::collections::HashSet::new();
+        let vm_marked = vm_refs.len();
+
+        // Mark objects referenced from VM
+        reachable_objects.extend(vm_refs);
+
+        // Mark objects referenced from DB
+        let mut db_marked = 0;
+        for (_referrer, referenced_objects) in &db_refs {
+            for referenced in referenced_objects {
+                if reachable_objects.insert(*referenced) {
+                    db_marked += 1;
+                }
+            }
         }
 
-        // TODO: Integrate with DB-level scanning and actual collection
-        // For now, just demonstrate VM scanning works
-        
-        self.gc_collection_in_progress = false;
-        info!(
-            "Completed anonymous object garbage collection cycle #{}",
-            self.gc_cycle_count
+        // Find unreachable objects
+        let unreachable_objects: Vec<_> = all_anon_objects
+            .into_iter()
+            .filter(|obj| !reachable_objects.contains(obj))
+            .collect();
+
+        debug!(
+            "Marking: {} objects reachable ({} from VM, {} additional from DB), {} unreachable",
+            reachable_objects.len(),
+            vm_marked,
+            db_marked,
+            unreachable_objects.len()
         );
+
+        // Collect unreachable objects
+        let collected = if !unreachable_objects.is_empty() {
+            debug!(
+                "Collecting {} unreachable objects",
+                unreachable_objects.len()
+            );
+            gc.collect_unreachable_anonymous_objects(&unreachable_objects)?
+        } else {
+            info!("No unreachable objects to collect");
+            0
+        };
+
+        info!(
+            "Major GC cycle #{} completed: collected {} objects from all generations",
+            self.gc_cycle_count, collected
+        );
+
+        // Commit the GC transaction
+        match gc.commit() {
+            Ok(CommitResult::Success) => {
+                debug!("Major GC transaction committed successfully");
+            }
+            Ok(CommitResult::ConflictRetry) => {
+                // Transaction conflict - the entire GC cycle needs to be retried
+                // since the database state may have changed
+                warn!(
+                    "Major GC transaction conflict - returning ConflictRetry to caller for retry"
+                );
+                return Err(Box::new(std::io::Error::other(
+                    "GC transaction conflict - retry needed",
+                )));
+            }
+            Err(e) => {
+                error!("Failed to commit major GC transaction: {:?}", e);
+                return Err(Box::new(std::io::Error::other(format!(
+                    "GC commit failed: {e:?}"
+                ))));
+            }
+        }
+
+        Ok(())
     }
 }
 
