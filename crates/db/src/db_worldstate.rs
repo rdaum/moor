@@ -15,8 +15,8 @@ use ahash::HashSet;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use crate::GCInterface;
 use crate::moor_db::WorldStateTransaction;
+use crate::{GCError, GCInterface};
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
@@ -998,5 +998,11 @@ impl GCInterface for DbWorldState {
     ) -> Result<usize, WorldStateError> {
         self.get_tx_mut()
             .collect_unreachable_anonymous_objects(unreachable_objects)
+    }
+
+    fn commit(self: Box<Self>) -> Result<CommitResult, GCError> {
+        self.tx
+            .commit()
+            .map_err(|e| GCError::CommitFailed(e.to_string()))
     }
 }

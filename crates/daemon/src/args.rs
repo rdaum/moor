@@ -196,6 +196,13 @@ pub struct ImportExportArgs {
 
     #[arg(
         long,
+        value_name = "gc-interval-seconds",
+        help = "Interval in seconds for automatic garbage collection (default: 30)"
+    )]
+    pub gc_interval_seconds: Option<u16>,
+
+    #[arg(
+        long,
         value_name = "textdump-output-encoding",
         help = "Encoding to use for writing textdump files. utf8 or iso8859-1. \
           LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you want to write a LambdaMOO-compatible textdump, choose iso8859-1. \
@@ -228,6 +235,9 @@ impl ImportExportArgs {
         }
         if let Some(args) = self.checkpoint_interval_seconds {
             config.checkpoint_interval = Some(std::time::Duration::from_secs(u64::from(args)));
+        }
+        if let Some(args) = self.gc_interval_seconds {
+            config.gc_interval = Some(std::time::Duration::from_secs(u64::from(args)));
         }
         if let Some(args) = self.version_override.as_ref() {
             config.version_override = Some(args.clone());

@@ -117,11 +117,16 @@ mod tests {
         // NOW get the GC interface and do GC operations
         let mut gc = db.gc_interface().unwrap();
 
-        // Store metadata for different generations
-        gc.store_anonymous_object_metadata(&anon_young, AnonymousObjectMetadata::new(0).unwrap())
-            .unwrap();
+        // anon_young already has generation 0 automatically assigned, so only update anon_old
         gc.store_anonymous_object_metadata(&anon_old, AnonymousObjectMetadata::new(1).unwrap())
             .unwrap();
+        
+        // Commit the changes
+        let commit_result = gc.commit().unwrap();
+        assert_eq!(commit_result, CommitResult::Success);
+
+        // Get a new GC interface for queries after commit
+        let mut gc = db.gc_interface().unwrap();
 
         // First verify metadata retrieval works
         let meta_young = gc.get_anonymous_object_metadata(&anon_young).unwrap();
@@ -147,7 +152,6 @@ mod tests {
 
         // Test getting objects by generation
         let young_objects = gc.get_anonymous_objects_by_generation(0).unwrap();
-        println!("Found {} young objects", young_objects.len());
         assert_eq!(young_objects.len(), 1);
         assert!(young_objects.contains(&anon_young));
 
@@ -182,9 +186,33 @@ mod tests {
 
         // Create anonymous objects
         let mut create_tx = db.new_world_state().unwrap();
-        let anon_parent = create_tx.create_object(&WIZARD, &NOTHING, &WIZARD, BitEnum::new(), ObjectKind::Anonymous).unwrap();
-        let anon_location = create_tx.create_object(&WIZARD, &NOTHING, &WIZARD, BitEnum::new(), ObjectKind::Anonymous).unwrap();
-        let anon_child = create_tx.create_object(&WIZARD, &NOTHING, &WIZARD, BitEnum::new(), ObjectKind::Anonymous).unwrap();
+        let anon_parent = create_tx
+            .create_object(
+                &WIZARD,
+                &NOTHING,
+                &WIZARD,
+                BitEnum::new(),
+                ObjectKind::Anonymous,
+            )
+            .unwrap();
+        let anon_location = create_tx
+            .create_object(
+                &WIZARD,
+                &NOTHING,
+                &WIZARD,
+                BitEnum::new(),
+                ObjectKind::Anonymous,
+            )
+            .unwrap();
+        let anon_child = create_tx
+            .create_object(
+                &WIZARD,
+                &NOTHING,
+                &WIZARD,
+                BitEnum::new(),
+                ObjectKind::Anonymous,
+            )
+            .unwrap();
         assert_eq!(create_tx.commit(), Ok(CommitResult::Success));
 
         // Store metadata
@@ -449,7 +477,8 @@ mod tests {
                 .unwrap();
 
             let unreachable = vec![anon2, anon4];
-            let collected_count = gc.collect_unreachable_anonymous_objects(&unreachable)
+            let collected_count = gc
+                .collect_unreachable_anonymous_objects(&unreachable)
                 .unwrap();
             assert_eq!(collected_count, 2);
 
@@ -578,7 +607,7 @@ mod tests {
         {
             let mut gc = db.gc_interface().unwrap();
             gc.store_anonymous_object_metadata(&anon, metadata).unwrap();
-            
+
             // Verify promotion worked in same transaction
             let retrieved = gc.get_anonymous_object_metadata(&anon).unwrap().unwrap();
             assert_eq!(retrieved.generation(), 1);
@@ -812,21 +841,20 @@ mod tests {
         // Store metadata and test retrieval with single GC interface instance
         {
             let mut gc = db.gc_interface().unwrap();
-            gc.store_anonymous_object_metadata(
-                &anon_young1,
-                AnonymousObjectMetadata::new(0).unwrap(),
-            )
-            .unwrap();
-            gc.store_anonymous_object_metadata(
-                &anon_young2,
-                AnonymousObjectMetadata::new(0).unwrap(),
-            )
-            .unwrap();
+            // anon_young1 and anon_young2 already have generation 0 automatically assigned
+            // Only update anon_old1 to generation 1
             gc.store_anonymous_object_metadata(
                 &anon_old1,
                 AnonymousObjectMetadata::new(1).unwrap(),
             )
             .unwrap();
+            
+            // Commit the changes
+            let commit_result = gc.commit().unwrap();
+            assert_eq!(commit_result, CommitResult::Success);
+            
+            // Get a new GC interface for queries after commit
+            let gc = db.gc_interface().unwrap();
 
             let young_objects = gc.get_anonymous_objects_by_generation(0).unwrap();
             assert_eq!(young_objects.len(), 2);

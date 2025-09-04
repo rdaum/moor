@@ -150,6 +150,10 @@ pub struct ImportExportConfig {
     /// If None, no checkpoints will be made.
     #[serde(deserialize_with = "parse_duration")]
     pub checkpoint_interval: Option<Duration>,
+    /// Interval between automatic garbage collection cycles.
+    /// If None, automatic GC is disabled.
+    #[serde(deserialize_with = "parse_duration")]
+    pub gc_interval: Option<Duration>,
     /// Version override string to put into the textdump.
     /// If None, the moor version + a serialization of the features config is used + the encoding.
     /// If set, this string will be used instead.
@@ -169,6 +173,7 @@ impl Default for ImportExportConfig {
             output_path: None,
             output_encoding: EncodingMode::UTF8,
             checkpoint_interval: None,
+            gc_interval: None,
             version_override: None,
             import_format: ImportExportFormat::Textdump,
             export_format: ImportExportFormat::Textdump,

@@ -162,17 +162,17 @@ impl TaskQ {
     /// Collect anonymous object references from all suspended tasks
     pub(crate) fn collect_anonymous_object_references(&self) -> Vec<Obj> {
         let mut refs = Vec::new();
-        
+
         // Scan all suspended tasks
         for suspended_task in self.suspended.tasks.values() {
             // Scan the current VM state
             let current_vm_state = suspended_task.task.vm_host.vm_exec_state();
             extract_anonymous_refs_from_vm_exec_state(current_vm_state, &mut refs);
-            
-            // Scan the retry state 
+
+            // Scan the retry state
             extract_anonymous_refs_from_vm_exec_state(&suspended_task.task.retry_state, &mut refs);
         }
-        
+
         refs
     }
 }
