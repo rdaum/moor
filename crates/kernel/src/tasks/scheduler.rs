@@ -107,6 +107,13 @@ pub struct Scheduler {
     /// accessed by the scheduler thread.
     task_q: TaskQ,
 
+    /// Anonymous object garbage collection flag
+    gc_collection_in_progress: bool,
+    /// Flag to force GC on next opportunity (set by gc_collect() builtin)
+    gc_force_collect: bool,
+    /// Counter tracking the number of GC cycles completed
+    gc_cycle_count: u64,
+
     /// Tracks whether a checkpoint operation is currently in progress to prevent overlapping checkpoints
     checkpoint_in_progress: Arc<AtomicBool>,
 }
@@ -164,6 +171,9 @@ impl Scheduler {
             system_control,
             worker_request_send,
             worker_request_recv,
+            gc_collection_in_progress: false,
+            gc_force_collect: false,
+            gc_cycle_count: 0,
             checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
         };
         s.reload_server_options();
@@ -188,6 +198,20 @@ impl Scheduler {
 
         self.reload_server_options();
         while self.running {
+            // Check if we should run GC when no tasks are active
+            if !self.gc_collection_in_progress
+                && self.task_q.active.is_empty()
+                && self.should_run_gc()
+            {
+                self.run_gc_cycle();
+            }
+
+            // Skip task processing if GC is in progress
+            if self.gc_collection_in_progress {
+                std::thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+
             // Check for tasks that need to be woken (timer wheel handles timing internally)
             if let Some(to_wake) = self.task_q.collect_wake_tasks() {
                 for sr in to_wake {
@@ -569,6 +593,35 @@ impl Scheduler {
             SchedulerClientMsg::CheckStatus(reply) => {
                 // Lightweight status check - just confirm we're alive and responding
                 reply.send(Ok(())).expect("Could not send status reply");
+            }
+            SchedulerClientMsg::GetGCStats(reply) => {
+                use crate::tasks::scheduler_client::GCStats;
+                let stats = GCStats {
+                    cycle_count: self.gc_cycle_count,
+                };
+                reply
+                    .send(Ok(stats))
+                    .expect("Could not send GC stats reply");
+            }
+            SchedulerClientMsg::RequestGC(reply) => {
+                info!("Direct GC request received via scheduler client");
+
+                // If GC is already in progress, just return success
+                if self.gc_collection_in_progress {
+                    info!(
+                        "GC already in progress, request acknowledged but no additional cycle started"
+                    );
+                    reply.send(Ok(())).expect("Could not send GC request reply");
+                } else if self.task_q.active.is_empty() {
+                    // Can run GC immediately since no active tasks
+                    self.run_gc_cycle();
+                    reply.send(Ok(())).expect("Could not send GC request reply");
+                } else {
+                    // Set flag for GC to run when tasks complete
+                    self.gc_force_collect = true;
+                    info!("GC requested but tasks are active, will run when tasks complete");
+                    reply.send(Ok(())).expect("Could not send GC request reply");
+                }
             }
             SchedulerClientMsg::ExecuteWorldStateActions {
                 actions,
@@ -1056,6 +1109,10 @@ impl Scheduler {
                 if let Err(e) = reply.send(result) {
                     error!(?e, "Could not send new transaction reply to requester");
                 }
+            }
+            TaskControlMsg::ForceGC => {
+                info!("Forcing garbage collection via gc_collect() builtin");
+                self.gc_force_collect = true;
             }
         }
     }
@@ -1605,6 +1662,41 @@ impl Scheduler {
         self.running = false;
 
         Ok(())
+    }
+
+    /// Check if garbage collection should run
+    fn should_run_gc(&self) -> bool {
+        // Force GC if requested via gc_collect() builtin
+        if self.gc_force_collect {
+            return true;
+        }
+
+        // For now, automatic GC is disabled
+        // TODO: Add memory pressure checks, object count thresholds, etc.
+        false
+    }
+
+    /// Run a garbage collection cycle
+    fn run_gc_cycle(&mut self) {
+        info!("Starting anonymous object garbage collection cycle");
+        self.gc_collection_in_progress = true;
+        self.gc_force_collect = false; // Clear force flag
+
+        // Increment the counter at the start of collection
+        self.gc_cycle_count += 1;
+
+        // TODO: Implement actual GC logic here
+        // For now, just a placeholder that logs
+        info!(
+            "GC cycle placeholder - no anonymous objects collected yet (cycle #{})",
+            self.gc_cycle_count
+        );
+
+        self.gc_collection_in_progress = false;
+        info!(
+            "Completed anonymous object garbage collection cycle #{}",
+            self.gc_cycle_count
+        );
     }
 }
 

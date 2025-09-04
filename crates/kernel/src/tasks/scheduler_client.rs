@@ -26,6 +26,13 @@ use moor_common::tasks::SchedulerError;
 use moor_common::tasks::SchedulerError::CompilationError;
 use moor_common::tasks::Session;
 
+/// Garbage collection statistics
+#[derive(Debug, Clone)]
+pub struct GCStats {
+    /// Total number of GC cycles completed
+    pub cycle_count: u64,
+}
+
 /// A handle for talking to the scheduler from the outside world.
 /// This is not meant to be used by running tasks, but by the rpc daemon, tests, etc.
 /// Handles requests for task submission, shutdown, etc.
@@ -296,6 +303,30 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
+    /// Get garbage collection statistics from the scheduler
+    pub fn get_gc_stats(&self) -> Result<GCStats, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::GetGCStats(reply))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    /// Request a garbage collection cycle from the scheduler
+    pub fn request_gc(&self) -> Result<(), SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestGC(reply))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(10)) // Longer timeout since GC might take time
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
     pub fn request_verbs(
         &self,
         player: &Obj,
@@ -518,4 +549,8 @@ pub enum SchedulerClientMsg {
             Result<Vec<crate::tasks::world_state_action::WorldStateResponse>, SchedulerError>,
         >,
     },
+    /// Get garbage collection statistics
+    GetGCStats(oneshot::Sender<Result<GCStats, SchedulerError>>),
+    /// Request a garbage collection cycle
+    RequestGC(oneshot::Sender<Result<(), SchedulerError>>),
 }

@@ -24,6 +24,7 @@ use tracing::{error, info, warn};
 use crate::task_context::{
     current_session, current_task_scheduler_client, with_current_transaction,
 };
+use crate::tasks::task_scheduler_client::TaskControlMsg;
 use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::TaskSuspend;
 use crate::vm::builtins::BfErr::{Code, ErrValue};
@@ -1570,6 +1571,31 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(true)))
 }
 
+/// Triggers anonymous object garbage collection. Wizard-only.
+/// MOO: `none gc_collect()`
+fn bf_gc_collect(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("gc_collect() does not take any arguments"),
+        ));
+    }
+
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    // Send ForceGC message to scheduler
+    current_task_scheduler_client()
+        .control_sender()
+        .send((bf_args.exec_state.task_id, TaskControlMsg::ForceGC))
+        .expect("Could not deliver GC request to scheduler");
+
+    Ok(RetNil)
+}
+
 /// Returns information about server memory usage. Wizard-only.
 /// MOO: `list memory_usage()`
 fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -2259,6 +2285,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("eval")] = Box::new(bf_eval);
     builtins[offset_for_builtin("read")] = Box::new(bf_read);
     builtins[offset_for_builtin("dump_database")] = Box::new(bf_dump_database);
+    builtins[offset_for_builtin("gc_collect")] = Box::new(bf_gc_collect);
     builtins[offset_for_builtin("memory_usage")] = Box::new(bf_memory_usage);
     builtins[offset_for_builtin("db_disk_size")] = Box::new(db_disk_size);
     builtins[offset_for_builtin("load_server_options")] = Box::new(load_server_options);
