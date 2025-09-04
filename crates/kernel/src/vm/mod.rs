@@ -19,10 +19,11 @@ use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
 use moor_var::program::names::Name;
 use moor_var::{List, Obj, Symbol, Var};
+
+use crate::vm::activation::{Activation, Frame};
+use crate::vm::moo_frame::{MooStackFrame, ScopeType};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
-
-use crate::vm::activation::Activation;
 
 pub(crate) mod activation;
 pub(crate) mod exec_state;
@@ -123,5 +124,173 @@ mod tests {
             "VMHostResponse is too big: {}",
             size_of::<VMHostResponse>()
         );
+    }
+}
+
+/// Extract anonymous object references from a variable
+fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
+    match var.variant() {
+        moor_var::Variant::Obj(obj) => {
+            if obj.is_anonymous() {
+                refs.push(*obj);
+            }
+        }
+        moor_var::Variant::List(list) => {
+            for item in list.iter() {
+                extract_anonymous_refs_from_var(&item, refs);
+            }
+        }
+        moor_var::Variant::Map(map) => {
+            for (key, value) in map.iter() {
+                extract_anonymous_refs_from_var(&key, refs);
+                extract_anonymous_refs_from_var(&value, refs);
+            }
+        }
+        moor_var::Variant::Flyweight(flyweight) => {
+            // Check delegate
+            let delegate = flyweight.delegate();
+            if delegate.is_anonymous() {
+                refs.push(*delegate);
+            }
+
+            // Check slots (Symbol -> Var pairs)
+            for (_symbol, slot_value) in flyweight.slots().iter() {
+                extract_anonymous_refs_from_var(slot_value, refs);
+            }
+
+            // Check contents (List)
+            for item in flyweight.contents().iter() {
+                extract_anonymous_refs_from_var(&item, refs);
+            }
+        }
+        moor_var::Variant::Err(error) => {
+            // Check the error's optional value field
+            if let Some(error_value) = &error.value {
+                extract_anonymous_refs_from_var(error_value, refs);
+            }
+        }
+        moor_var::Variant::Lambda(lambda) => {
+            // Check captured environment (stack frames)
+            for frame in lambda.0.captured_env.iter() {
+                for var in frame.iter() {
+                    extract_anonymous_refs_from_var(var, refs);
+                }
+            }
+        }
+        _ => {} // Other types (None, Bool, Int, Float, Str, Sym, Binary) don't contain object references
+    }
+}
+
+/// Extract anonymous object references from a MOO stack frame
+fn extract_anonymous_refs_from_moo_frame(frame: &MooStackFrame, refs: &mut Vec<Obj>) {
+    // 1. Scan all variables in the environment stack
+    for env_level in &frame.environment {
+        for var_slot in env_level {
+            if let Some(var) = var_slot {
+                extract_anonymous_refs_from_var(var, refs);
+            }
+        }
+    }
+
+    // 2. Scan all values on the value stack
+    for var in &frame.valstack {
+        extract_anonymous_refs_from_var(var, refs);
+    }
+
+    // 3. Scan temp variable
+    extract_anonymous_refs_from_var(&frame.temp, refs);
+
+    // 4. Scan scope stack for any stored variables
+    for scope in &frame.scope_stack {
+        match &scope.scope_type {
+            ScopeType::ForSequence { sequence, value_bind: _, key_bind: _, current_index: _, end_label: _ } => {
+                extract_anonymous_refs_from_var(sequence, refs);
+            }
+            ScopeType::ForRange { current_value, end_value, loop_variable: _, end_label: _ } => {
+                extract_anonymous_refs_from_var(current_value, refs);
+                extract_anonymous_refs_from_var(end_value, refs);
+            }
+            _ => {} // Other scope types don't store variables we can scan
+        }
+    }
+
+    // 5. Scan capture stack
+    for (_name, var) in &frame.capture_stack {
+        extract_anonymous_refs_from_var(var, refs);
+    }
+}
+
+/// Extract anonymous object references from an activation frame
+fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Vec<Obj>) {
+    // 1. Scan the frame contents
+    match &activation.frame {
+        Frame::Moo(moo_frame) => {
+            extract_anonymous_refs_from_moo_frame(moo_frame, refs);
+        }
+        Frame::Bf(bf_frame) => {
+            // Check bf trampoline argument
+            if let Some(trampoline_arg) = &bf_frame.bf_trampoline_arg {
+                extract_anonymous_refs_from_var(trampoline_arg, refs);
+            }
+            // Check return value
+            if let Some(return_value) = &bf_frame.return_value {
+                extract_anonymous_refs_from_var(return_value, refs);
+            }
+        }
+    }
+
+    // 2. Scan activation-level variables
+    // Check 'this' object
+    extract_anonymous_refs_from_var(&activation.this, refs);
+    
+    // Check player (already an Obj, so check directly)
+    if activation.player.is_anonymous() {
+        refs.push(activation.player);
+    }
+
+    // Check permissions (already an Obj, so check directly)  
+    if activation.permissions.is_anonymous() {
+        refs.push(activation.permissions);
+    }
+
+    // Scan arguments
+    for arg in activation.args.iter() {
+        extract_anonymous_refs_from_var(&arg, refs);
+    }
+
+    // 3. Check verbdef fields for anonymous object references
+    if activation.verbdef.location().is_anonymous() {
+        refs.push(activation.verbdef.location());
+    }
+    if activation.verbdef.owner().is_anonymous() {
+        refs.push(activation.verbdef.owner());
+    }
+
+    // 4. Scan command if present
+    if let Some(command) = &activation.command {
+        // Check direct object
+        if let Some(dobj) = command.dobj {
+            if dobj.is_anonymous() {
+                refs.push(dobj);
+            }
+        }
+        // Check indirect object
+        if let Some(iobj) = command.iobj {
+            if iobj.is_anonymous() {
+                refs.push(iobj);
+            }
+        }
+        // Scan arguments
+        for arg in &command.args {
+            extract_anonymous_refs_from_var(arg, refs);
+        }
+    }
+}
+
+/// Extract anonymous object references from VM execution state
+pub(crate) fn extract_anonymous_refs_from_vm_exec_state(vm_state: &exec_state::VMExecState, refs: &mut Vec<Obj>) {
+    // Scan all activations in the call stack
+    for activation in &vm_state.stack {
+        extract_anonymous_refs_from_activation(activation, refs);
     }
 }
