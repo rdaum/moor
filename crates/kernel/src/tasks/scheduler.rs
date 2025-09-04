@@ -209,7 +209,10 @@ impl Scheduler {
             }
 
             // Check for tasks that need to be woken (timer wheel handles timing internally)
-            if let Some(to_wake) = self.task_q.collect_wake_tasks() {
+            if let Some(to_wake) = self
+                .task_q
+                .collect_wake_tasks(self.gc_collection_in_progress)
+            {
                 for sr in to_wake {
                     let task_id = sr.task.task_id;
                     if let Err(e) = self.task_q.resume_task_thread(
@@ -399,6 +402,7 @@ impl Scheduler {
 
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
+
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -411,7 +415,9 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
+                    self.gc_collection_in_progress || self.gc_force_collect,
                 );
+
                 reply
                     .send(result)
                     .expect("Could not send task handle reply");
@@ -456,6 +462,7 @@ impl Scheduler {
                 };
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
+
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -468,6 +475,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
+                    self.gc_collection_in_progress || self.gc_force_collect,
                 );
                 reply
                     .send(result)
@@ -538,6 +546,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
+                    self.gc_collection_in_progress || self.gc_force_collect,
                 );
                 reply
                     .send(result)
@@ -565,6 +574,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
+                    self.gc_collection_in_progress || self.gc_force_collect,
                 );
                 reply
                     .send(result)
@@ -1023,6 +1033,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
+                    self.gc_collection_in_progress || self.gc_force_collect,
                 );
                 match result {
                     Err(e) => {
@@ -1537,6 +1548,7 @@ impl Scheduler {
             self.database.as_ref(),
             self.builtin_registry.clone(),
             self.config.clone(),
+            self.gc_collection_in_progress || self.gc_force_collect,
         ) {
             Ok(th) => th,
             Err(e) => {
@@ -1639,6 +1651,7 @@ impl TaskQ {
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
+        gc_in_progress: bool,
     ) -> Result<TaskHandle, SchedulerError> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.start_task);
@@ -1699,6 +1712,13 @@ impl TaskQ {
             let wake_condition = WakeCondition::Time(Instant::now() + delay);
             self.suspended
                 .add_task(wake_condition, task, session, Some(sender));
+            return Ok(TaskHandle(task_id, receiver));
+        }
+
+        // If GC is in progress, suspend this task instead of starting a thread
+        if gc_in_progress {
+            self.suspended
+                .add_task(WakeCondition::GCComplete, task, session, Some(sender));
             return Ok(TaskHandle(task_id, receiver));
         }
 

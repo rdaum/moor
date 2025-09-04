@@ -110,7 +110,10 @@ impl TaskQ {
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
     /// Uses segmented storage types for O(1) operations instead of O(n) linear scan.
     /// Note: Immediate wake tasks are handled via channel in scheduler select loop.
-    pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
+    pub(crate) fn collect_wake_tasks(
+        &mut self,
+        gc_in_progress: bool,
+    ) -> Option<Vec<SuspendedTask>> {
         let mut to_wake = None;
 
         // 1. Advance timer wheel based on elapsed time and collect expired timers
@@ -136,6 +139,13 @@ impl TaskQ {
         }
         for task_id in dependency_tasks_to_wake {
             none_or_push(&mut to_wake, task_id);
+        }
+
+        // 3. Check for GC-waiting tasks when GC is not in progress
+        if !gc_in_progress {
+            for &task_id in &self.suspended.gc_waiting_tasks {
+                none_or_push(&mut to_wake, task_id);
+            }
         }
 
         let to_wake = to_wake?;
@@ -173,6 +183,8 @@ pub enum WakeCondition {
     Immedate,
     /// Wake when a worker responds to this request id
     Worker(Uuid),
+    /// Wake when garbage collection completes
+    GCComplete,
 }
 
 #[repr(u8)]
@@ -184,6 +196,7 @@ pub enum WakeConditionType {
     Task = 3,
     Immediate = 4,
     Worker = 5,
+    GCComplete = 6,
 }
 
 impl WakeCondition {
@@ -195,6 +208,7 @@ impl WakeCondition {
             WakeCondition::Task(_) => WakeConditionType::Task,
             WakeCondition::Immedate => WakeConditionType::Immediate,
             WakeCondition::Worker(_) => WakeConditionType::Worker,
+            WakeCondition::GCComplete => WakeConditionType::GCComplete,
         }
     }
 }
@@ -224,6 +238,9 @@ pub struct SuspensionQ {
     /// Tasks waiting for worker responses by request ID (O(1) lookup)
     worker_requests: HashMap<uuid::Uuid, TaskId, BuildHasherDefault<AHasher>>,
 
+    /// Tasks waiting for GC completion
+    gc_waiting_tasks: Vec<TaskId>,
+
     tasks_database: Box<dyn TasksDb>,
 }
 
@@ -240,6 +257,7 @@ impl SuspensionQ {
             task_dependencies: HashMap::default(),
             input_requests: HashMap::default(),
             worker_requests: HashMap::default(),
+            gc_waiting_tasks: Vec::new(),
             tasks_database,
         }
     }
@@ -344,6 +362,9 @@ impl SuspensionQ {
                 WakeCondition::Never => {
                     //
                 }
+                WakeCondition::GCComplete => {
+                    self.gc_waiting_tasks.push(task_id);
+                }
             }
 
             self.tasks.insert(task_id, task);
@@ -420,6 +441,7 @@ impl SuspensionQ {
                 true
             }
             WakeCondition::Never => true,
+            WakeCondition::GCComplete => true,
         };
 
         let sr = SuspendedTask {
@@ -467,6 +489,9 @@ impl SuspensionQ {
                 }
                 WakeCondition::Never => {
                     //
+                }
+                WakeCondition::GCComplete => {
+                    self.gc_waiting_tasks.retain(|&id| id != task_id);
                 }
             }
 
@@ -681,6 +706,7 @@ impl Encode for WakeCondition {
             WakeCondition::Task(task_id) => task_id.encode(encoder),
             WakeCondition::Worker(worker_request_id) => worker_request_id.as_u128().encode(encoder),
             WakeCondition::Immedate => Ok(()),
+            WakeCondition::GCComplete => Ok(()),
         }
     }
 }
@@ -708,6 +734,7 @@ impl<C> Decode<C> for WakeCondition {
                 Ok(WakeCondition::Worker(worker_request_id))
             }
             WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
+            WakeConditionType::GCComplete => Ok(WakeCondition::GCComplete),
         }
     }
 }
@@ -735,6 +762,7 @@ impl<'de, C> BorrowDecode<'de, C> for WakeCondition {
                 Ok(WakeCondition::Worker(worker_request_id))
             }
             WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
+            WakeConditionType::GCComplete => Ok(WakeCondition::GCComplete),
         }
     }
 }

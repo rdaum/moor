@@ -372,9 +372,9 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
     match pair.as_rule() {
         Rule::object => {
             let ostr = &pair.as_str()[1..];
-            if ostr.starts_with("anon_") {
+            if let Some(anon_part) = ostr.strip_prefix("anon_") {
                 // Parse anonymous object format: anon_XXXXXX-XXXXXXXXXX
-                let anon_part = &ostr[5..]; // Remove "anon_" prefix
+                // Remove "anon_" prefix
                 if anon_part.len() == 17 && anon_part.chars().nth(6) == Some('-') {
                     let first_part = &anon_part[..6];
                     let second_part = &anon_part[7..];
@@ -391,10 +391,10 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
                     let objid = Obj::mk_anonymous(anon_id);
                     Ok(objid)
                 } else {
-                    return Err(ObjDefParseError::InvalidObjectId(format!(
+                    Err(ObjDefParseError::InvalidObjectId(format!(
                         "Invalid anonymous object format: {}",
                         ostr
-                    )));
+                    )))
                 }
             } else if ostr.len() == 17 && ostr.chars().nth(5) == Some('-') {
                 // This is an uuobjid probably, so we can safely assemble from there.
