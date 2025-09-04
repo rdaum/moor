@@ -14,6 +14,7 @@
 #[cfg(test)]
 mod tests {
     use crate::DatabaseConfig;
+    use crate::ObjAndUUIDHolder;
 
     use crate::moor_db::MoorDB;
     use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
@@ -2012,6 +2013,109 @@ mod tests {
     }
 
     #[test]
+    fn test_property_inheritance_lazy_behavior() {
+        // This test verifies lazy property inheritance behavior where children
+        // don't get eager propflags entries but can still resolve properties on-demand
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create a parent with several properties (simulating a rich object like #1)
+        let parent = tx
+            .create_object(
+                ObjectKind::Objid(Obj::mk_id(1)),
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        // Add several properties to the parent
+        for i in 0..10 {
+            tx.define_property(
+                &parent,
+                &parent,
+                Symbol::mk(&format!("prop{}", i)),
+                &NOTHING,
+                BitEnum::new(),
+                Some(v_int(i as i64)),
+            )
+            .unwrap();
+        }
+
+        // Create several child objects
+        let mut children = Vec::new();
+        for i in 0..5 {
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new(),
+                        &format!("child{}", i),
+                    ),
+                )
+                .unwrap();
+            children.push(child);
+        }
+
+        // Verify properties work correctly on all children
+        for child in &children {
+            // Test property inheritance
+            let (prop, value, _perms, is_clear) =
+                tx.resolve_property(child, Symbol::mk("prop5")).unwrap();
+            assert_eq!(prop.name(), "prop5".into());
+            assert_eq!(value, v_int(5));
+            assert!(is_clear, "Property should be clear (inherited)");
+
+            // Test that child doesn't directly define the property
+            let child_props = tx.get_properties(child).unwrap();
+            assert_eq!(
+                child_props.len(),
+                0,
+                "Child should not directly define inherited properties"
+            );
+
+            // In lazy mode, children should NOT have propflags entries for inherited properties
+            // They get computed on-demand from the defining object
+            let propflags_exists = tx
+                .object_propflags
+                .get(&ObjAndUUIDHolder::new(child, prop.uuid()))
+                .unwrap()
+                .is_some();
+            assert!(
+                !propflags_exists,
+                "Child should NOT have propflags entry for inherited property (lazy behavior)"
+            );
+
+            // But permissions should still be resolvable (computed lazily)
+            let perms_result = tx.retrieve_property_permissions(child, prop.uuid());
+            assert!(
+                perms_result.is_ok(),
+                "Child permissions should be resolvable via lazy computation"
+            );
+        }
+
+        // Test property modification creates local values
+        let test_child = children[0];
+        let (prop, _value, _perms, _is_clear) = tx
+            .resolve_property(&test_child, Symbol::mk("prop0"))
+            .unwrap();
+        tx.set_property(&test_child, prop.uuid(), v_int(999))
+            .unwrap();
+
+        let (_prop, value, _perms, is_clear) = tx
+            .resolve_property(&test_child, Symbol::mk("prop0"))
+            .unwrap();
+        assert_eq!(value, v_int(999));
+        assert!(
+            !is_clear,
+            "Property should not be clear after local modification"
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
     fn test_create_uuid_object() {
         let db = test_db();
         let mut tx = db.start_transaction();
@@ -3146,5 +3250,87 @@ mod tests {
         assert_eq!(final_max.id().0, 501);
 
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_tuple_explosion_debugging() {
+        let db = test_db();
+
+        // Create a parent object with some properties
+        let mut tx = db.start_transaction();
+        let parent = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        // Define a few properties on the parent
+        tx.define_property(
+            &parent,
+            &parent,
+            Symbol::mk("prop1"),
+            &parent,
+            BitEnum::new(),
+            Some(v_str("value1")),
+        )
+        .unwrap();
+
+        tx.define_property(
+            &parent,
+            &parent,
+            Symbol::mk("prop2"),
+            &parent,
+            BitEnum::new(),
+            Some(v_str("value2")),
+        )
+        .unwrap();
+
+        tx.define_property(
+            &parent,
+            &parent,
+            Symbol::mk("prop3"),
+            &parent,
+            BitEnum::new(),
+            Some(v_str("value3")),
+        )
+        .unwrap();
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+
+        // Now create 10 child objects and measure tuples
+        let mut tx = db.start_transaction();
+
+        for i in 0..10 {
+            tx.create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(
+                    parent,
+                    NOTHING,
+                    parent,
+                    BitEnum::new(),
+                    &format!("child_{}", i),
+                ),
+            )
+            .unwrap();
+        }
+
+        // Get working sets to see tuple count
+        let working_sets = tx.into_working_sets().unwrap();
+        let total_tuples = working_sets.total_tuples();
+
+        println!("Created 10 children with parent that has 3 properties");
+        println!("Total tuples in working set: {}", total_tuples);
+        println!("Tuples per object: {:.1}", total_tuples as f64 / 10.0);
+
+        // Expected: ~4-5 tuples per child object (owner, name, flags, parent, maybe location)
+        // If we see much more, we have tuple explosion
+
+        // For now, let's be lenient but detect obvious problems
+        assert!(
+            total_tuples < 100,
+            "Potential tuple explosion detected: {} tuples for 10 objects",
+            total_tuples
+        );
     }
 }
