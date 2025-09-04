@@ -170,13 +170,12 @@ fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
     };
 
     // For anonymous objects, show the internal ID in objdef format
-    if oid.is_anonymous() {
-        if let Some(anon_id) = oid.anonymous_objid() {
+    if oid.is_anonymous()
+        && let Some(anon_id) = oid.anonymous_objid() {
             let (autoincrement, rng, epoch_ms) = anon_id.components();
             let first_group = ((autoincrement as u64) << 6) | (rng as u64);
             return format!("#anon_{first_group:06X}-{epoch_ms:010X}");
         }
-    }
 
     format!("{oid}")
 }
