@@ -26,6 +26,10 @@ path = "src/verb-dispatch-load-test.rs"
 name = "direct-scheduler-load-test"
 path = "src/direct-scheduler-load-test.rs"
 
+[[bin]]
+name = "anonymous-object-load-test"
+path = "src/anonymous-object-load-test.rs"
+
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../../common" }
