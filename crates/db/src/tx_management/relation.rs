@@ -134,6 +134,12 @@ where
                 );
                 last_check_time = Instant::now();
             }
+
+            // Skip conflict checking for guaranteed unique operations
+            if op.guaranteed_unique {
+                continue;
+            }
+
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = self.index.index_lookup(domain) {
                 // If what we have is an insert, and there's something already there, that's a

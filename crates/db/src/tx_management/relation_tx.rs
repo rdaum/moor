@@ -86,6 +86,9 @@ where
     pub(crate) read_ts: Timestamp,
     pub(crate) write_ts: Timestamp,
     pub(crate) operation: OpType<Codomain>,
+    /// If true, this operation is guaranteed to be unique and can skip conflict checking.
+    /// Used for optimizing anonymous object creation and similar operations.
+    pub(crate) guaranteed_unique: bool,
 }
 
 pub struct WorkingSet<Domain, Codomain>
@@ -217,6 +220,26 @@ where
                 read_ts: self.tx.ts,
                 write_ts: self.tx.ts,
                 operation: OpType::Insert(value.clone()),
+                guaranteed_unique: false,
+            },
+        );
+        self.index.has_local_mutations = true;
+
+        Ok(())
+    }
+
+    /// Insert a value that is guaranteed to be unique, skipping conflict checking.
+    /// This is an optimization for cases where uniqueness is ensured by the caller,
+    /// such as anonymous object creation with UUID-based keys.
+    pub fn insert_guaranteed_unique(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
+        // Skip all duplicate checking since we're guaranteed unique
+        self.index.local_operations.insert(
+            domain.clone(),
+            Op {
+                read_ts: self.tx.ts,
+                write_ts: self.tx.ts,
+                operation: OpType::Insert(value.clone()),
+                guaranteed_unique: true,
             },
         );
         self.index.has_local_mutations = true;
@@ -269,6 +292,7 @@ where
                     read_ts,
                     write_ts: self.tx.ts,
                     operation: OpType::Update(value.clone()),
+                    guaranteed_unique: false,
                 },
             );
             self.index.has_local_mutations = true;
@@ -303,6 +327,7 @@ where
                 read_ts,
                 write_ts: self.tx.ts,
                 operation: OpType::Update(value.clone()),
+                guaranteed_unique: false,
             },
         );
         self.index.has_local_mutations = true;
@@ -369,6 +394,7 @@ where
                     read_ts: entry.ts,
                     write_ts: self.tx.ts,
                     operation: OpType::Update(value.clone()),
+                    guaranteed_unique: false,
                 },
             );
             self.index.has_local_mutations = true;
@@ -387,6 +413,7 @@ where
                     read_ts,
                     write_ts: self.tx.ts,
                     operation: OpType::Update(value.clone()),
+                    guaranteed_unique: false,
                 },
             );
             self.index.has_local_mutations = true;
@@ -401,6 +428,7 @@ where
                 read_ts: self.tx.ts,
                 write_ts: self.tx.ts,
                 operation: OpType::Insert(value.clone()),
+                guaranteed_unique: false,
             },
         );
         self.index.has_local_mutations = true;
@@ -528,6 +556,7 @@ where
                         read_ts,
                         write_ts: self.tx.ts,
                         operation: OpType::Delete,
+                        guaranteed_unique: false,
                     },
                 );
                 self.index.has_local_mutations = true;
@@ -561,6 +590,7 @@ where
                 read_ts,
                 write_ts: self.tx.ts,
                 operation: OpType::Delete,
+                guaranteed_unique: false,
             },
         );
         self.index.has_local_mutations = true;
