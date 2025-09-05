@@ -49,6 +49,18 @@ where
     table.upsert(d, c)
 }
 
+fn insert_guaranteed_unique<Domain, Codomain>(
+    table: &mut RTx<Domain, Codomain>,
+    d: Domain,
+    c: Codomain,
+) -> Result<(), Error>
+where
+    Domain: AsByteBuffer + Clone + Eq + Hash + Send + Sync + 'static,
+    Codomain: AsByteBuffer + Clone + PartialEq + Send + Sync + 'static,
+{
+    table.insert_guaranteed_unique(d, c)
+}
+
 impl WorldStateTransaction {
     pub fn object_valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
         match self.object_flags.has_domain(obj) {
@@ -205,18 +217,35 @@ impl WorldStateTransaction {
         };
 
         let owner = attrs.owner().unwrap_or(id);
-        upsert(&mut self.object_owner, id, owner).expect("Unable to insert initial owner");
+        if id.is_anonymous() || id.is_uuobjid() {
+            // Use guaranteed unique insertion for anonymous and UUID objects
+            insert_guaranteed_unique(&mut self.object_owner, id, owner)
+                .expect("Unable to insert initial owner");
+        } else {
+            // For new non-anonymous, non-UUID objects, we can use regular insert since we know the ID doesn't exist
+            self.object_owner
+                .insert(id, owner)
+                .expect("Unable to insert initial owner");
+        }
 
         self.has_mutations = true;
 
         // Set initial name
         let name = attrs.name().unwrap_or_default();
-        upsert(&mut self.object_name, id, StringHolder(name))
-            .expect("Unable to insert initial name");
+        if id.is_anonymous() || id.is_uuobjid() {
+            // Use guaranteed unique insertion for anonymous and UUID objects
+            insert_guaranteed_unique(&mut self.object_name, id, StringHolder(name))
+                .expect("Unable to insert initial name");
+        } else {
+            // For new non-anonymous, non-UUID objects, we can use regular insert since we know the ID doesn't exist
+            self.object_name
+                .insert(id, StringHolder(name))
+                .expect("Unable to insert initial name");
+        }
 
-        // We use our own setters for these, since there's biz-logic attached here...
+        // Set initial parent using optimized method for new objects
         if let Some(parent) = attrs.parent() {
-            self.set_object_parent(&id, &parent)
+            self.set_initial_object_parent(&id, &parent)
                 .expect("Unable to set parent");
         }
         if let Some(location) = attrs.location() {
@@ -224,7 +253,16 @@ impl WorldStateTransaction {
                 .expect("Unable to set location");
         }
 
-        upsert(&mut self.object_flags, id, attrs.flags()).expect("Unable to insert initial flags");
+        if id.is_anonymous() || id.is_uuobjid() {
+            // Use guaranteed unique insertion for anonymous and UUID objects
+            insert_guaranteed_unique(&mut self.object_flags, id, attrs.flags())
+                .expect("Unable to insert initial flags");
+        } else {
+            // For new non-anonymous, non-UUID objects, we can use regular insert since we know the ID doesn't exist
+            self.object_flags
+                .insert(id, attrs.flags())
+                .expect("Unable to insert initial flags");
+        }
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
@@ -350,6 +388,31 @@ impl WorldStateTransaction {
 
         // Update the parent relationship
         upsert(&mut self.object_parent, *o, *new_parent).expect("Unable to update parent");
+
+        Ok(())
+    }
+
+    /// Optimized version of set_object_parent for new object creation.
+    /// Skips the no-op check since we know this is a new object.
+    /// Uses guaranteed unique insertion for anonymous objects.
+    fn set_initial_object_parent(&mut self, o: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
+        self.has_mutations = true;
+
+        // TODO: Fairly certain We can skip cache flushes for brand new objects, since they are
+        //   known to not be participating in any cached resolution, so far. But if this raises
+        //   problems in the future, we can look into it.
+
+        // Use optimized insertion for anonymous and UUID objects, regular insert for new traditional objects
+        if o.is_anonymous() || o.is_uuobjid() {
+            insert_guaranteed_unique(&mut self.object_parent, *o, *parent)
+                .expect("Unable to set parent");
+        } else {
+            // For new traditional objects, we can use regular insert since we know the ID doesn't exist
+            // in our transaction, but we can't guarantee no conflict with another transaction.
+            self.object_parent
+                .insert(*o, *parent)
+                .expect("Unable to set parent");
+        }
 
         Ok(())
     }

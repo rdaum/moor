@@ -357,11 +357,17 @@ impl Scheduler {
             info!("Loaded gc_interval from database: {} seconds", gc_interval);
             so.gc_interval = Some(gc_interval);
         } else {
-            info!(
-                "No gc_interval found on #0, using default of {} seconds",
-                DEFAULT_GC_INTERVAL_SECONDS
-            );
-            so.gc_interval = Some(DEFAULT_GC_INTERVAL_SECONDS);
+            // Check if we have a config override before falling back to default
+            if self.config.runtime.gc_interval.is_some() {
+                info!("No gc_interval found on #0, will use config override");
+                so.gc_interval = None; // Config will take precedence
+            } else {
+                info!(
+                    "No gc_interval found on #0, using default of {} seconds",
+                    DEFAULT_GC_INTERVAL_SECONDS
+                );
+                so.gc_interval = Some(DEFAULT_GC_INTERVAL_SECONDS);
+            }
         }
         tx.rollback().unwrap();
 

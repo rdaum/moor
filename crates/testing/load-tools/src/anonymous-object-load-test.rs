@@ -28,7 +28,7 @@ use moor_common::util::BitEnum;
 use moor_compiler::compile;
 use moor_db::{Database, TxDB};
 use moor_kernel::SchedulerClient;
-use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, RuntimeConfig};
+use moor_kernel::config::{Config, FeaturesConfig, RuntimeConfig};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TaskResult};
 use moor_var::program::ProgramType;
@@ -61,7 +61,7 @@ struct Args {
     #[arg(
         long,
         help = "Number of anonymous objects to create per verb invocation",
-        default_value = "100"
+        default_value = "1000"
     )]
     num_objects_per_invocation: usize,
 
