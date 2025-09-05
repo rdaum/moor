@@ -696,6 +696,45 @@ where
         Ok(results.into_iter().collect())
     }
 
+    /// Optimized method to get multiple specific tuples
+    /// More efficient than get_all() when you only need a subset of tuples
+    pub fn bulk_get(&self, domains: &[Domain]) -> Result<Vec<(Domain, Codomain)>, Error> {
+        let mut results = HashMap::new();
+
+        // Process each requested domain
+        for domain in domains {
+            // Check local operations first (if we have mutations)
+            if self.index.has_local_mutations {
+                if let Some(op) = self.index.local_operations.get(domain) {
+                    match &op.operation {
+                        OpType::Delete => continue, // Skip deleted entries
+                        OpType::Insert(value) | OpType::Update(value) => {
+                            results.insert(domain.clone(), value.clone());
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // Check master entries
+            if let Some(entry) = self.index.master_entries.index_lookup(domain) {
+                if entry.ts <= self.tx.ts {
+                    results.insert(domain.clone(), entry.value.clone());
+                    continue;
+                }
+            }
+
+            // Check backing source as fallback
+            if let Some((ts, value)) = self.backing_source.get(domain)? {
+                if ts <= self.tx.ts {
+                    results.insert(domain.clone(), value);
+                }
+            }
+        }
+
+        Ok(results.into_iter().collect())
+    }
+
     /// Helper method to fully load all data from the provider into the master index
     /// Now that we fixed the lock contention in Canonical::scan(), this should work properly
     fn fully_load_from_provider(&mut self) -> Result<(), Error> {

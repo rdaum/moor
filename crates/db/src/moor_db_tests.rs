@@ -1893,6 +1893,283 @@ mod tests {
 
     /// Test property operations across transactions using high-level APIs  
     #[test]
+    fn test_batch_recycle_objects() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create a hierarchy of objects with properties and relationships
+        let parent = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        let child1 = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child1"),
+            )
+            .unwrap();
+
+        let child2 = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child2"),
+            )
+            .unwrap();
+
+        let container = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "container"),
+            )
+            .unwrap();
+
+        let content = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, container, BitEnum::new(), "content"),
+            )
+            .unwrap();
+
+        // Add properties to some objects
+        let prop_uuid = tx
+            .define_property(
+                &parent,
+                &parent,
+                Symbol::mk("test_prop"),
+                &NOTHING,
+                BitEnum::new(),
+                Some(v_str("test_value")),
+            )
+            .unwrap();
+
+        tx.set_property(&child1, prop_uuid, v_int(123)).unwrap();
+
+        // Add verbs to some objects
+        tx.add_object_verb(
+            &parent,
+            &parent,
+            &[Symbol::mk("test_verb")],
+            ProgramType::MooR(Program::new()),
+            BitEnum::new_with(VerbFlag::Exec),
+            VerbArgsSpec::this_none_this(),
+        )
+        .unwrap();
+
+        // Verify initial state
+        assert_eq!(tx.get_object_children(&parent).unwrap().len(), 2);
+        assert_eq!(tx.get_object_contents(&container).unwrap().len(), 1);
+        assert!(tx.object_valid(&child1).unwrap());
+        assert!(tx.object_valid(&child2).unwrap());
+        assert!(tx.object_valid(&content).unwrap());
+
+        // Test batch recycling multiple objects at once
+        let objects_to_recycle = vec![child1, child2, content];
+        tx.batch_recycle_objects(&objects_to_recycle).unwrap();
+
+        // Verify all objects were recycled
+        assert!(!tx.object_valid(&child1).unwrap());
+        assert!(!tx.object_valid(&child2).unwrap());
+        assert!(!tx.object_valid(&content).unwrap());
+
+        // Verify parent's children list is now empty
+        assert_eq!(tx.get_object_children(&parent).unwrap().len(), 0);
+
+        // Verify container's contents list is now empty
+        assert_eq!(tx.get_object_contents(&container).unwrap().len(), 0);
+
+        // Verify parent and container are still valid
+        assert!(tx.object_valid(&parent).unwrap());
+        assert!(tx.object_valid(&container).unwrap());
+
+        // Verify parent's property and verb are still intact
+        let (prop, value, _, _) = tx.resolve_property(&parent, Symbol::mk("test_prop")).unwrap();
+        assert_eq!(prop.name(), "test_prop".into());
+        assert_eq!(value, v_str("test_value"));
+
+        let verb = tx
+            .resolve_verb(
+                &parent,
+                Symbol::mk("test_verb"),
+                None,
+                Some(BitEnum::new_with(VerbFlag::Exec)),
+            )
+            .unwrap();
+        assert_eq!(verb.names(), vec!["test_verb".into()]);
+
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    fn test_batch_recycle_empty_list() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Test that batch recycling an empty list doesn't cause issues
+        tx.batch_recycle_objects(&[]).unwrap();
+
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    fn test_batch_recycle_bulk_path() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create enough objects to trigger the bulk path (>50)
+        let mut objects = Vec::new();
+        let parent = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        // Create 60 objects to ensure we hit the bulk path
+        for i in 0..60 {
+            let obj = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), &format!("obj_{}", i)),
+                )
+                .unwrap();
+            objects.push(obj);
+        }
+
+        // Add some properties to a few objects
+        let prop_uuid = tx
+            .define_property(
+                &parent,
+                &parent,
+                Symbol::mk("test_prop"),
+                &NOTHING,
+                BitEnum::new(),
+                Some(v_str("test_value")),
+            )
+            .unwrap();
+
+        // Set property on a few objects
+        for obj in objects.iter().take(5) {
+            tx.set_property(obj, prop_uuid, v_int(42)).unwrap();
+        }
+
+        // Verify initial state
+        assert_eq!(tx.get_object_children(&parent).unwrap().len(), 60);
+        for obj in &objects {
+            assert!(tx.object_valid(obj).unwrap());
+        }
+
+        // Test bulk batch recycling (should use bulk path since len > 50)
+        tx.batch_recycle_objects(&objects).unwrap();
+
+        // Verify all objects were recycled
+        for obj in &objects {
+            assert!(!tx.object_valid(obj).unwrap());
+        }
+
+        // Verify parent's children list is now empty
+        assert_eq!(tx.get_object_children(&parent).unwrap().len(), 0);
+
+        // Verify parent is still valid and has its properties
+        assert!(tx.object_valid(&parent).unwrap());
+        let (prop, value, _, _) = tx.resolve_property(&parent, Symbol::mk("test_prop")).unwrap();
+        assert_eq!(prop.name(), "test_prop".into());
+        assert_eq!(value, v_str("test_value"));
+
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    fn test_batch_recycle_vs_individual_equivalence() {
+        let db1 = test_db();
+        let db2 = test_db();
+
+        // Create identical setups in both databases
+        let setup_objects = |db: &Arc<MoorDB>| -> Result<Vec<Obj>, WorldStateError> {
+            let mut tx = db.start_transaction();
+
+            let parent = tx.create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )?;
+
+            let child1 = tx.create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child1"),
+            )?;
+
+            let child2 = tx.create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child2"),
+            )?;
+
+            let prop_uuid = tx.define_property(
+                &parent,
+                &parent,
+                Symbol::mk("test"),
+                &NOTHING,
+                BitEnum::new(),
+                Some(v_str("value")),
+            )?;
+
+            tx.set_property(&child1, prop_uuid, v_int(1))?;
+            tx.set_property(&child2, prop_uuid, v_int(2))?;
+
+            tx.commit().expect("Setup commit failed");
+            Ok(vec![parent, child1, child2])
+        };
+
+        let objects1 = setup_objects(&db1).unwrap();
+        let objects2 = setup_objects(&db2).unwrap();
+
+        // Use individual recycling in db1
+        {
+            let mut tx = db1.start_transaction();
+            // Recycle children individually (skip parent)
+            for obj in &objects1[1..] {
+                tx.recycle_object(obj).unwrap();
+            }
+            tx.commit().unwrap();
+        }
+
+        // Use batch recycling in db2
+        {
+            let mut tx = db2.start_transaction();
+            // Recycle children in batch (skip parent)
+            tx.batch_recycle_objects(&objects2[1..]).unwrap();
+            tx.commit().unwrap();
+        }
+
+        // Verify both databases have identical final state
+        let tx1 = db1.start_transaction();
+        let tx2 = db2.start_transaction();
+
+        let parent1 = objects1[0];
+        let parent2 = objects2[0];
+
+        // Both parents should still exist
+        assert!(tx1.object_valid(&parent1).unwrap());
+        assert!(tx2.object_valid(&parent2).unwrap());
+
+        // Both should have empty children lists
+        assert_eq!(tx1.get_object_children(&parent1).unwrap().len(), 0);
+        assert_eq!(tx2.get_object_children(&parent2).unwrap().len(), 0);
+
+        // Both should have the same property values
+        let (_, value1, _, _) = tx1.resolve_property(&parent1, Symbol::mk("test")).unwrap();
+        let (_, value2, _, _) = tx2.resolve_property(&parent2, Symbol::mk("test")).unwrap();
+        assert_eq!(value1, value2);
+
+        // Children should be invalid in both databases
+        for i in 1..objects1.len() {
+            assert!(!tx1.object_valid(&objects1[i]).unwrap());
+            assert!(!tx2.object_valid(&objects2[i]).unwrap());
+        }
+    }
+
+    #[test]
     fn test_relation_delete_operation() {
         let db = test_db();
         let obj = Obj::mk_id(1);

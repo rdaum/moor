@@ -356,6 +356,121 @@ impl WorldStateTransaction {
         Ok(())
     }
 
+    /// Optimized batch recycling for garbage collection sweep phase.
+    /// Reduces transaction overhead and cache flushes compared to individual recycle_object calls.
+    pub fn batch_recycle_objects(&mut self, objects: &[Obj]) -> Result<(), WorldStateError> {
+        if objects.is_empty() {
+            return Ok(());
+        }
+
+        // Use individual query approach - testing showed this performs better than bulk loading
+        self.batch_recycle_objects_individual(objects)
+    }
+
+    /// Optimized batch recycling using individual queries - good for smaller batches
+    fn batch_recycle_objects_individual(&mut self, objects: &[Obj]) -> Result<(), WorldStateError> {
+        // Pre-collect all relationship data to minimize individual queries
+        let mut contents_to_move = Vec::new();
+        let mut children_to_reparent = Vec::new();
+        let mut properties_to_delete = Vec::new();
+
+        for obj in objects {
+            // Get both contents and children BEFORE making any modifications to avoid
+            // secondary index confusion during transaction
+            let contents = self.get_object_contents(obj)?;
+            let parent = self.get_object_parent(obj)?;
+            let children = self.get_object_children(obj)?;
+            let propdefs = self.get_properties(obj)?;
+
+            // Collect contents that need to be moved to NOTHING
+            contents_to_move.extend(contents.iter());
+
+            // Collect children that need to be reparented to this object's parent
+            for c in children.iter() {
+                children_to_reparent.push((c, parent));
+            }
+
+            // Collect property UUIDs for deletion
+            for p in propdefs.iter() {
+                properties_to_delete.push((*obj, p.uuid()));
+            }
+        }
+
+        self.apply_batch_recycle_changes(objects, contents_to_move, children_to_reparent, properties_to_delete)
+    }
+
+
+    /// Common logic for applying batch recycle changes
+    fn apply_batch_recycle_changes(
+        &mut self,
+        objects: &[Obj],
+        contents_to_move: Vec<Obj>,
+        children_to_reparent: Vec<(Obj, Obj)>,
+        properties_to_delete: Vec<(Obj, uuid::Uuid)>,
+    ) -> Result<(), WorldStateError> {
+        // Bulk update location relationships directly on the relation
+        for content in contents_to_move {
+            upsert(&mut self.object_location, content, NOTHING).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating object location: {e:?}"))
+            })?;
+        }
+
+        // Bulk update parent relationships directly on the relation  
+        for (child, new_parent) in children_to_reparent {
+            upsert(&mut self.object_parent, child, new_parent).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating object parent: {e:?}"))
+            })?;
+        }
+
+        // Batch delete all core object data
+        for obj in objects {
+            // Remove parent relationship (children list is automatically updated via secondary index)
+            self.object_parent.delete(obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error removing parent relationship: {e:?}"))
+            })?;
+
+            // Remove location relationship (contents list is automatically updated via secondary index)
+            self.object_location.delete(obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error removing location relationship: {e:?}"))
+            })?;
+
+            // Delete core object attributes
+            self.object_flags.delete(obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting object flags: {e:?}"))
+            })?;
+            self.object_name.delete(obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting object name: {e:?}"))
+            })?;
+            self.object_owner.delete(obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting object owner: {e:?}"))
+            })?;
+            self.object_verbdefs.delete(obj).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting object verbdefs: {e:?}"))
+            })?;
+
+            // We may or may not have propdefs yet...
+            self.object_propdefs.delete(obj).ok();
+        }
+
+        // Batch delete property values
+        for (obj, prop_uuid) in properties_to_delete {
+            self.object_propvalues
+                .delete(&ObjAndUUIDHolder::new(&obj, prop_uuid))
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error deleting property value: {e:?}"))
+                })?;
+        }
+
+        self.has_mutations = true;
+
+        // Single cache flush at the end instead of per-object
+        self.verb_resolution_cache.flush();
+        self.ancestry_cache.flush();
+        self.prop_resolution_cache.flush();
+
+        Ok(())
+    }
+
     pub fn get_object_parent(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         let r = self.object_parent.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object parent: {e:?}"))
@@ -1610,109 +1725,74 @@ impl WorldStateTransaction {
     ) -> Result<Vec<(Obj, std::collections::HashSet<Obj>)>, WorldStateError> {
         let mut reference_map = std::collections::HashMap::new();
 
-        // 1. Scan all property values for anonymous object references
-        let prop_tuples = self
-            .object_propvalues
+        // Get all objects once - this is the only get_all() call we need
+        let all_objects = self
+            .object_flags
             .get_all()
             .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
 
-        for (key_holder, prop_value) in prop_tuples {
-            // Extract anonymous object references from the property value
-            let anon_refs = crate::extract_anonymous_refs(&prop_value);
+        // For each object, check for anonymous references using targeted queries
+        for (obj, _flags) in all_objects {
+            let mut obj_refs = std::collections::HashSet::new();
 
-            if !anon_refs.is_empty() {
-                let obj = key_holder.obj();
-                reference_map
-                    .entry(obj)
-                    .or_insert_with(std::collections::HashSet::new)
-                    .extend(anon_refs);
-            }
-        }
+            // 1. Check property values for anonymous object references
+            let propdefs = match self.get_properties(&obj) {
+                Ok(propdefs) => propdefs,
+                Err(_) => continue, // Object might not have properties
+            };
 
-        // 2. Scan object relationships (parent, location, owner)
-        // Each of these is Obj -> Obj, so check if the target (codomain) is anonymous
-
-        // Parent relationships
-        let parent_tuples = self
-            .object_parent
-            .get_all()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-        for (child, parent) in parent_tuples {
-            if parent.is_anonymous() {
-                reference_map
-                    .entry(child)
-                    .or_insert_with(std::collections::HashSet::new)
-                    .insert(parent);
-            }
-        }
-
-        // Location relationships
-        let location_tuples = self
-            .object_location
-            .get_all()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-        for (obj, location) in location_tuples {
-            if location.is_anonymous() {
-                reference_map
-                    .entry(obj)
-                    .or_insert_with(std::collections::HashSet::new)
-                    .insert(location);
-            }
-        }
-
-        // Note: We intentionally do NOT scan owner relationships as they are not
-        // live references for GC purposes - ownership is just metadata about who
-        // controls the object, not a reference that keeps it alive
-
-        // 3. Scan verb definitions for object references (location and owner fields)
-        let verbdef_tuples = self
-            .object_verbdefs
-            .get_all()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-        for (obj, verbdefs) in verbdef_tuples {
-            for verbdef in verbdefs.iter() {
-                // Check location field
-                if verbdef.location().is_anonymous() {
-                    reference_map
-                        .entry(obj)
-                        .or_insert_with(std::collections::HashSet::new)
-                        .insert(verbdef.location());
-                }
-                // Check owner field
-                if verbdef.owner().is_anonymous() {
-                    reference_map
-                        .entry(obj)
-                        .or_insert_with(std::collections::HashSet::new)
-                        .insert(verbdef.owner());
-                }
-            }
-        }
-
-        // 4. Scan property definitions for object references (definer and location fields)
-        let propdef_tuples = self
-            .object_propdefs
-            .get_all()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-        for (obj, propdefs) in propdef_tuples {
             for propdef in propdefs.iter() {
-                // Check definer field
-                if propdef.definer().is_anonymous() {
-                    reference_map
-                        .entry(obj)
-                        .or_insert_with(std::collections::HashSet::new)
-                        .insert(propdef.definer());
+                if let Ok((Some(prop_value), _perms)) = self.retrieve_property(&obj, propdef.uuid()) {
+                    let anon_refs = crate::extract_anonymous_refs(&prop_value);
+                    obj_refs.extend(anon_refs);
                 }
-                // Check location field
-                if propdef.location().is_anonymous() {
-                    reference_map
-                        .entry(obj)
-                        .or_insert_with(std::collections::HashSet::new)
-                        .insert(propdef.location());
+            }
+
+            // 2. Check parent relationship
+            if let Ok(parent) = self.get_object_parent(&obj) {
+                if parent.is_anonymous() {
+                    obj_refs.insert(parent);
                 }
+            }
+
+            // 3. Check location relationship  
+            if let Ok(location) = self.get_object_location(&obj) {
+                if location.is_anonymous() {
+                    obj_refs.insert(location);
+                }
+            }
+
+            // 4. Check verb definitions for object references
+            if let Ok(verbdefs) = self.get_verbs(&obj) {
+                for verbdef in verbdefs.iter() {
+                    // Check location field
+                    if verbdef.location().is_anonymous() {
+                        obj_refs.insert(verbdef.location());
+                    }
+                    // Check owner field  
+                    if verbdef.owner().is_anonymous() {
+                        obj_refs.insert(verbdef.owner());
+                    }
+                }
+            }
+
+            // 5. Check property definitions for object references
+            if let Ok(propdefs) = self.get_properties(&obj) {
+                for propdef in propdefs.iter() {
+                    // Check definer field
+                    if propdef.definer().is_anonymous() {
+                        obj_refs.insert(propdef.definer());
+                    }
+                    // Check location field
+                    if propdef.location().is_anonymous() {
+                        obj_refs.insert(propdef.location());
+                    }
+                }
+            }
+
+            // Only add to map if we found references
+            if !obj_refs.is_empty() {
+                reference_map.insert(obj, obj_refs);
             }
         }
 
@@ -1735,23 +1815,19 @@ impl WorldStateTransaction {
         &mut self,
         unreachable_objects: &std::collections::HashSet<Obj>,
     ) -> Result<usize, WorldStateError> {
-        // Actually delete the unreachable anonymous objects
-        let mut collected = 0;
+        // Filter and collect only anonymous objects that still exist
+        let mut objects_to_recycle = Vec::new();
         for obj in unreachable_objects {
-            if obj.is_anonymous() {
-                // Remove the object from the database
-                match self.recycle_object(obj) {
-                    Ok(_) => {
-                        collected += 1;
-                    }
-                    Err(WorldStateError::ObjectNotFound(_)) => {
-                        // Object was already deleted, that's fine
-                    }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
+            if obj.is_anonymous() && self.object_valid(obj)? {
+                objects_to_recycle.push(*obj);
             }
+        }
+
+        let collected = objects_to_recycle.len();
+        
+        if !objects_to_recycle.is_empty() {
+            // Use batch recycling for better performance
+            self.batch_recycle_objects(&objects_to_recycle)?;
         }
 
         Ok(collected)
