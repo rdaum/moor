@@ -408,7 +408,7 @@ impl Scheduler {
         // 1. Command-line config overrides all
         // 2. Database gc_interval setting
         // 3. Default of 30 seconds
-        if let Some(config_interval) = self.config.import_export.gc_interval {
+        if let Some(config_interval) = self.config.runtime.gc_interval {
             info!(
                 "Using gc_interval from command-line config: {:?}",
                 config_interval
@@ -1731,12 +1731,14 @@ impl Scheduler {
 
     /// Check if automatic GC should run based on heuristics
     fn should_run_automatic_gc(&self) -> bool {
-        // Use the cached GC interval from server options (reloaded periodically by scheduler)
-        let Some(gc_interval_seconds) = self.server_options.gc_interval else {
-            return false; // GC disabled if no interval configured
+        let gc_interval = if let Some(config_interval) = self.config.runtime.gc_interval {
+            config_interval
+        } else if let Some(db_secs) = self.server_options.gc_interval {
+            Duration::from_secs(db_secs)
+        } else {
+            Duration::from_secs(DEFAULT_GC_INTERVAL_SECONDS)
         };
 
-        let gc_interval = Duration::from_secs(gc_interval_seconds);
         let time_since_last_gc = self.gc_last_cycle_time.elapsed();
 
         if time_since_last_gc >= gc_interval {
