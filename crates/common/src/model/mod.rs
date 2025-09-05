@@ -47,7 +47,10 @@ pub use world_state::{WorldStateError, WorldStatePerf};
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
 pub enum CommitResult {
-    Success,       // Value was committed
+    Success {
+        mutations_made: bool,
+        timestamp: u64,
+    }, // Value was committed
     ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx_management
 }
 

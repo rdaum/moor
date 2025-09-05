@@ -191,7 +191,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             config.features.compile_options(),
         )
         .expect("Failed to load textdump");
-        assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+        assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
 
         (db, temp_dir)
     }

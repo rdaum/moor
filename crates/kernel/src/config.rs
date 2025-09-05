@@ -130,18 +130,12 @@ impl FeaturesConfig {
 }
 
 /// Configuration for runtime/scheduler behavior
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct RuntimeConfig {
     /// Interval between automatic garbage collection cycles.
     /// If None, automatic GC uses database settings or default.
     #[serde(deserialize_with = "parse_duration")]
     pub gc_interval: Option<Duration>,
-}
-
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        Self { gc_interval: None }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Eq, PartialEq)]

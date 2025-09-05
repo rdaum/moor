@@ -52,10 +52,13 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the task has completed successfully, with the given
-    /// return value.
-    pub fn success(&self, var: Var) {
+    /// return value, mutations flag, and commit timestamp.
+    pub fn success(&self, var: Var, mutations: bool, timestamp: u64) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::TaskSuccess(var)))
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskSuccess(var, mutations, timestamp),
+            ))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
@@ -402,7 +405,8 @@ pub type ActiveTaskDescriptions = Vec<(TaskId, Obj, TaskStart)>;
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
 pub enum TaskControlMsg {
     /// Everything executed. The task is done.
-    TaskSuccess(Var),
+    /// Contains: (return_value, mutations_occurred, commit_timestamp)
+    TaskSuccess(Var, bool, u64),
     /// The task hit an unresolvable transaction serialization conflict, and needs to be restarted
     /// in a new transaction.
     TaskConflictRetry(Box<Task>),

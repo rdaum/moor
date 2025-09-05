@@ -625,7 +625,10 @@ mod tests {
                 CompileOptions::default(),
             )
             .unwrap();
-            assert_eq!(loader_client.commit().unwrap(), CommitResult::Success);
+            assert!(matches!(
+                loader_client.commit(),
+                Ok(CommitResult::Success { .. })
+            ));
 
             // Make a tmpdir & dump objdefs into it
             let snapshot = db.clone().create_snapshot().unwrap();
@@ -788,7 +791,7 @@ mod tests {
             defloader
                 .read_dirdump(CompileOptions::default(), tmpdir_path)
                 .unwrap();
-            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+            assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Verify lambdas were loaded correctly
@@ -1011,7 +1014,7 @@ mod tests {
             defloader
                 .read_dirdump(CompileOptions::default(), tmpdir_path)
                 .unwrap();
-            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+            assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Verify anonymous objects were loaded correctly

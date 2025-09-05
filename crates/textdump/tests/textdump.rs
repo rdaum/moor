@@ -64,7 +64,7 @@ mod test {
             compile_options,
         )
         .expect("Could not load textdump");
-        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     fn write_textdump(db: Arc<TxDB>, version: &str) -> String {
@@ -217,7 +217,7 @@ mod test {
             CompileOptions::default(),
         )
         .unwrap();
-        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         // Check a few things in a new transaction.
         let tx = db.new_world_state().unwrap();
@@ -317,7 +317,7 @@ mod test {
             CompileOptions::default(),
         )
         .unwrap();
-        assert_eq!(lc.commit().unwrap(), CommitResult::Success);
+        assert!(matches!(lc.commit(), Ok(CommitResult::Success { .. })));
 
         // Now go through the properties and verbs of all the objects on db1, and verify that
         // they're the same on db2.
@@ -633,7 +633,7 @@ mod test {
             CompileOptions::default(),
         )
         .unwrap();
-        assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+        assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
 
         // Verify lambdas were preserved correctly
         {
@@ -879,7 +879,7 @@ mod test {
                 CompileOptions::default(),
             )
             .unwrap();
-            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+            assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Verify anonymous objects were preserved correctly
@@ -1013,7 +1013,7 @@ mod test {
             )
             .unwrap();
 
-            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+            assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }
 
         println!("Basic textdump format works!");
@@ -1067,7 +1067,7 @@ mod test {
             ) {
                 Ok(_) => {
                     println!("Successfully loaded simple textdump");
-                    assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+                    assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
                 }
                 Err(e) => {
                     println!("Failed to load textdump: {e:?}");

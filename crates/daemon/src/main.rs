@@ -122,11 +122,14 @@ fn perform_import(
 
     let result = loader_interface.commit()?;
 
-    if result == CommitResult::Success {
-        info!("Import complete in {:?}", start.elapsed());
-    } else {
-        error!("Import failed due to commit failure: {:?}", result);
-        bail!("Import failed");
+    match result {
+        CommitResult::Success { .. } => {
+            info!("Import complete in {:?}", start.elapsed());
+        }
+        _ => {
+            error!("Import failed due to commit failure: {:?}", result);
+            bail!("Import failed");
+        }
     }
     Ok(())
 }

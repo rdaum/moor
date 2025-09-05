@@ -11,12 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ahash::HashSet;
 use lazy_static::lazy_static;
+use std::collections::HashSet;
 use uuid::Uuid;
 
+use crate::gc::{GCError, GCInterface};
 use crate::moor_db::WorldStateTransaction;
-use crate::{GCError, GCInterface};
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
@@ -950,51 +950,19 @@ impl WorldState for DbWorldState {
 }
 
 impl GCInterface for DbWorldState {
-    fn store_anonymous_object_metadata(
-        &mut self,
-        objid: &Obj,
-        metadata: crate::AnonymousObjectMetadata,
-    ) -> Result<(), WorldStateError> {
-        self.get_tx_mut()
-            .store_anonymous_object_metadata(objid, metadata)
-    }
-
-    fn get_anonymous_object_metadata(
-        &self,
-        objid: &Obj,
-    ) -> Result<Option<crate::AnonymousObjectMetadata>, WorldStateError> {
-        self.get_tx().get_anonymous_object_metadata(objid)
-    }
-
     fn scan_anonymous_object_references(
         &mut self,
-    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+    ) -> Result<Vec<(Obj, HashSet<Obj>)>, WorldStateError> {
         self.get_tx_mut().scan_anonymous_object_references()
     }
 
-    fn scan_anonymous_object_references_generation(
-        &mut self,
-        generation: u8,
-    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
-        self.get_tx_mut()
-            .scan_anonymous_object_references_generation(generation)
-    }
-
-    fn get_anonymous_objects_by_generation(
-        &self,
-        generation: u8,
-    ) -> Result<Vec<Obj>, WorldStateError> {
-        self.get_tx()
-            .get_anonymous_objects_by_generation(generation)
-    }
-
-    fn promote_anonymous_objects(&mut self, objects: &[Obj]) -> Result<usize, WorldStateError> {
-        self.get_tx_mut().promote_anonymous_objects(objects)
+    fn get_anonymous_objects(&self) -> Result<HashSet<Obj>, WorldStateError> {
+        self.get_tx().get_anonymous_objects()
     }
 
     fn collect_unreachable_anonymous_objects(
         &mut self,
-        unreachable_objects: &[Obj],
+        unreachable_objects: &HashSet<Obj>,
     ) -> Result<usize, WorldStateError> {
         self.get_tx_mut()
             .collect_unreachable_anonymous_objects(unreachable_objects)
@@ -1003,6 +971,12 @@ impl GCInterface for DbWorldState {
     fn commit(self: Box<Self>) -> Result<CommitResult, GCError> {
         self.tx
             .commit()
+            .map_err(|e| GCError::CommitFailed(e.to_string()))
+    }
+
+    fn rollback(self: Box<Self>) -> Result<(), GCError> {
+        self.tx
+            .rollback()
             .map_err(|e| GCError::CommitFailed(e.to_string()))
     }
 }

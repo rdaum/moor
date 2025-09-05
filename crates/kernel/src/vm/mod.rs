@@ -112,11 +112,11 @@ pub struct VerbCall {
 }
 
 /// Extract anonymous object references from a variable
-fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
+fn extract_anonymous_refs_from_var(var: &Var, refs: &mut std::collections::HashSet<Obj>) {
     match var.variant() {
         moor_var::Variant::Obj(obj) => {
             if obj.is_anonymous() {
-                refs.push(*obj);
+                refs.insert(*obj);
             }
         }
         moor_var::Variant::List(list) => {
@@ -134,7 +134,7 @@ fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
             // Check delegate
             let delegate = flyweight.delegate();
             if delegate.is_anonymous() {
-                refs.push(*delegate);
+                refs.insert(*delegate);
             }
 
             // Check slots (Symbol -> Var pairs)
@@ -166,7 +166,10 @@ fn extract_anonymous_refs_from_var(var: &Var, refs: &mut Vec<Obj>) {
 }
 
 /// Extract anonymous object references from a MOO stack frame
-fn extract_anonymous_refs_from_moo_frame(frame: &MooStackFrame, refs: &mut Vec<Obj>) {
+fn extract_anonymous_refs_from_moo_frame(
+    frame: &MooStackFrame,
+    refs: &mut std::collections::HashSet<Obj>,
+) {
     // 1. Scan all variables in the environment stack
     for env_level in &frame.environment {
         for var in env_level.iter().flatten() {
@@ -214,7 +217,10 @@ fn extract_anonymous_refs_from_moo_frame(frame: &MooStackFrame, refs: &mut Vec<O
 }
 
 /// Extract anonymous object references from an activation frame
-fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Vec<Obj>) {
+fn extract_anonymous_refs_from_activation(
+    activation: &Activation,
+    refs: &mut std::collections::HashSet<Obj>,
+) {
     // 1. Scan the frame contents
     match &activation.frame {
         Frame::Moo(moo_frame) => {
@@ -238,12 +244,12 @@ fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Ve
 
     // Check player (already an Obj, so check directly)
     if activation.player.is_anonymous() {
-        refs.push(activation.player);
+        refs.insert(activation.player);
     }
 
     // Check permissions (already an Obj, so check directly)
     if activation.permissions.is_anonymous() {
-        refs.push(activation.permissions);
+        refs.insert(activation.permissions);
     }
 
     // Scan arguments
@@ -253,10 +259,10 @@ fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Ve
 
     // 3. Check verbdef fields for anonymous object references
     if activation.verbdef.location().is_anonymous() {
-        refs.push(activation.verbdef.location());
+        refs.insert(activation.verbdef.location());
     }
     if activation.verbdef.owner().is_anonymous() {
-        refs.push(activation.verbdef.owner());
+        refs.insert(activation.verbdef.owner());
     }
 
     // 4. Scan command if present
@@ -264,13 +270,13 @@ fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Ve
         // Check direct object
         if let Some(dobj) = command.dobj {
             if dobj.is_anonymous() {
-                refs.push(dobj);
+                refs.insert(dobj);
             }
         }
         // Check indirect object
         if let Some(iobj) = command.iobj {
             if iobj.is_anonymous() {
-                refs.push(iobj);
+                refs.insert(iobj);
             }
         }
         // Scan arguments
@@ -283,7 +289,7 @@ fn extract_anonymous_refs_from_activation(activation: &Activation, refs: &mut Ve
 /// Extract anonymous object references from VM execution state
 pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
     vm_state: &exec_state::VMExecState,
-    refs: &mut Vec<Obj>,
+    refs: &mut std::collections::HashSet<Obj>,
 ) {
     // Scan all activations in the call stack
     for activation in &vm_state.stack {

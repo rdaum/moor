@@ -67,6 +67,8 @@ pub enum SchedulerError {
     VerbRetrievalFailed(WorldStateError),
     #[error("Unable to resolve object reference {0}")]
     ObjectResolutionFailed(WorldStateError),
+    #[error("Garbage collection failed: {0}")]
+    GarbageCollectionFailed(String),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

@@ -28,6 +28,7 @@ use moor_common::util::PerfCounter;
 
 pub mod scheduler;
 
+pub(crate) mod gc_thread;
 pub(crate) mod scheduler_client;
 pub(crate) mod task;
 pub(crate) mod task_q;
@@ -160,6 +161,8 @@ pub struct SchedulerPerfCounters {
     task_exception: PerfCounter,
     handle_scheduler_msg: PerfCounter,
     handle_task_msg: PerfCounter,
+    gc_mark_phase: PerfCounter,
+    gc_sweep_phase: PerfCounter,
 }
 
 impl Default for SchedulerPerfCounters {
@@ -189,6 +192,8 @@ impl SchedulerPerfCounters {
             task_exception: PerfCounter::new("task_exception"),
             handle_scheduler_msg: PerfCounter::new("handle_scheduler_msg"),
             handle_task_msg: PerfCounter::new("handle_task_msg"),
+            gc_mark_phase: PerfCounter::new("gc_mark_phase"),
+            gc_sweep_phase: PerfCounter::new("gc_sweep_phase"),
         }
     }
 
@@ -212,6 +217,8 @@ impl SchedulerPerfCounters {
             &self.task_exception,
             &self.handle_scheduler_msg,
             &self.handle_task_msg,
+            &self.gc_mark_phase,
+            &self.gc_sweep_phase,
         ]
     }
 }

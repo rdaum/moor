@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::AnonymousObjectMetadata;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction};
@@ -271,12 +270,7 @@ impl WorldStateTransaction {
             self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
         }
 
-        // Automatically store GC metadata for anonymous objects (start them in young generation)
-        if id.is_anonymous() {
-            let initial_metadata = AnonymousObjectMetadata::new(0).unwrap(); // Start in generation 0 (young)
-            self.store_anonymous_object_metadata(&id, initial_metadata)
-                .expect("Failed to store initial GC metadata for anonymous object");
-        }
+        // No GC metadata needed for mark & sweep - anonymous objects are tracked by intrinsic property
 
         self.verb_resolution_cache.flush();
         self.ancestry_cache.flush();
@@ -1176,7 +1170,10 @@ impl WorldStateTransaction {
                     }))
                     .expect("Unable to send commit request for read-only transaction");
             }
-            return Ok(CommitResult::Success);
+            return Ok(CommitResult::Success {
+                mutations_made: false,
+                timestamp: 0, // Read-only transactions don't have meaningful timestamps
+            });
         }
 
         // Pull out the working sets
@@ -1608,30 +1605,9 @@ impl WorldStateTransaction {
 }
 
 impl WorldStateTransaction {
-    pub(crate) fn store_anonymous_object_metadata(
-        &mut self,
-        objid: &Obj,
-        metadata: AnonymousObjectMetadata,
-    ) -> Result<(), WorldStateError> {
-        self.anonymous_object_metadata
-            .upsert(*objid, metadata)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        self.has_mutations = true;
-        Ok(())
-    }
-
-    pub(crate) fn get_anonymous_object_metadata(
-        &self,
-        objid: &Obj,
-    ) -> Result<Option<AnonymousObjectMetadata>, WorldStateError> {
-        self.anonymous_object_metadata
-            .get(objid)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
-    }
-
     pub(crate) fn scan_anonymous_object_references(
         &mut self,
-    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
+    ) -> Result<Vec<(Obj, std::collections::HashSet<Obj>)>, WorldStateError> {
         let mut reference_map = std::collections::HashMap::new();
 
         // 1. Scan all property values for anonymous object references
@@ -1648,7 +1624,7 @@ impl WorldStateTransaction {
                 let obj = key_holder.obj();
                 reference_map
                     .entry(obj)
-                    .or_insert_with(Vec::new)
+                    .or_insert_with(std::collections::HashSet::new)
                     .extend(anon_refs);
             }
         }
@@ -1666,8 +1642,8 @@ impl WorldStateTransaction {
             if parent.is_anonymous() {
                 reference_map
                     .entry(child)
-                    .or_insert_with(Vec::new)
-                    .push(parent);
+                    .or_insert_with(std::collections::HashSet::new)
+                    .insert(parent);
             }
         }
 
@@ -1681,8 +1657,8 @@ impl WorldStateTransaction {
             if location.is_anonymous() {
                 reference_map
                     .entry(obj)
-                    .or_insert_with(Vec::new)
-                    .push(location);
+                    .or_insert_with(std::collections::HashSet::new)
+                    .insert(location);
             }
         }
 
@@ -1702,15 +1678,15 @@ impl WorldStateTransaction {
                 if verbdef.location().is_anonymous() {
                     reference_map
                         .entry(obj)
-                        .or_insert_with(Vec::new)
-                        .push(verbdef.location());
+                        .or_insert_with(std::collections::HashSet::new)
+                        .insert(verbdef.location());
                 }
                 // Check owner field
                 if verbdef.owner().is_anonymous() {
                     reference_map
                         .entry(obj)
-                        .or_insert_with(Vec::new)
-                        .push(verbdef.owner());
+                        .or_insert_with(std::collections::HashSet::new)
+                        .insert(verbdef.owner());
                 }
             }
         }
@@ -1727,15 +1703,15 @@ impl WorldStateTransaction {
                 if propdef.definer().is_anonymous() {
                     reference_map
                         .entry(obj)
-                        .or_insert_with(Vec::new)
-                        .push(propdef.definer());
+                        .or_insert_with(std::collections::HashSet::new)
+                        .insert(propdef.definer());
                 }
                 // Check location field
                 if propdef.location().is_anonymous() {
                     reference_map
                         .entry(obj)
-                        .or_insert_with(Vec::new)
-                        .push(propdef.location());
+                        .or_insert_with(std::collections::HashSet::new)
+                        .insert(propdef.location());
                 }
             }
         }
@@ -1743,90 +1719,41 @@ impl WorldStateTransaction {
         Ok(reference_map.into_iter().collect())
     }
 
-    pub(crate) fn collect_unreachable_anonymous_objects(
-        &mut self,
-        unreachable_objects: &[Obj],
-    ) -> Result<usize, WorldStateError> {
-        let mut collected = 0;
-
-        for obj in unreachable_objects {
-            if obj.is_anonymous() {
-                match self.anonymous_object_metadata.delete(obj) {
-                    Ok(Some(_)) => collected += 1,
-                    Ok(None) => {} // Object didn't have metadata
-                    Err(_) => {}   // Error deleting - might not exist
-                }
-            }
-        }
-
-        if collected > 0 {
-            self.has_mutations = true;
-        }
-
-        Ok(collected)
+    pub(crate) fn get_anonymous_objects(
+        &self,
+    ) -> Result<std::collections::HashSet<Obj>, WorldStateError> {
+        // Get all objects and filter for anonymous ones
+        let all_objects = self.get_objects()?;
+        let anonymous_objects = all_objects
+            .iter()
+            .filter(|obj| obj.is_anonymous())
+            .collect();
+        Ok(anonymous_objects)
     }
 
-    pub(crate) fn scan_anonymous_object_references_generation(
+    pub(crate) fn collect_unreachable_anonymous_objects(
         &mut self,
-        generation: u8,
-    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError> {
-        // Get all references first
-        let all_references = self.scan_anonymous_object_references()?;
-
-        // Filter to only include references to objects of the specified generation
-        let mut filtered_references = Vec::new();
-
-        for (referring_obj, referenced_objs) in all_references {
-            let mut filtered_refs = Vec::new();
-
-            for anon_obj in referenced_objs {
-                if let Ok(Some(metadata)) = self.get_anonymous_object_metadata(&anon_obj) {
-                    if metadata.generation() == generation {
-                        filtered_refs.push(anon_obj);
+        unreachable_objects: &std::collections::HashSet<Obj>,
+    ) -> Result<usize, WorldStateError> {
+        // Actually delete the unreachable anonymous objects
+        let mut collected = 0;
+        for obj in unreachable_objects {
+            if obj.is_anonymous() {
+                // Remove the object from the database
+                match self.recycle_object(obj) {
+                    Ok(_) => {
+                        collected += 1;
+                    }
+                    Err(WorldStateError::ObjectNotFound(_)) => {
+                        // Object was already deleted, that's fine
+                    }
+                    Err(e) => {
+                        return Err(e);
                     }
                 }
             }
-
-            if !filtered_refs.is_empty() {
-                filtered_references.push((referring_obj, filtered_refs));
-            }
         }
 
-        Ok(filtered_references)
-    }
-
-    pub(crate) fn get_anonymous_objects_by_generation(
-        &self,
-        generation: u8,
-    ) -> Result<Vec<Obj>, WorldStateError> {
-        // Since we need a read-only operation but get_all() requires mutable access,
-        // we'll use scan() instead which works with a read-only reference
-        let metadata_tuples = self
-            .anonymous_object_metadata
-            .scan(&|_, metadata| metadata.generation() == generation)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-        let objects: Vec<Obj> = metadata_tuples.into_iter().map(|(obj, _)| obj).collect();
-        Ok(objects)
-    }
-
-    pub(crate) fn promote_anonymous_objects(
-        &mut self,
-        objects: &[Obj],
-    ) -> Result<usize, WorldStateError> {
-        let mut promoted = 0;
-
-        for obj in objects {
-            if let Ok(Some(mut metadata)) = self.get_anonymous_object_metadata(obj) {
-                // Only promote if currently young generation
-                if metadata.is_young_generation() {
-                    metadata.set_generation(1); // Move to old generation
-                    self.store_anonymous_object_metadata(obj, metadata)?;
-                    promoted += 1;
-                }
-            }
-        }
-
-        Ok(promoted)
+        Ok(collected)
     }
 }

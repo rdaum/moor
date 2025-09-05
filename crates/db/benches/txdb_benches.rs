@@ -33,7 +33,7 @@ fn create_db() -> TxDB {
             ObjectKind::NextObjid,
         )
         .unwrap();
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     ws_source
 }
 
@@ -49,7 +49,7 @@ fn commit_latency(c: &mut Criterion) {
             ObjectKind::NextObjid,
         )
         .unwrap();
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
     let append_values = v_list_iter((0..100).map(v_int));
     let mut group = c.benchmark_group("commit_latency");

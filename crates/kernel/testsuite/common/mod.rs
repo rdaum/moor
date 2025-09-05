@@ -55,7 +55,7 @@ pub fn load_textdump(db: &dyn Database) {
         CompileOptions::default(),
     )
     .expect("Could not load textdump");
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 }
 
 pub fn create_db() -> Box<dyn Database> {
@@ -87,7 +87,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
             .unwrap();
         assert!(verb.matches_name(verb_name));
     }
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
     // And then verify that again in a new transaction.
     let tx = db.new_world_state().unwrap();
@@ -98,7 +98,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
             .unwrap();
         assert!(verb.matches_name(verb_name));
     }
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 }
 
 #[allow(dead_code)]
