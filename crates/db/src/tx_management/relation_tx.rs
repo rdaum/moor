@@ -231,7 +231,11 @@ where
     /// Insert a value that is guaranteed to be unique, skipping conflict checking.
     /// This is an optimization for cases where uniqueness is ensured by the caller,
     /// such as anonymous object creation with UUID-based keys.
-    pub fn insert_guaranteed_unique(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
+    pub fn insert_guaranteed_unique(
+        &mut self,
+        domain: Domain,
+        value: Codomain,
+    ) -> Result<(), Error> {
         // Skip all duplicate checking since we're guaranteed unique
         self.index.local_operations.insert(
             domain.clone(),

@@ -309,7 +309,7 @@ fn setup_test_database(database: &TxDB) -> Result<Obj, eyre::Error> {
 
     // Commit all changes
     match loader.commit()? {
-        CommitResult::Success => {
+        CommitResult::Success { .. } => {
             info!("Successfully initialized test database for anonymous object creation");
             Ok(player)
         }

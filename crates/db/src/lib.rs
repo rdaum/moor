@@ -21,13 +21,6 @@ use std::cmp::Ordering;
 use std::path::Path;
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
-pub enum GCError {
-    StorageError(String),
-    TransactionConflict,
-    ObjectNotFound(String),
-    CommitFailed(String),
-}
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -54,6 +47,7 @@ use crate::db_worldstate::DbWorldState;
 use crate::moor_db::{Caches, MoorDB, WorkingSets};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
+mod gc;
 pub mod prop_cache;
 mod snapshot_loader;
 mod tx_management;
@@ -62,6 +56,7 @@ pub mod verb_cache;
 
 pub use db_worldstate::db_counters;
 use fast_counter::ConcurrentCounter;
+pub use gc::{GCError, GCInterface};
 pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
@@ -72,46 +67,6 @@ pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
     fn create_snapshot_async(&self, callback: SnapshotCallback) -> Result<(), WorldStateError>;
     fn gc_interface(&self) -> Result<Box<dyn GCInterface>, WorldStateError>;
-}
-
-/// Interface for garbage collection operations on anonymous objects
-pub trait GCInterface {
-    /// Store metadata for an anonymous object (generation, timestamps, etc.)
-    fn store_anonymous_object_metadata(
-        &mut self,
-        objid: &Obj,
-        metadata: AnonymousObjectMetadata,
-    ) -> Result<(), WorldStateError>;
-    /// Retrieve metadata for an anonymous object
-    fn get_anonymous_object_metadata(
-        &self,
-        objid: &Obj,
-    ) -> Result<Option<AnonymousObjectMetadata>, WorldStateError>;
-    /// Scan the database for anonymous object references in properties and other data structures
-    fn scan_anonymous_object_references(&mut self)
-    -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError>;
-
-    /// Scan for references to anonymous objects of a specific generation only
-    fn scan_anonymous_object_references_generation(
-        &mut self,
-        generation: u8,
-    ) -> Result<Vec<(Obj, Vec<Obj>)>, WorldStateError>;
-
-    /// Get all anonymous objects in a specific generation
-    fn get_anonymous_objects_by_generation(
-        &self,
-        generation: u8,
-    ) -> Result<Vec<Obj>, WorldStateError>;
-
-    /// Promote surviving anonymous objects to the next generation
-    fn promote_anonymous_objects(&mut self, objects: &[Obj]) -> Result<usize, WorldStateError>;
-    /// Remove unreachable anonymous objects and their metadata from the database
-    fn collect_unreachable_anonymous_objects(
-        &mut self,
-        unreachable_objects: &[Obj],
-    ) -> Result<usize, WorldStateError>;
-    /// Commit any pending changes to the database
-    fn commit(self: Box<Self>) -> Result<CommitResult, GCError>;
 }
 
 #[derive(Clone)]
@@ -399,7 +354,6 @@ pub struct ObjAndUUIDHolder {
 #[derive(Clone, Debug, PartialEq, Eq, IntoBytes, FromBytes, Immutable)]
 #[repr(C, packed)]
 pub struct AnonymousObjectMetadata {
-    generation: u8,             // 0 = young generation, 1 = old generation
     created_micros: u128,       // microseconds since UNIX_EPOCH
     last_accessed_micros: u128, // microseconds since UNIX_EPOCH
 }
@@ -444,7 +398,7 @@ impl std::hash::Hash for ObjAndUUIDHolder {
 }
 
 impl AnonymousObjectMetadata {
-    pub fn new(generation: u8) -> Result<Self, EncodingError> {
+    pub fn new() -> Result<Self, EncodingError> {
         let now = std::time::SystemTime::now();
         let micros = now
             .duration_since(std::time::UNIX_EPOCH)
@@ -452,26 +406,9 @@ impl AnonymousObjectMetadata {
             .as_micros();
 
         Ok(Self {
-            generation,
             created_micros: micros,
             last_accessed_micros: micros,
         })
-    }
-
-    pub fn generation(&self) -> u8 {
-        self.generation
-    }
-
-    pub fn set_generation(&mut self, generation: u8) {
-        self.generation = generation;
-    }
-
-    pub fn is_young_generation(&self) -> bool {
-        self.generation == 0
-    }
-
-    pub fn is_old_generation(&self) -> bool {
-        self.generation == 1
     }
 
     pub fn created_time(&self) -> std::time::SystemTime {
@@ -519,9 +456,8 @@ impl Ord for AnonymousObjectMetadata {
         let self_last_accessed = self.last_accessed_micros;
         let other_last_accessed = other.last_accessed_micros;
 
-        self.generation
-            .cmp(&other.generation)
-            .then_with(|| self_created.cmp(&other_created))
+        self_created
+            .cmp(&other_created)
             .then_with(|| self_last_accessed.cmp(&other_last_accessed))
     }
 }

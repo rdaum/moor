@@ -212,7 +212,7 @@ impl Task {
                             })?;
                         Ok((new_world_state, ()))
                     }) {
-                        Ok((CommitResult::Success, _)) => {
+                        Ok((CommitResult::Success { .. }, _)) => {
                             self.retry_state = self.vm_host.snapshot_state();
                             self.vm_host.resume_execution(v_int(0));
                             return Some(self);
@@ -309,7 +309,10 @@ impl Task {
 
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
-                let CommitResult::Success = commit_result else {
+                let CommitResult::Success {
+                    mutations_made,
+                    timestamp,
+                } = commit_result else {
                     warn!(
                         "Conflict during commit before complete, asking scheduler to retry task for task_id: {}, player {}, retry # {}, task_start: {}",
                         self.task_id,
@@ -331,7 +334,7 @@ impl Task {
 
                 self.vm_host.stop();
 
-                task_scheduler_client.success(result);
+                task_scheduler_client.success(result, mutations_made, timestamp);
                 None
             }
             VMHostResponse::CompleteAbort => {
@@ -356,7 +359,7 @@ impl Task {
 
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
-                let CommitResult::Success = commit_result else {
+                let CommitResult::Success { .. } = commit_result else {
                     warn!(
                         "Conflict during commit before complete, asking scheduler to retry task ({})",
                         self.task_id
@@ -957,7 +960,7 @@ mod tests {
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(2));
@@ -1029,7 +1032,7 @@ mod tests {
         // Also scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
@@ -1078,7 +1081,7 @@ mod tests {
         }
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
@@ -1130,7 +1133,7 @@ mod tests {
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_str("hello, world!"));
@@ -1193,7 +1196,7 @@ mod tests {
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(123));
@@ -1257,7 +1260,7 @@ mod tests {
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));
@@ -1291,7 +1294,7 @@ mod tests {
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));
@@ -1369,7 +1372,7 @@ mod tests {
         // This should be a success, it got handled
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result, _mutations, _timestamp) = msg else {
             panic!("Expected TaskSuccess, got different message type");
         };
         assert_eq!(result, v_int(1));

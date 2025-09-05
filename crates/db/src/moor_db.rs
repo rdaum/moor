@@ -378,8 +378,9 @@ impl MoorDB {
                         warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
                     }
 
-                    // Get the transaction timestamp before extracting working sets
+                    // Get the transaction timestamp and mutations flag before extracting working sets
                     let tx_timestamp = ws.tx.ts;
+                    let has_mutations = ws.has_mutations;
                     let (relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
                     {
                         if !checkers.check_all(&relation_ws) {
@@ -389,7 +390,10 @@ impl MoorDB {
                         drop(_t);
 
                         if checkers.all_clean() {
-                            reply.send(CommitResult::Success).ok();
+                            reply.send(CommitResult::Success {
+                                mutations_made: false,
+                                timestamp: tx_timestamp.0,
+                            }).ok();
 
                             let combined_caches = Caches {
                                 verb_resolution_cache: verb_cache,
@@ -435,7 +439,10 @@ impl MoorDB {
                         }
 
                         // No need to block the caller while we're doing the final write to disk.
-                        reply.send(CommitResult::Success).ok();
+                        reply.send(CommitResult::Success {
+                            mutations_made: has_mutations,
+                            timestamp: tx_timestamp.0,
+                        }).ok();
 
                         // And if the commit took a long time, warn before the write to disk is begun.
                         if start_time.elapsed() > Duration::from_secs(5) {

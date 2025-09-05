@@ -128,7 +128,7 @@ mod tests {
                                     }
 
                                     match Box::new(ws).commit() {
-                                        Ok(CommitResult::Success) => {
+                                        Ok(CommitResult::Success { .. }) => {
                                             counter.fetch_add(1, Ordering::Relaxed);
                                             break;
                                         }
@@ -387,7 +387,7 @@ mod tests {
                                     }
 
                                     match Box::new(ws).commit() {
-                                        Ok(CommitResult::Success) => {
+                                        Ok(CommitResult::Success { .. }) => {
                                             properties_defined.fetch_add(1, Ordering::Relaxed);
                                             break;
                                         }
@@ -736,7 +736,7 @@ mod tests {
                                     }
 
                                     match Box::new(ws1).commit() {
-                                        Ok(CommitResult::Success) => {
+                                        Ok(CommitResult::Success { .. }) => {
                                             successful_updates.fetch_add(1, Ordering::Relaxed);
                                             break;
                                         }

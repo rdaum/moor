@@ -29,6 +29,7 @@ use moor_compiler::to_literal;
 use moor_db::Database;
 
 use crate::config::{Config, ImportExportFormat};
+use crate::tasks::gc_thread::spawn_gc_mark_phase;
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::task::Task;
 use crate::tasks::task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition};
@@ -111,12 +112,18 @@ pub struct Scheduler {
 
     /// Anonymous object garbage collection flag
     gc_collection_in_progress: bool,
+    /// Flag indicating concurrent GC mark phase is in progress
+    gc_mark_in_progress: bool,
+    /// Flag indicating GC sweep phase is in progress (blocks new tasks)
+    gc_sweep_in_progress: bool,
     /// Flag to force GC on next opportunity (set by gc_collect() builtin)
     gc_force_collect: bool,
     /// Counter tracking the number of GC cycles completed
     gc_cycle_count: u64,
     /// Time of last GC cycle (for interval-based collection)
     gc_last_cycle_time: std::time::Instant,
+    /// Transaction timestamp (monotonically incrementing) of the last mutating task/transaction
+    last_mutation_timestamp: Option<u64>,
 
     /// Tracks whether a checkpoint operation is currently in progress to prevent overlapping checkpoints
     checkpoint_in_progress: Arc<AtomicBool>,
@@ -133,6 +140,10 @@ fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState)
             None
         }
     }
+}
+
+fn gc_error(context: &str, e: impl std::fmt::Debug) -> SchedulerError {
+    SchedulerError::GarbageCollectionFailed(format!("{context}: {e:?}"))
 }
 
 impl Scheduler {
@@ -177,9 +188,12 @@ impl Scheduler {
             worker_request_send,
             worker_request_recv,
             gc_collection_in_progress: false,
+            gc_mark_in_progress: false,
+            gc_sweep_in_progress: false,
             gc_force_collect: false,
             gc_cycle_count: 0,
             gc_last_cycle_time: std::time::Instant::now(),
+            last_mutation_timestamp: None,
             checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
         };
         s.reload_server_options();
@@ -204,25 +218,21 @@ impl Scheduler {
 
         self.reload_server_options();
         while self.running {
-            // Check if we should run GC when no tasks are active
-            if !self.gc_collection_in_progress
-                && self.task_q.active.is_empty()
-                && self.should_run_gc()
+            // Check if we should run GC (and no GC is already in progress)
+            if !self.gc_collection_in_progress && !self.gc_mark_in_progress && self.should_run_gc()
             {
                 self.run_gc_cycle();
             }
 
-            // Skip task processing if GC is in progress
-            if self.gc_collection_in_progress {
+            // Skip task processing only if GC sweep is in progress
+            // (mark phase allows concurrent task processing)
+            if self.gc_sweep_in_progress {
                 std::thread::sleep(Duration::from_millis(10));
                 continue;
             }
 
             // Check for tasks that need to be woken (timer wheel handles timing internally)
-            if let Some(to_wake) = self
-                .task_q
-                .collect_wake_tasks(self.gc_collection_in_progress)
-            {
+            if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
                 for sr in to_wake {
                     let task_id = sr.task.task_id;
                     if let Err(e) = self.task_q.resume_task_thread(
@@ -467,7 +477,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_collection_in_progress || self.gc_force_collect,
+                    self.gc_sweep_in_progress || self.gc_force_collect,
                 );
 
                 reply
@@ -527,7 +537,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_collection_in_progress || self.gc_force_collect,
+                    self.gc_sweep_in_progress || self.gc_force_collect,
                 );
                 reply
                     .send(result)
@@ -598,7 +608,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_collection_in_progress || self.gc_force_collect,
+                    self.gc_sweep_in_progress || self.gc_force_collect,
                 );
                 reply
                     .send(result)
@@ -626,7 +636,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_collection_in_progress || self.gc_force_collect,
+                    self.gc_sweep_in_progress || self.gc_force_collect,
                 );
                 reply
                     .send(result)
@@ -662,7 +672,7 @@ impl Scheduler {
                     .expect("Could not send GC stats reply");
             }
             SchedulerClientMsg::RequestGC(reply) => {
-                info!("Direct GC request received via scheduler client");
+                debug!("Direct GC request received via scheduler client");
 
                 // If GC is already in progress, just return success
                 if self.gc_collection_in_progress {
@@ -677,9 +687,44 @@ impl Scheduler {
                 } else {
                     // Set flag for GC to run when tasks complete
                     self.gc_force_collect = true;
-                    info!("GC requested but tasks are active, will run when tasks complete");
+                    debug!("GC requested but tasks are active, will run when tasks complete");
                     reply.send(Ok(())).expect("Could not send GC request reply");
                 }
+            }
+            SchedulerClientMsg::GCMarkPhaseComplete {
+                unreachable_objects,
+                mutation_timestamp_before_mark,
+            } => {
+                // Clear the concurrent GC flag
+                self.gc_mark_in_progress = false;
+
+                info!(
+                    "GC mark phase completed, received {} unreachable objects",
+                    unreachable_objects.len()
+                );
+
+                // Check if mutations happened during mark phase
+                if mutation_timestamp_before_mark != self.last_mutation_timestamp {
+                    info!(
+                        "Minor GC cycle #{}: mark phase invalidated by mutation during marking (before: {:?}, after: {:?}), skipping sweep phase",
+                        self.gc_cycle_count,
+                        mutation_timestamp_before_mark,
+                        self.last_mutation_timestamp
+                    );
+                    return;
+                }
+
+                // Check if there's work to do
+                if unreachable_objects.is_empty() {
+                    info!(
+                        "Minor GC cycle #{}: mark phase found no objects to collect, skipping sweep phase",
+                        self.gc_cycle_count
+                    );
+                    return;
+                }
+
+                // Start blocking sweep phase
+                let _ = self.run_blocking_sweep_phase(unreachable_objects);
             }
             SchedulerClientMsg::ExecuteWorldStateActions {
                 actions,
@@ -744,7 +789,13 @@ impl Scheduler {
 
         let task_q = &mut self.task_q;
         match msg {
-            TaskControlMsg::TaskSuccess(value) => {
+            TaskControlMsg::TaskSuccess(value, mutations_made, timestamp) => {
+                // Record that this is the transaction to have last mutated the world.
+                // Used by e.g. concurrent GC algorithm.
+                if mutations_made {
+                    self.last_mutation_timestamp = Some(timestamp);
+                }
+
                 // Commit the session.
                 let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for success");
@@ -1090,7 +1141,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_collection_in_progress || self.gc_force_collect,
+                    self.gc_sweep_in_progress || self.gc_force_collect,
                 );
                 match result {
                     Err(e) => {
@@ -1748,7 +1799,7 @@ impl Scheduler {
         let time_since_last_gc = self.gc_last_cycle_time.elapsed();
 
         if time_since_last_gc >= gc_interval {
-            debug!(
+            info!(
                 "Triggering automatic GC after {} seconds of inactivity (interval: {} seconds)",
                 time_since_last_gc.as_secs(),
                 gc_interval.as_secs()
@@ -1763,23 +1814,15 @@ impl Scheduler {
         false
     }
 
-    /// Run a garbage collection cycle - decides between minor and major GC
+    /// Run a garbage collection cycle - mark & sweep collection
     fn run_gc_cycle(&mut self) {
-        self.gc_collection_in_progress = true;
-        let was_forced = self.gc_force_collect;
         self.gc_force_collect = false; // Clear force flag
         self.gc_cycle_count += 1;
 
-        // Decide between minor and major GC with retry logic for conflicts
-        // Forced GC (via gc_collect() builtin) always does major GC
-        // Otherwise, run major GC every 10 cycles, minor GC otherwise
+        // Run concurrent mark & sweep GC with retry logic for conflicts
         let max_retries = 3;
         for attempt in 1..=max_retries {
-            let result = if was_forced || self.gc_cycle_count % 10 == 0 {
-                self.run_major_gc_cycle()
-            } else {
-                self.run_minor_gc_cycle()
-            };
+            let result = self.run_concurrent_gc();
 
             match result {
                 Ok(()) => break, // Success, exit retry loop
@@ -1802,269 +1845,145 @@ impl Scheduler {
             }
         }
 
-        self.gc_collection_in_progress = false;
         // Update the timestamp AFTER GC completes, not before
         self.gc_last_cycle_time = std::time::Instant::now();
     }
 
-    /// Run minor GC - collect young generation only
-    fn run_minor_gc_cycle(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        debug!(
-            "Starting minor GC cycle #{} (young generation)",
-            self.gc_cycle_count
+    /// Run concurrent mark & sweep GC
+    fn run_concurrent_gc(&mut self) -> Result<(), SchedulerError> {
+        // Collect VM references before spawning thread
+        let vm_refs = self.task_q.collect_anonymous_object_references();
+        let mutation_timestamp_before_mark = self.last_mutation_timestamp;
+
+        // Create GC transaction for the background thread
+        let gc_tx = self.database.gc_interface().map_err(|e| {
+            SchedulerError::GarbageCollectionFailed(format!("Failed to create GC interface: {e}"))
+        })?;
+        let config_clone = self.config.clone();
+        let scheduler_sender = self.scheduler_sender.clone();
+        let gc_cycle_count = self.gc_cycle_count;
+
+        // Set flag to prevent additional concurrent GC
+        self.gc_mark_in_progress = true;
+
+        // Spawn the mark thread
+        let _handle = spawn_gc_mark_phase(
+            gc_tx,
+            config_clone,
+            scheduler_sender,
+            vm_refs,
+            mutation_timestamp_before_mark,
+            gc_cycle_count,
         );
 
-        // Collect all VM references once
-        let all_vm_refs = self.task_q.collect_anonymous_object_references();
-        let total_vm_refs = all_vm_refs.len();
-        debug!(
-            "Tracing: found {} total anonymous object references in VM frames",
-            total_vm_refs
-        );
+        Ok(())
+    }
 
-        // Get GC interface
-        let mut gc = self.database.gc_interface()?;
-
-        // Get all young generation objects from DB
-        let young_objects = gc.get_anonymous_objects_by_generation(0)?;
-        debug!(
-            "DB scan: found {} young generation (gen 0) objects in database",
-            young_objects.len()
-        );
-
-        // Filter VM references to young generation only
-        let young_vm_refs: Vec<_> = all_vm_refs
-            .into_iter()
-            .filter(|obj| {
-                gc.get_anonymous_object_metadata(obj)
-                    .map(|opt| opt.is_some_and(|meta| meta.generation() == 0))
-                    .unwrap_or(false)
-            })
-            .collect();
-        debug!(
-            "Tracing: {} of {} VM references are to young generation objects",
-            young_vm_refs.len(),
-            total_vm_refs
-        );
-
-        // Get DB references to young generation objects
-        let db_young_refs = gc.scan_anonymous_object_references_generation(0)?;
-        let total_db_refs: usize = db_young_refs.iter().map(|(_, refs)| refs.len()).sum();
-        debug!(
-            "DB scan: found {} referrer objects with {} total references to young generation",
-            db_young_refs.len(),
-            total_db_refs
-        );
-
-        // Mark reachable young objects
-        let mut reachable_young = std::collections::HashSet::new();
-        let initial_vm_refs = young_vm_refs.len();
-
-        // Mark objects referenced from VM
-        reachable_young.extend(young_vm_refs);
-
-        // Mark objects referenced from DB
-        let mut db_marked = 0;
-        for (_referrer, referenced_objects) in &db_young_refs {
-            for referenced in referenced_objects {
-                if let Ok(Some(metadata)) = gc.get_anonymous_object_metadata(referenced) {
-                    if metadata.generation() == 0 && reachable_young.insert(*referenced) {
-                        db_marked += 1;
-                    }
-                }
-            }
+    /// Wait for all active tasks to finish before starting sweep phase
+    fn wait_for_active_tasks_to_finish(&mut self) -> Result<(), SchedulerError> {
+        if self.task_q.active.is_empty() {
+            info!("No active tasks to wait for");
+            return Ok(());
         }
 
-        // Find unreachable young objects
-        let unreachable_young: Vec<_> = young_objects
-            .into_iter()
-            .filter(|obj| !reachable_young.contains(obj))
-            .collect();
-
-        debug!(
-            "Marking: {} objects reachable ({} from VM, {} additional from DB), {} unreachable",
-            reachable_young.len(),
-            initial_vm_refs,
-            db_marked,
-            unreachable_young.len()
-        );
-
-        // Collect unreachable young objects
-        let collected = if !unreachable_young.is_empty() {
-            debug!(
-                "Collecting {} unreachable young objects",
-                unreachable_young.len()
-            );
-            gc.collect_unreachable_anonymous_objects(&unreachable_young)?
-        } else {
-            debug!("No unreachable young objects to collect");
-            0
-        };
-
-        // Promote surviving young objects to generation 1
-        let reachable_vec: Vec<_> = reachable_young.into_iter().collect();
-        let promoted = if !reachable_vec.is_empty() {
-            debug!(
-                "Promoting {} surviving young objects to generation 1",
-                reachable_vec.len()
-            );
-            gc.promote_anonymous_objects(&reachable_vec)?
-        } else {
-            debug!("No young objects to promote");
-            0
-        };
-
         info!(
-            "Minor GC cycle #{} completed: collected {} objects, promoted {} objects",
-            self.gc_cycle_count, collected, promoted
+            "Waiting for {} active tasks to finish before GC sweep phase",
+            self.task_q.active.len()
         );
 
-        // Commit the GC transaction
-        match gc.commit() {
-            Ok(CommitResult::Success) => {
-                debug!("Minor GC transaction committed successfully");
-            }
-            Ok(CommitResult::ConflictRetry) => {
-                // Transaction conflict - the entire GC cycle needs to be retried
-                // since the database state may have changed
-                debug!(
-                    "Minor GC transaction conflict - returning ConflictRetry to caller for retry"
-                );
-                return Err(Box::new(std::io::Error::other(
-                    "GC transaction conflict - retry needed",
-                )));
-            }
-            Err(e) => {
-                error!("Failed to commit minor GC transaction: {:?}", e);
-                return Err(Box::new(std::io::Error::other(format!(
-                    "GC commit failed: {e:?}"
-                ))));
+        // Spin until all active tasks are done
+        while !self.task_q.active.is_empty() {
+            std::thread::sleep(Duration::from_millis(10));
+
+            // Process any incoming messages while waiting
+            if let Ok((task_id, msg)) = self.task_control_receiver.try_recv() {
+                self.handle_task_msg(task_id, msg);
             }
         }
 
         Ok(())
     }
 
-    /// Run major GC - collect all generations
-    fn run_major_gc_cycle(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        debug!(
-            "Starting major GC cycle #{} (all generations)",
-            self.gc_cycle_count
-        );
-
-        // Collect all VM references once
-        let vm_refs = self.task_q.collect_anonymous_object_references();
-        debug!(
-            "Tracing: found {} total anonymous object references in VM frames",
-            vm_refs.len()
-        );
-
-        // Get GC interface
-        let mut gc = self.database.gc_interface()?;
-
-        // Get all anonymous objects from all generations
-        let mut all_anon_objects = Vec::new();
-        let mut objects_by_generation = Vec::new();
-        for generation in 0..=2 {
-            // Support up to generation 2
-            let gen_objects = gc.get_anonymous_objects_by_generation(generation)?;
-            debug!(
-                "DB scan: found {} objects in generation {}",
-                gen_objects.len(),
-                generation
-            );
-            objects_by_generation.push(gen_objects.len());
-            all_anon_objects.extend(gen_objects);
-        }
-        debug!(
-            "DB scan: {} total anonymous objects across all generations (gen0: {}, gen1: {}, gen2: {})",
-            all_anon_objects.len(),
-            objects_by_generation[0],
-            objects_by_generation[1],
-            objects_by_generation[2]
-        );
-
-        // Get all DB references (all generations)
-        let db_refs = gc.scan_anonymous_object_references()?;
-        let total_db_refs: usize = db_refs.iter().map(|(_, refs)| refs.len()).sum();
-        debug!(
-            "DB scan: found {} referrer objects with {} total references",
-            db_refs.len(),
-            total_db_refs
-        );
-
-        // Mark reachable objects from all sources
-        let mut reachable_objects = std::collections::HashSet::new();
-        let vm_marked = vm_refs.len();
-
-        // Mark objects referenced from VM
-        reachable_objects.extend(vm_refs);
-
-        // Mark objects referenced from DB
-        let mut db_marked = 0;
-        for (_referrer, referenced_objects) in &db_refs {
-            for referenced in referenced_objects {
-                if reachable_objects.insert(*referenced) {
-                    db_marked += 1;
-                }
-            }
-        }
-
-        // Find unreachable objects
-        let unreachable_objects: Vec<_> = all_anon_objects
-            .into_iter()
-            .filter(|obj| !reachable_objects.contains(obj))
-            .collect();
-
-        debug!(
-            "Marking: {} objects reachable ({} from VM, {} additional from DB), {} unreachable",
-            reachable_objects.len(),
-            vm_marked,
-            db_marked,
+    /// Blocking sweep phase for concurrent GC - waits for tasks and collects objects
+    fn run_blocking_sweep_phase(
+        &mut self,
+        unreachable_objects: std::collections::HashSet<Obj>,
+    ) -> Result<(), SchedulerError> {
+        info!(
+            "Starting blocking sweep phase for {} unreachable objects",
             unreachable_objects.len()
         );
 
+        // Block new tasks during sweep
+        self.gc_sweep_in_progress = true;
+
+        // Check mutation timestamp before waiting for tasks
+        let mutation_timestamp_before_wait = self.last_mutation_timestamp;
+
+        // Wait for all active tasks to finish
+        self.wait_for_active_tasks_to_finish()?;
+
+        // Check mutation timestamp after waiting for tasks
+        let mutation_timestamp_after_wait = self.last_mutation_timestamp;
+        if mutation_timestamp_before_wait != mutation_timestamp_after_wait {
+            info!(
+                "Minor GC cycle #{}: mutations detected while waiting for tasks (before: {:?}, after: {:?}), sweep phase invalidated",
+                self.gc_cycle_count, mutation_timestamp_before_wait, mutation_timestamp_after_wait
+            );
+            self.gc_sweep_in_progress = false;
+            return Ok(());
+        }
+
+        // Run the actual sweep
+        let result = self.run_gc_sweep_phase(std::collections::HashSet::new(), unreachable_objects);
+
+        // Unblock new tasks
+        self.gc_sweep_in_progress = false;
+
+        result
+    }
+
+    /// Sweep phase of minor GC - collects unreachable objects (promotion already done in mark phase)
+    fn run_gc_sweep_phase(
+        &mut self,
+        _reachable_objects: std::collections::HashSet<Obj>,
+        unreachable_objects: std::collections::HashSet<Obj>,
+    ) -> Result<(), SchedulerError> {
+        let start_time = std::time::Instant::now();
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.gc_sweep_phase);
+        // Get a new GC interface for the sweep phase transaction
+        let mut gc = self
+            .database
+            .gc_interface()
+            .map_err(|e| gc_error("Failed to create GC interface for sweep phase", e))?;
+
         // Collect unreachable objects
         let collected = if !unreachable_objects.is_empty() {
-            debug!(
-                "Collecting {} unreachable objects",
-                unreachable_objects.len()
-            );
-            gc.collect_unreachable_anonymous_objects(&unreachable_objects)?
+            gc.collect_unreachable_anonymous_objects(&unreachable_objects)
+                .map_err(|e| gc_error("Failed to collect unreachable objects", e))?
         } else {
-            info!("No unreachable objects to collect");
             0
         };
 
-        info!(
-            "Major GC cycle #{} completed: collected {} objects from all generations",
-            self.gc_cycle_count, collected
-        );
+        let sweep_duration = start_time.elapsed();
+        info!("GC sweep: {} objects collected in {:.2}ms", collected, sweep_duration.as_secs_f64() * 1000.0);
 
-        // Commit the GC transaction
+        // Commit the sweep phase transaction
         match gc.commit() {
-            Ok(CommitResult::Success) => {
-                debug!("Major GC transaction committed successfully");
-            }
+            Ok(CommitResult::Success { .. }) => Ok(()),
             Ok(CommitResult::ConflictRetry) => {
-                // Transaction conflict - the entire GC cycle needs to be retried
-                // since the database state may have changed
-                warn!(
-                    "Major GC transaction conflict - returning ConflictRetry to caller for retry"
-                );
-                return Err(Box::new(std::io::Error::other(
-                    "GC transaction conflict - retry needed",
-                )));
+                // Transaction conflict - our optimism wasn't justified
+                warn!("GC sweep transaction conflict - retry needed");
+                Err(SchedulerError::GarbageCollectionFailed(
+                    "GC transaction conflict - retry needed".to_string(),
+                ))
             }
             Err(e) => {
-                error!("Failed to commit major GC transaction: {:?}", e);
-                return Err(Box::new(std::io::Error::other(format!(
-                    "GC commit failed: {e:?}"
-                ))));
+                error!("Failed to commit GC sweep transaction: {:?}", e);
+                Err(gc_error("GC commit failed", e))
             }
         }
-
-        Ok(())
     }
 }
 
@@ -2130,7 +2049,7 @@ impl TaskQ {
             task.retry_state = task.vm_host.snapshot_state();
 
             match crate::task_context::commit_current_transaction() {
-                Ok(CommitResult::Success) => {}
+                Ok(CommitResult::Success { .. }) => {}
                 // TODO: perform a retry here in a modest loop.
                 Ok(CommitResult::ConflictRetry) => {
                     error!(task_id, "Conflict during task start");

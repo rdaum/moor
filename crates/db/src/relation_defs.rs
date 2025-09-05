@@ -281,6 +281,7 @@ macro_rules! define_relations {
                 pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
                 pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
                 pub(crate) ancestry_cache: Box<AncestryCache>,
+                pub(crate) has_mutations: bool,
             }
 
             impl WorkingSets {
@@ -364,6 +365,7 @@ macro_rules! define_relations {
                         verb_resolution_cache: self.verb_resolution_cache,
                         prop_resolution_cache: self.prop_resolution_cache,
                         ancestry_cache: self.ancestry_cache,
+                        has_mutations: self.has_mutations,
                     });
 
                     Ok(ws)

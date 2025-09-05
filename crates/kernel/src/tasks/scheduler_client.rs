@@ -553,4 +553,9 @@ pub enum SchedulerClientMsg {
     GetGCStats(oneshot::Sender<Result<GCStats, SchedulerError>>),
     /// Request a garbage collection cycle
     RequestGC(oneshot::Sender<Result<(), SchedulerError>>),
+    /// Internal message from GC thread when mark phase completes
+    GCMarkPhaseComplete {
+        unreachable_objects: std::collections::HashSet<Obj>,
+        mutation_timestamp_before_mark: Option<u64>,
+    },
 }

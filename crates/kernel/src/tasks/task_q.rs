@@ -160,8 +160,8 @@ impl TaskQ {
     }
 
     /// Collect anonymous object references from all suspended tasks
-    pub(crate) fn collect_anonymous_object_references(&self) -> Vec<Obj> {
-        let mut refs = Vec::new();
+    pub(crate) fn collect_anonymous_object_references(&self) -> std::collections::HashSet<Obj> {
+        let mut refs = std::collections::HashSet::new();
 
         // Scan all suspended tasks
         for suspended_task in self.suspended.tasks.values() {

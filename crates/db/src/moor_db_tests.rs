@@ -52,7 +52,7 @@ mod tests {
         assert_eq!(tx.get_object_parent(&oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_location(&oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(&oid).unwrap(), "test");
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         // Verify existence in a new transaction.
         let tx = db.start_transaction();
@@ -77,7 +77,7 @@ mod tests {
             .create_object(ObjectKind::NextObjid, ObjAttrs::default())
             .unwrap();
         assert_eq!(oid2, Obj::mk_id(2));
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -152,7 +152,7 @@ mod tests {
         let objects = tx.get_objects().unwrap();
         assert!(objects.is_same(ObjSet::from_items(&[a, b, c, d])));
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -222,7 +222,7 @@ mod tests {
         );
         assert_eq!(tx.descendants(&b, false).unwrap(), ObjSet::from_items(&[d]));
         assert_eq!(tx.descendants(&c, false).unwrap(), ObjSet::empty());
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -309,7 +309,7 @@ mod tests {
 
         // The other way around, d to c should be fine.
         tx.set_object_location(&d, &c).unwrap();
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     /// Test data integrity of object moves between commits.
@@ -351,7 +351,7 @@ mod tests {
         assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(&c).unwrap(), ObjSet::empty());
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         let mut tx = db.start_transaction();
         assert_eq!(tx.get_object_location(&b).unwrap(), a);
@@ -378,7 +378,7 @@ mod tests {
             tx.get_object_contents(&c).unwrap(),
             ObjSet::from_items(&[b])
         );
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         let tx = db.start_transaction();
         assert_eq!(tx.get_object_location(&c).unwrap(), a);
@@ -420,7 +420,7 @@ mod tests {
         assert_eq!(v, v_str("test"));
         assert_eq!(perms.owner(), NOTHING);
         assert!(!is_clear);
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     /// Regression test for updating-verbs failing.
@@ -484,7 +484,7 @@ mod tests {
         assert_eq!(vh.names(), vec!["test2".into()]);
 
         // Now commit, and try to resolve again.
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         let tx = db.start_transaction();
         let vh = tx
             .resolve_verb(
@@ -495,7 +495,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(vh.names(), vec!["test2".into()]);
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -548,7 +548,7 @@ mod tests {
             result.err().unwrap(),
             WorldStateError::PropertyNotFound(b, "test".to_string())
         );
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -628,7 +628,7 @@ mod tests {
         assert_eq!(perms.flags(), BitEnum::new_with(PropFlag::Read));
         assert!(!is_clear);
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -818,7 +818,7 @@ mod tests {
             .names(),
             vec!["test2".into()]
         );
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         // Verify existence in a new transaction.
         let tx = db.start_transaction();
@@ -844,7 +844,7 @@ mod tests {
             .names(),
             vec!["test2".into()]
         );
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -913,7 +913,7 @@ mod tests {
             tx.get_verb_program(&a, v_uuid).unwrap(),
             ProgramType::MooR(Program::new())
         );
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -985,7 +985,7 @@ mod tests {
             .names(),
             verb_names
         );
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -1447,7 +1447,7 @@ mod tests {
             .unwrap();
         tx.recycle_object(&my_obj).unwrap();
         let r = tx.commit().unwrap();
-        assert_eq!(r, CommitResult::Success);
+        assert!(matches!(r, CommitResult::Success { .. }));
     }
 
     #[test]
@@ -1484,7 +1484,7 @@ mod tests {
             .unwrap();
 
         // First commit should succeed
-        assert_eq!(tx2.commit().unwrap(), CommitResult::Success);
+        assert!(matches!(tx2.commit(), Ok(CommitResult::Success { .. })));
 
         // Second commit should fail due to conflict
         assert_eq!(tx3.commit().unwrap(), CommitResult::ConflictRetry);
@@ -1702,7 +1702,7 @@ mod tests {
                     )
                     .unwrap();
                 assert_eq!(parent, Obj::mk_id(parent_id));
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 2: Create child object parented to parent - separate transaction
@@ -1714,7 +1714,7 @@ mod tests {
                         ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
                     )
                     .unwrap();
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 3: Define property "test" on parent with value 1 - separate transaction
@@ -1729,7 +1729,7 @@ mod tests {
                     Some(v_int(1)),
                 )
                 .unwrap();
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 4: Check parent property value - separate transaction
@@ -1739,7 +1739,7 @@ mod tests {
                     tx.resolve_property(&parent, Symbol::mk("test")).unwrap();
                 assert_eq!(value, v_int(1));
                 assert!(!is_clear, "Property should not be clear on defining object");
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 5: Check child inherits property - separate transaction
@@ -1749,7 +1749,7 @@ mod tests {
                     tx.resolve_property(&child, Symbol::mk("test")).unwrap();
                 assert_eq!(value, v_int(1));
                 assert!(is_clear, "Inherited property should be marked as clear");
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 6: Set property on child to value 2 - separate transaction
@@ -1759,7 +1759,7 @@ mod tests {
                     tx.resolve_property(&child, Symbol::mk("test")).unwrap();
                 let uuid = prop.uuid();
                 tx.set_property(&child, uuid, v_int(2)).unwrap();
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
                 uuid
             };
 
@@ -1770,7 +1770,7 @@ mod tests {
                     tx.resolve_property(&child, Symbol::mk("test")).unwrap();
                 assert_eq!(value, v_int(2));
                 assert!(!is_clear, "Property should not be clear after being set");
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 8: Check properties() function behavior - separate transaction
@@ -1786,7 +1786,7 @@ mod tests {
                     0,
                     "Child should have 0 properties (inheritance not listed)"
                 );
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 9: Clear property on child - separate transaction
@@ -1794,7 +1794,7 @@ mod tests {
                 let mut tx = db.start_transaction();
 
                 tx.clear_property(&child, prop_uuid).unwrap();
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 10: Check child inherits parent's value again - separate transaction
@@ -1809,7 +1809,7 @@ mod tests {
                     "Child should inherit parent's value (1) after clearing, but got {value:?}"
                 );
                 assert!(is_clear, "Property should be clear after clearing");
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
 
             // Step 11: Check parent property unchanged - separate transaction
@@ -1819,7 +1819,7 @@ mod tests {
                     tx.resolve_property(&parent, Symbol::mk("test")).unwrap();
                 assert_eq!(value, v_int(1));
                 assert!(!is_clear, "Parent property should remain unchanged");
-                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
             }
         }
     }
@@ -1857,14 +1857,14 @@ mod tests {
                     Some(v_int(1)),
                 )
                 .unwrap();
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Set property in one transaction
         {
             let mut tx = db.start_transaction();
             tx.set_property(&child, prop_uuid, v_int(2)).unwrap();
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Read property in another transaction
@@ -1880,7 +1880,7 @@ mod tests {
 
             // Debug: Check what the underlying relation delete does
             tx.clear_property(&child, prop_uuid).unwrap();
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Read property in another transaction
@@ -1916,7 +1916,7 @@ mod tests {
                     Some(v_int(42)),
                 )
                 .unwrap();
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Read property by name in another transaction - this should work
@@ -1937,7 +1937,7 @@ mod tests {
         {
             let mut tx = db.start_transaction();
             tx.clear_property(&obj, prop_uuid).unwrap();
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Read property in another transaction - should be None after clear
@@ -2009,7 +2009,7 @@ mod tests {
             "Single TX: Property should be clear after clearing"
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2032,7 +2032,7 @@ mod tests {
             tx.define_property(
                 &parent,
                 &parent,
-                Symbol::mk(&format!("prop{}", i)),
+                Symbol::mk(&format!("prop{i}")),
                 &NOTHING,
                 BitEnum::new(),
                 Some(v_int(i as i64)),
@@ -2051,7 +2051,7 @@ mod tests {
                         parent,
                         NOTHING,
                         BitEnum::new(),
-                        &format!("child{}", i),
+                        &format!("child{i}"),
                     ),
                 )
                 .unwrap();
@@ -2112,7 +2112,7 @@ mod tests {
             "Property should not be clear after local modification"
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2134,7 +2134,7 @@ mod tests {
         assert_eq!(tx.get_object_parent(&oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_location(&oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(&oid).unwrap(), "test_uuid");
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         // Verify existence in a new transaction.
         let tx = db.start_transaction();
@@ -2191,7 +2191,7 @@ mod tests {
                 .is_same(ObjSet::from_items(&[child, numbered_child]))
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2243,7 +2243,7 @@ mod tests {
             ObjSet::from_items(&[item])
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2293,7 +2293,7 @@ mod tests {
         assert_eq!(perms.owner(), NOTHING);
         assert!(is_clear); // Inherited properties are clear
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2352,7 +2352,7 @@ mod tests {
             vec!["uuid_verb".into()]
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2451,7 +2451,7 @@ mod tests {
             WorldStateError::ObjectNotFound(ObjectRef::Id(parent))
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2496,7 +2496,7 @@ mod tests {
                 .is_same(ObjSet::from_items(&[numbered_obj]))
         );
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -2625,7 +2625,7 @@ mod tests {
             assert!(tx.object_valid(&new_obj).unwrap());
             assert_eq!(tx.get_object_name(&new_obj).unwrap(), "test_obj");
 
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Test 2: Renumber with structural relationships, verbs, and properties
@@ -2767,7 +2767,7 @@ mod tests {
                     .is_err()
             );
 
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Test 3: Auto-selection for Objid
@@ -2798,7 +2798,7 @@ mod tests {
             assert!(!tx.object_valid(&obj16).unwrap());
             assert!(tx.object_valid(&new_obj).unwrap());
 
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Test 4: Error cases
@@ -2821,7 +2821,7 @@ mod tests {
             let result = tx.renumber_object(&nonexistent, Some(&Obj::mk_id(888)));
             assert!(matches!(result, Err(WorldStateError::ObjectNotFound(_))));
 
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Test 5: Cross-type renumbering (UuObjid to Objid) - only allowed direction
@@ -2846,7 +2846,7 @@ mod tests {
             assert!(tx.object_valid(&new_obj).unwrap());
             assert_eq!(tx.get_object_name(&new_obj).unwrap(), "cross_type");
 
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
 
         // Test 6: Inheritance behavior after renumbering
@@ -3129,7 +3129,7 @@ mod tests {
                     .is_err()
             );
 
-            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
         }
     }
 
@@ -3191,7 +3191,7 @@ mod tests {
         let result = tx.renumber_object(&numbered_obj, Some(&Obj::mk_id(200)));
         assert!(result.is_ok());
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -3249,7 +3249,7 @@ mod tests {
         let final_max = tx.get_max_object().unwrap();
         assert_eq!(final_max.id().0, 501);
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 
     #[test]
@@ -3296,7 +3296,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
 
         // Now create 10 child objects and measure tuples
         let mut tx = db.start_transaction();
@@ -3309,7 +3309,7 @@ mod tests {
                     NOTHING,
                     parent,
                     BitEnum::new(),
-                    &format!("child_{}", i),
+                    &format!("child_{i}"),
                 ),
             )
             .unwrap();
@@ -3320,7 +3320,7 @@ mod tests {
         let total_tuples = working_sets.total_tuples();
 
         println!("Created 10 children with parent that has 3 properties");
-        println!("Total tuples in working set: {}", total_tuples);
+        println!("Total tuples in working set: {total_tuples}");
         println!("Tuples per object: {:.1}", total_tuples as f64 / 10.0);
 
         // Expected: ~4-5 tuples per child object (owner, name, flags, parent, maybe location)
@@ -3329,8 +3329,7 @@ mod tests {
         // For now, let's be lenient but detect obvious problems
         assert!(
             total_tuples < 100,
-            "Potential tuple explosion detected: {} tuples for 10 objects",
-            total_tuples
+            "Potential tuple explosion detected: {total_tuples} tuples for 10 objects"
         );
     }
 }

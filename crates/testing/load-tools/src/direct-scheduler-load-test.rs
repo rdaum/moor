@@ -376,7 +376,7 @@ fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre:
 
     // Commit all changes
     match loader.commit()? {
-        CommitResult::Success => {
+        CommitResult::Success { .. } => {
             info!(
                 "Successfully initialized test database with {} objects and programmed verbs",
                 num_objects

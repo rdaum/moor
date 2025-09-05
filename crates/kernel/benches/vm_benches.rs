@@ -53,7 +53,7 @@ fn create_db() -> TxDB {
             ObjectKind::NextObjid,
         )
         .unwrap();
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     ws_source
 }
 
@@ -104,7 +104,7 @@ fn prepare_vm_execution(
     )
     .unwrap();
     let vm_host = prepare_call_verb(tx.as_mut(), "test", List::mk_list(&[]), max_ticks);
-    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
+    assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     vm_host
 }
 

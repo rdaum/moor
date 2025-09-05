@@ -223,7 +223,7 @@ where
     let commit_result = commit_current_transaction()?;
 
     match commit_result {
-        CommitResult::Success => {
+        CommitResult::Success { .. } => {
             // Create the new transaction
             let (new_world_state, result) = create_transaction()?;
 
@@ -243,7 +243,7 @@ where
                 });
             });
 
-            Ok((CommitResult::Success, Some(result)))
+            Ok((commit_result, Some(result)))
         }
         CommitResult::ConflictRetry => {
             // On conflict, we don't create a new transaction

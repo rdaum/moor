@@ -56,7 +56,7 @@ impl WorldStateActionExecutor {
             self.tx.rollback().ok();
         } else {
             match self.tx.commit() {
-                Ok(CommitResult::Success) => {}
+                Ok(CommitResult::Success { .. }) => {}
                 Ok(CommitResult::ConflictRetry) => {
                     return Err(CommandExecutionError(CommandError::DatabaseError(
                         WorldStateError::DatabaseError("Transaction conflict".to_string()),
