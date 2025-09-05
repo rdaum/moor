@@ -18,7 +18,7 @@ use eyre::eyre;
 use figment::Figment;
 use figment::providers::{Format as ProviderFormat, Serialized, Yaml};
 use moor_db::DatabaseConfig;
-use moor_kernel::config::{Config, ImportExportConfig, ImportExportFormat};
+use moor_kernel::config::{Config, ImportExportConfig, ImportExportFormat, RuntimeConfig};
 use moor_textdump::EncodingMode;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -40,6 +40,9 @@ pub struct Args {
 
     #[command(flatten)]
     import_export_args: Option<ImportExportArgs>,
+
+    #[command(flatten)]
+    runtime_args: Option<RuntimeArgs>,
 
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
@@ -196,13 +199,6 @@ pub struct ImportExportArgs {
 
     #[arg(
         long,
-        value_name = "gc-interval-seconds",
-        help = "Interval in seconds for automatic garbage collection (default: 30)"
-    )]
-    pub gc_interval_seconds: Option<u16>,
-
-    #[arg(
-        long,
         value_name = "textdump-output-encoding",
         help = "Encoding to use for writing textdump files. utf8 or iso8859-1. \
           LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you want to write a LambdaMOO-compatible textdump, choose iso8859-1. \
@@ -236,9 +232,6 @@ impl ImportExportArgs {
         if let Some(args) = self.checkpoint_interval_seconds {
             config.checkpoint_interval = Some(std::time::Duration::from_secs(u64::from(args)));
         }
-        if let Some(args) = self.gc_interval_seconds {
-            config.gc_interval = Some(std::time::Duration::from_secs(u64::from(args)));
-        }
         if let Some(args) = self.version_override.as_ref() {
             config.version_override = Some(args.clone());
         }
@@ -250,6 +243,26 @@ impl ImportExportArgs {
             Format::Textdump => ImportExportFormat::Textdump,
             Format::Objdef => ImportExportFormat::Objdef,
         };
+        Ok(())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
+pub struct RuntimeArgs {
+    #[arg(
+        long,
+        value_name = "gc-interval-seconds",
+        help = "Interval in seconds for automatic garbage collection (default: 30)"
+    )]
+    pub gc_interval_seconds: Option<u16>,
+}
+
+impl RuntimeArgs {
+    pub fn merge_config(&self, config: &mut RuntimeConfig) -> Result<(), eyre::Report> {
+        if let Some(args) = self.gc_interval_seconds {
+            config.gc_interval = Some(std::time::Duration::from_secs(u64::from(args)));
+        }
         Ok(())
     }
 }
@@ -279,6 +292,9 @@ impl Args {
     fn merge_config(&self, mut config: Config) -> Result<Config, eyre::Report> {
         if let Some(args) = self.import_export_args.as_ref() {
             args.merge_config(&mut config.import_export)?;
+        }
+        if let Some(args) = self.runtime_args.as_ref() {
+            args.merge_config(&mut config.runtime)?;
         }
         if let Some(args) = self.feature_args.as_ref() {
             let mut copy = config.features.as_ref().clone();
