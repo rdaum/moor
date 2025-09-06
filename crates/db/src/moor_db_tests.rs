@@ -1985,7 +1985,9 @@ mod tests {
         assert!(tx.object_valid(&container).unwrap());
 
         // Verify parent's property and verb are still intact
-        let (prop, value, _, _) = tx.resolve_property(&parent, Symbol::mk("test_prop")).unwrap();
+        let (prop, value, _, _) = tx
+            .resolve_property(&parent, Symbol::mk("test_prop"))
+            .unwrap();
         assert_eq!(prop.name(), "test_prop".into());
         assert_eq!(value, v_str("test_value"));
 
@@ -2032,7 +2034,13 @@ mod tests {
             let obj = tx
                 .create_object(
                     ObjectKind::NextObjid,
-                    ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), &format!("obj_{}", i)),
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new(),
+                        &format!("obj_{}", i),
+                    ),
                 )
                 .unwrap();
             objects.push(obj);
@@ -2074,7 +2082,9 @@ mod tests {
 
         // Verify parent is still valid and has its properties
         assert!(tx.object_valid(&parent).unwrap());
-        let (prop, value, _, _) = tx.resolve_property(&parent, Symbol::mk("test_prop")).unwrap();
+        let (prop, value, _, _) = tx
+            .resolve_property(&parent, Symbol::mk("test_prop"))
+            .unwrap();
         assert_eq!(prop.name(), "test_prop".into());
         assert_eq!(value, v_str("test_value"));
 

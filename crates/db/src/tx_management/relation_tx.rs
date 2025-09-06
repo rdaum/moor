@@ -704,8 +704,8 @@ where
         // Process each requested domain
         for domain in domains {
             // Check local operations first (if we have mutations)
-            if self.index.has_local_mutations {
-                if let Some(op) = self.index.local_operations.get(domain) {
+            if self.index.has_local_mutations
+                && let Some(op) = self.index.local_operations.get(domain) {
                     match &op.operation {
                         OpType::Delete => continue, // Skip deleted entries
                         OpType::Insert(value) | OpType::Update(value) => {
@@ -714,22 +714,19 @@ where
                         }
                     }
                 }
-            }
 
             // Check master entries
-            if let Some(entry) = self.index.master_entries.index_lookup(domain) {
-                if entry.ts <= self.tx.ts {
+            if let Some(entry) = self.index.master_entries.index_lookup(domain)
+                && entry.ts <= self.tx.ts {
                     results.insert(domain.clone(), entry.value.clone());
                     continue;
                 }
-            }
 
             // Check backing source as fallback
-            if let Some((ts, value)) = self.backing_source.get(domain)? {
-                if ts <= self.tx.ts {
+            if let Some((ts, value)) = self.backing_source.get(domain)?
+                && ts <= self.tx.ts {
                     results.insert(domain.clone(), value);
                 }
-            }
         }
 
         Ok(results.into_iter().collect())

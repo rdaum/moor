@@ -249,6 +249,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let mut config = Config::default();
         config.import_export.output_path = Some(output_path.clone());
         config.import_export.export_format = export_format;
+        // Enable anonymous objects for GC tests
+        config.features = Arc::new(moor_kernel::config::FeaturesConfig {
+            anonymous_objects: true,
+            ..config.features.as_ref().clone()
+        });
         let config = Arc::new(config);
 
         // Create real database with core
