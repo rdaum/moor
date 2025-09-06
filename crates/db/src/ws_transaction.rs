@@ -396,9 +396,13 @@ impl WorldStateTransaction {
             }
         }
 
-        self.apply_batch_recycle_changes(objects, contents_to_move, children_to_reparent, properties_to_delete)
+        self.apply_batch_recycle_changes(
+            objects,
+            contents_to_move,
+            children_to_reparent,
+            properties_to_delete,
+        )
     }
-
 
     /// Common logic for applying batch recycle changes
     fn apply_batch_recycle_changes(
@@ -415,7 +419,7 @@ impl WorldStateTransaction {
             })?;
         }
 
-        // Bulk update parent relationships directly on the relation  
+        // Bulk update parent relationships directly on the relation
         for (child, new_parent) in children_to_reparent {
             upsert(&mut self.object_parent, child, new_parent).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error updating object parent: {e:?}"))
@@ -431,7 +435,9 @@ impl WorldStateTransaction {
 
             // Remove location relationship (contents list is automatically updated via secondary index)
             self.object_location.delete(obj).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error removing location relationship: {e:?}"))
+                WorldStateError::DatabaseError(format!(
+                    "Error removing location relationship: {e:?}"
+                ))
             })?;
 
             // Delete core object attributes
@@ -1742,25 +1748,24 @@ impl WorldStateTransaction {
             };
 
             for propdef in propdefs.iter() {
-                if let Ok((Some(prop_value), _perms)) = self.retrieve_property(&obj, propdef.uuid()) {
+                if let Ok((Some(prop_value), _perms)) = self.retrieve_property(&obj, propdef.uuid())
+                {
                     let anon_refs = crate::extract_anonymous_refs(&prop_value);
                     obj_refs.extend(anon_refs);
                 }
             }
 
             // 2. Check parent relationship
-            if let Ok(parent) = self.get_object_parent(&obj) {
-                if parent.is_anonymous() {
+            if let Ok(parent) = self.get_object_parent(&obj)
+                && parent.is_anonymous() {
                     obj_refs.insert(parent);
                 }
-            }
 
-            // 3. Check location relationship  
-            if let Ok(location) = self.get_object_location(&obj) {
-                if location.is_anonymous() {
+            // 3. Check location relationship
+            if let Ok(location) = self.get_object_location(&obj)
+                && location.is_anonymous() {
                     obj_refs.insert(location);
                 }
-            }
 
             // 4. Check verb definitions for object references
             if let Ok(verbdefs) = self.get_verbs(&obj) {
@@ -1769,7 +1774,7 @@ impl WorldStateTransaction {
                     if verbdef.location().is_anonymous() {
                         obj_refs.insert(verbdef.location());
                     }
-                    // Check owner field  
+                    // Check owner field
                     if verbdef.owner().is_anonymous() {
                         obj_refs.insert(verbdef.owner());
                     }
@@ -1824,7 +1829,7 @@ impl WorldStateTransaction {
         }
 
         let collected = objects_to_recycle.len();
-        
+
         if !objects_to_recycle.is_empty() {
             // Use batch recycling for better performance
             self.batch_recycle_objects(&objects_to_recycle)?;

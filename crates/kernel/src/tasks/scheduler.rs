@@ -219,7 +219,11 @@ impl Scheduler {
         self.reload_server_options();
         while self.running {
             // Check if we should run GC (and no GC is already in progress)
-            if !self.gc_collection_in_progress && !self.gc_mark_in_progress && self.should_run_gc()
+            // Only run GC if anonymous objects are enabled
+            if self.config.features.anonymous_objects
+                && !self.gc_collection_in_progress
+                && !self.gc_mark_in_progress
+                && self.should_run_gc()
             {
                 self.run_gc_cycle();
             }
@@ -477,7 +481,8 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_sweep_in_progress || self.gc_force_collect,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
 
                 reply
@@ -537,7 +542,8 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_sweep_in_progress || self.gc_force_collect,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
                 reply
                     .send(result)
@@ -608,7 +614,8 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_sweep_in_progress || self.gc_force_collect,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
                 reply
                     .send(result)
@@ -636,7 +643,8 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_sweep_in_progress || self.gc_force_collect,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
                 reply
                     .send(result)
@@ -674,8 +682,11 @@ impl Scheduler {
             SchedulerClientMsg::RequestGC(reply) => {
                 debug!("Direct GC request received via scheduler client");
 
-                // If GC is already in progress, just return success
-                if self.gc_collection_in_progress {
+                // Check if anonymous objects are enabled first
+                if !self.config.features.anonymous_objects {
+                    warn!("GC requested but anonymous objects are disabled, ignoring request");
+                    reply.send(Ok(())).expect("Could not send GC request reply");
+                } else if self.gc_collection_in_progress {
                     info!(
                         "GC already in progress, request acknowledged but no additional cycle started"
                     );
@@ -1141,7 +1152,8 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
-                    self.gc_sweep_in_progress || self.gc_force_collect,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
                 match result {
                     Err(e) => {
@@ -1222,7 +1234,13 @@ impl Scheduler {
             }
             TaskControlMsg::ForceGC => {
                 info!("Forcing garbage collection via gc_collect() builtin");
-                self.gc_force_collect = true;
+                if !self.config.features.anonymous_objects {
+                    warn!(
+                        "GC force requested but anonymous objects are disabled, ignoring request"
+                    );
+                } else {
+                    self.gc_force_collect = true;
+                }
             }
         }
     }
@@ -1967,7 +1985,11 @@ impl Scheduler {
         };
 
         let sweep_duration = start_time.elapsed();
-        info!("GC sweep: {} objects collected in {:.2}ms", collected, sweep_duration.as_secs_f64() * 1000.0);
+        info!(
+            "GC sweep: {} objects collected in {:.2}ms",
+            collected,
+            sweep_duration.as_secs_f64() * 1000.0
+        );
 
         // Commit the sweep phase transaction
         match gc.commit() {

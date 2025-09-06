@@ -76,6 +76,10 @@ pub struct FeaturesConfig {
     /// Whether to enable persistent event logging. When disabled, events are not persisted to disk
     /// and history features are unavailable.
     pub enable_eventlog: bool,
+    /// Whether to enable anonymous objects. Anonymous objects are lightweight objects that can be
+    /// created without assigned object IDs. Requires garbage collection to clean up unreferenced objects.
+    /// Defaults to false due to GC overhead.
+    pub anonymous_objects: bool,
 }
 
 impl Default for FeaturesConfig {
@@ -95,6 +99,7 @@ impl Default for FeaturesConfig {
             custom_errors: false,
             use_uuobjids: false,
             enable_eventlog: true,
+            anonymous_objects: false,
         }
     }
 }

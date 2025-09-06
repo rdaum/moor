@@ -268,17 +268,15 @@ fn extract_anonymous_refs_from_activation(
     // 4. Scan command if present
     if let Some(command) = &activation.command {
         // Check direct object
-        if let Some(dobj) = command.dobj {
-            if dobj.is_anonymous() {
+        if let Some(dobj) = command.dobj
+            && dobj.is_anonymous() {
                 refs.insert(dobj);
             }
-        }
         // Check indirect object
-        if let Some(iobj) = command.iobj {
-            if iobj.is_anonymous() {
+        if let Some(iobj) = command.iobj
+            && iobj.is_anonymous() {
                 refs.insert(iobj);
             }
-        }
         // Scan arguments
         for arg in &command.args {
             extract_anonymous_refs_from_var(arg, refs);

@@ -1985,7 +1985,9 @@ mod tests {
         assert!(tx.object_valid(&container).unwrap());
 
         // Verify parent's property and verb are still intact
-        let (prop, value, _, _) = tx.resolve_property(&parent, Symbol::mk("test_prop")).unwrap();
+        let (prop, value, _, _) = tx
+            .resolve_property(&parent, Symbol::mk("test_prop"))
+            .unwrap();
         assert_eq!(prop.name(), "test_prop".into());
         assert_eq!(value, v_str("test_value"));
 

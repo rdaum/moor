@@ -446,7 +446,14 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         // Convert integer to ObjectKind, validating as we go
         match obj_type {
             0 => ObjectKind::NextObjid,
-            1 => ObjectKind::Anonymous,
+            1 => {
+                if !bf_args.config.anonymous_objects {
+                    return Err(BfErr::ErrValue(E_INVARG.msg(
+                        "Anonymous objects not available (anonymous_objects feature is disabled)",
+                    )));
+                }
+                ObjectKind::Anonymous
+            }
             2 => {
                 if !bf_args.config.use_uuobjids {
                     return Err(BfErr::ErrValue(
