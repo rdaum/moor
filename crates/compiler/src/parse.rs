@@ -3661,8 +3661,7 @@ mod tests {
         if let StmtNode::Expr(Expr::Decl {
             expr: Some(expr), ..
         }) = &expr_parse.stmts[0].node
-        {
-            if let Expr::Lambda { body, .. } = expr.as_ref() {
+            && let Expr::Lambda { body, .. } = expr.as_ref() {
                 // Should be a return statement wrapping the expression
                 if let StmtNode::Expr(Expr::Return(Some(_))) = &body.node {
                     // Good - expression lambda was wrapped in return
@@ -3673,7 +3672,6 @@ mod tests {
                     );
                 }
             }
-        }
 
         // Test statement lambda with fn/endfn
         let program = r#"let f = fn(x) return x + 1; endfn;"#;
