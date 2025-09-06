@@ -174,10 +174,32 @@ where
             return Err(Error::Duplicate);
         }
 
-        // We also have to check our own local index to see if we have an entry for this domain.
-        // IF we do, we can't insert it.
-        if self.index.local_operations.contains_key(&domain) {
-            return Err(Error::Duplicate);
+        // Check our own local index to see if we have an entry for this domain.
+        if self.index.has_local_mutations
+            && let Some(entry) = self.index.local_operations.get_mut(&domain)
+        {
+            match &entry.operation {
+                OpType::Delete => {
+                    // Check master index to determine if this should be Insert or Update
+                    if let Some(master_entry) = self.index.master_entries.index_lookup(&domain) {
+                        // Entry exists in master index, convert to Update
+                        entry.read_ts = master_entry.ts;
+                        entry.write_ts = self.tx.ts;
+                        entry.operation = OpType::Update(value.clone());
+                    } else {
+                        // No entry in master index, convert to Insert
+                        entry.read_ts = self.tx.ts;
+                        entry.write_ts = self.tx.ts;
+                        entry.operation = OpType::Insert(value.clone());
+                    }
+                    self.index.has_local_mutations = true;
+                    return Ok(());
+                }
+                OpType::Insert(_) | OpType::Update(_) => {
+                    // Already have an insert or update for this domain
+                    return Err(Error::Duplicate);
+                }
+            }
         }
 
         // Not in the index, we check the backing source.

@@ -2252,6 +2252,53 @@ mod tests {
     }
 
     #[test]
+    fn test_recycle_object_cleanup_complete() {
+        // Test that recycling an object completely cleans up all state
+        // and allows creating a new object with the same ID
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create object with specific ID
+        let obj_id = Obj::mk_id(42);
+        let obj = tx
+            .create_object(
+                ObjectKind::Objid(obj_id),
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test_obj"),
+            )
+            .unwrap();
+
+        assert_eq!(obj, obj_id);
+
+        // Verify object exists
+        assert!(tx.object_valid(&obj).unwrap());
+        assert_eq!(tx.get_object_name(&obj).unwrap(), "test_obj");
+
+        // Recycle the object
+        tx.recycle_object(&obj).expect("Unable to recycle object");
+
+        // Verify object is gone
+        let result = tx.get_object_name(&obj);
+        assert_eq!(
+            result.err().unwrap(),
+            WorldStateError::ObjectNotFound(ObjectRef::Id(obj))
+        );
+
+        // Now try to create a new object with the SAME ID
+        // This should succeed if recycle cleaned up properly
+        let new_obj = tx
+            .create_object(
+                ObjectKind::Objid(obj_id),
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "new_obj"),
+            )
+            .expect("Should be able to create object with recycled ID");
+
+        assert_eq!(new_obj, obj_id);
+        assert_eq!(tx.get_object_name(&new_obj).unwrap(), "new_obj");
+
+        tx.commit().expect("Transaction should commit successfully");
+    }
+
+    #[test]
     fn test_uuid_object_recycle() {
         let db = test_db();
         let mut tx = db.start_transaction();
@@ -2623,28 +2670,28 @@ mod tests {
         {
             let mut tx = db.start_transaction();
 
-            // Create objects #0, #1, #2 first, then create #5
-            let _obj0 = tx
-                .create_object(ObjectKind::Objid(Obj::mk_id(0)), ObjAttrs::default())
+            // Create objects #11, #12, #13 first, then create #16 (use higher numbers to avoid conflicts)
+            let _obj11 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(11)), ObjAttrs::default())
                 .unwrap();
-            let _obj1 = tx
-                .create_object(ObjectKind::Objid(Obj::mk_id(1)), ObjAttrs::default())
+            let _obj12 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(12)), ObjAttrs::default())
                 .unwrap();
-            let _obj2 = tx
-                .create_object(ObjectKind::Objid(Obj::mk_id(2)), ObjAttrs::default())
+            let _obj13 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(13)), ObjAttrs::default())
                 .unwrap();
-            let obj5 = tx
-                .create_object(ObjectKind::Objid(Obj::mk_id(5)), ObjAttrs::default())
+            let obj16 = tx
+                .create_object(ObjectKind::Objid(Obj::mk_id(16)), ObjAttrs::default())
                 .unwrap();
 
-            // Delete obj1 to create a gap at #1
-            tx.recycle_object(&_obj1).unwrap();
+            // Delete obj12 to create a gap at #12
+            tx.recycle_object(&_obj12).unwrap();
 
-            // Renumber obj5 with auto-selection - should pick the first available slot (1)
-            let new_obj = tx.renumber_object(&obj5, None).unwrap();
-            // Should pick the first available slot below 5, which is 1 (after obj1 was deleted)
-            assert!(new_obj.id().0 < 5);
-            assert!(!tx.object_valid(&obj5).unwrap());
+            // Renumber obj16 with auto-selection - should pick the first available slot (12)
+            let new_obj = tx.renumber_object(&obj16, None).unwrap();
+            // Should pick the first available slot below 16, which is 12 (after obj12 was deleted)
+            assert!(new_obj.id().0 < 16);
+            assert!(!tx.object_valid(&obj16).unwrap());
             assert!(tx.object_valid(&new_obj).unwrap());
 
             assert_eq!(tx.commit(), Ok(CommitResult::Success));
