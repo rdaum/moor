@@ -88,7 +88,7 @@ ColdMUD/Genesis never achieved LambdaMOO's widespread adoption, but it showed th
 
 Built from the ground up in Rust, mooR maintains everything that made MOO special—the live coding, the democratic programming where regular users can modify the world, the persistent object-oriented database where everything is an object. But it addresses the limitations that accumulated over MOO's decades of existence.
 
-Classic MOO servers process commands one at a time, which could create bottlenecks during busy periods. mooR uses **transactions** to allow multiple commands to run simultaneously while keeping the database consistent—solving the concurrency challenges that limited classic MOO's scalability. (For details, see [Transactions in the MOO Database](../the-database/transactions.md).)
+Classic MOO servers process commands one at a time, which could create bottlenecks during busy periods. mooR uses **transactions** to allow multiple commands to run simultaneously while keeping the database consistent—solving the concurrency challenges that limited classic MOO's scalability. (For details, see [Transactions in the MOO Database](the-database/transactions.md).)
 
 Beyond performance, mooR extends the MOO language with modern features like maps, symbols, enhanced error handling, and improved type systems, while maintaining backward compatibility with existing MOO code.
 
