@@ -185,17 +185,19 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Network connections
 
+mooR handles outbound networking differently than classic LambdaMOO - see the [networking section](../networking.md#outbound-network-connections-via-curl_worker) for details on using workers for outbound connections.
+
 | Name                                                           | Complete | Notes                                                                                                |
 |----------------------------------------------------------------|----------|------------------------------------------------------------------------------------------------------|
-| [`set_connection_option`](server.md#set_connection_option)     |          |                                                                                                      |
-| [`connection_option`](server.md#connection_option)             |          |                                                                                                      |
-| [`connection_options`](server.md#connection_options)           |          |                                                                                                      |
-| [`open_network_connection`](server.md#open_network_connection) |          |                                                                                                      |
+| [`set_connection_option`](server.md#set_connection_option)     |          | Not planned                                                                                          |
+| [`connection_option`](server.md#connection_option)             |          | Not planned                                                                                          |
+| [`connection_options`](server.md#connection_options)           |          | Not planned                                                                                          |
+| [`open_network_connection`](server.md#open_network_connection) |          | Not planned - use worker system instead                                                             |
 | [`listen`](server.md#listen)                                   | &check;  | `print-messages` not yet implemented. errors in binding not properly propagating back to the builtin |
 | [`unlisten`](server.md#unlisten)                               | &check;  |                                                                                                      |
 | [`listeners`](server.md#listeners)                             | &check;  |                                                                                                      |
-| [`output_delimiters`](server.md#output_delimiters)             |          |                                                                                                      |
-| [`buffered_output_length`](server.md#buffered_output_length)   |          |                                                                                                      |
+| [`output_delimiters`](server.md#output_delimiters)             |          | Not planned                                                                                          |
+| [`buffered_output_length`](server.md#buffered_output_length)   |          | Not planned                                                                                          |
 
 ## Extension from Toast
 
