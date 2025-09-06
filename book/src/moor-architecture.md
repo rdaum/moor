@@ -64,7 +64,7 @@ in the `daemon` process
 - a task scheduler for executing verbs in virtual machines (`daemon/src/scheduler/`)
 - a ZeroMQ based RPC server for handling requests from the host processes (`daemon/src/rpc_server.rs`)
 
-in each "_host_" process (e.g. `web`, `telnet`, `console`):
+in each "_host_" process (e.g. `web`, `telnet`):
 
 - a listen loop of some kind (HTTP, TCP, etc.)
 - a ZeroMQ RPC client which turns events to/from the daemon into RPC events
@@ -223,6 +223,3 @@ for interacting with the system. The web frontend is a rich browser-based applic
 the web-host via these APIs. In development, Vite serves the frontend with API proxying. In production,
 nginx serves the frontend files and proxies API calls to the web-host service.
 
-In addition to these, a `console` host process is provided. This is a simple command-line interface which is used for
-attaching to the daemon process in a manner similar to the telnet interface, but with history, tab-completion, and
-other modern conveniences. In the future this tool will be extended to provide administrative and debugging tools.
