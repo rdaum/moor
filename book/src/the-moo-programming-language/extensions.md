@@ -73,7 +73,7 @@ This is a set of immutable sorted key-value pairs with convenient syntax for cre
 can be used as an alternative to traditional MOO `alists` / "associative lists".
 
 ```moo
-let my_map = [ "a" => 1, "b" => 2, "c" => 3 ];
+let my_map = [ "a" -> 1, "b" -> 2, "c" -> 3 ];
 my_map["a"] => 1
 ```
 
@@ -181,7 +181,7 @@ When accessing a property (or slot) on a flyweight using property accessing synt
 flyweight itself, and then check the delegate object. If the property is not found on either, it will return `E_PROPNF`:
 
 ```moo
-let x = < $key, [ password => "secret" ] >;
+let x = < $key, [ password -> "secret" ] >;
 return x.password;
 
 => "secret"
@@ -214,7 +214,7 @@ If a third argument is present, it is expected to be a "content-type" string, an
 JSON message as such.
 
 ```moo
-notify(player, [ "type" => "message", "text" => "Hello, world!" ], "application/json");
+notify(player, [ "type" -> "message", "text" -> "Hello, world!" ], "application/json");
 ```
 
 becomes, on the websocket:
