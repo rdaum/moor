@@ -26,12 +26,12 @@ statement  = {
   | empty_return
   | try_except_statement
   | try_finally_statement
-  | begin_statement
   | fn_statement
+  | global_assignment
   | expr_statement
   | local_assignment
   | const_assignment
-  | global_assignment
+  | begin_statement
   }
 
 if_statement  = { ^"if" ~ "(" ~ expr ~ ")" ~ statements ~ (elseif_clause)* ~ (else_clause)? ~ endif_clause }

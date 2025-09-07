@@ -3661,17 +3661,18 @@ mod tests {
         if let StmtNode::Expr(Expr::Decl {
             expr: Some(expr), ..
         }) = &expr_parse.stmts[0].node
-            && let Expr::Lambda { body, .. } = expr.as_ref() {
-                // Should be a return statement wrapping the expression
-                if let StmtNode::Expr(Expr::Return(Some(_))) = &body.node {
-                    // Good - expression lambda was wrapped in return
-                } else {
-                    panic!(
-                        "Expected return statement for expression lambda, got: {:?}",
-                        &body.node
-                    );
-                }
+            && let Expr::Lambda { body, .. } = expr.as_ref()
+        {
+            // Should be a return statement wrapping the expression
+            if let StmtNode::Expr(Expr::Return(Some(_))) = &body.node {
+                // Good - expression lambda was wrapped in return
+            } else {
+                panic!(
+                    "Expected return statement for expression lambda, got: {:?}",
+                    &body.node
+                );
             }
+        }
 
         // Test statement lambda with fn/endfn
         let program = r#"let f = fn(x) return x + 1; endfn;"#;
@@ -3783,5 +3784,32 @@ return 0 && "Automatically Added Return";"#;
                 panic!("auditDB verb failed to parse (regression): {e:?}");
             }
         }
+    }
+
+    #[test]
+    // Regression test for parsing identifiers that start with keywords (e.g., "beginning")
+    fn regression_begin_in_block() {
+        let program = r#"if (iobjstr == "")
+  player:tell("Nothing to do.");
+  return;
+elseif (iobjstr == "next")
+  if (this.last_read == length(this.notice_desc))
+    player:tell("End of notices: Start with the first one?");
+    if ($command_utils:yes_or_no())
+      beginning = 1;
+    else
+      player:tell("No more jumps to make.");
+      return;
+    endif
+  else
+    beginning = this.last_read + 1;
+    what = this.last_scan;
+  endif
+else
+  beginning = 1;
+  what = iobjstr;
+  this.last_scan = what;
+endif"#;
+        parse_program(program, CompileOptions::default()).unwrap();
     }
 }
