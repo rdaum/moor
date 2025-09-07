@@ -378,7 +378,7 @@ impl WebSocketConnection {
         ws_sender: &mut SplitSink<WebSocket, Message>,
     ) {
         let line = line.into_text().unwrap();
-        let cmd = line.trim().to_string();
+        let cmd = line.to_string(); // Don't trim input lines - preserve them exactly as sent
 
         let Some(input_request_id) = expecting_input.front() else {
             warn!("Attempt to send reply to input request without an input request");

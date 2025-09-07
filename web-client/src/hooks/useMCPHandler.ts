@@ -19,6 +19,7 @@ interface MCPSpool {
     verbName: string;
     uploadAction: string;
     lines: string[];
+    isProp?: boolean;
 }
 
 export const useMCPHandler = (
@@ -26,6 +27,13 @@ export const useMCPHandler = (
         title: string,
         objectCurie: string,
         verbName: string,
+        content: string,
+        uploadAction?: string,
+    ) => void,
+    onShowPropertyEditor: (
+        title: string,
+        objectCurie: string,
+        propertyName: string,
         content: string,
         uploadAction?: string,
     ) => void,
@@ -71,7 +79,7 @@ export const useMCPHandler = (
 
         const title = isProp ? `${objectName}.${verbName}` : `${objectName}:${verbName}`;
 
-        return { objectCurie: objectName, verbName, title, uploadAction };
+        return { objectCurie: objectName, verbName, title, uploadAction, isProp };
     }, []);
 
     // Handle narrative messages that might be MCP commands or spool content
@@ -98,6 +106,7 @@ export const useMCPHandler = (
                     verbName: editInfo.verbName,
                     uploadAction: editInfo.uploadAction,
                     lines: [],
+                    isProp: editInfo.isProp,
                 };
             }
             return true; // Indicate this message was handled as MCP
@@ -107,11 +116,21 @@ export const useMCPHandler = (
         if (!isHistorical && spoolRef.current) {
             // Check for end marker (single "." on its own line)
             if (content.trim() === ".") {
-                // End of spool - launch editor
+                // End of spool - launch appropriate editor
                 const spool = spoolRef.current;
                 const editorContent = spool.lines.join("\n");
 
-                onShowVerbEditor(spool.title, spool.objectCurie, spool.verbName, editorContent, spool.uploadAction);
+                if (spool.isProp) {
+                    onShowPropertyEditor(
+                        spool.title,
+                        spool.objectCurie,
+                        spool.verbName,
+                        editorContent,
+                        spool.uploadAction,
+                    );
+                } else {
+                    onShowVerbEditor(spool.title, spool.objectCurie, spool.verbName, editorContent, spool.uploadAction);
+                }
 
                 // Clear spool
                 spoolRef.current = null;
@@ -124,7 +143,7 @@ export const useMCPHandler = (
         }
 
         return false; // This message was not MCP-related
-    }, [parseEditCommand, onShowVerbEditor]);
+    }, [parseEditCommand, onShowVerbEditor, onShowPropertyEditor]);
 
     return {
         handleNarrativeMessage,

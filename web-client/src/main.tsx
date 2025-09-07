@@ -20,6 +20,7 @@ import { TopDock } from "./components/docks/TopDock";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
+import { PropertyEditor } from "./components/PropertyEditor";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
@@ -29,6 +30,7 @@ import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketConte
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
 import { useMediaQuery } from "./hooks/useMediaQuery";
+import { usePropertyEditor } from "./hooks/usePropertyEditor";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { MoorRemoteObject } from "./lib/rpc";
 import { oidRef } from "./lib/var";
@@ -41,6 +43,7 @@ function AppContent({
     narrativeCallbackRef,
     onLinkClick,
     onVerbEditorReady,
+    onPropertyEditorReady,
 }: {
     narrativeRef: React.RefObject<NarrativeRef>;
     narrativeCallbackRef: (node: NarrativeRef | null) => void;
@@ -50,6 +53,15 @@ function AppContent({
             title: string,
             objectCurie: string,
             verbName: string,
+            content: string,
+            uploadAction?: string,
+        ) => void,
+    ) => void;
+    onPropertyEditorReady?: (
+        showPropertyEditor: (
+            title: string,
+            objectCurie: string,
+            propertyName: string,
             content: string,
             uploadAction?: string,
         ) => void,
@@ -85,12 +97,26 @@ function AppContent({
         showVerbEditor,
     } = useVerbEditor();
 
+    // Property editor state
+    const {
+        propertyEditorSession,
+        closePropertyEditor,
+        showPropertyEditor,
+    } = usePropertyEditor();
+
     // Notify parent about verb editor availability
     useEffect(() => {
         if (onVerbEditorReady) {
             onVerbEditorReady(showVerbEditor);
         }
     }, [onVerbEditorReady, showVerbEditor]);
+
+    // Notify parent about property editor availability
+    useEffect(() => {
+        if (onPropertyEditorReady) {
+            onPropertyEditorReady(showPropertyEditor);
+        }
+    }, [onPropertyEditorReady, showPropertyEditor]);
 
     // History management
     const {
@@ -271,7 +297,8 @@ function AppContent({
     }, [isDraggingSplit]);
 
     const isConnected = authState.player?.connected || false;
-    const isSplitMode = isConnected && editorSession && (isMobile || forceSplitMode);
+    const hasActiveEditor = editorSession || propertyEditorSession;
+    const isSplitMode = isConnected && hasActiveEditor && (isMobile || forceSplitMode);
 
     // Add pending historical messages when narrative component becomes available
     useEffect(() => {
@@ -403,7 +430,7 @@ function AppContent({
                     </div>
 
                     {/* Editor Section (in split mode) */}
-                    {isSplitMode && editorSession && authState.player?.authToken && (
+                    {isSplitMode && authState.player?.authToken && (
                         <div
                             style={{
                                 height: `${(1 - splitRatio) * 100}%`,
@@ -412,28 +439,49 @@ function AppContent({
                                 overflow: "hidden",
                             }}
                         >
-                            <VerbEditor
-                                visible={true}
-                                onClose={closeEditor}
-                                title={editorSession.title}
-                                objectCurie={editorSession.objectCurie}
-                                verbName={editorSession.verbName}
-                                initialContent={editorSession.content}
-                                authToken={authState.player.authToken}
-                                uploadAction={editorSession.uploadAction}
-                                onSendMessage={sendMessage}
-                                splitMode={true}
-                                onSplitDrag={handleSplitMouseDown}
-                                onSplitTouchStart={handleSplitTouchStart}
-                                onToggleSplitMode={toggleSplitMode}
-                                isInSplitMode={true}
-                            />
+                            {editorSession && (
+                                <VerbEditor
+                                    visible={true}
+                                    onClose={closeEditor}
+                                    title={editorSession.title}
+                                    objectCurie={editorSession.objectCurie}
+                                    verbName={editorSession.verbName}
+                                    initialContent={editorSession.content}
+                                    authToken={authState.player.authToken}
+                                    uploadAction={editorSession.uploadAction}
+                                    onSendMessage={sendMessage}
+                                    splitMode={true}
+                                    onSplitDrag={handleSplitMouseDown}
+                                    onSplitTouchStart={handleSplitTouchStart}
+                                    onToggleSplitMode={toggleSplitMode}
+                                    isInSplitMode={true}
+                                />
+                            )}
+                            {propertyEditorSession && (
+                                <PropertyEditor
+                                    visible={true}
+                                    onClose={closePropertyEditor}
+                                    title={propertyEditorSession.title}
+                                    objectCurie={propertyEditorSession.objectCurie}
+                                    propertyName={propertyEditorSession.propertyName}
+                                    initialContent={propertyEditorSession.content}
+                                    authToken={authState.player.authToken}
+                                    uploadAction={propertyEditorSession.uploadAction}
+                                    onSendMessage={sendMessage}
+                                    splitMode={true}
+                                    onSplitDrag={handleSplitMouseDown}
+                                    onSplitTouchStart={handleSplitTouchStart}
+                                    onToggleSplitMode={toggleSplitMode}
+                                    isInSplitMode={true}
+                                    contentType={propertyEditorSession.contentType}
+                                />
+                            )}
                         </div>
                     )}
                 </main>
             )}
 
-            {/* Verb Editor Modal (fallback for non-split mode) */}
+            {/* Editor Modals (fallback for non-split mode) */}
             {!isSplitMode && editorSession && authState.player?.authToken && (
                 <VerbEditor
                     visible={true}
@@ -447,6 +495,22 @@ function AppContent({
                     onSendMessage={sendMessage}
                     onToggleSplitMode={toggleSplitMode}
                     isInSplitMode={false}
+                />
+            )}
+            {!isSplitMode && propertyEditorSession && authState.player?.authToken && (
+                <PropertyEditor
+                    visible={true}
+                    onClose={closePropertyEditor}
+                    title={propertyEditorSession.title}
+                    objectCurie={propertyEditorSession.objectCurie}
+                    propertyName={propertyEditorSession.propertyName}
+                    initialContent={propertyEditorSession.content}
+                    authToken={authState.player.authToken}
+                    uploadAction={propertyEditorSession.uploadAction}
+                    onSendMessage={sendMessage}
+                    onToggleSplitMode={toggleSplitMode}
+                    isInSplitMode={false}
+                    contentType={propertyEditorSession.contentType}
                 />
             )}
         </div>
@@ -476,11 +540,22 @@ function AppWrapper() {
         ((title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) | null
     >(null);
 
+    // Store property editor function from AppContent
+    const showPropertyEditorRef = useRef<
+        | ((title: string, objectCurie: string, propertyName: string, content: string, uploadAction?: string) => void)
+        | null
+    >(null);
+
     // MCP handler for parsing edit commands
     const { handleNarrativeMessage: mcpHandler } = useMCPHandler(
         (title, objectCurie, verbName, content, uploadAction) => {
             if (showVerbEditorRef.current) {
                 showVerbEditorRef.current(title, objectCurie, verbName, content, uploadAction);
+            }
+        },
+        (title, objectCurie, propertyName, content, uploadAction) => {
+            if (showPropertyEditorRef.current) {
+                showPropertyEditorRef.current(title, objectCurie, propertyName, content, uploadAction);
             }
         },
     );
@@ -590,6 +665,9 @@ function AppWrapper() {
                 onLinkClick={handleLinkClick}
                 onVerbEditorReady={(fn) => {
                     showVerbEditorRef.current = fn;
+                }}
+                onPropertyEditorReady={(fn) => {
+                    showPropertyEditorRef.current = fn;
                 }}
             />
         </WebSocketProvider>
