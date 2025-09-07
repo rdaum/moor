@@ -34,6 +34,12 @@ export const useMCPHandler = (
 
     // Parse MCP edit command: "#$# edit name: Object:verb upload: @program #object:verb permissions"
     const parseEditCommand = useCallback((command: string) => {
+        // Handle server sending mcp message - generally the first message from server on connect and reconnect
+        if (command === "#$#mcp version: 2.1 to: 2.1") {
+            console.log("Server supports " + command);
+            return null;
+        }
+
         // Remove the MCP prefix
         const cleanCommand = command.replace(/^#\$#\s+/, "");
 

@@ -150,6 +150,7 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
                         <input
                             ref={usernameRef}
                             id="login_username"
+                            name="username"
                             type="text"
                             placeholder="Username"
                             autoComplete="username"
@@ -164,6 +165,7 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
                         <input
                             ref={passwordRef}
                             id="login_password"
+                            name="password"
                             type="password"
                             placeholder="Password"
                             autoComplete="current-password"
