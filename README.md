@@ -108,7 +108,11 @@ Connect via:
 - **Web**: [http://localhost:8080](http://localhost:8080)
 - **Telnet**: `telnet localhost 8888`
 
-The server comes pre-loaded with JaysHouseCore, providing a ready-to-explore virtual world.
+The server comes pre-loaded with an extraction of LambdaCore, providing a ready-to-explore virtual world.
+
+For more detailed setup instructions, see the
+[Docker Compose Setup](https://timbran.codeberg.page/moor-book-html/the-system/docker-compose-setup.html)
+section in the mooR Book.
 
 ### Alternative: Frontend Development Setup
 
@@ -119,12 +123,9 @@ npm run full:dev
 ```
 
 This starts the moor-daemon and web development server, accessible at
-[http://localhost:5173](http://localhost:5173). This setup excludes telnet but provides
-hot-reloading for frontend development.
-
-For more detailed setup instructions, see the
-[Docker Compose Setup](https://timbran.codeberg.page/moor-book-html/the-system/docker-compose-setup.html)
-section in the mooR Book.
+[http://localhost:3000](http://localhost:3000). This setup excludes telnet and provides
+hot-reloading for frontend development, but it requires installing some dependencies.
+See [the web client's readme](https://codeberg.org/timbran/moor/web-client/README.md) for details.
 
 ## For Developers & Contributors
 
