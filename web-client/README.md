@@ -23,7 +23,7 @@ npm run web-host:dev
 # Start daemon, web-host, and web client together
 npm run full:dev
 
-# Use custom core database (defaults to JHCore-DEV-2.db)
+# Use custom core database (defaults to cores/JHCore-DEV-2.db)
 MOOR_CORE=MyCore.db npm run daemon:dev
 
 # Build for production

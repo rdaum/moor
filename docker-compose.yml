@@ -5,9 +5,11 @@
 # by the Dockerfile in the root of the repository. A real production system would definitely need to consider its
 # security and network layout, and this is just a simple example to get started with.
 
-# The first time the system starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
-# JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
-# that resulted. To re-import the textdump, simply delete this directory.
+# The first time the system starts, it will import cores/lambda-moor from the cores directory.
+# This is a fork of LambdaCore, reconstituted in mooR's `objdef` format, with some modifications.
+# To import an existing LambdaMOO 1.8.x DB, change --import to point to it, and change --import-format to textdump
+# After import, `moor-data` will contain the database that resulted.
+# To re-import simply delete this directory.
 
 # After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
 # system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
@@ -42,8 +44,8 @@ services:
         --events-listen=tcp://0.0.0.0:7898 
         --workers-response-listen=tcp://0.0.0.0:7897 
         --workers-request-listen=tcp://0.0.0.0:7896 
-        --import=/db/JHCore-DEV-2.db --import-format=textdump 
-        --export=/db/export --export-format objdef 
+        --import=/db/cores/lambda-moor --import-format=objdef
+        --export=/db/export --export-format objdef
     ports:
       # ZMQ ports
       - "7899:7899" # RPC listener

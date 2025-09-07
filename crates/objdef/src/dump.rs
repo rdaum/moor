@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn load_textdump_dump_objdef_restore_objdef() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let jhcore = manifest_dir.join("../../JHCore-DEV-2.db");
+        let jhcore = manifest_dir.join("../../cores/JHCore-DEV-2.db");
 
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_path = tmpdir.path();

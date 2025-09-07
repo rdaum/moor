@@ -180,7 +180,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Load JHCore
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let jhcore = manifest_dir.join("../../JHCore-DEV-2.db");
+        let jhcore = manifest_dir.join("../../cores/JHCore-DEV-2.db");
 
         let mut loader = db.loader_client().unwrap();
         let config = Config::default();

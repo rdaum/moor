@@ -15,7 +15,7 @@ features:
   use_symbols_in_builtins: false
 
 import_export:
-  input_path: "/var/lib/moor/JHCore-DEV-2.db"
+  input_path: "/var/lib/moor/cores/JHCore-DEV-2.db"
   import_format: "Textdump"
   output_path: "/var/spool/moor-daemon/core.export"
   export_format: "Objdef"

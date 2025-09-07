@@ -277,7 +277,7 @@ mod test {
     #[test]
     fn load_big_core() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let jhcore = manifest_dir.join("../../JHCore-DEV-2.db");
+        let jhcore = manifest_dir.join("../../cores/JHCore-DEV-2.db");
 
         let (db1, _) = TxDB::open(None, DatabaseConfig::default());
         let db1 = Arc::new(db1);
@@ -294,7 +294,7 @@ mod test {
     #[ignore]
     fn load_write_reload_big_core() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let jhcore = manifest_dir.join("../../JHCore-DEV-2.db");
+        let jhcore = manifest_dir.join("../../cores/JHCore-DEV-2.db");
 
         let (db1, _) = TxDB::open(None, DatabaseConfig::default());
         let db1 = Arc::new(db1);

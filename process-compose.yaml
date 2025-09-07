@@ -9,7 +9,7 @@
 # This mimics the behavior of docker-compose.yml but runs processes directly on the host using cargo run.
 # Uses IPC defaults for ZMQ communication since all processes are running locally.
 
-# The first time the system starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
+# The first time the system starts, it will import cores/JHCore-DEV-2.db from the cores directory. This is a recent
 # JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
 # that resulted. To re-import the textdump, simply delete this directory.
 
@@ -40,7 +40,7 @@ processes:
       cargo run --release -p moor-daemon -- 
       ./moor-data
       --db=development.db 
-      --import=JHCore-DEV-2.db --import-format=textdump 
+      --import=cores/JHCore-DEV-2.db --import-format=textdump 
       --export=development-export --export-format=objdef 
       --checkpoint-interval-seconds=360
       --use-boolean-returns=false
