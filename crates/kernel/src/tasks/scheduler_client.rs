@@ -276,7 +276,7 @@ impl SchedulerClient {
         let timeout = if blocking {
             Duration::from_secs(600) // 10 minutes for large textdumps
         } else {
-            Duration::from_secs(5)
+            Duration::from_secs(30) // 30 seconds for checkpoint initiation (snapshot creation can be slow)
         };
 
         receive

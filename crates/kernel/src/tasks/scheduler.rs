@@ -558,7 +558,9 @@ impl Scheduler {
                 } else {
                     self.checkpoint()
                 };
-                reply.send(result).expect("Could not send checkpoint reply");
+                if let Err(_) = reply.send(result) {
+                    error!("Could not send checkpoint reply (client likely timed out)");
+                }
             }
             SchedulerClientMsg::CheckStatus(reply) => {
                 // Lightweight status check - just confirm we're alive and responding
