@@ -25,6 +25,11 @@ use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
 
+pub type SnapshotCallback = Box<
+    dyn FnOnce(Result<Box<dyn SnapshotInterface>, WorldStateError>) -> Result<(), WorldStateError>
+        + Send,
+>;
+
 mod db_loader_client;
 pub mod db_worldstate;
 mod fjall_provider;
@@ -56,6 +61,7 @@ pub use moor_db::SEQUENCE_MAX_OBJECT;
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
     fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, WorldStateError>;
+    fn create_snapshot_async(&self, callback: SnapshotCallback) -> Result<(), WorldStateError>;
 }
 
 #[derive(Clone)]
@@ -94,6 +100,20 @@ impl Database for TxDB {
         self.storage
             .create_snapshot()
             .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
+    }
+
+    fn create_snapshot_async(&self, callback: SnapshotCallback) -> Result<(), WorldStateError> {
+        let storage = self.storage.clone();
+        std::thread::spawn(move || {
+            let snapshot_result = storage
+                .create_snapshot()
+                .map_err(|e| WorldStateError::DatabaseError(e.to_string()));
+
+            if let Err(e) = callback(snapshot_result) {
+                tracing::error!("Snapshot callback failed: {}", e);
+            }
+        });
+        Ok(())
     }
 }
 

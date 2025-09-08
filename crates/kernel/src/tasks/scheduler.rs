@@ -106,6 +106,9 @@ pub struct Scheduler {
     /// This is in a lock to allow interior mutability for the scheduler loop, but is only ever
     /// accessed by the scheduler thread.
     task_q: TaskQ,
+
+    /// Tracks whether a checkpoint operation is currently in progress to prevent overlapping checkpoints
+    checkpoint_in_progress: Arc<AtomicBool>,
 }
 
 fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
@@ -161,6 +164,7 @@ impl Scheduler {
             system_control,
             worker_request_send,
             worker_request_recv,
+            checkpoint_in_progress: Arc::new(AtomicBool::new(false)),
         };
         s.reload_server_options();
         s
@@ -558,7 +562,7 @@ impl Scheduler {
                 } else {
                     self.checkpoint()
                 };
-                if let Err(_) = reply.send(result) {
+                if reply.send(result).is_err() {
                     error!("Could not send checkpoint reply (client likely timed out)");
                 }
             }
@@ -1250,13 +1254,32 @@ impl Scheduler {
     }
 
     fn checkpoint(&self) -> Result<(), SchedulerError> {
+        // Check if a checkpoint is already in progress
+        if self
+            .checkpoint_in_progress
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            )
+            .is_err()
+        {
+            warn!("Checkpoint already in progress, skipping duplicate request");
+            return Ok(());
+        }
+
         let Some(textdump_path) = self.config.import_export.output_path.clone() else {
+            self.checkpoint_in_progress
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
 
         // Verify the directory exists / create it
         if let Err(e) = std::fs::create_dir_all(&textdump_path) {
+            self.checkpoint_in_progress
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             error!(?e, "Could not create textdump directory");
             return Err(SchedulerError::CouldNotStartTask);
         }
@@ -1273,40 +1296,43 @@ impl Scheduler {
         ));
 
         let encoding_mode = self.config.import_export.output_encoding;
-
-        let loader_client = {
-            // Use snapshot database to avoid blocking ongoing operations
-            match self.database.create_snapshot() {
-                Ok(snapshot_loader) => snapshot_loader,
-                Err(e) => {
-                    error!(?e, "Could not create snapshot for checkpoint");
-                    return Err(SchedulerError::CouldNotStartTask);
-                }
-            }
-        };
-
         let version_string = self
             .config
             .import_export
             .version_string(&self.version, &self.config.features);
         let dirdump = self.config.import_export.export_format == ImportExportFormat::Objdef;
 
-        let tr = std::thread::Builder::new()
-            .name("moor-export".to_string())
-            .spawn(move || {
+        // Clone the checkpoint flag to pass to the callback
+        let checkpoint_flag = self.checkpoint_in_progress.clone();
+
+        // Use async snapshot creation - the blocking and export work happens in the callback
+        let result = self
+            .database
+            .create_snapshot_async(Box::new(move |snapshot_result| {
+                let loader_client = match snapshot_result {
+                    Ok(loader_client) => loader_client,
+                    Err(e) => {
+                        error!(?e, "Could not create snapshot for checkpoint");
+                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(());
+                    }
+                };
+
                 if dirdump {
                     info!("Collecting objects for dump...");
                     let objects = match collect_object_definitions(loader_client.as_ref()) {
                         Ok(objects) => objects,
                         Err(e) => {
                             error!(?e, "Failed to collect objects for dump");
-                            return;
+                            checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                            return Ok(());
                         }
                     };
                     info!("Dumping objects to {textdump_path:?}");
                     if let Err(e) = dump_object_definitions(&objects, &textdump_path) {
                         error!(?e, "Failed to dump objects");
-                        return;
+                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(());
                     }
                     // Now that the dump has been written, strip the in-progress suffix.
                     let final_path = textdump_path.with_extension("moo");
@@ -1317,7 +1343,8 @@ impl Scheduler {
                 } else {
                     let Ok(mut output) = File::create(&textdump_path) else {
                         error!("Could not open textdump file for writing");
-                        return;
+                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(());
                     };
 
                     let textdump = make_textdump(loader_client.as_ref(), version_string);
@@ -1325,7 +1352,8 @@ impl Scheduler {
                     let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
                     if let Err(e) = writer.write_textdump(&textdump) {
                         error!(?e, "Could not write textdump");
-                        return;
+                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(());
                     }
 
                     // Now that the dump has been written, strip the in-progress suffix.
@@ -1335,9 +1363,16 @@ impl Scheduler {
                     }
                     info!(?final_path, "Textdump written.");
                 }
-            });
-        if let Err(e) = tr {
-            error!(?e, "Could not start textdump thread");
+
+                // Clear the checkpoint flag when operation completes successfully
+                checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            }));
+
+        if result.is_err() {
+            self.checkpoint_in_progress
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            return Err(SchedulerError::CouldNotStartTask);
         }
 
         Ok(())
@@ -1348,13 +1383,32 @@ impl Scheduler {
     /// Unlike `checkpoint()`, this method blocks until the background textdump thread
     /// finishes, providing confirmation that the checkpoint has been written to disk.
     fn checkpoint_blocking(&self) -> Result<(), SchedulerError> {
+        // Check if a checkpoint is already in progress
+        if self
+            .checkpoint_in_progress
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            )
+            .is_err()
+        {
+            warn!("Checkpoint already in progress, skipping duplicate request");
+            return Ok(());
+        }
+
         let Some(textdump_path) = self.config.import_export.output_path.clone() else {
+            self.checkpoint_in_progress
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
 
         // Verify the directory exists / create it
         if let Err(e) = std::fs::create_dir_all(&textdump_path) {
+            self.checkpoint_in_progress
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             error!(?e, "Could not create textdump directory");
             return Err(SchedulerError::CouldNotStartTask);
         }
@@ -1371,81 +1425,98 @@ impl Scheduler {
         ));
 
         let encoding_mode = self.config.import_export.output_encoding;
-
-        let loader_client = {
-            // Use snapshot database to avoid slowing things down
-            match self.database.create_snapshot() {
-                Ok(snapshot_loader) => snapshot_loader,
-                Err(e) => {
-                    error!(?e, "Could not create snapshot for checkpoint");
-                    return Err(SchedulerError::CouldNotStartTask);
-                }
-            }
-        };
-
         let version_string = self
             .config
             .import_export
             .version_string(&self.version, &self.config.features);
         let dirdump = self.config.import_export.export_format == ImportExportFormat::Objdef;
 
-        let join_handle = std::thread::Builder::new()
-            .name("moor-export".to_string())
-            .spawn(move || {
-                if dirdump {
-                    info!("Collecting objects for dump...");
-                    let objects = match collect_object_definitions(loader_client.as_ref()) {
-                        Ok(objects) => objects,
+        // Use a channel to wait for the async operation to complete
+        let (completion_sender, completion_receiver) = std::sync::mpsc::channel();
+
+        // Clone the checkpoint flag to pass to the callback
+        let checkpoint_flag = self.checkpoint_in_progress.clone();
+
+        // Use async snapshot creation but wait for completion
+        let result = self
+            .database
+            .create_snapshot_async(Box::new(move |snapshot_result| {
+                let result = (|| -> Result<(), SchedulerError> {
+                    let loader_client = match snapshot_result {
+                        Ok(loader_client) => loader_client,
                         Err(e) => {
-                            error!(?e, "Failed to collect objects for dump");
-                            return;
+                            error!(?e, "Could not create snapshot for checkpoint");
+                            return Err(SchedulerError::CouldNotStartTask);
                         }
                     };
-                    info!("Dumping objects to {textdump_path:?}");
-                    if let Err(e) = dump_object_definitions(&objects, &textdump_path) {
-                        error!(?e, "Failed to dump objects");
-                        return;
-                    }
-                    // Now that the dump has been written, strip the in-progress suffix.
-                    let final_path = textdump_path.with_extension("moo");
-                    if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
-                        error!(?e, "Could not rename objdefdump to final path");
-                    }
-                    info!(?final_path, "Objdefdump written.");
-                } else {
-                    let Ok(mut output) = File::create(&textdump_path) else {
-                        error!("Could not open textdump file for writing");
-                        return;
-                    };
 
-                    let textdump = make_textdump(loader_client.as_ref(), version_string);
+                    if dirdump {
+                        info!("Collecting objects for dump...");
+                        let objects = match collect_object_definitions(loader_client.as_ref()) {
+                            Ok(objects) => objects,
+                            Err(e) => {
+                                error!(?e, "Failed to collect objects for dump");
+                                return Err(SchedulerError::CouldNotStartTask);
+                            }
+                        };
+                        info!("Dumping objects to {textdump_path:?}");
+                        if let Err(e) = dump_object_definitions(&objects, &textdump_path) {
+                            error!(?e, "Failed to dump objects");
+                            return Err(SchedulerError::CouldNotStartTask);
+                        }
+                        // Now that the dump has been written, strip the in-progress suffix.
+                        let final_path = textdump_path.with_extension("moo");
+                        if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                            error!(?e, "Could not rename objdefdump to final path");
+                            return Err(SchedulerError::CouldNotStartTask);
+                        }
+                        info!(?final_path, "Objdefdump written.");
+                    } else {
+                        let Ok(mut output) = File::create(&textdump_path) else {
+                            error!("Could not open textdump file for writing");
+                            return Err(SchedulerError::CouldNotStartTask);
+                        };
 
-                    let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
-                    if let Err(e) = writer.write_textdump(&textdump) {
-                        error!(?e, "Could not write textdump");
-                        return;
-                    }
+                        let textdump = make_textdump(loader_client.as_ref(), version_string);
 
-                    // Now that the dump has been written, strip the in-progress suffix.
-                    let final_path = textdump_path.with_extension("moo-textdump");
-                    if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
-                        error!(?e, "Could not rename textdump to final path");
+                        let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
+                        if let Err(e) = writer.write_textdump(&textdump) {
+                            error!(?e, "Could not write textdump");
+                            return Err(SchedulerError::CouldNotStartTask);
+                        }
+
+                        // Now that the dump has been written, strip the in-progress suffix.
+                        let final_path = textdump_path.with_extension("moo-textdump");
+                        if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                            error!(?e, "Could not rename textdump to final path");
+                            return Err(SchedulerError::CouldNotStartTask);
+                        }
+                        info!(?final_path, "Textdump written.");
                     }
-                    info!(?final_path, "Textdump written.");
+                    Ok(())
+                })();
+
+                // Clear the checkpoint flag regardless of the result
+                checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+
+                // Send the result back to the waiting thread
+                if completion_sender.send(result).is_err() {
+                    error!("Failed to send checkpoint completion result");
                 }
-            })
-            .map_err(|e| {
-                error!(?e, "Could not start textdump thread");
-                SchedulerError::CouldNotStartTask
-            })?;
+                Ok(())
+            }));
 
-        // Wait for the textdump thread to complete
-        if let Err(e) = join_handle.join() {
-            error!(?e, "Textdump thread panicked");
+        if result.is_err() {
+            self.checkpoint_in_progress
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             return Err(SchedulerError::CouldNotStartTask);
         }
 
-        Ok(())
+        // Wait for the operation to complete
+        completion_receiver.recv().unwrap_or_else(|_| {
+            error!("Failed to receive checkpoint completion result");
+            Err(SchedulerError::CouldNotStartTask)
+        })
     }
 
     fn process_fork_request(
