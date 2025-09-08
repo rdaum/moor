@@ -1348,8 +1348,8 @@ impl RpcMessageHandler {
         };
 
         info!(
-            "Performing {:?} login for client: {}, with args: {:?}",
-            connect_type, client_id, args
+            "Performing {:?} login for client: {}",
+            connect_type, client_id
         );
         let session = Arc::new(RpcSession::new(
             client_id,
