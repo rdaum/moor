@@ -2032,7 +2032,7 @@ mod tests {
             let obj = tx
                 .create_object(
                     ObjectKind::NextObjid,
-                    ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), &format!("obj_{}", i)),
+                    ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), &format!("obj_{i}")),
                 )
                 .unwrap();
             objects.push(obj);
