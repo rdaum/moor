@@ -49,9 +49,9 @@ impl SnapshotLoader {
         Codomain: AsByteBuffer,
     {
         let result: ByteView = user_value.into();
-        let ts = Timestamp(u64::from_le_bytes(result[0..8].try_into().unwrap()));
+        let ts = Timestamp(u128::from_le_bytes(result[0..16].try_into().unwrap()));
         let codomain =
-            Codomain::from_bytes(result.slice(8..)).map_err(|_| Error::EncodingFailure)?;
+            Codomain::from_bytes(result.slice(16..)).map_err(|_| Error::EncodingFailure)?;
         Ok((ts, codomain))
     }
 
