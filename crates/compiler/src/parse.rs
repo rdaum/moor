@@ -1813,7 +1813,7 @@ pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, 
 }
 
 // Lex an enhanced MOO string literal with proper escape sequences.
-// Supports standard escapes (\n, \t, \r, \0, \', \\, \"), 
+// Supports standard escapes (\n, \t, \r, \0, \', \\, \"),
 // hex escapes (\xNN), and Unicode escapes (\uNNNN).
 pub fn unquote_str(s: &str) -> Result<String, String> {
     fn parse_hex_escape(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<char, String> {
@@ -1821,28 +1821,35 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
         for _ in 0..2 {
             match chars.next() {
                 Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
-                Some(c) => return Err(format!("Invalid hex escape: expected hex digit, got '{c}'")),
+                Some(c) => {
+                    return Err(format!("Invalid hex escape: expected hex digit, got '{c}'"));
+                }
                 None => return Err("Incomplete hex escape: expected 2 hex digits".to_string()),
             }
         }
-        let hex_value = u8::from_str_radix(&hex_str, 16)
-            .map_err(|_| "Invalid hex escape value".to_string())?;
+        let hex_value =
+            u8::from_str_radix(&hex_str, 16).map_err(|_| "Invalid hex escape value".to_string())?;
         Ok(hex_value as char)
     }
-    
-    fn parse_unicode_escape(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<char, String> {
+
+    fn parse_unicode_escape(
+        chars: &mut std::iter::Peekable<std::str::Chars>,
+    ) -> Result<char, String> {
         let mut hex_str = String::new();
         for _ in 0..4 {
             match chars.next() {
                 Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
-                Some(c) => return Err(format!("Invalid unicode escape: expected hex digit, got '{c}'")),
+                Some(c) => {
+                    return Err(format!(
+                        "Invalid unicode escape: expected hex digit, got '{c}'"
+                    ));
+                }
                 None => return Err("Incomplete unicode escape: expected 4 hex digits".to_string()),
             }
         }
         let unicode_value = u32::from_str_radix(&hex_str, 16)
             .map_err(|_| "Invalid unicode escape value".to_string())?;
-        char::from_u32(unicode_value)
-            .ok_or_else(|| "Invalid unicode code point".to_string())
+        char::from_u32(unicode_value).ok_or_else(|| "Invalid unicode code point".to_string())
     }
 
     let mut output = String::new();
@@ -1850,7 +1857,7 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
     let Some('"') = chars.next() else {
         return Err("Expected \" at beginning of string".to_string());
     };
-    
+
     while let Some(c) = chars.next() {
         match c {
             '\\' => match chars.peek() {
@@ -1940,9 +1947,12 @@ mod tests {
         assert_eq!(unquote_str(r#""hello\rworld""#).unwrap(), "hello\rworld");
         assert_eq!(unquote_str(r#""hello\0world""#).unwrap(), "hello\0world");
         assert_eq!(unquote_str(r#""hello\'world""#).unwrap(), "hello'world");
-        
+
         // Test combinations
-        assert_eq!(unquote_str(r#""line1\nline2\tindented""#).unwrap(), "line1\nline2\tindented");
+        assert_eq!(
+            unquote_str(r#""line1\nline2\tindented""#).unwrap(),
+            "line1\nline2\tindented"
+        );
     }
 
     #[test]
@@ -1951,7 +1961,7 @@ mod tests {
         assert_eq!(unquote_str(r#""A is \x41""#).unwrap(), "A is A");
         assert_eq!(unquote_str(r#""\x48\x65\x6C\x6C\x6F""#).unwrap(), "Hello");
         assert_eq!(unquote_str(r#""\x00\xFF""#).unwrap(), "\0\u{FF}");
-        
+
         // Test lowercase and uppercase hex
         assert_eq!(unquote_str(r#""\x4a\x4A""#).unwrap(), "JJ");
     }
@@ -1960,9 +1970,12 @@ mod tests {
     fn test_string_unquote_unicode_escapes() {
         // Test unicode escape sequences
         assert_eq!(unquote_str(r#""Hello \u0041""#).unwrap(), "Hello A");
-        assert_eq!(unquote_str(r#""\u0048\u0065\u006C\u006C\u006F""#).unwrap(), "Hello");
+        assert_eq!(
+            unquote_str(r#""\u0048\u0065\u006C\u006C\u006F""#).unwrap(),
+            "Hello"
+        );
         assert_eq!(unquote_str(r#""Smile: \u263A""#).unwrap(), "Smile: ☺");
-        
+
         // Test various Unicode ranges
         assert_eq!(unquote_str(r#""\u00E9\u00E8\u00EA""#).unwrap(), "éèê"); // Latin
         assert_eq!(unquote_str(r#""\u03B1\u03B2\u03B3""#).unwrap(), "αβγ"); // Greek
@@ -1975,13 +1988,13 @@ mod tests {
         assert!(unquote_str(r#""\x4""#).is_err());
         assert!(unquote_str(r#""\xGG""#).is_err());
         assert!(unquote_str(r#""\x4G""#).is_err());
-        
+
         // Test malformed unicode escapes
         assert!(unquote_str(r#""\u""#).is_err());
         assert!(unquote_str(r#""\u123""#).is_err());
         assert!(unquote_str(r#""\uGGGG""#).is_err());
         assert!(unquote_str(r#""\u123G""#).is_err());
-        
+
         // Test truncated escapes at end of string
         assert!(unquote_str(r#""\x4""#).is_err());
         assert!(unquote_str(r#""\u123""#).is_err());
@@ -1994,9 +2007,9 @@ mod tests {
         assert_eq!(unquote_str(r#""foo\fbar""#).unwrap(), "foofbar");
         assert_eq!(unquote_str(r#""foo\vbar""#).unwrap(), "foovbar");
         assert_eq!(unquote_str(r#""foo\zbar""#).unwrap(), "foozbar");
-        
+
         // Test edge cases
-        assert_eq!(unquote_str(r#""foo\""#).unwrap(), "foo");  // backslash at end becomes empty
+        assert_eq!(unquote_str(r#""foo\""#).unwrap(), "foo"); // backslash at end becomes empty
     }
 
     #[test]
