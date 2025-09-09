@@ -283,8 +283,16 @@ impl TaskStart {
                     to_literal(vloc)
                 )
             }
-            TaskStart::StartFork { suspended, .. } => {
-                format!("Fork(suspended: {})", suspended)
+            TaskStart::StartFork {
+                suspended,
+                fork_request,
+            } => {
+                format!(
+                    "Fork(suspended: {}) for verb: {}:{}",
+                    suspended,
+                    to_literal(&fork_request.activation.this),
+                    fork_request.activation.verb_name
+                )
             }
             TaskStart::StartEval { player, .. } => {
                 format!("Eval(player: {})", player)
