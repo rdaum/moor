@@ -2,9 +2,11 @@
 
 ## Understanding object persistence
 
-In MOO, objects are permanent and persistent—they stick around until someone explicitly destroys them. This is different from most programming languages where objects automatically disappear when nothing references them anymore.
+In MOO, objects are permanent and persistent—they stick around until someone explicitly destroys them. This is different
+from most programming languages where objects automatically disappear when nothing references them anymore.
 
-For a complete explanation of object persistence and how MOO objects work, see [Objects in the MOO Database](objects-in-the-moo-database.md).
+For a complete explanation of object persistence and how MOO objects work,
+see [Objects in the MOO Database](objects-in-the-moo-database.md).
 
 ## Creating objects
 
@@ -27,9 +29,11 @@ the [Object Parents and Children](object-parents-and-children.md) chapter.
 
 ## Object identifier types
 
-mooR supports two types of object identifiers: numbered IDs like `#123` and UUID identifiers like `#048D05-1234567890`. Both work exactly the same way in your code, but they're designed for different purposes.
+mooR supports two types of object identifiers: numbered IDs like `#123` and UUID identifiers like `#048D05-1234567890`.
+Both work exactly the same way in your code, but they're designed for different purposes.
 
-For details about these identifier types and when to use each one, see the [Two Ways to Identify Objects](objects-in-the-moo-database.md#two-ways-to-identify-objects) section.
+For details about these identifier types and when to use each one, see
+the [Two Ways to Identify Objects](objects-in-the-moo-database.md#two-ways-to-identify-objects) section.
 
 ## Choosing which type to create
 
@@ -47,14 +51,14 @@ So for example if you specifically need UUID objects, you can request them by sp
 The `obj_type` parameter controls which naming system to use:
 
 - `0` (or `false`) = numbered objects like `#123`
-- `1` (or `true`) = anonymous objects (not yet supported in mooR, but available in ToastStunt)
+- `1` (or `true`) = anonymous objects (requires `anonymous_objects` feature to be enabled)
 - `2` = UUID objects like `#048D05-1234567890`
 
-> **Anonymous Objects**: ToastStunt supports "anonymous" objects (type `1` or `true`) that are automatically garbage
-> collected when no longer referenced, similar to objects in other programming languages. This feature is not yet
-> implemented in mooR, but may be added in the future. If you're looking for a lightweight, garbage-collected
-> object-like
-> thing, see the section about flyweights below.
+> **Anonymous Objects**: mooR supports "anonymous" objects (type `1` or `true`) that are automatically garbage
+> collected when no longer referenced, similar to objects in other programming languages. This feature must be
+> explicitly enabled by your server administrator via the `anonymous_objects` configuration flag, as it introduces
+> garbage collection overhead. For details about anonymous objects, see the
+> [Anonymous Objects section](objects-in-the-moo-database.md#anonymous-objects) in the objects chapter.
 
 Your server administrator controls which type is created by default through configuration settings. For details on how
 this works, see the [Server Configuration](../the-system/server-configuration.md) documentation.
@@ -98,7 +102,12 @@ The `recycle()` function destroys an object permanently. Just before it actually
 object's `recycle` verb (if any) to give the object a chance to clean up after itself—perhaps removing itself from
 lists, notifying other objects, or saving important data elsewhere.
 
-For more details about why you might need to be careful about cleaning up objects, including the "number slot problem" with numbered objects, see [Objects in the MOO Database](objects-in-the-moo-database.md#the-number-slot-problem-numbered-ids-only).
+> **Note**: `recycle()` cannot be used on anonymous objects, as they are automatically garbage collected when no longer
+> referenced. Attempting to recycle an anonymous object will raise `E_INVARG`.
+
+For more details about why you might need to be careful about cleaning up objects, including the "number slot problem"
+with numbered objects,
+see [Objects in the MOO Database](objects-in-the-moo-database.md#the-number-slot-problem-numbered-ids-only).
 
 Permissions to create a child of an object, or to recycle an object, are controlled by the permissions and ownerships
 constraints described in the [Objects in the MOO database](objects-in-the-moo-database.md) chapter. In particular,

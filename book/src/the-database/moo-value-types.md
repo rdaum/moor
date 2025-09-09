@@ -11,7 +11,7 @@ database.
 - Errors (arising during program execution)
 - Symbols (special labels for naming things in code)
 - Binary values (arbitrary byte sequences)
-- Object numbers (references to the permanent objects in the database)
+- Object references (numbered, UUID, and anonymous objects in the database)
 - "Flyweights" - anonymous lightweight object _values_
 - Lambdas (anonymous functions with closures)
 
@@ -148,7 +148,8 @@ doubled = { x * 2 for x in {1, 2, 3, 4} };    // Creates {2, 4, 6, 8}
 squares = { x * x for x in [1..5] };          // Creates {1, 4, 9, 16, 25}
 ```
 
-This syntax lets you build complex lists in a single, readable expression. For detailed information about list comprehensions, see the [List Comprehensions](../the-moo-programming-language/list-comprehensions.md) chapter.
+This syntax lets you build complex lists in a single, readable expression. For detailed information about list
+comprehensions, see the [List Comprehensions](../the-moo-programming-language/list-comprehensions.md) chapter.
 
 (Note that @ is also a standard prefix character to denote certain kinds of user commands, but these two facts are not
 connected.)
@@ -241,15 +242,18 @@ return E_TOOFAST("The car is going way too fast");
 
 ## Object Type
 
-_Object references_ are how you refer to the permanent objects stored in the MOO database. The value itself is not the object—it's more like an address or pointer that tells MOO which object you're talking about.
+_Object references_ are how you refer to the permanent objects stored in the MOO database. The value itself is not the
+object—it's more like an address or pointer that tells MOO which object you're talking about.
 
-Every object in the database has a unique identifier. When you store an object reference in a variable or property, you're storing a reference that points to that specific object.
+Every object in the database has a unique identifier. When you store an object reference in a variable or property,
+you're storing a reference that points to that specific object.
 
-### Two Types of Object References
+### Three Types of Object References
 
-mooR supports two different kinds of object identifiers:
+mooR supports three different kinds of object references:
 
 **Traditional Object Numbers:**
+
 ```
 #495
 #123
@@ -257,37 +261,67 @@ mooR supports two different kinds of object identifiers:
 ```
 
 **UUID Object Names:**
+
 ```
 #048D05-1234567890
 #1A2B3C-4567891234
 ```
 
-Both work exactly the same way in your code—you can call verbs on them, access properties, and use them anywhere you'd use any object reference.
+**Anonymous Object References:**
+Anonymous objects cannot be typed directly—you can only get references to them from `create()` calls:
+
+```
+let anon_obj = create($thing, player, 1);  // Creates anonymous object
+// anon_obj now contains an anonymous object reference
+// No way to type this directly in code!
+```
+
+Numbered and UUID objects work exactly the same way in your code—you can call verbs on them, access properties, and use
+them anywhere you'd use any object reference. Anonymous objects also work the same way, but they have no literal form
+you can type directly.
 
 ### Important notes about object references:
 
 - Traditional object numbers like `#495` refer to object 495 in the sequential numbering system
 - UUID object names like `#048D05-1234567890` refer to objects in the UUID naming system
-- If an object gets recycled (deleted), any references to it become invalid
+- Anonymous object references have no literal form—you get them from `create()` and they disappear when garbage
+  collected
+- If a numbered or UUID object gets recycled (deleted), any references to it become invalid
+- Anonymous objects are automatically deleted when no references to them exist (garbage collection)
 - You can pass object references around, store them in lists, use them as map keys, etc.
-- When you call verbs or access properties, you use the object reference: `#495:tell("Hello!")` or `#048D05-1234567890:tell("Hello!")`
-- Traditional object numbers can be negative for special purposes, but UUID object names are never negative
+- When you call verbs or access properties, you use the object reference: `#495:tell("Hello!")`,
+  `#048D05-1234567890:tell("Hello!")`, or `anon_obj:tell("Hello!")`
+- Traditional object numbers can be negative for special purposes, but UUID and anonymous objects never are
+- Use `is_anonymous(obj)` to detect if an object reference is anonymous (all types have `typeof(obj) == OBJ`)
 
 ### Special & negative traditional object numbers:
 
-There are three special traditional object numbers used for specific purposes: `#-1`, `#-2`, and `#-3`, usually referred to in the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
+There are three special traditional object numbers used for specific purposes: `#-1`, `#-2`, and `#-3`, usually referred
+to in the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
 
-Negative traditional object numbers never refer to an actual physical object in the world, but always to some concept (e.g. #-1 for nothing) or something external (player connections are given special negative numbers).
+Negative traditional object numbers never refer to an actual physical object in the world, but always to some concept (
+e.g. #-1 for nothing) or something external (player connections are given special negative numbers).
 
-Note that UUID object names don't have negative equivalents—these special cases only apply to the traditional numbering system.
+Note that UUID object names and anonymous objects don't have negative equivalents—these special cases only apply to the
+traditional numbering system.
 
 ### Best practices:
 
-Instead of hard-coding object references like `#495` or `#048D05-1234567890` in your code, it's better to use system references like `$my_special_object` (See below). This makes your code more readable and less fragile if object identifiers change.
+Instead of hard-coding object references like `#495` or `#048D05-1234567890` in your code, it's better to use system
+references like `$my_special_object` (See below). This makes your code more readable and less fragile if object
+identifiers change. Anonymous objects cannot be hard-coded since they have no literal form.
 
-> **Note:** Hard-coding object references in your code should be discouraged. An object only exists until it is recycled, and it's technically possible for an object identifier to change under some circumstances. Thus, you should use a system reference to an object (`$my_special_object`) instead. More on system references later.
+> **Note:** Hard-coding object references in your code should be discouraged. An object only exists until it is
+> recycled (or garbage collected for anonymous objects), and it's technically possible for an object identifier to
+> change
+> under some circumstances. Thus, you should use a system reference to an object (`$my_special_object`) instead. More on
+> system references later.
 >
-> **Object Types:** The choice between traditional numbers and UUID names is typically determined by your server's configuration and the specific use case (world infrastructure vs. dynamic content).
+> **Object Types:** The choice between traditional numbers, UUID names, and anonymous objects depends on your server's
+> configuration and the specific use case:
+> - **Numbered objects**: World infrastructure, permanent fixtures
+> - **UUID objects**: Dynamic content that needs unique but persistent IDs
+> - **Anonymous objects**: Temporary objects that clean up automatically
 
 ## System References ($names)
 
@@ -619,7 +653,8 @@ weapon_name = sword.name;       // Gets "iron sword"
 
 ### Working with XML and web interfaces:
 
-Flyweights are especially useful for building web pages because they can be easily converted to and from XML. However, mooR also supports working with XML using regular lists and maps, which can be more convenient for simple cases:
+Flyweights are especially useful for building web pages because they can be easily converted to and from XML. However,
+mooR also supports working with XML using regular lists and maps, which can be more convenient for simple cases:
 
 ```moo
 // A flyweight representing HTML structure:
@@ -644,7 +679,8 @@ xml_as_maps = xml_parse(html_string, 10);        // Returns structured maps
 
 **Map format** uses: `["tag" -> "tag_name", "attributes" -> ["attr" -> "value"], "content" -> {...}]`
 
-Both list and map formats work regardless of whether flyweights are enabled, making them useful for systems that prefer simpler data structures.
+Both list and map formats work regardless of whether flyweights are enabled, making them useful for systems that prefer
+simpler data structures.
 
 ### Important notes:
 
@@ -655,15 +691,18 @@ Both list and map formats work regardless of whether flyweights are enabled, mak
 
 ## Function Type
 
-_Functions_ in mooR let you create small pieces of reusable code within your verbs. You can store them in variables, pass them around like any other value, and they can even "remember" variables from where they were created.
+_Functions_ in mooR let you create small pieces of reusable code within your verbs. You can store them in variables,
+pass them around like any other value, and they can even "remember" variables from where they were created.
 
-> **Fun Fact**: Despite its name suggesting otherwise, the original LambdaMOO never actually had lambda functions! mooR brings this useful programming tool to MOO as part of our mission of dragging the future into the past.
+> **Fun Fact**: Despite its name suggesting otherwise, the original LambdaMOO never actually had lambda functions! mooR
+> brings this useful programming tool to MOO as part of our mission of dragging the future into the past.
 
 ### Function syntax:
 
 Functions can be written in several forms:
 
 **Arrow syntax** (for simple expressions):
+
 ```moo
 {x, y} => x + y                    // Takes two parameters, returns their sum
 {name} => "Hello, " + name         // Simple string formatting
@@ -671,6 +710,7 @@ Functions can be written in several forms:
 ```
 
 **Function syntax** (for complex logic and code organization):
+
 ```moo
 // Anonymous function
 fn(x, y)
@@ -690,6 +730,7 @@ endfn
 ```
 
 **Named recursive functions**:
+
 ```moo
 fn factorial(n)
     if (n <= 1)
@@ -791,18 +832,21 @@ let squared = map({x} => x * x, numbers);  // {1, 4, 9, 16}
 ### When should you use functions?
 
 **Great for named functions:**
-- Breaking down complex verb logic into manageable pieces  
+
+- Breaking down complex verb logic into manageable pieces
 - Code organization and avoiding duplication within verbs
 - Mathematical calculations and data processing
 - Any logic that benefits from a descriptive name
 
 **Great for anonymous functions (lambdas):**
+
 - Event handlers and callbacks
 - Data transformation and filtering (map, filter, etc.)
 - Creating functions that create other functions
 - Short, one-off operations
 
 **Better to use regular verbs for:**
+
 - Functions called from multiple different verbs
 - Complex business logic that forms your application's core
 - Code that needs to be accessible via inheritance
@@ -811,10 +855,11 @@ let squared = map({x} => x * x, numbers);  // {1, 4, 9, 16}
 ### Technical notes:
 
 - Functions are immutable values like strings and lists
-- They capture variables by value, not by reference  
+- They capture variables by value, not by reference
 - Named recursive functions can call themselves using their declared name
 - Functions work with the scatter assignment syntax for flexible parameter handling
 - Stack traces show function calls as `verb.<fn>` or `verb.function_name` for named functions
 
-For comprehensive examples and advanced usage, see the [Functions and Lambdas](../the-moo-programming-language/lambda-functions.md) chapter.
+For comprehensive examples and advanced usage, see
+the [Functions and Lambdas](../the-moo-programming-language/lambda-functions.md) chapter.
 

@@ -97,8 +97,6 @@ has no such declarations.) The following variables always have values:
 | ERR      |
 | BOOL     |
 | MAP      |
-| WAIF     |
-| ANON     |
 | true     |
 | false    |
 | player   |
@@ -117,21 +115,20 @@ has no such declarations.) The following variables always have values:
 
 The values of some of these variables always start out the same:
 
-| Variable           | Value | Description                                           |
-|--------------------|-------|-------------------------------------------------------|
-| <code>INT</code>   | 0     | an integer, the type code for integers                |
-| <code>NUM</code>   | 0     | (deprecated) an integer, the type code for integers   |
-| <code>OBJ</code>   | 1     | an integer, the type code for objects                 |
-| <code>STR</code>   | 2     | an integer, the type code for strings                 |
-| <code>ERR</code>   | 3     | an integer, the type code for error values            |
-| <code>LIST</code>  | 4     | an integer, the type code for lists                   |
-| <code>FLOAT</code> | 9     | an integer, the type code for floating-point numbers  |
-| <code>MAP</code>   | 10    | an integer, the type code for map values              |
-| <code>ANON</code>  | 12    | an integer, the type code for anonymous object values |
-| <code>WAIF</code>  | 13    | an integer, the type code for WAIF values             |
-| <code>BOOL</code>  | 14    | an integer, the type code for bool values             |
-| <code>true</code>  | true  | the boolean true                                      |
-| <code>false</code> | false | the boolean false                                     |
+| Variable               | Value | Description                                          |
+|------------------------|-------|------------------------------------------------------|
+| <code>INT</code>       | 0     | an integer, the type code for integers               |
+| <code>NUM</code>       | 0     | (deprecated) an integer, the type code for integers  |
+| <code>OBJ</code>       | 1     | an integer, the type code for objects                |
+| <code>STR</code>       | 2     | an integer, the type code for strings                |
+| <code>ERR</code>       | 3     | an integer, the type code for error values           |
+| <code>LIST</code>      | 4     | an integer, the type code for lists                  |
+| <code>FLOAT</code>     | 9     | an integer, the type code for floating-point numbers |
+| <code>MAP</code>       | 10    | an integer, the type code for map values             |
+| <code>BOOL</code>      | 14    | an integer, the type code for bool values            |
+| <code>FLYWEIGHT</code> | 15    | an integer, the type code for flyweight values       |
+| <code>true</code>      | true  | the boolean true                                     |
+| <code>false</code>     | false | the boolean false                                    |
 
 > Note: The `typeof` function can is of note here and is described in the built-ins section.
 

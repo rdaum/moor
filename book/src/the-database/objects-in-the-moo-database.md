@@ -68,9 +68,146 @@ The UUID format might look complicated, but you don't need to understand how it 
 > explicitly turned on. See the [Server Configuration](../the-system/server-configuration.md) documentation for details
 > on feature flags.
 
+## Anonymous Objects
+
+In addition to numbered and UUID objects, mooR supports a third type: **anonymous objects**. These represent a
+fundamentally different approach to object management that's closer to how objects work in other programming languages.
+
+### Understanding the Three Types of Object References
+
+To understand anonymous objects, it's important to first understand how they differ from the traditional object ID
+systems:
+
+**Numbered Objects (`#123`) and UUID Objects (`#048D05-1234567890`):**
+
+- These are **object identifiers, not true references**
+- Think of them as "names" or "addresses" for objects in the database
+- **Pass by value** - when you write `#123`, you're writing a literal number that identifies an object
+- **Persistent forever** - the object exists until someone explicitly calls `recycle()`
+- **Can be typed directly** in your code - `#123` is something you can literally type
+
+**Anonymous Objects:**
+
+- These are **true object references or "handles"**
+- Think of them as pointers that let you talk about an object, but have no "value" themselves
+- **Pass by reference** - you can't type an anonymous object reference, only get one from `create()`
+- **Temporary** - automatically disappear when nothing references them anymore
+- **No literal form** - there's no way to type an anonymous object reference directly in code
+
+### When Anonymous Objects Disappear
+
+Anonymous objects are **garbage collected** using a mark & sweep algorithm that runs periodically in the background. An
+anonymous object becomes unreachable and gets deleted when:
+
+- No variables contain references to it
+- No object properties contain references to it
+- No running tasks have references to it
+- No suspended tasks have references to it
+
+This happens automatically - you don't need to call `recycle()` on anonymous objects (in fact, doing so will raise
+`E_INVARG`).
+
+### Creating Anonymous Objects
+
+You create anonymous objects by passing `1` (or `true`) as the third argument to `create()`:
+
+```moo
+// Create an anonymous object
+let temp_obj = create($thing, player, 1);
+temp_obj.name = "temporary item";
+temp_obj.description = "This won't be around for long";
+
+// When temp_obj goes out of scope or gets reassigned,
+// the anonymous object will eventually be garbage collected
+temp_obj = 0;  // Now nothing references the anonymous object
+```
+
+### Detecting Anonymous Objects
+
+Since anonymous objects have `typeof(obj) == OBJ` (same as regular objects), you need the `is_anonymous()` builtin to
+detect them:
+
+```moo
+let regular_obj = create($thing);      // Regular numbered/UUID object  
+let anon_obj = create($thing, player, 1); // Anonymous object
+
+typeof(regular_obj);    // Returns OBJ
+typeof(anon_obj);       // Also returns OBJ - same type!
+
+is_anonymous(regular_obj);  // Returns 0 (false)
+is_anonymous(anon_obj);     // Returns 1 (true)
+```
+
+> **Porting from ToastStunt**: This is an important difference from ToastStunt, where anonymous objects had
+> `typeof(anon_obj) == ANON`. In mooR, you must use `is_anonymous()` to distinguish them.
+
+### The Trade-offs
+
+**Benefits of Anonymous Objects:**
+
+- **Automatic cleanup** - no need to remember to call `recycle()`
+- **No ID slot consumption** - doesn't use up numbered object slots
+- **Convenient for temporary objects** - perfect for short-lived game objects
+
+**Costs of Anonymous Objects:**
+
+- **Garbage collection overhead** - background mark & sweep cycles consume CPU time
+- **Potential pauses** - the sweep phase can briefly pause new task creation
+- **Same memory cost** - anonymous objects use just as much memory/storage as regular objects
+- **Must be enabled** - requires the `anonymous_objects` feature flag (disabled by default)
+
+### When to Use Anonymous Objects
+
+**Good use cases:**
+
+- Temporary inventory items that come and go
+- Short-lived UI elements or game pieces
+- Objects created during calculations that don't need to persist
+- Any object where manual cleanup is error-prone
+
+**Avoid for:**
+
+- Permanent world fixtures (rooms, important NPCs, etc.)
+- Objects that need predictable, immediate cleanup
+- Performance-critical code where GC pauses matter
+- Systems where you need to reference objects by typed identifiers
+
+### Performance Considerations
+
+The garbage collection system introduces overhead that traditional MOO doesn't have:
+
+- **Background marking** - periodically scans all references to find unreachable objects
+- **Sweep pauses** - when collecting garbage, new tasks are briefly blocked
+- **Memory overhead** - unreferenced objects stick around until the next GC cycle
+
+For most MOO applications, this overhead is acceptable, but server administrators should be aware that enabling
+anonymous objects will impact performance.
+
+### Feature Requirements
+
+Anonymous objects require your server administrator to enable the `anonymous_objects` configuration flag. This feature
+is disabled by default due to the garbage collection overhead. If anonymous objects aren't enabled and you try to create
+one, you'll get an `E_INVARG` error.
+
+### Comparison with Flyweights
+
+mooR also provides **flyweights**, which are truly lightweight object-like values. Here's how they compare:
+
+| Feature            | Anonymous Objects           | Flyweights                         |
+|--------------------|-----------------------------|------------------------------------|
+| Storage cost       | Same as regular objects     | Very lightweight                   |
+| Inheritance        | Full inheritance support    | No inheritance                     |
+| Persistence        | Until garbage collected     | Only exist in variables/properties |
+| Performance impact | Garbage collection overhead | Minimal overhead                   |
+| Use case           | Temporary full objects      | Small immutable data structures    |
+
+For more on flyweights, see the [Flyweights section](moo-value-types.md#flyweights---lightweight-objects) in the value
+types documentation.
+
 ## Ways to Reference Objects
 
-Once an object has an ID, there are several ways you can reference it in your code:
+Once an object exists, there are several ways you can reference it in your code. The methods available depend on whether
+it's a numbered/UUID object or an anonymous object:
 
 **Direct object IDs**: Use the object's actual identifier
 
@@ -93,7 +230,12 @@ let sword = #123;
 sword:wield();                   // Same as #123:wield()
 ```
 
-All of these work exactly the same way—they're just different ways of referring to the same objects.
+All of these work exactly the same way for numbered and UUID objects—they're just different ways of referring to the
+same objects.
+
+**Anonymous objects work differently**: Since anonymous objects have no literal form, you can only reference them
+through variables. You get anonymous object references from `create()` calls and can store them in variables or
+properties, but you cannot type them directly like `#123`.
 
 > **Best Practice - Avoid Hard-Coded Object IDs**: While you can use direct object IDs like `#123` anywhere in your
 > code, it's generally discouraged in verbs that other people will use or in code that's meant for general use. If

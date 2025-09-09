@@ -8,7 +8,7 @@ functions for manipulating them.
 ### `create`
 
 ```
-obj create(obj parent [, obj owner] [, int is-anon] [, list init-args])
+obj create(obj parent [, obj owner] [, int obj_type] [, list init-args])
 ```
 
 Creates and returns a new object whose parent is parent and whose owner is as described below. If the given parent is
@@ -16,14 +16,23 @@ neither valid nor #-1, then E_INVARG is raised. The parent object must be valid 
 its `f` bit must be true) or else the programmer must own parent or be a wizard; otherwise E_PERM is raised. If the `f`
 bit is not present, E_PERM is raised unless the programmer owns parent or is a wizard.
 
-The `is-anon` argument is accepted for backwards compatibility. If provided and true, `E_INVARG` is raised as anonymous
-objects are not supported.
+The `obj_type` argument controls which type of object to create:
+
+- `0` (or `false`) = numbered objects like `#123` (default)
+- `1` (or `true`) = anonymous objects (requires `anonymous_objects` feature enabled)
+- `2` = UUID objects like `#048D05-1234567890`
+
+If `obj_type` is `1` but the `anonymous_objects` feature is not enabled, `E_INVARG` is raised.
 
 E_PERM is also raised if owner is provided and not the same as the programmer, unless the programmer is a wizard.
 
 After the new object is created, its initialize verb, if any, is called. If init-args were given, they are passed as
-args to initialize. The new object is assigned the least non-negative object number that has not yet been used for a
-created object. Note that no object number is ever reused, even if the object with that number is recycled.
+args to initialize. For numbered objects, the new object is assigned the least non-negative object number that has not
+yet been used. For UUID objects, a unique UUID identifier is generated. For anonymous objects, an opaque reference is
+created that cannot be typed directly in code.
+
+Note that numbered object numbers are never reused, even if the object with that number is recycled. UUID and anonymous
+objects do not have this limitation.
 
 > Note: $sysobj is typically #0. Though it can technically be changed to something else, there is no reason that the
 > author knows of to break from convention here.
@@ -122,6 +131,32 @@ recycled) and zero (i.e., a false value) otherwise.
 valid(#0)    =>   1
 valid(#-1)   =>   0
 ```
+
+### `is_anonymous`
+
+```
+int is_anonymous(obj object)
+```
+
+Returns a non-zero integer (i.e., a true value) if object is an anonymous object and zero (i.e., a false value)
+otherwise.
+
+Since anonymous objects have `typeof(obj) == OBJ` (same as regular objects), this is the only way to distinguish them
+programmatically.
+
+```
+let regular_obj = create($thing);         // Regular numbered/UUID object  
+let anon_obj = create($thing, player, 1); // Anonymous object
+
+is_anonymous(regular_obj);  =>  0   // false - not anonymous
+is_anonymous(anon_obj);     =>  1   // true - is anonymous
+typeof(anon_obj);          =>  1   // OBJ - same as regular objects!
+```
+
+If object is not a valid object, `E_INVARG` is raised.
+
+> **Porting from ToastStunt**: In ToastStunt, anonymous objects had `typeof(anon_obj) == ANON`. In mooR,
+> anonymous objects have `typeof(anon_obj) == OBJ` and you must use `is_anonymous()` to detect them.
 
 ### Functions: `parent`
 

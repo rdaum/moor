@@ -107,6 +107,7 @@ These options enable or disable various MOO language features:
 | List comprehensions | `--list-comprehensions`     | `true`  | Enable list/range comprehensions                                                 |
 | Persistent tasks    | `--persistent-tasks`        | `true`  | Enable persistent tasks between server restarts                                  |
 | Event logging       | `--enable-eventlog`         | `true`  | Enable persistent event logging and history features                             |
+| Anonymous objects   | `--anonymous-objects`       | `false` | Enable anonymous objects with automatic garbage collection                       |
 
 ## Import/Export Configuration
 
@@ -179,3 +180,57 @@ features_config:
 import_export_config:
   output_encoding: "ISO8859_1"
 ```
+
+## Anonymous Objects Configuration
+
+The `anonymous_objects` feature flag enables a new type of object that is automatically garbage collected when no longer referenced.
+This feature is disabled by default due to performance considerations.
+
+### Enabling Anonymous Objects
+
+To enable anonymous objects, set the flag in your configuration file:
+
+```yaml
+features_config:
+  anonymous_objects: true
+```
+
+Or use the command line flag: `--anonymous-objects`
+
+### When to Enable Anonymous Objects
+
+**Consider enabling if:**
+
+- Your MOO creates many temporary objects (game pieces, UI elements, etc.)
+- You have developers who struggle with manual object cleanup
+- You want to reduce the burden of object lifecycle management
+- Your server has sufficient CPU resources for garbage collection overhead
+
+**Keep disabled if:**
+
+- Your MOO has strict performance requirements with minimal latency tolerance
+- Your builders are experienced with manual object lifecycle management
+- Your server runs on resource-constrained hardware
+- You need maximum predictable performance without GC pauses
+
+### Performance Implications
+
+Anonymous objects use a mark-and-sweep garbage collector with the following characteristics:
+
+- **CPU Overhead**: The GC thread runs continuously, consuming CPU cycles even when not collecting
+- **Memory Usage**: Same storage costs as regular objects until collection occurs
+- **Concurrency**: Mark phase runs concurrently with normal server operations to minimize blocking but can put load
+  on the system as it scans the entire database.
+- **Collection Pauses**: Sweep phase can cause brief server pauses during collection cycles
+
+The garbage collector is optimized but will impact overall server performance. Monitor your server's CPU usage and
+response times when enabling this feature.
+
+### Migration Considerations
+
+When enabling anonymous objects on an existing MOO:
+
+- Existing code using `create(parent, owner, 1)` will begin creating anonymous objects
+- No changes needed to existing numbered or UUID object code
+- Consider updating builder documentation to explain the new object type option
+- Test performance impact during peak usage periods before enabling permanently

@@ -14,9 +14,11 @@ might expect to see.)
 
 ## Where Code Lives: Verbs
 
-Before diving into the syntax of MOO code, it's important to understand where MOO code actually lives and how it's organized.
+Before diving into the syntax of MOO code, it's important to understand where MOO code actually lives and how it's
+organized.
 
-Unlike most programming languages that have functions, procedures, or methods as their primary units of code organization, MOO has **verbs**. All MOO code lives inside verbs, which are attached to objects in the database.
+Unlike most programming languages that have functions, procedures, or methods as their primary units of code
+organization, MOO has **verbs**. All MOO code lives inside verbs, which are attached to objects in the database.
 
 In traditional programming languages, you might write:
 
@@ -34,12 +36,18 @@ player:tell("Hello, ", dobj.name, "!");
 
 ### Key Concepts About Verbs:
 
-- **All code is in verbs**: There are no global functions, procedures, or scripts in MOO. Every piece of executable code must be a verb on some object.
-- **Verbs belong to objects**: Each verb is owned by a specific object and can access that object's properties and other verbs.
-- **Verbs are called, not functions**: When you want to execute code, you call a verb on an object, not a function. See [Calling Verbs](the-moo-programming-language/calling-verbs.md) for details.
-- **Verbs contain statements**: Inside each verb, you write [statements](the-moo-programming-language/moo-language-statements.md) that describe the behavior you want.
+- **All code is in verbs**: There are no global functions, procedures, or scripts in MOO. Every piece of executable code
+  must be a verb on some object.
+- **Verbs belong to objects**: Each verb is owned by a specific object and can access that object's properties and other
+  verbs.
+- **Verbs are called, not functions**: When you want to execute code, you call a verb on an object, not a function.
+  See [Calling Verbs](the-moo-programming-language/calling-verbs.md) for details.
+- **Verbs contain statements**: Inside each verb, you
+  write [statements](the-moo-programming-language/moo-language-statements.md) that describe the behavior you want.
 
-This design reflects MOO's object-oriented nature—everything is an object, and all behavior is defined as verbs on those objects. While this might seem limiting at first, it actually provides a very clear and consistent way to organize code in a persistent, multi-user environment.
+This design reflects MOO's object-oriented nature—everything is an object, and all behavior is defined as verbs on those
+objects. While this might seem limiting at first, it actually provides a very clear and consistent way to organize code
+in a persistent, multi-user environment.
 
 ## What MOO programs are like
 
@@ -102,9 +110,10 @@ dynamic scripting languages like Python or JavaScript. Here are some of the most
   This is different from languages like Java or C# that use class-based inheritance.
 
 * Persistent objects: MOO objects are persistent, meaning that they exist in the database and can be accessed by
-  multiple asks. This is different from many other languages where objects are created and destroyed in memory during
-  program execution. MOO has no concept of transient ephemeral objects, so all objects are persistent. ToastStunt has
-  "anonymous" objects that are not persistent, but these are not part of `mooR`.  `mooR` does have a special object-like
-  value called a "flyweight" that is used to represent small lightweight immutable values which have object-like
-  properties, but these are not full objects, cannot be inherited from, and persist only inside properties, not as
+  multiple tasks. This is different from many other languages where objects are created and destroyed in memory during
+  program execution. Traditional MOO has no concept of transient ephemeral objects, so all objects are persistent.
+  However, `mooR` does support "anonymous" objects that are automatically garbage collected when no longer referenced,
+  similar to objects in other programming languages. `mooR` also has a special object-like value called a "flyweight"
+  that is used to represent small lightweight immutable values which have object-like properties, but these are not
+  full objects, cannot be inherited from, and persist only inside properties, not as
   "rooted" objects in the database.
