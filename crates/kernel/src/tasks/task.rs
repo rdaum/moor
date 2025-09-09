@@ -37,6 +37,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use flume::Sender;
 use lazy_static::lazy_static;
+use rand::Rng;
 use tracing::{error, warn};
 
 use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
@@ -317,6 +318,13 @@ impl Task {
                         self.task_start.diagnostic(),
                     );
                     session.rollback().unwrap();
+
+                    // Add randomized backoff to prevent retry storms. Base delay is 10-50ms, multiplied by retry count.
+                    let mut rng = rand::thread_rng();
+                    let base_delay_ms = rng.gen_range(10..=50);
+                    let delay_ms = base_delay_ms * (self.retries + 1) as u64; // +1 since retries will be incremented in scheduler
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 };

@@ -266,12 +266,12 @@ impl TaskStart {
             TaskStart::StartCommandVerb {
                 player, command, ..
             } => {
-                format!("CommandVerb(player: {}, command: {:?})", player, command)
+                format!("CommandVerb(player: {player}, command: {command:?})")
             }
             TaskStart::StartDoCommand {
                 player, command, ..
             } => {
-                format!("DoCommand(player: {}, command: {:?})", player, command)
+                format!("DoCommand(player: {player}, command: {command:?})")
             }
             TaskStart::StartVerb {
                 player, verb, vloc, ..
@@ -298,7 +298,7 @@ impl TaskStart {
                 )
             }
             TaskStart::StartEval { player, .. } => {
-                format!("Eval(player: {})", player)
+                format!("Eval(player: {player})")
             }
         }
     }
