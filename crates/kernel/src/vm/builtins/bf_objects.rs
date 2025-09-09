@@ -615,6 +615,12 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
+    if obj.is_anonymous() {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("cannot recycle() anonymous objects"),
+        ));
+    }
+
     let valid = with_current_transaction(|world_state| world_state.valid(&obj));
     if valid == Ok(false)
         || valid
