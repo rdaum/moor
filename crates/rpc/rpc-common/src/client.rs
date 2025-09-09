@@ -165,6 +165,9 @@ pub enum HostClientToDaemonMessage {
     RequestCurrentPresentations(ClientToken, AuthToken),
     /// Dismiss a specific presentation by ID.
     DismissPresentation(ClientToken, AuthToken, String),
+    /// Set a client attribute (key-value pair) for this client connection.
+    /// If the value is None, the attribute is removed.
+    SetClientAttribute(ClientToken, AuthToken, Symbol, Option<Var>),
     /// We're done with this ClientToken
     /// The second argument indicates whether this constitutes a physical "disconnection" event
     /// and whether this should trigger the `$user_disconnected` verb invocation.
@@ -210,6 +213,8 @@ pub enum DaemonToClientReply {
     CurrentPresentations(Vec<moor_common::tasks::Presentation>),
     /// Response to `DismissPresentation` - acknowledgment of dismissal
     PresentationDismissed,
+    /// Response to `SetClientAttribute` - acknowledgment of attribute update
+    ClientAttributeSet,
     /// This Client has been disconnected and is not expected to be heard from again.
     Disconnected,
 }

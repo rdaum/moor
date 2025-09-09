@@ -20,8 +20,9 @@ use crate::connections::in_memory::ConnectionRegistryMemory;
 use crate::connections::persistence::NullPersistence;
 use eyre::Report as Error;
 use moor_common::tasks::SessionError;
-use moor_var::{Obj, Symbol};
+use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
+use std::collections::HashMap;
 use std::path::Path;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
@@ -81,6 +82,18 @@ pub trait ConnectionRegistry {
 
     /// Get the acceptable content types for a connection.
     fn acceptable_content_types_for(&self, connection: Obj) -> Result<Vec<Symbol>, SessionError>;
+
+    /// Set a client attribute (key-value pair) for a client connection.
+    /// If value is None, the attribute is removed.
+    fn set_client_attribute(
+        &self,
+        client_id: Uuid,
+        key: Symbol,
+        value: Option<Var>,
+    ) -> Result<(), RpcMessageError>;
+
+    /// Get all client attributes for a player object.
+    fn get_client_attributes(&self, player: Obj) -> Result<HashMap<Symbol, Var>, SessionError>;
 }
 
 pub enum ConnectionRegistryConfig {

@@ -589,6 +589,14 @@ mod tests {
         {
             Ok(vec![])
         }
+
+        fn connection_attributes(
+            &self,
+            _player: Obj,
+        ) -> Result<std::collections::HashMap<Symbol, Var>, moor_common::tasks::SessionError>
+        {
+            Ok(std::collections::HashMap::new())
+        }
     }
 
     #[test]

@@ -17,7 +17,7 @@ use std::time::SystemTime;
 
 use eyre::{Error, bail};
 use moor_common::tasks::SessionError;
-use moor_var::{Obj, Symbol};
+use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
 use uuid::Uuid;
 
@@ -253,6 +253,7 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             hostname,
             acceptable_content_types: acceptable_content_types
                 .unwrap_or_else(|| vec![Symbol::mk("text_plain")]),
+            client_attributes: HashMap::new(),
         };
 
         // Add to connection records
@@ -617,6 +618,91 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         } else {
             Err(SessionError::NoConnectionForPlayer(connection))
         }
+    }
+
+    fn set_client_attribute(
+        &self,
+        client_id: Uuid,
+        key: Symbol,
+        value: Option<Var>,
+    ) -> Result<(), RpcMessageError> {
+        let mut inner = self.inner.lock().unwrap();
+
+        // Find the connection object and player for this client
+        let Some((connection_obj, player_obj)) = inner.client_objects.get(&client_id).cloned()
+        else {
+            return Err(RpcMessageError::NoConnection);
+        };
+
+        // Update the attribute in the connection record
+        if let Some(connection_records) = inner.connection_records.get_mut(&connection_obj) {
+            for record in &mut connection_records.connections {
+                if record.client_id == client_id.as_u128() {
+                    match &value {
+                        Some(val) => {
+                            record.client_attributes.insert(key, val.clone());
+                        }
+                        None => {
+                            record.client_attributes.remove(&key);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Also update player connections if this client has a logged-in player
+        if let Some(player_obj) = player_obj {
+            if let Some(player_records) = inner.player_connections.get_mut(&player_obj) {
+                for record in &mut player_records.connections {
+                    if record.client_id == client_id.as_u128() {
+                        match &value {
+                            Some(val) => {
+                                record.client_attributes.insert(key, val.clone());
+                            }
+                            None => {
+                                record.client_attributes.remove(&key);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Prepare changes for persistence
+        let client_changes = ClientMappingChanges::new();
+        let mut player_changes = PlayerConnectionChanges::new();
+
+        // If there's a logged-in player, persist the player connection changes
+        if let Some(player_obj) = player_obj {
+            if let Some(connections) = inner.player_connections.get(&player_obj) {
+                player_changes.update(player_obj, connections.clone());
+            }
+        }
+
+        drop(inner);
+        self.persist_changes(client_changes, player_changes)
+            .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn get_client_attributes(&self, player: Obj) -> Result<HashMap<Symbol, Var>, SessionError> {
+        let inner = self.inner.lock().unwrap();
+
+        let Some(player_records) = inner.player_connections.get(&player) else {
+            // Player not found or not logged in
+            return Err(SessionError::NoConnectionForPlayer(player));
+        };
+
+        // Return attributes from the first connection record
+        let Some(record) = player_records.connections.first() else {
+            // No connections for this player
+            return Ok(HashMap::new());
+        };
+
+        Ok(record.client_attributes.clone())
     }
 }
 

@@ -17,7 +17,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::tasks::NarrativeEvent;
-use moor_var::{Error, Obj, SYSTEM_OBJECT, Symbol};
+use moor_var::{Error, Obj, SYSTEM_OBJECT, Symbol, Var};
 
 /// Detailed information about a connection
 #[derive(Debug, Clone)]
@@ -126,6 +126,13 @@ pub trait Session: Send + Sync {
         &self,
         player: Option<Obj>,
     ) -> Result<Vec<ConnectionDetails>, SessionError>;
+
+    /// Get all connection attributes for the given player.
+    /// Returns a map of attribute names to values.
+    fn connection_attributes(
+        &self,
+        player: Obj,
+    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError>;
 }
 
 /// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
@@ -244,6 +251,13 @@ impl Session for NoopClientSession {
         _player: Option<Obj>,
     ) -> Result<Vec<ConnectionDetails>, SessionError> {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+    }
+
+    fn connection_attributes(
+        &self,
+        _player: Obj,
+    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError> {
+        Ok(std::collections::HashMap::new())
     }
 }
 
@@ -398,6 +412,13 @@ impl Session for MockClientSession {
         _player: Option<Obj>,
     ) -> Result<Vec<ConnectionDetails>, SessionError> {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+    }
+
+    fn connection_attributes(
+        &self,
+        _player: Obj,
+    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError> {
+        Ok(std::collections::HashMap::new())
     }
 }
 

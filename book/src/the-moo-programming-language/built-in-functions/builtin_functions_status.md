@@ -196,7 +196,8 @@ mooR handles outbound networking differently than classic LambdaMOO - see the [n
 | [`listen`](server.md#listen)                                   | &check;  | `print-messages` not yet implemented. errors in binding not properly propagating back to the builtin |
 | [`unlisten`](server.md#unlisten)                               | &check;  |                                                                                                      |
 | [`listeners`](server.md#listeners)                             | &check;  |                                                                                                      |
-| [`output_delimiters`](server.md#output_delimiters)             |          | Not planned                                                                                          |
+| [`output_delimiters`](server.md#output_delimiters)             | &check;  |                                                                                                      |
+| [`connection_attributes`](server.md#connection_attributes)     | &check;  | mooR extension - returns map/list based on features                                                 |
 | [`buffered_output_length`](server.md#buffered_output_length)   |          | Not planned                                                                                          |
 
 ## Extension from Toast

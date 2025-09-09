@@ -14,7 +14,8 @@
 //! Shared data types for connections management
 
 use bincode::{Decode, Encode};
-use moor_var::Symbol;
+use moor_var::{Symbol, Var};
+use std::collections::HashMap;
 use std::time::SystemTime;
 
 mod fjall_persistence;
@@ -34,6 +35,7 @@ pub struct ConnectionRecord {
     pub last_ping: SystemTime,
     pub hostname: String,
     pub acceptable_content_types: Vec<Symbol>,
+    pub client_attributes: HashMap<Symbol, Var>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

@@ -2116,6 +2116,114 @@ fn bf_workers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(result)))
 }
 
+/// Returns the current output delimiters (prefix and suffix) for the specified player.
+/// MOO: `list output_delimiters(obj player)`
+fn bf_output_delimiters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(ErrValue(
+            E_ARGS.msg("output_delimiters() requires exactly 1 argument"),
+        ));
+    }
+
+    let Some(player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(E_TYPE.msg("Player must be an object")));
+    };
+
+    // Permission check: can only query own delimiters unless wizard
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    if player != task_perms.who && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+        return Err(ErrValue(E_PERM.msg("Permission denied")));
+    }
+
+    // Get the attributes from the connection registry
+    let attributes = match current_session().connection_attributes(player) {
+        Ok(attributes) => attributes,
+        Err(SessionError::NoConnectionForPlayer(_)) => {
+            // No active connection, return empty delimiters
+            return Ok(Ret(v_list(&[v_str(""), v_str("")])));
+        }
+        Err(_) => return Err(ErrValue(E_INVARG.msg("Unable to get output delimiters"))),
+    };
+
+    // Extract prefix and suffix from the generic attributes
+    let prefix = attributes
+        .get(&Symbol::mk("line-output-prefix"))
+        .and_then(|v| v.as_string())
+        .unwrap_or("");
+
+    let suffix = attributes
+        .get(&Symbol::mk("line-output-suffix"))
+        .and_then(|v| v.as_string())
+        .unwrap_or("");
+
+    Ok(Ret(v_list(&[v_str(prefix), v_str(suffix)])))
+}
+
+/// Returns all connection attributes for the specified player.
+/// Returns a map if map support is enabled, otherwise returns an association list.
+/// MOO: `list connection_attributes(obj player)` or `map connection_attributes(obj player)`
+fn bf_connection_attributes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(ErrValue(
+            E_ARGS.msg("connection_attributes() requires exactly 1 argument"),
+        ));
+    }
+
+    let Some(player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(E_TYPE.msg("Player must be an object")));
+    };
+
+    // Permission check: can only query own attributes unless wizard
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    if player != task_perms.who && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+        return Err(ErrValue(E_PERM.msg("Permission denied")));
+    }
+
+    // Get the attributes from the connection registry
+    let attributes = match current_session().connection_attributes(player) {
+        Ok(attributes) => attributes,
+        Err(SessionError::NoConnectionForPlayer(_)) => {
+            // No active connection, return empty collection
+            return Ok(Ret(if bf_args.config.map_type {
+                v_map(&[])
+            } else {
+                v_list(&[])
+            }));
+        }
+        Err(_) => {
+            return Err(ErrValue(
+                E_INVARG.msg("Unable to get connection attributes"),
+            ));
+        }
+    };
+
+    // Helper for symbol vs string conversion
+    let sym_or_str = |s: Symbol| {
+        if bf_args.config.symbol_type {
+            v_sym(s)
+        } else {
+            v_arc_string(s.as_arc_string())
+        }
+    };
+
+    // Convert attributes to appropriate return type based on features
+    if bf_args.config.map_type {
+        // Return as map if map support is enabled
+        let pairs: Vec<(Var, Var)> = attributes
+            .into_iter()
+            .map(|(key, value)| (sym_or_str(key), value))
+            .collect();
+        Ok(Ret(v_map(&pairs)))
+    } else {
+        // Return as list of 2-element lists (association list format)
+        let pairs: Vec<Var> = attributes
+            .into_iter()
+            .map(|(key, value)| v_list(&[sym_or_str(key), value]))
+            .collect();
+        Ok(Ret(v_list(&pairs)))
+    }
+}
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
     builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
@@ -2170,4 +2278,6 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("connections")] = Box::new(bf_connections);
     builtins[offset_for_builtin("switch_player")] = Box::new(bf_switch_player);
     builtins[offset_for_builtin("workers")] = Box::new(bf_workers);
+    builtins[offset_for_builtin("output_delimiters")] = Box::new(bf_output_delimiters);
+    builtins[offset_for_builtin("connection_attributes")] = Box::new(bf_connection_attributes);
 }

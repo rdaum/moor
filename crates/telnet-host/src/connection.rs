@@ -24,7 +24,7 @@ use futures_util::{SinkExt, StreamExt};
 use moor_common::model::{CompileError, ObjectRef};
 use moor_common::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_common::util::parse_into_words;
-use moor_var::{Obj, Symbol, Var, Variant};
+use moor_var::{Obj, Symbol, Var, Variant, v_str};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{
@@ -515,6 +515,23 @@ impl TelnetConnection {
                         Some(prefix.to_string())
                     };
                 }
+
+                // Notify daemon of prefix change
+                if let Some(auth_token) = &self.auth_token {
+                    let prefix_value = self.output_prefix.as_ref().map(|s| v_str(s));
+                    let _ = self
+                        .rpc_client
+                        .make_client_rpc_call(
+                            self.client_id,
+                            HostClientToDaemonMessage::SetClientAttribute(
+                                self.client_token.clone(),
+                                auth_token.clone(),
+                                Symbol::mk("line-output-prefix"),
+                                prefix_value,
+                            ),
+                        )
+                        .await;
+                }
                 Ok(true)
             }
             "SUFFIX" | "OUTPUTSUFFIX" => {
@@ -530,6 +547,23 @@ impl TelnetConnection {
                     } else {
                         Some(suffix.to_string())
                     };
+                }
+
+                // Notify daemon of suffix change
+                if let Some(auth_token) = &self.auth_token {
+                    let suffix_value = self.output_suffix.as_ref().map(|s| v_str(s));
+                    let _ = self
+                        .rpc_client
+                        .make_client_rpc_call(
+                            self.client_id,
+                            HostClientToDaemonMessage::SetClientAttribute(
+                                self.client_token.clone(),
+                                auth_token.clone(),
+                                Symbol::mk("line-output-suffix"),
+                                suffix_value,
+                            ),
+                        )
+                        .await;
                 }
                 Ok(true)
             }

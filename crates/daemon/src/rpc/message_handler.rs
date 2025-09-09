@@ -453,6 +453,19 @@ impl MessageHandler for RpcMessageHandler {
                     error!(error = ?e, "Unable to send connection details");
                 }
             }
+            SessionActions::RequestClientAttributes(_client_id, player, reply) => {
+                let client_attributes_send_result =
+                    match self.connections.get_client_attributes(player) {
+                        Ok(attributes) => reply.send(Ok(attributes)),
+                        Err(e) => {
+                            error!(error = ?e, "Unable to get client attributes");
+                            reply.send(Err(e))
+                        }
+                    };
+                if let Err(e) = client_attributes_send_result {
+                    error!(error = ?e, "Unable to send client attributes");
+                }
+            }
             SessionActions::PublishTaskCompletion(client_id, task_event) => {
                 if let Err(e) = self.publish_task_completion(client_id, task_event) {
                     error!(error = ?e, client_id = ?client_id, "Unable to publish task completion");
@@ -1184,6 +1197,25 @@ impl RpcMessageHandler {
                 self.event_log.dismiss_presentation(player, presentation_id);
 
                 Ok(DaemonToClientReply::PresentationDismissed)
+            }
+            HostClientToDaemonMessage::SetClientAttribute(token, auth_token, key, value) => {
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
+
+                // Store the attribute in the connection registry
+                self.connections
+                    .set_client_attribute(client_id, key, value)?;
+
+                Ok(DaemonToClientReply::ClientAttributeSet)
             }
             HostClientToDaemonMessage::Detach(token, disconnected) => {
                 let _connection = self.client_auth(token, client_id)?;

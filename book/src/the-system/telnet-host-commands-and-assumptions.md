@@ -115,12 +115,16 @@ containing only `>>MOO-Prefix<<` and followed by a line containing only `>>MOO-S
 reliably extract the program text from the MOO output and show it to the user in a separate editor window. There are
 many other possible uses.
 
-> Note: The built-in function `output_delimiters()` exists on LambdaMOO to return the current values of the output
-> prefix and suffix for the current connection. This function is not part of `mooR` since those values are not stored
-> in the daemon, but are purely part of the `telnet-host` process itself.
-> In addition, if the user is running multiple connections to the same MOO, the output prefix and suffix values are
-> connection-specific. That is, each connection has its own output prefix and suffix values, which are not shared
-> between connections
+The built-in function `output_delimiters()` returns the current values of the output prefix and suffix for the current
+connection. In mooR, these values are stored as client attributes and synchronized between the `telnet-host` and
+`daemon` processes via RPC.
+
+mooR also provides a `connection_attributes()` builtin function that returns all client attributes for a connection as
+either a map (when map support is enabled) or an association list (when map support is disabled). The output delimiters
+are stored as the `line-output-prefix` and `line-output-suffix` attributes.
+
+Each connection has its own output prefix and suffix values, which are not shared between connections, so users running
+multiple connections to the same MOO will have connection-specific delimiter settings.
 
 ## The .program Command
 
