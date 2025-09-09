@@ -1812,27 +1812,84 @@ pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, 
     tree_transform.transform_statements(pairs)
 }
 
-// Lex a simple MOO string literal.  Expectation is:
-//   " and " at beginning and end
-//   \" is "
-//   \\ is \
-//   \n is just n
-// That's it. MOO has no tabs, newlines, etc. quoting.
+// Lex an enhanced MOO string literal with proper escape sequences.
+// Supports standard escapes (\n, \t, \r, \0, \', \\, \"), 
+// hex escapes (\xNN), and Unicode escapes (\uNNNN).
 pub fn unquote_str(s: &str) -> Result<String, String> {
+    fn parse_hex_escape(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<char, String> {
+        let mut hex_str = String::new();
+        for _ in 0..2 {
+            match chars.next() {
+                Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
+                Some(c) => return Err(format!("Invalid hex escape: expected hex digit, got '{c}'")),
+                None => return Err("Incomplete hex escape: expected 2 hex digits".to_string()),
+            }
+        }
+        let hex_value = u8::from_str_radix(&hex_str, 16)
+            .map_err(|_| "Invalid hex escape value".to_string())?;
+        Ok(hex_value as char)
+    }
+    
+    fn parse_unicode_escape(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<char, String> {
+        let mut hex_str = String::new();
+        for _ in 0..4 {
+            match chars.next() {
+                Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
+                Some(c) => return Err(format!("Invalid unicode escape: expected hex digit, got '{c}'")),
+                None => return Err("Incomplete unicode escape: expected 4 hex digits".to_string()),
+            }
+        }
+        let unicode_value = u32::from_str_radix(&hex_str, 16)
+            .map_err(|_| "Invalid unicode escape value".to_string())?;
+        char::from_u32(unicode_value)
+            .ok_or_else(|| "Invalid unicode code point".to_string())
+    }
+
     let mut output = String::new();
     let mut chars = s.chars().peekable();
     let Some('"') = chars.next() else {
         return Err("Expected \" at beginning of string".to_string());
     };
-    // Proceed until second-last. Last has to be '"'
+    
     while let Some(c) = chars.next() {
         match c {
-            '\\' => match chars.next() {
-                Some('\\') => output.push('\\'),
-                Some('"') => output.push('"'),
-                Some(c) => output.push(c),
-                None => {
-                    return Err("Unexpected end of string".to_string());
+            '\\' => match chars.peek() {
+                Some('"') => {
+                    // Check if this is the closing quote - if so, this is a backslash at the end
+                    chars.next(); // consume the quote
+                    if chars.peek().is_some() {
+                        // Not the end, there are more characters, so this is an escaped quote
+                        output.push('"');
+                        continue;
+                    } else {
+                        // This is the closing quote, backslash at end is ignored
+                        return Ok(output);
+                    }
+                }
+                _ => {
+                    match chars.next() {
+                        Some('\\') => output.push('\\'),
+                        Some('\'') => output.push('\''),
+                        Some('n') => output.push('\n'),
+                        Some('r') => output.push('\r'),
+                        Some('t') => output.push('\t'),
+                        Some('0') => output.push('\0'),
+                        Some('x') => {
+                            let hex_char = parse_hex_escape(&mut chars)?;
+                            output.push(hex_char);
+                        }
+                        Some('u') => {
+                            let unicode_char = parse_unicode_escape(&mut chars)?;
+                            output.push(unicode_char);
+                        }
+                        Some(c) => {
+                            // Backward compatibility: unknown escapes just pass through the character
+                            output.push(c);
+                        }
+                        None => {
+                            return Err("Unexpected end of string".to_string());
+                        }
+                    }
                 }
             },
             '"' => {
@@ -1873,8 +1930,73 @@ mod tests {
         assert_eq!(unquote_str(r#""foo""#).unwrap(), "foo");
         assert_eq!(unquote_str(r#""foo\"bar""#).unwrap(), r#"foo"bar"#);
         assert_eq!(unquote_str(r#""foo\\bar""#).unwrap(), r"foo\bar");
-        // Does not support \t, \n, etc.  They just turn into n, t, etc.
-        assert_eq!(unquote_str(r#""foo\tbar""#).unwrap(), r#"footbar"#);
+    }
+
+    #[test]
+    fn test_string_unquote_standard_escapes() {
+        // Test standard escape sequences
+        assert_eq!(unquote_str(r#""hello\nworld""#).unwrap(), "hello\nworld");
+        assert_eq!(unquote_str(r#""hello\tworld""#).unwrap(), "hello\tworld");
+        assert_eq!(unquote_str(r#""hello\rworld""#).unwrap(), "hello\rworld");
+        assert_eq!(unquote_str(r#""hello\0world""#).unwrap(), "hello\0world");
+        assert_eq!(unquote_str(r#""hello\'world""#).unwrap(), "hello'world");
+        
+        // Test combinations
+        assert_eq!(unquote_str(r#""line1\nline2\tindented""#).unwrap(), "line1\nline2\tindented");
+    }
+
+    #[test]
+    fn test_string_unquote_hex_escapes() {
+        // Test hex escape sequences
+        assert_eq!(unquote_str(r#""A is \x41""#).unwrap(), "A is A");
+        assert_eq!(unquote_str(r#""\x48\x65\x6C\x6C\x6F""#).unwrap(), "Hello");
+        assert_eq!(unquote_str(r#""\x00\xFF""#).unwrap(), "\0\u{FF}");
+        
+        // Test lowercase and uppercase hex
+        assert_eq!(unquote_str(r#""\x4a\x4A""#).unwrap(), "JJ");
+    }
+
+    #[test]
+    fn test_string_unquote_unicode_escapes() {
+        // Test unicode escape sequences
+        assert_eq!(unquote_str(r#""Hello \u0041""#).unwrap(), "Hello A");
+        assert_eq!(unquote_str(r#""\u0048\u0065\u006C\u006C\u006F""#).unwrap(), "Hello");
+        assert_eq!(unquote_str(r#""Smile: \u263A""#).unwrap(), "Smile: ☺");
+        
+        // Test various Unicode ranges
+        assert_eq!(unquote_str(r#""\u00E9\u00E8\u00EA""#).unwrap(), "éèê"); // Latin
+        assert_eq!(unquote_str(r#""\u03B1\u03B2\u03B3""#).unwrap(), "αβγ"); // Greek
+    }
+
+    #[test]
+    fn test_string_unquote_error_cases() {
+        // Test malformed hex escapes
+        assert!(unquote_str(r#""\x""#).is_err());
+        assert!(unquote_str(r#""\x4""#).is_err());
+        assert!(unquote_str(r#""\xGG""#).is_err());
+        assert!(unquote_str(r#""\x4G""#).is_err());
+        
+        // Test malformed unicode escapes
+        assert!(unquote_str(r#""\u""#).is_err());
+        assert!(unquote_str(r#""\u123""#).is_err());
+        assert!(unquote_str(r#""\uGGGG""#).is_err());
+        assert!(unquote_str(r#""\u123G""#).is_err());
+        
+        // Test truncated escapes at end of string
+        assert!(unquote_str(r#""\x4""#).is_err());
+        assert!(unquote_str(r#""\u123""#).is_err());
+    }
+
+    #[test]
+    fn test_string_unquote_backward_compatibility() {
+        // Test that unknown escape sequences still work as before (pass through the character)
+        assert_eq!(unquote_str(r#""foo\bbar""#).unwrap(), "foobbar");
+        assert_eq!(unquote_str(r#""foo\fbar""#).unwrap(), "foofbar");
+        assert_eq!(unquote_str(r#""foo\vbar""#).unwrap(), "foovbar");
+        assert_eq!(unquote_str(r#""foo\zbar""#).unwrap(), "foozbar");
+        
+        // Test edge cases
+        assert_eq!(unquote_str(r#""foo\""#).unwrap(), "foo");  // backslash at end becomes empty
     }
 
     #[test]
@@ -2549,15 +2671,15 @@ mod tests {
 
     #[test]
     fn test_string_escape_codes() {
-        // Just verify MOO's very limited string escape tokenizing, which does not support
-        // anything other than \" and \\. \n, \t etc just become "n" "t".
+        // Test enhanced string escape sequences: \n, \t, \r are now properly supported
+        // along with the original \" and \\.
         let program = r#"
             "\n \t \r \" \\";
         "#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Expr(Value(v_str(r#"n t r " \"#)))]
+            vec![StmtNode::Expr(Value(v_str("\n \t \r \" \\")))]
         );
     }
 
