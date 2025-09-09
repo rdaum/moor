@@ -64,13 +64,16 @@ keep adding features right up until the last minute.
 
 **Language enhancements:**
 
-- All classic MOO features plus compatibility with ToastStunt extensions (maps, booleans)
-- Lambda functions: anonymous functions with closures (`{x, y} => x + y`)
+- UTF-8 strings, 64-bit integers, binary values
+- Proper boolean values (`true`/`false`)
 - Maps: associative containers (`["key" -> "value"]`)
 - Lexically scoped variables with `begin`/`end` blocks
 - List/range comprehensions (`{x * 2 for x in [1..5]}`)
-- UTF-8 strings, 64-bit integers, symbols, binary values
-- Lightweight immutable objects ("flyweights")
+- Lambda functions: anonymous functions with closures (`{x, y} => x + y`)
+- Symbol literals ('mysymbol) like Lisp/Scheme (optional)
+- UUID object identifiers (optional)
+- Anonymous objects with automatic garbage collection (optional)
+- Lightweight immutable objects ("flyweights") (optional)
 
 **Modern infrastructure:**
 
