@@ -288,10 +288,13 @@ impl TaskStart {
                 fork_request,
             } => {
                 format!(
-                    "Fork(suspended: {}) for verb: {}:{}",
+                    "Fork(suspended: {}) for verb: {}:{} (defined on {}) @ line {:?}, parent task {}",
                     suspended,
                     to_literal(&fork_request.activation.this),
-                    fork_request.activation.verb_name
+                    fork_request.activation.verb_name,
+                    fork_request.activation.verb_definer(),
+                    fork_request.activation.frame.find_line_no(),
+                    fork_request.parent_task_id,
                 )
             }
             TaskStart::StartEval { player, .. } => {
