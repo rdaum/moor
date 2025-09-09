@@ -14,7 +14,6 @@
 use std::sync::Arc;
 
 use flume::Sender;
-use oneshot;
 use std::sync::Mutex;
 use uuid::Uuid;
 
