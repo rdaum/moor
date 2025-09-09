@@ -309,6 +309,13 @@ impl Task {
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
                 let CommitResult::Success = commit_result else {
+                    warn!(
+                        "Conflict during commit before complete, asking scheduler to retry task for task_id: {}, player {}, retry # {}, task_start: {}",
+                        self.task_id,
+                        self.player,
+                        self.retries,
+                        self.task_start.diagnostic(),
+                    );
                     session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);
                     return None;

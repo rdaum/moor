@@ -17,7 +17,7 @@ use std::time::SystemTime;
 use bincode::{Decode, Encode};
 use flume::Receiver;
 use lazy_static::lazy_static;
-use moor_compiler::Program;
+use moor_compiler::{Program, to_literal};
 use moor_var::{List, Obj};
 use moor_var::{Symbol, Var};
 
@@ -259,5 +259,36 @@ pub enum TaskStart {
 impl TaskStart {
     pub fn is_background(&self) -> bool {
         matches!(self, TaskStart::StartFork { .. })
+    }
+
+    pub fn diagnostic(&self) -> String {
+        match self {
+            TaskStart::StartCommandVerb {
+                player, command, ..
+            } => {
+                format!("CommandVerb(player: {}, command: {:?})", player, command)
+            }
+            TaskStart::StartDoCommand {
+                player, command, ..
+            } => {
+                format!("DoCommand(player: {}, command: {:?})", player, command)
+            }
+            TaskStart::StartVerb {
+                player, verb, vloc, ..
+            } => {
+                format!(
+                    "Verb(player: {}, verb: {}, vloc: {})",
+                    player,
+                    verb,
+                    to_literal(vloc)
+                )
+            }
+            TaskStart::StartFork { suspended, .. } => {
+                format!("Fork(suspended: {})", suspended)
+            }
+            TaskStart::StartEval { player, .. } => {
+                format!("Eval(player: {})", player)
+            }
+        }
     }
 }

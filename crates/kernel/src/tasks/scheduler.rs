@@ -714,9 +714,12 @@ impl Scheduler {
                     return;
                 };
 
-                task.session
+                if let Err(e) = task
+                    .session
                     .send_system_msg(task.player, &abort_reason_text)
-                    .expect("Could not send abort message to player");
+                {
+                    warn!("Could not send abort message to player: {e:?}");
+                }
 
                 let _ = task.session.commit();
 
@@ -1841,14 +1844,16 @@ impl TaskQ {
         // Remove this from the running tasks.
         // By definition we can't respond to a retry for a suspended task, so if it's not in the
         // running tasks there's something very wrong.
-        let old_tc = self
-            .active
-            .remove(&task_id)
-            .expect("Task not found for retry");
+        let Some(old_tc) = self.active.remove(&task_id) else {
+            error!(
+                task_id,
+                "Task not found for retry for {task_id}, ignoring -- consistency issue!"
+            );
+            return;
+        };
 
         // If the number of retries has been exceeded, we'll just immediately respond with abort.
         if task.retries > MAX_TASK_RETRIES {
-            old_tc.result_sender.expect("Task not found for retry");
             info!(
                 "Maximum number of retries exceeded for task {}.  Aborting.",
                 task.task_id
