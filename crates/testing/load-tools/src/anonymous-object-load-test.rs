@@ -642,9 +642,9 @@ async fn main() -> Result<(), eyre::Error> {
     let runtime_config = RuntimeConfig {
         gc_interval: Some(Duration::from_secs(999)), // Very long GC interval during load testing
     };
-    let features_config = FeaturesConfig { 
+    let features_config = FeaturesConfig {
         anonymous_objects: true, // Enable anonymous objects for this load test
-        ..Default::default() 
+        ..Default::default()
     };
     let config = Config {
         features: Arc::new(features_config),
