@@ -23,6 +23,7 @@ use moor_common::tasks::Exception;
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
 use moor_var::{Error, NOTHING, v_arc_string, v_bool, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
+use tracing::warn;
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum FinallyReason {
@@ -145,6 +146,18 @@ impl VMExecState {
         {
             return self.throw_error(error);
         }
+        let verb_this_name = verb_frame.map(|a| {
+            format!(
+                "{}:{} line: {:?}",
+                to_literal(&a.this),
+                a.verb_name.as_arc_string(),
+                a.frame.find_line_no()
+            )
+        });
+
+        // TODO: remove at some point 1.0, this is mainly here for diagnostics on uncooperative
+        //   dbs.
+        warn!(error = ?error, verb = ?verb_this_name, "Pushing error from !d verb");
         ExecutionResult::More
     }
 
