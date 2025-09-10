@@ -157,7 +157,6 @@ primary    = _{
   | builtin_call
   | paren_expr
   | sysprop_call
-  | sysprop
   | try_expr
   | flyweight
   | map
@@ -175,7 +174,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | string | object | err | symbol | type_constant | literal_binary | ident | boolean }
+atom     = { integer | float | string | object | err | sysprop | boolean | symbol | type_constant | literal_binary | ident }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr }
 lambda_params = { (lambda_param ~ ("," ~ lambda_param)*)? }
@@ -224,8 +223,6 @@ keyword = @{
   | ^"let"
   | ^"fn"
   | ^"endfn"
-  | ^"true"
-  | ^"false"
   | err
 }
 
@@ -305,7 +302,7 @@ fertile_attr = { "fertile" ~ ":" ~ boolean}
 read_attr = { "readable" ~ ":" ~ boolean }
 write_attr = { "writeable" ~ ":" ~ boolean }
 
-boolean = { "true" | "false" }
+boolean = @{ ("true" | "false") ~ !ident_continue }
 
 verb_decl = { ^"verb" ~ verb_name ~ "(" ~ verbargspec ~ ")" ~ owner_attr ~ flags_attr ~ verb_statements  }
 verb_statements = { statements ~ "endverb" }

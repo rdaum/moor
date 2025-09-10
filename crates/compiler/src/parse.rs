@@ -258,6 +258,14 @@ impl TreeTransformer {
 
                 Ok(Expr::Error(e, msg_part))
             }
+            Rule::sysprop => {
+                let mut inner = pair.into_inner();
+                let property = inner.next().unwrap().as_str();
+                Ok(Expr::Prop {
+                    location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
+                    property: Box::new(Expr::Value(v_str(property))),
+                })
+            }
             _ => {
                 panic!("Unimplemented atom: {pair:?}");
             }
@@ -3991,5 +3999,15 @@ endif"#;
         // Verify that both identifiers are properly parsed
         assert!(parse2.variables.find_name("truecolor_match").is_some());
         assert!(parse2.variables.find_name("false_positive").is_some());
+
+        let result_regression = parse_program(
+            r#"{path, ?require_extension = $false} = args;"#,
+            CompileOptions::default(),
+        );
+        result_regression.unwrap();
+
+        // Test sysprop parsing
+        let result_sysprop = parse_program(r#"x = $false;"#, CompileOptions::default());
+        result_sysprop.unwrap();
     }
 }
