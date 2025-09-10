@@ -175,7 +175,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | string | object | err | boolean | symbol | type_constant | literal_binary | ident  }
+atom     = { integer | float | string | object | err | symbol | type_constant | literal_binary | ident | boolean }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr }
 lambda_params = { (lambda_param ~ ("," ~ lambda_param)*)? }
@@ -224,6 +224,8 @@ keyword = @{
   | ^"let"
   | ^"fn"
   | ^"endfn"
+  | ^"true"
+  | ^"false"
   | err
 }
 

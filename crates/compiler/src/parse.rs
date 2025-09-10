@@ -3968,4 +3968,28 @@ else
 endif"#;
         parse_program(program, CompileOptions::default()).unwrap();
     }
+
+    #[test]
+    // Regression test for parsing identifiers that start with boolean keywords
+    fn test_boolean_keyword_identifier_parsing() {
+        // Test the original issue with scatter assignment
+        let program = r#"{code, escape_char, ?truecolor_match = 0, ?xterm_256_match = 0} = args;
+    if (truecolor_match)
+      ret = substitute(tostr(ret, ";2;%4;%5;%6m"), truecolor_match);
+      return ret;
+    endif"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        // Verify that 'truecolor_match' is properly parsed as an identifier
+        assert!(parse.variables.find_name("truecolor_match").is_some());
+
+        // Test other variations
+        let program2 = r#"truecolor_match = 1;
+    false_positive = 2;"#;
+        let parse2 = parse_program(program2, CompileOptions::default()).unwrap();
+
+        // Verify that both identifiers are properly parsed
+        assert!(parse2.variables.find_name("truecolor_match").is_some());
+        assert!(parse2.variables.find_name("false_positive").is_some());
+    }
 }
