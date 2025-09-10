@@ -312,7 +312,8 @@ impl Task {
                 let CommitResult::Success {
                     mutations_made,
                     timestamp,
-                } = commit_result else {
+                } = commit_result
+                else {
                     warn!(
                         "Conflict during commit before complete, asking scheduler to retry task for task_id: {}, player {}, retry # {}, task_start: {}",
                         self.task_id,

@@ -42,8 +42,7 @@ async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
     let args: Args = Args::parse();
 
-    moor_common::tracing::init_tracing(args.debug)
-        .expect("Unable to configure logging");
+    moor_common::tracing::init_tracing(args.debug).expect("Unable to configure logging");
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
