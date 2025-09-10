@@ -430,9 +430,9 @@ impl VMExecState {
                 self.unwind_stack(FinallyReason::Return(result))
             }
             Ok(BfRet::RetNil) => self.unwind_stack(FinallyReason::Return(v_int(0))),
-            Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
-            Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
-            Err(BfErr::Raise(e)) => self.push_bf_error(e),
+            Err(BfErr::ErrValue(e)) => self.push_error(e),
+            Err(BfErr::Code(c)) => self.push_error(c.into()),
+            Err(BfErr::Raise(e)) => self.push_error(e),
             Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }
@@ -483,9 +483,9 @@ impl VMExecState {
         match bf_result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Ok(BfRet::RetNil) => self.unwind_stack(FinallyReason::Return(v_int(0))),
-            Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
-            Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
-            Err(BfErr::Raise(e)) => self.push_bf_error(e),
+            Err(BfErr::Code(c)) => self.push_error(c.into()),
+            Err(BfErr::ErrValue(e)) => self.push_error(e),
+            Err(BfErr::Raise(e)) => self.push_error(e),
             Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }

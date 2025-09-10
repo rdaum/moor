@@ -120,14 +120,6 @@ impl VMExecState {
         v_obj(NOTHING)
     }
 
-    /// Return the activation record of the caller of the current activation.
-    pub(crate) fn parent_activation_mut(&mut self) -> &mut Activation {
-        let len = self.stack.len();
-        self.stack
-            .get_mut(len - 2)
-            .expect("activation stack underflow")
-    }
-
     /// Return the permissions of the caller of the current activation.
     pub(crate) fn caller_perms(&self) -> Obj {
         // Filter out builtin frames, and then take the next one.

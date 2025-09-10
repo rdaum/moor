@@ -139,13 +139,15 @@ impl VMExecState {
     pub(crate) fn push_error(&mut self, error: Error) -> ExecutionResult {
         self.set_return_value(v_error(error.clone()));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        if let Some(activation) = self.stack.last()
+        let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
+        if let Some(activation) = verb_frame
             && activation.verbdef.flags().contains(VerbFlag::Debug)
         {
             return self.throw_error(error);
         }
         ExecutionResult::More
     }
+
     /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
     /// want.
     pub(crate) fn raise_error(&mut self, error: Error) -> ExecutionResult {
@@ -157,32 +159,6 @@ impl VMExecState {
         {
             return self.throw_error(error);
         }
-        ExecutionResult::More
-    }
-
-    /// Same as push_error, but for returns from builtin functions.
-    pub(crate) fn push_bf_error(&mut self, error: Error) -> ExecutionResult {
-        // TODO: revisit this now that Bf frames are a thing...
-        //   We should be able to come up with a way to propagate and unwind for any kind of frame...
-        //   And not have a special case here
-
-        // No matter what, the error value has to be on the stack of the *calling* verb, not on this
-        // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
-        // function.
-        self.parent_activation_mut()
-            .frame
-            .set_return_value(v_error(error.clone()));
-
-        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        // Filter out frames for builtin invocations
-        let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
-        if let Some(activation) = verb_frame
-            && activation.verbdef.flags().contains(VerbFlag::Debug)
-        {
-            return self.throw_error(error);
-        }
-        // If we're not unwinding, we need to pop the builtin function's activation frame.
-        self.stack.pop();
         ExecutionResult::More
     }
 
