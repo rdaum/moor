@@ -1061,6 +1061,12 @@ mod tests {
     #[test_case("1 == 2 && return 0; 1 == 1 && return 1; return 2;", v_int(1); "short circuit return expr"
     )]
     #[test_case("true && return;", v_int(0); "short circuit empty return expr")]
+    #[test_case("return 5 &. 3;", v_int(1); "bitwise and")]
+    #[test_case("return 5 |. 3;", v_int(7); "bitwise or")]
+    #[test_case("return 5 ^. 3;", v_int(6); "bitwise xor")]
+    #[test_case("return 5 << 1;", v_int(10); "left shift")]
+    #[test_case("return 10 >> 1;", v_int(5); "right shift")]
+    #[test_case("return ~5;", v_int(-6); "bitwise complement")]
     fn test_run(program: &str, expected_result: Var) {
         let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());

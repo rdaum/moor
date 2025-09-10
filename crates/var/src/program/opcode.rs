@@ -23,6 +23,12 @@ pub struct BuiltinId(pub u16);
 pub enum Op {
     Add,
     And(Label),
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitShl,
+    BitShr,
+    BitNot,
     CallVerb,
     CheckListForSplice,
     FinallyContinue,

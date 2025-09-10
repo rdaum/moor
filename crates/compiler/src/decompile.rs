@@ -527,6 +527,10 @@ impl Decompile {
                 let expr = self.pop_expr()?;
                 self.push_expr(Expr::Unary(UnaryOp::Not, Box::new(expr)));
             }
+            Op::BitNot => {
+                let expr = self.pop_expr()?;
+                self.push_expr(Expr::Unary(UnaryOp::BitNot, Box::new(expr)));
+            }
             Op::GetProp | Op::PushGetProp => {
                 let prop = self.pop_expr()?;
                 let obj = self.pop_expr()?;
@@ -547,7 +551,12 @@ impl Decompile {
             | Op::Div
             | Op::Mod
             | Op::Exp
-            | Op::In => {
+            | Op::In
+            | Op::BitAnd
+            | Op::BitOr
+            | Op::BitXor
+            | Op::BitShl
+            | Op::BitShr => {
                 let right = self.pop_expr()?;
                 let left = self.pop_expr()?;
                 let operator = BinaryOp::from_binary_opcode(opcode);

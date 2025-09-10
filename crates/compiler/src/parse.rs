@@ -333,16 +333,21 @@ impl TreeTransformer {
             .op(Op::infix(Rule::lor, Assoc::Left))
             // 11. Logical and.
             .op(Op::infix(Rule::land, Assoc::Left))
-            // TODO: bitwise operators here (| 10, ^ XOR 9, & 8) if we ever get them.
-            // 7
-            // Equality/inequality
+            // 10. Bitwise or.
+            .op(Op::infix(Rule::bitor, Assoc::Left))
+            // 9. Bitwise xor.
+            .op(Op::infix(Rule::bitxor, Assoc::Left))
+            // 8. Bitwise and.
+            .op(Op::infix(Rule::bitand, Assoc::Left))
+            // 7. Equality/inequality
             .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
             // 6. Relational operators
             .op(Op::infix(Rule::gt, Assoc::Left)
                 | Op::infix(Rule::lt, Assoc::Left)
                 | Op::infix(Rule::gte, Assoc::Left)
                 | Op::infix(Rule::lte, Assoc::Left))
-            // TODO 5 bitwise shiftleft/shiftright if we ever get them.
+            // 5. Bitwise shift operators
+            .op(Op::infix(Rule::bitshl, Assoc::Left) | Op::infix(Rule::bitshr, Assoc::Left))
             // 5. In operator ended up above add
             .op(Op::infix(Rule::in_range, Assoc::Left))
             // 4. Add & subtract same precedence
@@ -354,7 +359,7 @@ impl TreeTransformer {
             // Exponent is higher than multiply/divide (not present in C)
             .op(Op::infix(Rule::pow, Assoc::Left))
             // 2. Unary negation & logical-not
-            .op(Op::prefix(Rule::neg) | Op::prefix(Rule::not))
+            .op(Op::prefix(Rule::neg) | Op::prefix(Rule::not) | Op::prefix(Rule::bitnot))
             // 1. Indexing/suffix operator generally.
             .op(Op::postfix(Rule::index_range)
                 | Op::postfix(Rule::index_single)
@@ -786,6 +791,31 @@ impl TreeTransformer {
                     Box::new(lhs?),
                     Box::new(rhs.unwrap()),
                 )),
+                Rule::bitand => Ok(Expr::Binary(
+                    BinaryOp::BitAnd,
+                    Box::new(lhs?),
+                    Box::new(rhs.unwrap()),
+                )),
+                Rule::bitor => Ok(Expr::Binary(
+                    BinaryOp::BitOr,
+                    Box::new(lhs?),
+                    Box::new(rhs.unwrap()),
+                )),
+                Rule::bitxor => Ok(Expr::Binary(
+                    BinaryOp::BitXor,
+                    Box::new(lhs?),
+                    Box::new(rhs.unwrap()),
+                )),
+                Rule::bitshl => Ok(Expr::Binary(
+                    BinaryOp::BitShl,
+                    Box::new(lhs?),
+                    Box::new(rhs.unwrap()),
+                )),
+                Rule::bitshr => Ok(Expr::Binary(
+                    BinaryOp::BitShr,
+                    Box::new(lhs?),
+                    Box::new(rhs.unwrap()),
+                )),
                 _ => todo!("Unimplemented infix: {:?}", op.as_rule()),
             })
             .map_prefix(|op, rhs| match op.as_rule() {
@@ -796,6 +826,7 @@ impl TreeTransformer {
                 }
                 Rule::not => Ok(Expr::Unary(UnaryOp::Not, Box::new(rhs?))),
                 Rule::neg => Ok(Expr::Unary(UnaryOp::Neg, Box::new(rhs?))),
+                Rule::bitnot => Ok(Expr::Unary(UnaryOp::BitNot, Box::new(rhs?))),
                 _ => todo!("Unimplemented prefix: {:?}", op.as_rule()),
             })
             .map_postfix(|lhs, op| {

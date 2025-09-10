@@ -123,6 +123,93 @@ impl Var {
     pub fn is_sysobj(&self) -> bool {
         matches!(self.variant(), Variant::Obj(o) if o.is_sysobj())
     }
+
+    pub fn bitand(&self, v: &Self) -> Result<Self, Error> {
+        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot bitwise AND type {} and {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            })));
+        };
+        Ok(v_int(l & r))
+    }
+
+    pub fn bitor(&self, v: &Self) -> Result<Self, Error> {
+        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot bitwise OR type {} and {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            })));
+        };
+        Ok(v_int(l | r))
+    }
+
+    pub fn bitxor(&self, v: &Self) -> Result<Self, Error> {
+        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot bitwise XOR type {} and {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            })));
+        };
+        Ok(v_int(l ^ r))
+    }
+
+    pub fn bitshl(&self, v: &Self) -> Result<Self, Error> {
+        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot left shift type {} by {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            })));
+        };
+        if *r < 0 || *r > 63 {
+            return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
+        }
+        l.checked_shl(*r as u32)
+            .map(v_int)
+            .ok_or_else(|| E_INVARG.msg("Integer overflow in left shift"))
+    }
+
+    pub fn bitshr(&self, v: &Self) -> Result<Self, Error> {
+        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot right shift type {} by {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            })));
+        };
+        if *r < 0 || *r > 63 {
+            return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
+        }
+        l.checked_shr(*r as u32)
+            .map(v_int)
+            .ok_or_else(|| E_INVARG.msg("Integer overflow in right shift"))
+    }
+
+    pub fn bitnot(&self) -> Result<Self, Error> {
+        let Variant::Int(l) = self.variant() else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot bitwise complement type {}",
+                    self.type_code().to_literal()
+                )
+            })));
+        };
+        Ok(v_int(!l))
+    }
 }
 
 #[cfg(test)]
@@ -246,5 +333,80 @@ mod tests {
         assert!(v_str("b") >= v_str("a"));
         assert!(v_objid(2) >= v_objid(1));
         assert!(v_err(E_RANGE) >= v_err(E_TYPE));
+    }
+
+    #[test]
+    fn test_bitand() {
+        assert_eq!(v_int(5).bitand(&v_int(3)), Ok(v_int(1))); // 0101 & 0011 = 0001
+        assert_eq!(v_int(12).bitand(&v_int(10)), Ok(v_int(8))); // 1100 & 1010 = 1000
+        assert_eq!(v_int(0).bitand(&v_int(15)), Ok(v_int(0))); // 0000 & 1111 = 0000
+
+        // Test with non-integers
+        assert!(v_str("test").bitand(&v_int(5)).is_ok());
+        assert!(v_int(5).bitand(&v_str("test")).is_ok());
+    }
+
+    #[test]
+    fn test_bitor() {
+        assert_eq!(v_int(5).bitor(&v_int(3)), Ok(v_int(7))); // 0101 | 0011 = 0111
+        assert_eq!(v_int(12).bitor(&v_int(10)), Ok(v_int(14))); // 1100 | 1010 = 1110
+        assert_eq!(v_int(0).bitor(&v_int(15)), Ok(v_int(15))); // 0000 | 1111 = 1111
+
+        // Test with non-integers
+        assert!(v_str("test").bitor(&v_int(5)).is_ok());
+        assert!(v_int(5).bitor(&v_str("test")).is_ok());
+    }
+
+    #[test]
+    fn test_bitxor() {
+        assert_eq!(v_int(5).bitxor(&v_int(3)), Ok(v_int(6))); // 0101 ^ 0011 = 0110
+        assert_eq!(v_int(12).bitxor(&v_int(10)), Ok(v_int(6))); // 1100 ^ 1010 = 0110
+        assert_eq!(v_int(15).bitxor(&v_int(15)), Ok(v_int(0))); // 1111 ^ 1111 = 0000
+
+        // Test with non-integers
+        assert!(v_str("test").bitxor(&v_int(5)).is_ok());
+        assert!(v_int(5).bitxor(&v_str("test")).is_ok());
+    }
+
+    #[test]
+    fn test_bitshl() {
+        assert_eq!(v_int(1).bitshl(&v_int(2)), Ok(v_int(4))); // 1 << 2 = 4
+        assert_eq!(v_int(5).bitshl(&v_int(1)), Ok(v_int(10))); // 5 << 1 = 10
+        assert_eq!(v_int(3).bitshl(&v_int(3)), Ok(v_int(24))); // 3 << 3 = 24
+
+        // Test bounds checking
+        assert!(v_int(1).bitshl(&v_int(-1)).is_ok()); // Should return error
+        assert!(v_int(1).bitshl(&v_int(64)).is_ok()); // Should return error
+
+        // Test with non-integers
+        assert!(v_str("test").bitshl(&v_int(2)).is_ok());
+        assert!(v_int(5).bitshl(&v_str("test")).is_ok());
+    }
+
+    #[test]
+    fn test_bitshr() {
+        assert_eq!(v_int(8).bitshr(&v_int(2)), Ok(v_int(2))); // 8 >> 2 = 2
+        assert_eq!(v_int(10).bitshr(&v_int(1)), Ok(v_int(5))); // 10 >> 1 = 5
+        assert_eq!(v_int(24).bitshr(&v_int(3)), Ok(v_int(3))); // 24 >> 3 = 3
+
+        // Test bounds checking
+        assert!(v_int(8).bitshr(&v_int(-1)).is_ok()); // Should return error
+        assert!(v_int(8).bitshr(&v_int(64)).is_ok()); // Should return error
+
+        // Test with non-integers
+        assert!(v_str("test").bitshr(&v_int(2)).is_ok());
+        assert!(v_int(5).bitshr(&v_str("test")).is_ok());
+    }
+
+    #[test]
+    fn test_bitnot() {
+        assert_eq!(v_int(5).bitnot(), Ok(v_int(!5))); // ~5 = -6 in two's complement
+        assert_eq!(v_int(0).bitnot(), Ok(v_int(-1))); // ~0 = -1
+        assert_eq!(v_int(-1).bitnot(), Ok(v_int(0))); // ~(-1) = 0
+        assert_eq!(v_int(42).bitnot(), Ok(v_int(!42))); // ~42 = -43
+
+        // Test with non-integers
+        assert!(v_str("test").bitnot().is_ok()); // Should return error
+        assert!(v_float(5.0).bitnot().is_ok()); // Should return error
     }
 }

@@ -652,20 +652,20 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         }
 
         // Also update player connections if this client has a logged-in player
-        if let Some(player_obj) = player_obj {
-            if let Some(player_records) = inner.player_connections.get_mut(&player_obj) {
-                for record in &mut player_records.connections {
-                    if record.client_id == client_id.as_u128() {
-                        match &value {
-                            Some(val) => {
-                                record.client_attributes.insert(key, val.clone());
-                            }
-                            None => {
-                                record.client_attributes.remove(&key);
-                            }
+        if let Some(player_obj) = player_obj
+            && let Some(player_records) = inner.player_connections.get_mut(&player_obj)
+        {
+            for record in &mut player_records.connections {
+                if record.client_id == client_id.as_u128() {
+                    match &value {
+                        Some(val) => {
+                            record.client_attributes.insert(key, val.clone());
                         }
-                        break;
+                        None => {
+                            record.client_attributes.remove(&key);
+                        }
                     }
+                    break;
                 }
             }
         }
@@ -675,10 +675,10 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         let mut player_changes = PlayerConnectionChanges::new();
 
         // If there's a logged-in player, persist the player connection changes
-        if let Some(player_obj) = player_obj {
-            if let Some(connections) = inner.player_connections.get(&player_obj) {
-                player_changes.update(player_obj, connections.clone());
-            }
+        if let Some(player_obj) = player_obj
+            && let Some(connections) = inner.player_connections.get(&player_obj)
+        {
+            player_changes.update(player_obj, connections.clone());
         }
 
         drop(inner);

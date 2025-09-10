@@ -484,6 +484,11 @@ impl CodegenState {
                     BinaryOp::LtE => Op::Le,
                     BinaryOp::Exp => Op::Exp,
                     BinaryOp::In => Op::In,
+                    BinaryOp::BitAnd => Op::BitAnd,
+                    BinaryOp::BitOr => Op::BitOr,
+                    BinaryOp::BitXor => Op::BitXor,
+                    BinaryOp::BitShl => Op::BitShl,
+                    BinaryOp::BitShr => Op::BitShr,
                 };
                 self.emit(binop);
                 self.pop_stack(1);
@@ -515,6 +520,7 @@ impl CodegenState {
                 self.emit(match op {
                     UnaryOp::Neg => Op::UnaryMinus,
                     UnaryOp::Not => Op::Not,
+                    UnaryOp::BitNot => Op::BitNot,
                 });
             }
             Expr::Prop { location, property } => {

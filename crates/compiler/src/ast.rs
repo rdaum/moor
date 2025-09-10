@@ -41,6 +41,11 @@ pub struct ScatterItem {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BinaryOp {
     Add,
+    BitAnd,
+    BitOr,
+    BitShl,
+    BitShr,
+    BitXor,
     Div,
     Eq,
     Exp,
@@ -59,6 +64,11 @@ impl BinaryOp {
     pub fn from_binary_opcode(opcode: Op) -> Self {
         match opcode {
             Op::Add => Self::Add,
+            Op::BitAnd => Self::BitAnd,
+            Op::BitOr => Self::BitOr,
+            Op::BitShl => Self::BitShl,
+            Op::BitShr => Self::BitShr,
+            Op::BitXor => Self::BitXor,
             Op::Div => Self::Div,
             Op::Eq => Self::Eq,
             Op::Exp => Self::Exp,
@@ -80,6 +90,11 @@ impl Display for BinaryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Add => write!(f, "+"),
+            Self::BitAnd => write!(f, "&."),
+            Self::BitOr => write!(f, "|."),
+            Self::BitShl => write!(f, "<<"),
+            Self::BitShr => write!(f, ">>"),
+            Self::BitXor => write!(f, "^."),
             Self::Div => write!(f, "/"),
             Self::Eq => write!(f, "=="),
             Self::Exp => write!(f, "^"),
@@ -100,6 +115,7 @@ impl Display for BinaryOp {
 pub enum UnaryOp {
     Neg,
     Not,
+    BitNot,
 }
 
 impl Display for UnaryOp {
@@ -107,6 +123,7 @@ impl Display for UnaryOp {
         match self {
             Self::Neg => write!(f, "-"),
             Self::Not => write!(f, "!"),
+            Self::BitNot => write!(f, "~"),
         }
     }
 }

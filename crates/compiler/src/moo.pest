@@ -97,17 +97,22 @@ infix    = _{
   | sub
   | mul
   | div
-  | pow
   | modulus
   | land
   | lor
   | eq
   | neq
+  | bitshl
+  | bitshr
   | lte
   | gte
   | lt
   | gt
   | in_range
+  | bitand
+  | bitor
+  | bitxor
+  | pow
 }
 add      =  { "+" }
 sub      =  { "-" }
@@ -124,11 +129,17 @@ gt       =  { ">" }
 lte      =  { "<=" }
 gte      =  { ">=" }
 in_range = @{ ^"in" ~ !ident_continue+ }
+bitand   =  { "&." }
+bitor    =  { "|." }
+bitxor   =  { "^." }
+bitshl   =  { "<<" }
+bitshr   =  { ">>" }
 
-prefix = _{ neg | not | scatter_assign }
+prefix = _{ neg | not | bitnot | scatter_assign }
 neg    =  { "-" }
 // 
 not = { "!" }
+bitnot = { "~" }
 
 scatter_assign   =  { "{" ~ scatter ~ "}" ~ !"=>" ~ ASSIGN }
 scatter          = _{ scatter_item ~ ("," ~ scatter_item)* }

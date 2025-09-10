@@ -50,6 +50,9 @@ impl Expr {
                 ast::BinaryOp::LtE => 6,
                 ast::BinaryOp::In => 6,
 
+                ast::BinaryOp::BitShl => 5,
+                ast::BinaryOp::BitShr => 5,
+
                 ast::BinaryOp::Add => 4,
                 ast::BinaryOp::Sub => 4,
 
@@ -58,6 +61,10 @@ impl Expr {
                 ast::BinaryOp::Mod => 3,
 
                 ast::BinaryOp::Exp => 2,
+
+                ast::BinaryOp::BitAnd => 8,
+                ast::BinaryOp::BitXor => 9,
+                ast::BinaryOp::BitOr => 10,
             },
 
             Expr::Unary(_, _) => 1,

@@ -628,6 +628,33 @@ pub fn moo_frame_execute(
                     f.pop();
                 }
             }
+            Op::BitAnd => {
+                binary_var_op!(self, f, state, bitand);
+            }
+            Op::BitOr => {
+                binary_var_op!(self, f, state, bitor);
+            }
+            Op::BitXor => {
+                binary_var_op!(self, f, state, bitxor);
+            }
+            Op::BitShl => {
+                binary_var_op!(self, f, state, bitshl);
+            }
+            Op::BitShr => {
+                binary_var_op!(self, f, state, bitshr);
+            }
+            Op::BitNot => {
+                let v = f.peek_top();
+                match v.bitnot() {
+                    Err(e) => {
+                        f.pop();
+                        return ExecutionResult::PushError(e);
+                    }
+                    Ok(result) => {
+                        f.poke(0, result);
+                    }
+                }
+            }
             Op::Not => {
                 let v = !f.peek_top().is_true();
                 let b = if features_config.use_boolean_returns {
