@@ -108,6 +108,7 @@ These options enable or disable various MOO language features:
 | Persistent tasks    | `--persistent-tasks`        | `true`  | Enable persistent tasks between server restarts                                  |
 | Event logging       | `--enable-eventlog`         | `true`  | Enable persistent event logging and history features                             |
 | Anonymous objects   | `--anonymous-objects`       | `false` | Enable anonymous objects with automatic garbage collection                       |
+| UUID objects        | `--use-uuobjids`            | `false` | Enable UUID object identifiers like #048D05-1234567890                          |
 
 ## Import/Export Configuration
 
