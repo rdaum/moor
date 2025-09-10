@@ -39,7 +39,12 @@ uuid.workspace = true
 zerocopy.workspace = true
 
 # Error Handling
+eyre.workspace = true
 thiserror.workspace = true
+
+# Tracing & Logging
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Text Processing
 strsim.workspace = true

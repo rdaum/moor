@@ -43,7 +43,6 @@ use moor_textdump::textdump_load;
 use rand::{Rng, rngs::OsRng};
 use rpc_common::load_keypair;
 use tracing::{error, info, warn};
-use tracing_subscriber::fmt::format::FmtSpan;
 
 mod args;
 mod connections;
@@ -239,21 +238,7 @@ fn main() -> Result<(), Report> {
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 
-    let main_subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_ansi(true)
-        .with_file(true)
-        .with_target(false)
-        .with_line_number(true)
-        .with_thread_names(true)
-        .with_span_events(FmtSpan::NONE)
-        .with_max_level(if args.debug {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        })
-        .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
+    moor_common::tracing::init_tracing(args.debug)
         .map_err(|e| eyre!("Unable to configure logging: {}", e))?;
 
     // If generate-keypair flag is provided, generate keypair and exit

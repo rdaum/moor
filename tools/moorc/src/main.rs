@@ -38,7 +38,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, trace, warn};
-use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct Args {
@@ -149,24 +148,8 @@ fn main() -> Result<(), eyre::Report> {
     color_eyre::install().unwrap();
     let args: Args = Args::parse();
 
-    let main_subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_ansi(true)
-        .with_span_events(FmtSpan::NONE)
-        .with_target(false)
-        .with_file(false)
-        .with_target(false)
-        .with_line_number(false)
-        .with_thread_names(false)
-        .with_span_events(FmtSpan::NONE)
-        .with_max_level(if args.debug {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        })
-        .finish();
-    tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
-        eprintln!("Unable to set configure logging: {e}");
+    moor_common::tracing::init_tracing_simple(args.debug).unwrap_or_else(|e| {
+        eprintln!("Unable to configure logging: {e}");
         std::process::exit(1);
     });
 

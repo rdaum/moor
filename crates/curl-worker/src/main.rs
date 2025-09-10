@@ -25,7 +25,6 @@ use std::sync::atomic::AtomicBool;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
-use tracing_subscriber::fmt::format::FmtSpan;
 use uuid::Uuid;
 
 // TODO: timeouts, and generally more error handling
@@ -43,22 +42,8 @@ async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
     let args: Args = Args::parse();
 
-    let main_subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_ansi(true)
-        .with_file(true)
-        .with_target(false)
-        .with_line_number(true)
-        .with_thread_names(true)
-        .with_span_events(FmtSpan::NONE)
-        .with_max_level(if args.debug {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        })
-        .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
+    moor_common::tracing::init_tracing(args.debug)
+        .expect("Unable to configure logging");
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,

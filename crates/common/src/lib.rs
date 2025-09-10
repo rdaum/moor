@@ -19,6 +19,7 @@ pub mod builtins;
 pub mod matching;
 pub mod model;
 pub mod tasks;
+pub mod tracing;
 pub mod util;
 
 /// When encoding or decoding types to/from data or network, this is a version tag put into headers
