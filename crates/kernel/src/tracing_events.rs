@@ -1462,7 +1462,6 @@ macro_rules! trace_transaction_rollback {
 mod tests {
     use super::*;
     use std::time::Duration;
-    
 
     #[test]
     fn test_tracing_disabled_by_default() {
