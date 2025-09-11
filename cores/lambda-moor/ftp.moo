@@ -20,7 +20,7 @@ object FTP
       return {"Unable to connect to host."};
     endif
     this.connections = {@this.connections, {conn, caller_perms(), {}, 0, {}}};
-    if (!this:wait_for_response(conn) || user && !this:do_command(conn, "USER " + user) || pass && !this:do_command(conn, "PASS " + pass))
+    if (!this:wait_for_response(conn) || (user && !this:do_command(conn, "USER " + user)) || (pass && !this:do_command(conn, "PASS " + pass)))
       messages = this:get_messages(conn);
       this.connections = listdelete(this.connections, $list_utils:iassoc(conn, this.connections));
       $network:close(conn);

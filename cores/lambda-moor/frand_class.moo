@@ -198,7 +198,7 @@ object FRAND_CLASS
 
   verb "@addr*oom" (any none none) owner: HACKER flags: "rxd"
     "'@addroom <name> <object>', '@addroom <object> <name>', '@addroom <name>', '@addroom <object>', '@addroom' - Add a room to your personal database of teleport destinations. Example: '@addroom Kitchen #24'. Reasonable <object>s are numbers (#17) and 'here'. If you leave out <object>, the object is the current room. If you leave out <name>, the name is the specified room's name. If you leave out both, you get the current room and its name.";
-    if (!caller && player != this || caller && callers()[1][3] != this)
+    if (!caller && player != this || (caller && callers()[1][3] != this))
       if (!caller)
         player:tell(E_PERM);
       endif
@@ -224,7 +224,7 @@ object FRAND_CLASS
 
   verb "@rmr*oom" (any none none) owner: HACKER flags: "rxd"
     "'@rmroom <roomname>' - Remove a room from your personal database of teleport destinations. Example: '@rmroom library'.";
-    if (!caller && player != this || caller && callers()[1][3] != this)
+    if (!caller && player != this || (caller && callers()[1][3] != this))
       if (!caller)
         player:tell(E_PERM);
       endif
@@ -1242,7 +1242,7 @@ object FRAND_CLASS
     origins = {};
     "Before removing any refusals, figure out which ones to remove. Removing one changes the indices and invalidates the loop invariant.";
     for i in [1..length(this.refused_origins)]
-      if (time() >= this.refused_until[i] || typeof(this.refused_origins[i]) == OBJ && !$recycler:valid(this.refused_origins[i]))
+      if (time() >= this.refused_until[i] || (typeof(this.refused_origins[i]) == OBJ && !$recycler:valid(this.refused_origins[i])))
         origins = {@origins, this.refused_origins[i]};
       endif
     endfor

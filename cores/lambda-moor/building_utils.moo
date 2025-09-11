@@ -98,7 +98,7 @@ object BUILDING_UTILS
       return E_INVARG;
     elseif (who.wizard)
       "no problemo";
-    elseif (who != object.owner || who != parent.owner && !parent.f)
+    elseif (who != object.owner || (who != parent.owner && !parent.f))
       return E_PERM;
     endif
     "Chparent any children to their grandparent instead of orphaning them horribly.  Have to do the chparent with wizperms, in case the children are owned by others, so do this before set_task_perms.";

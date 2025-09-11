@@ -228,7 +228,7 @@ object MAIL_AGENT
         $command_utils:suspend_if_needed(0);
       endfor
     else
-      if (!valid(recip) || recip in seen || !is_player(recip) && !($mail_recipient in $object_utils:ancestors(recip)))
+      if (!valid(recip) || recip in seen || (!is_player(recip) && !($mail_recipient in $object_utils:ancestors(recip))))
         "recip is neither a player nor a mailing list/folder";
       else
         if (fwd = this:mail_forward(recip))
@@ -796,7 +796,7 @@ object MAIL_AGENT
           endif
         elseif (string == "first")
           seq = $seq_utils:add(seq, 1, 1);
-        elseif (n = toint(string) || (string in {"last", "$"} && -1 || string == "cur" && cur))
+        elseif (n = toint(string) || (string in {"last", "$"} && -1 || (string == "cur" && cur)))
           if (n <= 0)
             seq = $seq_utils:add(seq, max(0, nummsgs + n) + 1, nummsgs);
           elseif (i = caller:exists_num_eq(n))

@@ -43,7 +43,7 @@ object ROOT_CLASS
   verb set_name (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     "set_name(newname) attempts to change this.name to newname";
     "  => E_PERM   if you don't own this or aren't its parent, or are a player trying to do an end-run around $player_db...";
-    if (!caller_perms().wizard && (is_player(this) || caller_perms() != this.owner && this != caller))
+    if (!caller_perms().wizard && (is_player(this) || (caller_perms() != this.owner && this != caller)))
       return E_PERM;
     else
       return typeof(e = `this.name = args[1] ! ANY') != ERR || e;
@@ -338,7 +338,7 @@ object ROOT_CLASS
     "=> {E_NONE, error message} ";
     if (!(caller == this || $perm_utils:controls(caller_perms(), this)))
       return E_PERM;
-    elseif ((t = typeof(msg = `this.((args[1] + "_msg")) ! ANY')) in {ERR, STR} || t == LIST && msg && typeof(msg[1]) == STR)
+    elseif ((t = typeof(msg = `this.((args[1] + "_msg")) ! ANY')) in {ERR, STR} || (t == LIST && msg && typeof(msg[1]) == STR))
       return msg;
     else
       return {1, msg};

@@ -566,7 +566,7 @@ object MATH_UTILS
     "This verb was revised on 2006-03-16 by Gary (#110811) to allow for floating input of the second argument.  The help documentation had said this was allowed but actually it caused a traceback.  How many people are actually using this, I wonder? ";
     {x, n} = args;
     "if (n < 0)";
-    if (typeof(n) == INT && n < 0 || typeof(n) == FLOAT && n < 0.0)
+    if (typeof(n) == INT && n < 0 || (typeof(n) == FLOAT && n < 0.0))
       return E_INVARG;
     elseif (typeof(x) == INT && typeof(n) == FLOAT)
       return E_TYPE;

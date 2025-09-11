@@ -1047,7 +1047,7 @@ object CODE_UTILS
       prefix = "";
       while (i = index(s, sub))
         prefix = prefix + s[1..i - 1];
-        if ((prefix == "" || (!delimited || !index(lets, prefix[$]))) && (!delimited || (i + len > length(s) || !index(lets, s[i + len]))) && !this:inside_quotes(prefix))
+        if (prefix == "" || (!delimited || !index(lets, prefix[$])) && (!delimited || (i + len > length(s) || !index(lets, s[i + len]))) && !this:inside_quotes(prefix))
           prefix = prefix + x[2];
         else
           prefix = prefix + s[i..i + len - 1];
@@ -1292,7 +1292,7 @@ object CODE_UTILS
     elseif (from == to && destverb == origverb)
       "Moving same origverb onto the same object puts the verbcode in the wrong one. Just not allow";
       return E_NACC;
-    elseif (!$perm_utils:controls(who, from) && !from.w || !$perm_utils:controls(who, to) && !to.w)
+    elseif (!$perm_utils:controls(who, from) && !from.w || (!$perm_utils:controls(who, to) && !to.w))
       "caller_perms() is not allowed to hack on either object in question";
       return E_PERM;
     elseif (!$object_utils:defines_verb(from, origverb_first))
@@ -1329,7 +1329,7 @@ object CODE_UTILS
     elseif (from == to && destprop == origprop)
       "Moving same prop onto the same object puts the contents in the wrong one. Just not allow";
       return E_NACC;
-    elseif (!$perm_utils:controls(who, from) && !from.w || !$perm_utils:controls(who, to) && !to.w)
+    elseif (!$perm_utils:controls(who, from) && !from.w || (!$perm_utils:controls(who, to) && !to.w))
       "caller_perms() is not allowed to hack on either object in question";
       return E_PERM;
     elseif (!$object_utils:defines_property(from, origprop))

@@ -555,7 +555,7 @@ object LIST_UTILS
         if (typeof(things) != LIST && typeof(things) != STR)
           return E_TYPE;
         else
-          result = verb == "longest" && length(result) < length(things) || verb == "shortest" && length(result) > length(things) ? things | result;
+          result = verb == "longest" && length(result) < length(things) || (verb == "shortest" && length(result) > length(things)) ? things | result;
         endif
       endfor
     endif

@@ -197,7 +197,7 @@ object COMMAND_UTILS
           p:notify(">> Command Aborted <<");
           kill_task(task_id());
         endif
-        return index("yes", ans) == 1 || index("no", ans) != 1 && E_INVARG;
+        return index("yes", ans) == 1 || (index("no", ans) != 1 && E_INVARG);
       else
         return E_NONE;
       endif

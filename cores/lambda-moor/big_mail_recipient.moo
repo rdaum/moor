@@ -347,7 +347,7 @@ object BIG_MAIL_RECIPIENT
 
   verb rm_message_seq (this none this) owner: HACKER flags: "rxd"
     seq = args[1];
-    if (!(this:ok_write(caller, caller_perms()) || this:ok(caller, caller_perms()) && (seq = this:own_messages_filter(caller_perms(), @args))))
+    if (!(this:ok_write(caller, caller_perms()) || (this:ok(caller, caller_perms()) && (seq = this:own_messages_filter(caller_perms(), @args)))))
       return E_PERM;
     endif
     msgtree = this.messages;

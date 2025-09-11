@@ -790,7 +790,7 @@ object WIZ_UTILS
         $command_utils:suspend_if_needed(0);
         matches = {};
         for name in (who.all_connect_places)
-          if (index(where, "*") && su:match_string(name, where) || !index(where, "*") && index(name, where))
+          if (index(where, "*") && su:match_string(name, where) || (!index(where, "*") && index(name, where)))
             matches = {@matches, name};
           endif
         endfor
@@ -1137,7 +1137,7 @@ object WIZ_UTILS
     for prop in (properties(object))
       $command_utils:suspend_if_needed(0);
       info = property_info(object, prop);
-      if (!(index(info[2], "c") || info[1] != object.owner && valid(info[1]) && is_player(info[1])))
+      if (!(index(info[2], "c") || (info[1] != object.owner && valid(info[1]) && is_player(info[1]))))
         same = same && info[1] == newowner;
         $wiz_utils:set_property_owner(object, prop, newowner, 1);
       endif

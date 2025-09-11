@@ -661,7 +661,7 @@ object BYTE_QUOTA_UTILS
         who = players[index];
         if (is_player(who) && $object_utils:has_property(who, "size_quota"))
           "Robustness in the face of reaping...";
-          if (!this.repeat_cycle || who.last_disconnect_time > tooidletime && who.last_disconnect_time != $maxint)
+          if (!this.repeat_cycle || (who.last_disconnect_time > tooidletime && who.last_disconnect_time != $maxint))
             "only measure people who login regularly if we're a big moo.";
             usage = 0;
             unmeasured = 0;

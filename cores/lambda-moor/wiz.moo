@@ -156,7 +156,7 @@ object WIZ
           suspend(0);
         endif
         info = property_info(object, prop);
-        if (!(index(info[2], "c") || info[1] != object.owner && valid(info[1]) && is_player(info[1])))
+        if (!(index(info[2], "c") || (info[1] != object.owner && valid(info[1]) && is_player(info[1]))))
           same = same && info[1] == newowner;
           $wiz_utils:set_property_owner(object, prop, newowner, suspendok);
         endif

@@ -157,9 +157,9 @@ object MAIL_RECIPIENT
     result = {};
     forward_self = !this.mail_forward || this in this.mail_forward;
     for recip in (args)
-      if (!valid(recip) || !is_player(recip) && !($mail_recipient in $object_utils:ancestors(recip)))
+      if (!valid(recip) || (!is_player(recip) && !($mail_recipient in $object_utils:ancestors(recip))))
         r = E_INVARG;
-      elseif ($perm_utils:controls(perms, this) || typeof(this.readers) != LIST && $perm_utils:controls(perms, recip))
+      elseif ($perm_utils:controls(perms, this) || (typeof(this.readers) != LIST && $perm_utils:controls(perms, recip)))
         this.mail_forward = setadd(this.mail_forward, recip);
         r = recip;
       else
@@ -218,7 +218,7 @@ object MAIL_RECIPIENT
     for recip in (args)
       if (!valid(recip) || recip == this)
         r = E_INVARG;
-      elseif ($perm_utils:controls(perms, this) || this:is_readable_by(perms) && $perm_utils:controls(perms, recip))
+      elseif ($perm_utils:controls(perms, this) || (this:is_readable_by(perms) && $perm_utils:controls(perms, recip)))
         this.mail_notify = setadd(this.mail_notify, recip);
         r = recip;
       else

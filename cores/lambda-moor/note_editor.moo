@@ -142,7 +142,7 @@ object NOTE_EDITOR
     else
       text = `(spec[1]).((spec[2])) ! ANY';
     endif
-    if ((tt = typeof(text)) in {ERR, STR} || tt == LIST && (!text || typeof(text[1]) == STR))
+    if ((tt = typeof(text)) in {ERR, STR} || (tt == LIST && (!text || typeof(text[1]) == STR)))
       return text;
     else
       return E_TYPE;

@@ -237,7 +237,7 @@ object MAIL_RECIPIENT_CLASS
   verb current_folder (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     ":current_folder() => default folder to use, always an object, usually `this'";
     set_task_perms(caller_perms());
-    return (!this:mail_option("sticky") || this.current_folder) && this;
+    return !this:mail_option("sticky") || this.current_folder && this;
   endverb
 
   verb set_current_folder (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
@@ -599,7 +599,7 @@ object MAIL_RECIPIENT_CLASS
       endif
       for c in (all_mlists)
         $command_utils:suspend_if_needed(0);
-        if ((c:is_usable_by(this) || c:is_readable_by(this)) && (verb != "@unsubscribed" || !(c in ml)))
+        if (c:is_usable_by(this) || c:is_readable_by(this) && (verb != "@unsubscribed" || !(c in ml)))
           c:look_self(quick);
         endif
       endfor
@@ -1564,7 +1564,7 @@ object MAIL_RECIPIENT_CLASS
         "Leaving the zombie messages kinda defeats the purpose of @unsend. Since use of @unsend removes any old zombie mail, and since I can't find any nice, tidy way to save the old zombie mail, we're just going to delete the new zombie mail outright. Those who don't like this can set emselves +no_unsend.";
         who.messages_going = {};
         count = count + 1;
-        (ticks_left() < 5000 || seconds_left() < 2) && suspend(1);
+        ticks_left() < 5000 || seconds_left() < 2 && suspend(1);
         continue;
       else
         if (ticks_left() / 5000 < length(recips) || seconds_left() < 2)

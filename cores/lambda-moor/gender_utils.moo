@@ -269,7 +269,7 @@ object GENDER_UTILS
       return st[1..len - 1] + "ies";
     elseif (index("sz", st[len]) && index("aeiou", st[len - 1]))
       return st + st[len] + "es";
-    elseif (index("osx", st[len]) || len > 1 && index("chsh", st[len - 1..len]) % 2)
+    elseif (index("osx", st[len]) || (len > 1 && index("chsh", st[len - 1..len]) % 2))
       return st + "es";
     else
       return st + "s";

@@ -56,7 +56,7 @@ object PASSWORD_VERIFIER
       endif
     endif
     "this is gonna be huge";
-    return this:trivial_check(@args) || this.minimum_password_length && this:check_length(@args) || this.check_against_name && trust && this:check_name(@args) || this.check_against_email && trust && this:check_email(@args) || this.check_against_hosts && trust && this:check_hosts(@args) || typeof(this.check_against_dictionary) in {LIST, OBJ} && this:check_dictionary(@args) || this.require_funky_characters && this:check_for_funky_characters(@args) || this.check_against_moo && this:check_against_moo(@args) || this.check_obscure_stuff && this:check_obscure_combinations(@args);
+    return this:trivial_check(@args) || (this.minimum_password_length && this:check_length(@args)) || (this.check_against_name && trust && this:check_name(@args)) || (this.check_against_email && trust && this:check_email(@args)) || (this.check_against_hosts && trust && this:check_hosts(@args)) || (typeof(this.check_against_dictionary) in {LIST, OBJ} && this:check_dictionary(@args)) || (this.require_funky_characters && this:check_for_funky_characters(@args)) || (this.check_against_moo && this:check_against_moo(@args)) || (this.check_obscure_stuff && this:check_obscure_combinations(@args));
   endverb
 
   verb trivial_check (this none this) owner: HACKER flags: "rxd"

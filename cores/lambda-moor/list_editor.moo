@@ -254,7 +254,7 @@ object LIST_EDITOR
 
   verb is_delimiter (this none this) owner: #96 flags: "rxd"
     line = $string_utils:triml(args[1]);
-    return line && (line[1] == "}" || line[1] == "{" && !rindex(line, "}"));
+    return line && (line[1] == "}" || (line[1] == "{" && !rindex(line, "}")));
   endverb
 
   verb to_value (this none this) owner: #96 flags: "rxd"
@@ -278,7 +278,7 @@ object LIST_EDITOR
           curlist = {@curlist, curstr};
           curstr = 0;
         endif
-        if (char == "}" || char == "{" && !rindex(line, "}"))
+        if (char == "}" || (char == "{" && !rindex(line, "}")))
           comma = 0;
           for c in [1..length(line)]
             char = line[c];

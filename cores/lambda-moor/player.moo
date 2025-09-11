@@ -110,7 +110,7 @@ object PLAYER
   verb my_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     "Extra parsing of player commands.  Called by $command_utils:do_huh.";
     "This version of my_huh just handles features.";
-    permissions = (caller == this || $perm_utils:controls(caller_perms(), this)) && $command_utils:validate_feature(@args) ? this | $no_one;
+    permissions = caller == this || $perm_utils:controls(caller_perms(), this) && $command_utils:validate_feature(@args) ? this | $no_one;
     "verb - obvious                 pass - would be args";
     "plist - list of prepspecs that this command matches";
     "dlist and ilist - likewise for dobjspecs, iobjspecs";
@@ -522,7 +522,7 @@ object PLAYER
   endverb
 
   verb "@ungag" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
-    if (player != this || caller != this && !$perm_utils:controls(caller_perms(), this))
+    if (player != this || (caller != this && !$perm_utils:controls(caller_perms(), this)))
       player:notify("Permission denied.");
     elseif (dobjstr == "")
       player:notify(tostr("Usage:  ", verb, " <player>  or  ", verb, " everyone"));
@@ -552,7 +552,7 @@ object PLAYER
     {record, trust, mistrust} = args;
     s = {this, "???", this};
     for w in (record)
-      if ((!valid(s[3]) || (s[3]).wizard || s[3] in trust) && !(s[3] in mistrust) || s[1] == this)
+      if (!valid(s[3]) || (s[3]).wizard || s[3] in trust && !(s[3] in mistrust) || s[1] == this)
         s = w;
       else
         return s;
@@ -836,7 +836,7 @@ object PLAYER
     set_task_perms(caller == this ? this | $no_one);
     dobj = this:my_match_object(dobjstr);
     iobj = this:my_match_object(iobjstr);
-    if ($command_utils:object_match_failed(dobj, dobjstr) || iobj != $nothing && $command_utils:object_match_failed(iobj, iobjstr))
+    if ($command_utils:object_match_failed(dobj, dobjstr) || (iobj != $nothing && $command_utils:object_match_failed(iobj, iobjstr)))
       return;
     endif
     if (!$perm_utils:controls(this, dobj) && this != dobj)

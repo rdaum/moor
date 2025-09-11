@@ -447,7 +447,7 @@ object GENERIC_EDITOR
   endverb
 
   verb set_changed (this none this) owner: #96 flags: "rxd"
-    return this:ok(who = args[1]) && (((unchanged = !(args[2])) || (this.times[who] = time())) && (this.changes[who] = !unchanged));
+    return this:ok(who = args[1]) && ((unchanged = !(args[2])) || (this.times[who] = time()) && (this.changes[who] = !unchanged));
   endverb
 
   verb origin (this none this) owner: #96 flags: "rxd"
@@ -455,7 +455,7 @@ object GENERIC_EDITOR
   endverb
 
   verb set_origin (this none this) owner: #96 flags: "rxd"
-    return this:ok(who = args[1]) && ((valid(origin = args[2]) && origin != this || (origin == $nothing || E_INVARG)) && (this.original[who] = origin));
+    return this:ok(who = args[1]) && (valid(origin = args[2]) && origin != this || (origin == $nothing || E_INVARG) && (this.original[who] = origin));
   endverb
 
   verb readable (this none this) owner: #96 flags: "rxd"
@@ -468,7 +468,7 @@ object GENERIC_EDITOR
 
   verb text (this none this) owner: #96 flags: "rxd"
     {?who = player in this.active} = args;
-    return (this:readable(who) || this:ok(who)) && this.texts[who];
+    return this:readable(who) || this:ok(who) && this.texts[who];
   endverb
 
   verb load (this none this) owner: #96 flags: "rxd"
@@ -477,7 +477,7 @@ object GENERIC_EDITOR
       return fuckup;
     elseif (typeof(texts) == STR)
       texts = {texts};
-    elseif (typeof(texts) != LIST || length(texts) && typeof(texts[1]) != STR)
+    elseif (typeof(texts) != LIST || (length(texts) && typeof(texts[1]) != STR))
       return E_TYPE;
     endif
     this.texts[who] = texts;
@@ -1070,7 +1070,7 @@ object GENERIC_EDITOR
     i2 = length(col[2]);
     right = 0;
     while (i1 || i2)
-      if (!(i1 && length(col[1][i1]) > 35 || i2 && length(col[2][i2]) > 35))
+      if (!(i1 && length(col[1][i1]) > 35 || (i2 && length(col[2][i2]) > 35)))
         d = {@d, $string_utils:left(i1 ? col[1][i1] | "", 40) + (i2 ? col[2][i2] | "")};
         i1 && (i1 = i1 - 1);
         i2 && (i2 = i2 - 1);

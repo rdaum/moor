@@ -153,7 +153,7 @@ object SITE_DB
         dialup = index(sitename, "dialup");
         "Don't keep around dialups.";
         for y in (items)
-          if (typeof(y) == OBJ && (!valid(y) || !is_player(y) || dialup && !(sitename in y.all_connect_places)))
+          if (typeof(y) == OBJ && (!valid(y) || !is_player(y) || (dialup && !(sitename in y.all_connect_places))))
             verbose && player:tell("removing ", $string_utils:nn(y), " from ", sitename);
             items = setremove(items, y);
           endif

@@ -252,7 +252,7 @@ object GUEST
       endif
       for c in (all_mlists)
         $command_utils:suspend_if_needed(0);
-        if ((c:is_usable_by(this) || c:is_readable_by(this)) && verb != "@unsubscribed")
+        if (c:is_usable_by(this) || c:is_readable_by(this) && verb != "@unsubscribed")
           `c:look_self(1) ! ANY';
         endif
       endfor

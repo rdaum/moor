@@ -1632,7 +1632,7 @@ object STRING_UTILS
       if (index("aeiou", noun[1]))
         a_or_an = "an";
         "unicycle, unimplemented, union, united, unimpressed, unique";
-        if (noun[1] == "u" && length(noun) > 2 && noun[2] == "n" && (index("aeiou", noun[3]) == 0 || noun[3] == "i" && length(noun) > 3 && (index("aeioubcghqwyz", noun[4]) || length(noun) > 4 && index("eiy", noun[5]))))
+        if (noun[1] == "u" && length(noun) > 2 && noun[2] == "n" && (index("aeiou", noun[3]) == 0 || (noun[3] == "i" && length(noun) > 3 && (index("aeioubcghqwyz", noun[4]) || (length(noun) > 4 && index("eiy", noun[5]))))))
           a_or_an = "a";
         endif
       endif

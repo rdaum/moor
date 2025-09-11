@@ -79,7 +79,7 @@ object REGISTRATION_DB
     for x in (others)
       allzapped = 1;
       for y in (this:find_exact(x))
-        if (length(y) == 2 && (y[2] == "zapped due to inactivity" || y[2] == "toaded due to inactivity") || y[1] == allowed || $object_utils:has_property($local, "second_char_registry") && typeof(them = $local.second_char_registry:other_chars(y[1])) == LIST && allowed in them)
+        if (length(y) == 2 && (y[2] == "zapped due to inactivity" || y[2] == "toaded due to inactivity") || y[1] == allowed || ($object_utils:has_property($local, "second_char_registry") && typeof(them = $local.second_char_registry:other_chars(y[1])) == LIST && allowed in them))
           "let them change to the address if it is them, or if it is a registered char of theirs.";
           "Hrm. Need typeof==LIST check because returns E_INVARG for shared characters. bleah Ho_Yan 5/8/95";
         else

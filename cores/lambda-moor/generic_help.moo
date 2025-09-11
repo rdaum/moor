@@ -39,7 +39,7 @@ object GENERIC_HELP
         return {};
       endif
       for prop in (props)
-        if ((i = index(strsub(prop, "-", "_"), search)) == 1 || i == 2 && index(" @", prop[1]))
+        if ((i = index(strsub(prop, "-", "_"), search)) == 1 || (i == 2 && index(" @", prop[1])))
           topics = {@topics, prop[1] == " " ? prop[2..$] | prop};
         endif
       endfor

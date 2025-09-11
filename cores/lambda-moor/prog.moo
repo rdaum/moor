@@ -443,7 +443,7 @@ object PROG
         time = start >= now ? ctime(start)[5..24] | su:left(start == -1 ? "Reading input ..." | tostr(now - start, " seconds ago..."), 20);
         owner_name = valid(owner) ? owner.name | tostr("Dead ", owner);
         player:notify(tostr(su:left(tostr(q_id), 10), "  ", time, "  ", su:left(owner_name, 12), "  {", $building_utils:size_string(size), "} ", vloc, ":", vname, " (", lineno, ")", this != vloc ? tostr(" [", this, "]") | ""));
-        if (verbose || index(vname, "suspend") && vloc == $command_utils)
+        if (verbose || (index(vname, "suspend") && vloc == $command_utils))
           "Display the first (or, if verbose, every) line of the callers() list, which is gotten by taking the second through last elements of task_stack().";
           stack = `task_stack(q_id, 1) ! E_INVARG => {}';
           for frame in (stack[2..verbose ? $ | 2])
@@ -574,7 +574,7 @@ object PROG
       endfor
     elseif (colon || vrb || whatstr)
       for task in (queued_tasks)
-        if ((whatstr == "" || valid(task[6]) && index((task[6]).name, whatstr) == 1 || valid(task[9]) && index((task[9]).name, whatstr) == 1 || task[9] == what || task[6] == what) && (vrb == "" || index(" " + strsub(task[7], "*", ""), " " + vrb) == 1))
+        if (whatstr == "" || (valid(task[6]) && index((task[6]).name, whatstr) == 1) || (valid(task[9]) && index((task[9]).name, whatstr) == 1) || task[9] == what || task[6] == what && (vrb == "" || index(" " + strsub(task[7], "*", ""), " " + vrb) == 1))
           `kill_task(task[1]) ! ANY';
           killed = killed + 1;
           if (!quiet)
