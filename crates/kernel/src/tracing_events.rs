@@ -109,6 +109,37 @@ pub enum TraceEventType {
         active_tasks: usize,
         queued_tasks: usize,
     },
+
+    /// Transaction events (database layer)
+    TransactionBegin {
+        tx_id: String,
+        thread_id: u64,
+    },
+    TransactionCheck {
+        tx_id: String,
+        thread_id: u64,
+        num_tuples: usize,
+    },
+    TransactionApply {
+        tx_id: String,
+        thread_id: u64,
+        num_tuples: usize,
+    },
+    TransactionCommit {
+        tx_id: String,
+        thread_id: u64,
+        success: bool,
+        timestamp: u64,
+    },
+    TransactionRollback {
+        tx_id: String,
+        thread_id: u64,
+        reason: String,
+    },
+    TransactionEnd {
+        tx_id: String,
+        thread_id: u64,
+    },
 }
 
 /// Message sent to the background tracing thread
@@ -894,6 +925,195 @@ fn convert_to_trace_event(event_type: TraceEventType, _start_time: u64) -> Optio
                 cname: None,
             })
         }
+
+        // Transaction events
+        TraceEventType::TransactionBegin { tx_id, thread_id } => {
+            let mut args = HashMap::new();
+            args.insert("tx_id".to_string(), Value::String(tx_id.clone()));
+
+            Some(TraceEvent {
+                name: format!("Transaction {tx_id}"),
+                cat: Some("database".to_string()),
+                ph: EventPhase::Begin,
+                ts: now,
+                tts: None,
+                pid,
+                tid: thread_id,
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: None,
+                id: None,
+                scope: None,
+                cname: Some("blue".to_string()),
+            })
+        }
+
+        TraceEventType::TransactionCheck {
+            tx_id,
+            thread_id,
+            num_tuples,
+        } => {
+            let mut args = HashMap::new();
+            args.insert("tx_id".to_string(), Value::String(tx_id.clone()));
+            args.insert("num_tuples".to_string(), Value::Number(num_tuples.into()));
+
+            Some(TraceEvent {
+                name: format!("TX Check: {tx_id}"),
+                cat: Some("database".to_string()),
+                ph: EventPhase::Begin,
+                ts: now,
+                tts: None,
+                pid,
+                tid: thread_id,
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: None,
+                id: None,
+                scope: None,
+                cname: Some("orange".to_string()),
+            })
+        }
+
+        TraceEventType::TransactionApply {
+            tx_id,
+            thread_id,
+            num_tuples,
+        } => {
+            let mut args = HashMap::new();
+            args.insert("tx_id".to_string(), Value::String(tx_id.clone()));
+            args.insert("num_tuples".to_string(), Value::Number(num_tuples.into()));
+
+            Some(TraceEvent {
+                name: format!("TX Apply: {tx_id}"),
+                cat: Some("database".to_string()),
+                ph: EventPhase::Begin,
+                ts: now,
+                tts: None,
+                pid,
+                tid: thread_id,
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: None,
+                id: None,
+                scope: None,
+                cname: Some("red".to_string()),
+            })
+        }
+
+        TraceEventType::TransactionCommit {
+            tx_id,
+            thread_id,
+            success,
+            timestamp,
+        } => {
+            let mut args = HashMap::new();
+            args.insert("tx_id".to_string(), Value::String(tx_id.clone()));
+            args.insert("success".to_string(), Value::Bool(success));
+            args.insert("timestamp".to_string(), Value::Number(timestamp.into()));
+
+            let event_name = if success {
+                format!("TX Commit: {tx_id}")
+            } else {
+                format!("TX Conflict: {tx_id}")
+            };
+
+            Some(TraceEvent {
+                name: event_name,
+                cat: Some("database".to_string()),
+                ph: EventPhase::Instant,
+                ts: now,
+                tts: None,
+                pid,
+                tid: thread_id,
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: Some(InstantScope::Thread),
+                id: None,
+                scope: None,
+                cname: if success {
+                    Some("green".to_string())
+                } else {
+                    Some("red".to_string())
+                },
+            })
+        }
+
+        TraceEventType::TransactionRollback {
+            tx_id,
+            thread_id,
+            reason,
+        } => {
+            let mut args = HashMap::new();
+            args.insert("tx_id".to_string(), Value::String(tx_id.clone()));
+            args.insert("reason".to_string(), Value::String(reason));
+
+            Some(TraceEvent {
+                name: format!("TX Rollback: {tx_id}"),
+                cat: Some("database".to_string()),
+                ph: EventPhase::Instant,
+                ts: now,
+                tts: None,
+                pid,
+                tid: thread_id,
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: Some(InstantScope::Thread),
+                id: None,
+                scope: None,
+                cname: Some("red".to_string()),
+            })
+        }
+
+        TraceEventType::TransactionEnd { tx_id, thread_id } => {
+            let mut args = HashMap::new();
+            args.insert("tx_id".to_string(), Value::String(tx_id.clone()));
+
+            Some(TraceEvent {
+                name: format!("Transaction {tx_id}"),
+                cat: Some("database".to_string()),
+                ph: EventPhase::End,
+                ts: now,
+                tts: None,
+                pid,
+                tid: thread_id,
+                dur: None,
+                tdur: None,
+                args: Some(args),
+                sf: None,
+                stack: None,
+                esf: None,
+                estack: None,
+                s: None,
+                id: None,
+                scope: None,
+                cname: Some("good".to_string()),
+            })
+        }
     }
 }
 
@@ -1162,10 +1382,87 @@ macro_rules! trace_stack_unwind {
     };
 }
 
+// Transaction tracing macros
+#[macro_export]
+macro_rules! trace_transaction_begin {
+    ($tx_id:expr, $thread_id:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionBegin {
+                tx_id: $tx_id.to_string(),
+                thread_id: $thread_id,
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! trace_transaction_check {
+    ($tx_id:expr, $thread_id:expr, $num_tuples:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionCheck {
+                tx_id: $tx_id.to_string(),
+                thread_id: $thread_id,
+                num_tuples: $num_tuples,
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! trace_transaction_apply {
+    ($tx_id:expr, $thread_id:expr, $num_tuples:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionApply {
+                tx_id: $tx_id.to_string(),
+                thread_id: $thread_id,
+                num_tuples: $num_tuples,
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! trace_transaction_commit {
+    ($tx_id:expr, $thread_id:expr, $success:expr, $timestamp:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionCommit {
+                tx_id: $tx_id.to_string(),
+                thread_id: $thread_id,
+                success: $success,
+                timestamp: $timestamp,
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! trace_transaction_rollback {
+    ($tx_id:expr, $thread_id:expr, $reason:expr) => {
+        #[cfg(feature = "trace_events")]
+        {
+            use $crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionRollback {
+                tx_id: $tx_id.to_string(),
+                thread_id: $thread_id,
+                reason: $reason.to_string(),
+            });
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
+    
 
     #[test]
     fn test_tracing_disabled_by_default() {

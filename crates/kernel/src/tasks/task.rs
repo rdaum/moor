@@ -130,10 +130,18 @@ impl Task {
         #[cfg(feature = "trace_events")]
         {
             match &task_start {
-                TaskStart::StartCommandVerb { command, handler_object, .. } => {
+                TaskStart::StartCommandVerb {
+                    command,
+                    handler_object,
+                    ..
+                } => {
                     trace_task_create_command!(task_id, &player, command, handler_object);
                 }
-                TaskStart::StartDoCommand { command, handler_object, .. } => {
+                TaskStart::StartDoCommand {
+                    command,
+                    handler_object,
+                    ..
+                } => {
                     trace_task_create_command!(task_id, &player, command, handler_object);
                 }
                 TaskStart::StartVerb { verb, vloc, .. } => {

@@ -18,6 +18,11 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
+#[cfg(feature = "trace_events")]
+use std::collections::hash_map::DefaultHasher;
+#[cfg(feature = "trace_events")]
+use std::hash::{Hash, Hasher};
+
 use moor_common::model::{CommitResult, WorldState, WorldStateError};
 use moor_common::tasks::{Session, TaskId};
 use moor_var::Obj;
@@ -67,6 +72,17 @@ impl TaskGuard {
                 session,
             });
         });
+
+        #[cfg(feature = "trace_events")]
+        {
+            let thread_id = {
+                let mut hasher = DefaultHasher::new();
+                std::thread::current().id().hash(&mut hasher);
+                hasher.finish()
+            };
+            crate::trace_transaction_begin!(format!("task_{task_id}"), thread_id);
+        }
+
         TaskGuard(())
     }
 }
@@ -79,6 +95,31 @@ impl Drop for TaskGuard {
                 tracing::warn!(
                     "Task context dropped without explicit commit/rollback, rolling back"
                 );
+
+                #[cfg(feature = "trace_events")]
+                {
+                    let task_id = task_ctx.task_id;
+                    let thread_id = {
+                        let mut hasher = DefaultHasher::new();
+                        std::thread::current().id().hash(&mut hasher);
+                        hasher.finish()
+                    };
+
+                    // Emit emergency rollback event
+                    crate::trace_transaction_rollback!(
+                        format!("task_{task_id}"),
+                        thread_id,
+                        "emergency_cleanup"
+                    );
+
+                    // End the transaction span
+                    use crate::tracing_events::{TraceEventType, emit_trace_event};
+                    emit_trace_event(TraceEventType::TransactionEnd {
+                        tx_id: format!("task_{task_id}"),
+                        thread_id,
+                    });
+                }
+
                 let _ = task_ctx.world_state.rollback(); // Best effort cleanup
             }
         });
@@ -165,7 +206,43 @@ pub fn commit_current_transaction() -> Result<CommitResult, WorldStateError> {
             .borrow_mut()
             .take()
             .expect("No active task context to commit");
-        task_ctx.world_state.commit()
+
+        #[cfg(feature = "trace_events")]
+        let task_id = task_ctx.task_id;
+        #[cfg(feature = "trace_events")]
+        let thread_id = {
+            let mut hasher = DefaultHasher::new();
+            std::thread::current().id().hash(&mut hasher);
+            hasher.finish()
+        };
+
+        let result = task_ctx.world_state.commit();
+
+        #[cfg(feature = "trace_events")]
+        {
+            // Emit commit event and end the transaction span
+            let success = matches!(result, Ok(moor_common::model::CommitResult::Success { .. }));
+            let timestamp = match &result {
+                Ok(moor_common::model::CommitResult::Success { timestamp, .. }) => *timestamp,
+                _ => 0,
+            };
+
+            crate::trace_transaction_commit!(
+                format!("task_{task_id}"),
+                thread_id,
+                success,
+                timestamp
+            );
+
+            // End the transaction span
+            use crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionEnd {
+                tx_id: format!("task_{task_id}"),
+                thread_id,
+            });
+        }
+
+        result
     })
 }
 
@@ -177,6 +254,31 @@ pub fn rollback_current_transaction() -> Result<(), WorldStateError> {
             .borrow_mut()
             .take()
             .expect("No active task context to rollback");
+
+        #[cfg(feature = "trace_events")]
+        {
+            let task_id = task_ctx.task_id;
+            let thread_id = {
+                let mut hasher = DefaultHasher::new();
+                std::thread::current().id().hash(&mut hasher);
+                hasher.finish()
+            };
+
+            // Emit rollback event and end the transaction span
+            crate::trace_transaction_rollback!(
+                format!("task_{task_id}"),
+                thread_id,
+                "explicit_rollback"
+            );
+
+            // End the transaction span
+            use crate::tracing_events::{TraceEventType, emit_trace_event};
+            emit_trace_event(TraceEventType::TransactionEnd {
+                tx_id: format!("task_{task_id}"),
+                thread_id,
+            });
+        }
+
         task_ctx.world_state.rollback()
     })
 }
