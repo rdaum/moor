@@ -186,9 +186,8 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(Ret(v_objid(f)))
         }
         Variant::Str(s) if s.as_str().starts_with('#') => {
-            let i = s.as_str()[1..].parse::<i32>();
-            match i {
-                Ok(i) => Ok(Ret(v_objid(i))),
+            match moor_var::Obj::try_from(s.as_str()) {
+                Ok(obj) => Ok(Ret(v_obj(obj))),
                 Err(_) => Ok(Ret(v_objid(0))),
             }
         }
