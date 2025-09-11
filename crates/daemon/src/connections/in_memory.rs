@@ -689,21 +689,36 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         Ok(())
     }
 
-    fn get_client_attributes(&self, player: Obj) -> Result<HashMap<Symbol, Var>, SessionError> {
+    fn get_client_attributes(&self, obj: Obj) -> Result<HashMap<Symbol, Var>, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let Some(player_records) = inner.player_connections.get(&player) else {
-            // Player not found or not logged in
-            return Err(SessionError::NoConnectionForPlayer(player));
-        };
+        if !obj.is_positive() {
+            // This is a connection object - look in connection_records
+            let Some(connection_records) = inner.connection_records.get(&obj) else {
+                return Err(SessionError::NoConnectionForPlayer(obj));
+            };
 
-        // Return attributes from the first connection record
-        let Some(record) = player_records.connections.first() else {
-            // No connections for this player
-            return Ok(HashMap::new());
-        };
+            // Return attributes from the first (and typically only) connection record
+            let Some(record) = connection_records.connections.first() else {
+                return Ok(HashMap::new());
+            };
 
-        Ok(record.client_attributes.clone())
+            Ok(record.client_attributes.clone())
+        } else {
+            // This is a player object - look in player_connections
+            let Some(player_records) = inner.player_connections.get(&obj) else {
+                // Player not found or not logged in
+                return Err(SessionError::NoConnectionForPlayer(obj));
+            };
+
+            // Return attributes from the first connection record
+            let Some(record) = player_records.connections.first() else {
+                // No connections for this player
+                return Ok(HashMap::new());
+            };
+
+            Ok(record.client_attributes.clone())
+        }
     }
 }
 

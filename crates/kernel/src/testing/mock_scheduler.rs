@@ -593,9 +593,9 @@ mod tests {
         fn connection_attributes(
             &self,
             _player: Obj,
-        ) -> Result<std::collections::HashMap<Symbol, Var>, moor_common::tasks::SessionError>
-        {
-            Ok(std::collections::HashMap::new())
+        ) -> Result<Var, moor_common::tasks::SessionError> {
+            use moor_var::v_list;
+            Ok(v_list(&[]))
         }
     }
 

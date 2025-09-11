@@ -127,12 +127,10 @@ pub trait Session: Send + Sync {
         player: Option<Obj>,
     ) -> Result<Vec<ConnectionDetails>, SessionError>;
 
-    /// Get all connection attributes for the given player.
-    /// Returns a map of attribute names to values.
-    fn connection_attributes(
-        &self,
-        player: Obj,
-    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError>;
+    /// Get connection attributes for the given object.
+    /// If object is a player: returns a list of [connection_obj, attributes] pairs for all connections
+    /// If object is a connection: returns just the attributes map for that connection
+    fn connection_attributes(&self, obj: Obj) -> Result<Var, SessionError>;
 }
 
 /// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
@@ -253,11 +251,9 @@ impl Session for NoopClientSession {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
     }
 
-    fn connection_attributes(
-        &self,
-        _player: Obj,
-    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError> {
-        Ok(std::collections::HashMap::new())
+    fn connection_attributes(&self, _obj: Obj) -> Result<Var, SessionError> {
+        use moor_var::v_list;
+        Ok(v_list(&[]))
     }
 }
 
@@ -414,11 +410,9 @@ impl Session for MockClientSession {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
     }
 
-    fn connection_attributes(
-        &self,
-        _player: Obj,
-    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError> {
-        Ok(std::collections::HashMap::new())
+    fn connection_attributes(&self, _obj: Obj) -> Result<Var, SessionError> {
+        use moor_var::v_list;
+        Ok(v_list(&[]))
     }
 }
 

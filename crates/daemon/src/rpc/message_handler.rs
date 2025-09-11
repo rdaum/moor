@@ -61,6 +61,10 @@ use tracing::{debug, error, info, warn};
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
 pub const HOST_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Type alias for connection attributes result to reduce complexity
+type ConnectionAttributesResult =
+    Result<Vec<(Obj, std::collections::HashMap<Symbol, Var>)>, moor_common::tasks::SessionError>;
+
 /// Trait for handling RPC message business logic
 pub trait MessageHandler: Send + Sync {
     /// Process a host-to-daemon message
@@ -453,16 +457,35 @@ impl MessageHandler for RpcMessageHandler {
                     error!(error = ?e, "Unable to send connection details");
                 }
             }
-            SessionActions::RequestClientAttributes(_client_id, player, reply) => {
-                let client_attributes_send_result =
-                    match self.connections.get_client_attributes(player) {
-                        Ok(attributes) => reply.send(Ok(attributes)),
-                        Err(e) => {
-                            error!(error = ?e, "Unable to get client attributes");
-                            reply.send(Err(e))
-                        }
-                    };
-                if let Err(e) = client_attributes_send_result {
+            SessionActions::RequestClientAttributes(_client_id, obj, reply) => {
+                use moor_var::{v_list, v_map, v_obj, v_sym};
+
+                let handle_result = || -> Result<Var, moor_common::tasks::SessionError> {
+                    if !obj.is_positive() {
+                        // This is a connection object - return just its attributes
+                        let attributes =
+                            self.get_connection_attributes_for_single_connection(obj)?;
+                        let attr_pairs: Vec<_> =
+                            attributes.into_iter().map(|(k, v)| (v_sym(k), v)).collect();
+                        Ok(v_map(&attr_pairs))
+                    } else {
+                        // This is a player object - return list of [connection_obj, attributes] pairs
+                        let connection_attrs_list =
+                            self.get_connection_attributes_for_player(obj)?;
+                        let items: Vec<_> = connection_attrs_list
+                            .into_iter()
+                            .map(|(conn_obj, attributes)| {
+                                let attr_pairs: Vec<_> =
+                                    attributes.into_iter().map(|(k, v)| (v_sym(k), v)).collect();
+                                v_list(&[v_obj(conn_obj), v_map(&attr_pairs)])
+                            })
+                            .collect();
+                        Ok(v_list(&items))
+                    }
+                };
+
+                let result = handle_result();
+                if let Err(e) = reply.send(result) {
                     error!(error = ?e, "Unable to send client attributes");
                 }
             }
@@ -1914,5 +1937,38 @@ impl RpcMessageHandler {
             has_more_before,
             events: historical_events,
         }
+    }
+
+    /// Get attributes for a single connection object
+    fn get_connection_attributes_for_single_connection(
+        &self,
+        connection_obj: Obj,
+    ) -> Result<std::collections::HashMap<Symbol, Var>, moor_common::tasks::SessionError> {
+        // Get attributes directly from the connection registry
+        // The connection registry now handles both player and connection objects
+        self.connections.get_client_attributes(connection_obj)
+    }
+
+    /// Get attributes for all connections of a player
+    fn get_connection_attributes_for_player(&self, player: Obj) -> ConnectionAttributesResult {
+        // Get all client IDs for this player
+        let client_ids = self.connections.client_ids_for(player)?;
+
+        let mut result = Vec::new();
+        for client_id in client_ids {
+            // Get the connection object for this client
+            let Some(connection_obj) = self.connections.connection_object_for_client(client_id)
+            else {
+                continue;
+            };
+
+            // Get attributes for this specific connection
+            let attributes = self
+                .get_connection_attributes_for_single_connection(connection_obj)
+                .unwrap_or_else(|_| std::collections::HashMap::new());
+            result.push((connection_obj, attributes));
+        }
+
+        Ok(result)
     }
 }

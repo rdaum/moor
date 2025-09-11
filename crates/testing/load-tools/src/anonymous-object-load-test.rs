@@ -33,7 +33,6 @@ use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TaskResult};
 use moor_var::program::ProgramType;
 use moor_var::{Error, List, NOTHING, Obj, Symbol, Var, v_int, v_obj};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -176,8 +175,9 @@ impl Session for DirectSession {
         Ok(vec![])
     }
 
-    fn connection_attributes(&self, _player: Obj) -> Result<HashMap<Symbol, Var>, SessionError> {
-        Ok(HashMap::new())
+    fn connection_attributes(&self, _player: Obj) -> Result<Var, SessionError> {
+        use moor_var::v_list;
+        Ok(v_list(&[]))
     }
 }
 

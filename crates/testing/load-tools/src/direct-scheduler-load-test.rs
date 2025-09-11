@@ -191,11 +191,9 @@ impl Session for DirectSession {
         Ok(vec![])
     }
 
-    fn connection_attributes(
-        &self,
-        _player: Obj,
-    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError> {
-        Ok(std::collections::HashMap::new())
+    fn connection_attributes(&self, _player: Obj) -> Result<Var, SessionError> {
+        use moor_var::v_list;
+        Ok(v_list(&[]))
     }
 }
 

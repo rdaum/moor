@@ -19,8 +19,7 @@ use uuid::Uuid;
 
 use moor_common::tasks::NarrativeEvent;
 use moor_common::tasks::{ConnectionDetails, Session, SessionError};
-use moor_var::{Obj, Symbol, Var};
-use std::collections::HashMap;
+use moor_var::{Obj, Var};
 
 use crate::event_log::EventLogOps;
 
@@ -62,11 +61,7 @@ pub enum SessionActions {
         Option<Obj>,
         oneshot::Sender<Result<Vec<ConnectionDetails>, SessionError>>,
     ),
-    RequestClientAttributes(
-        Uuid,
-        Obj,
-        oneshot::Sender<Result<HashMap<Symbol, Var>, SessionError>>,
-    ),
+    RequestClientAttributes(Uuid, Obj, oneshot::Sender<Result<Var, SessionError>>),
     PublishTaskCompletion(Uuid, rpc_common::ClientEvent),
 }
 
@@ -243,15 +238,12 @@ impl Session for RpcSession {
         rx.recv().map_err(|_e| SessionError::DeliveryError)?
     }
 
-    fn connection_attributes(
-        &self,
-        player: Obj,
-    ) -> Result<std::collections::HashMap<Symbol, Var>, SessionError> {
+    fn connection_attributes(&self, obj: Obj) -> Result<Var, SessionError> {
         let (tx, rx) = oneshot::channel();
         self.send
             .send(SessionActions::RequestClientAttributes(
                 self.client_id,
-                player,
+                obj,
                 tx,
             ))
             .map_err(|_e| SessionError::DeliveryError)?;

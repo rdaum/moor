@@ -93,8 +93,10 @@ pub trait ConnectionRegistry {
         value: Option<Var>,
     ) -> Result<(), RpcMessageError>;
 
-    /// Get all client attributes for a player object.
-    fn get_client_attributes(&self, player: Obj) -> Result<HashMap<Symbol, Var>, SessionError>;
+    /// Get client attributes for the given object.
+    /// If obj is a player object (positive id): returns attributes from first connection
+    /// If obj is a connection object (negative id): returns attributes for that connection
+    fn get_client_attributes(&self, obj: Obj) -> Result<HashMap<Symbol, Var>, SessionError>;
 }
 
 pub enum ConnectionRegistryConfig {
