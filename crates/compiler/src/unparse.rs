@@ -40,7 +40,7 @@ impl Expr {
             Expr::Scatter(_, _) | Expr::Assign { .. } => 14,
             Expr::Cond { .. } => 13,
             Expr::Or(_, _) => 12,
-            Expr::And(_, _) => 11,
+            Expr::And(_, _) => 12,
             Expr::Binary(op, _, _) => match op {
                 ast::BinaryOp::Eq => 7,
                 ast::BinaryOp::NEq => 7,
@@ -1650,6 +1650,30 @@ end"#; "complex scatter declaration with optional and rest")]
     #[test]
     fn test_lambda_unparse_no_params() {
         let program = r#"return {} => 42;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_operator_precedence_and_or_regression_minimal() {
+        // Minimal test case for operator precedence bug
+        // The issue is that parentheses are being removed when they shouldn't be
+        let program = r#"if (a || (!b && c))
+          return 1;
+        endif"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_operator_precedence_and_or_regression_full() {
+        // Full complex expression from LambdaMOO's match_verb for reference
+        let program = r#"if (vargs[2] == "any" || (!prepstr && vargs[2] == "none") || index("/" + vargs[2] + "/", "/" + prepstr + "/") && (vargs[1] == "any" || (!dobjstr && vargs[1] == "none") || (dobj == what && vargs[1] == "this")) && (vargs[3] == "any" || (!iobjstr && vargs[3] == "none") || (iobj == what && vargs[3] == "this")) && index(verb_info(where[1], vrb)[2], "x") && verb_code(where[1], vrb))
+          return 1;
+        endif"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
