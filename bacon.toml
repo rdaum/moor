@@ -34,6 +34,8 @@ command = [
     "true",
     "--custom-errors",
     "true",
+    "--use-uuobjids",
+    "true",
 ]
 allow_warnings = true
 need_stdout = true
@@ -61,6 +63,8 @@ command = [
     "--use-boolean-returns",
     "true",
     "--custom-errors",
+    "true",
+    "--use-uuobjids",
     "true",
 ]
 allow_warnings = true
@@ -91,6 +95,8 @@ command = [
     "--use-boolean-returns",
     "true",
     "--custom-errors",
+    "true",
+    "--use-uuobjids",
     "true",
     "--trace-output",
     "moor-trace.json",

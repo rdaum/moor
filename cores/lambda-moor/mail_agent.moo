@@ -430,7 +430,7 @@ object MAIL_AGENT
     else
       name = what.name;
     endif
-    while (m = match(name, "(#[0-9]+)"))
+    while (m = $code_utils:match_objid(name))
       {s, e} = m[1..2];
       name[s..e] = "";
     endwhile
@@ -446,7 +446,7 @@ object MAIL_AGENT
     "This is the standard routine for parsing address lists that appear in From:, To: and Reply-To: lines";
     objects = {};
     string = args[1];
-    while (m = match(string, "(#[0-9]+)"))
+    while (m = $code_utils:match_objid(string))
       {s, e} = m[1..2];
       if (#0 != (o = toobj(string[s + 1..e - 1])))
         objects = {@objects, o};

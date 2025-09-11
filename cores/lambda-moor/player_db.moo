@@ -132,7 +132,7 @@ object PLAYER_DB
       return 0;
     elseif (index("*#()", name[1]))
       return 0;
-    elseif (match(name, "(#[0-9]+)"))
+    elseif ($code_utils:match_objid(name))
       return 0;
     elseif (valid(who = this:find_exact(name)) && is_player(who))
       return who;
@@ -176,7 +176,7 @@ object PLAYER_DB
       return tostr("You may not use a blank name.");
     elseif (i = index("*#()", name[1]))
       return tostr("You may not begin a name with the \"", "*#()"[i], "\" character.");
-    elseif (match(name, "(#[0-9]+)"))
+    elseif ($code_utils:match_objid(name))
       return tostr("A name can't contain a parenthesized object number.");
     elseif (name in $player_db.stupid_names)
       return tostr("The name \"", name, "\" would probably cause problems in command parsing or similar usage.");

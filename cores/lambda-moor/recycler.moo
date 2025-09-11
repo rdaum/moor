@@ -93,7 +93,8 @@ object RECYCLER
     endif
     dobj = valid(dobj) ? dobj | $string_utils:match_object(dobjstr, player.location);
     if (!valid(dobj))
-      dobj = (n = toint(dobjstr)) ? toobj(n) | #-1;
+      parsed_obj = $code_utils:toobj(dobjstr);
+      dobj = parsed_obj == E_TYPE ? #-1 | parsed_obj;
     endif
     if (!valid(dobj))
       player:tell("Couldn't parse ", dobjstr, " as a valid object number.");
