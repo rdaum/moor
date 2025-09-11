@@ -109,6 +109,7 @@ fs2 = "0.4"
 
 # Networking & Communication
 axum = { version = "0.8", features = ["ws"] }
+nectar = "0.4"
 reqwest = "0.12"
 tmq = "0.5"
 tower-http = { version = "0.6", features = ["fs"] }

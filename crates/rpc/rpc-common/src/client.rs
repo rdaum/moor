@@ -17,6 +17,7 @@ use bincode::{Decode, Encode};
 use moor_common::model::ObjectRef;
 use moor_common::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
 use moor_var::{Obj, Symbol, Var};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -115,6 +116,8 @@ pub enum HostClientToDaemonMessage {
         peer_addr: String,
         /// Optional list of acceptable content types (text/plain is always implied)
         acceptable_content_types: Option<Vec<Symbol>>,
+        /// Optional connection attributes (e.g. terminal-width, terminal-type, etc.)
+        connection_attributes: Option<HashMap<Symbol, Var>>,
     },
     /// Anonymously request a sysprop (e.g. $login.welcome_message)
     RequestSysProp(ClientToken, ObjectRef, Symbol),

@@ -830,12 +830,14 @@ impl RpcMessageHandler {
             HostClientToDaemonMessage::ConnectionEstablish {
                 peer_addr: hostname,
                 acceptable_content_types,
+                connection_attributes,
             } => {
                 let oid = self.connections.new_connection(
                     client_id,
                     hostname,
                     None,
                     acceptable_content_types,
+                    connection_attributes,
                 )?;
                 let token = self.make_client_token(client_id);
                 Ok(NewConnection(token, oid))
@@ -855,6 +857,7 @@ impl RpcMessageHandler {
                     hostname,
                     Some(player),
                     acceptable_content_types,
+                    None,
                 )?;
                 let client_token = self.make_client_token(client_id);
 

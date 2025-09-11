@@ -220,6 +220,7 @@ impl WebHost {
                         Symbol::mk("text_html"),
                         Symbol::mk("text_djot"),
                     ]),
+                    connection_attributes: None,
                 },
             )
             .await

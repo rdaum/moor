@@ -13,9 +13,12 @@
 
 use crate::connection::TelnetConnection;
 use eyre::bail;
-use futures_util::StreamExt;
-use futures_util::stream::SplitSink;
+use futures_util::{
+    SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
+};
 use moor_var::{Obj, Symbol};
+use nectar::{TelnetCodec, option::TelnetOption, subnegotiation::SubnegotiationType};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
@@ -27,7 +30,7 @@ use std::sync::atomic::AtomicBool;
 use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
-use tokio_util::codec::{Framed, LinesCodec};
+use tokio_util::codec::Framed;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -200,9 +203,55 @@ impl Listener {
 
             // And let the RPC server know we're here, and it should start sending events on the
             // narrative subscription.
-            debug!(rpc_address, "Contacting RPC server to establish connection");
+            debug!(rpc_address, "Setting up telnet connection for negotiation");
             let mut rpc_client = RpcSendClient::new(rpc_request_sock);
 
+            // Set up the telnet connection stream first
+            let framed_stream = Framed::new(stream, TelnetCodec::new(1024));
+            let (mut write, mut read) = framed_stream.split();
+
+            // Initialize basic connection attributes for telnet
+            let mut connection_attributes = std::collections::HashMap::new();
+            connection_attributes.insert(Symbol::mk("host-type"), moor_var::Var::from("telnet"));
+            connection_attributes.insert(
+                Symbol::mk("supports-telnet-protocol"),
+                moor_var::Var::mk_bool(true),
+            );
+
+            // Perform telnet capability negotiation first
+            debug!("Starting telnet capability negotiation");
+            if let Err(e) = negotiate_telnet_capabilities(&mut write).await {
+                warn!("Failed to negotiate telnet capabilities: {}", e);
+            }
+
+            // Collect negotiation results with timeout
+            if let Ok(negotiated_attrs) =
+                collect_negotiation_results(&mut read, &connection_attributes).await
+            {
+                // Check if client supports charset and send UTF-8 request
+                if negotiated_attrs.contains_key(&Symbol::mk("supports-charset")) {
+                    debug!("Client supports charset, sending UTF-8 request");
+                    if let Err(e) = send_utf8_charset_request(&mut write).await {
+                        debug!("Failed to send UTF-8 charset request: {}", e);
+                    } else {
+                        debug!("UTF-8 charset request sent");
+
+                        // Collect UTF-8 response with short timeout
+                        if let Ok(charset_attrs) = collect_charset_response(&mut read).await {
+                            connection_attributes.extend(charset_attrs);
+                        }
+                    }
+                }
+
+                connection_attributes.extend(negotiated_attrs);
+            }
+
+            debug!(
+                "Telnet negotiation complete, establishing connection with {} attributes",
+                connection_attributes.len()
+            );
+
+            // Now establish the connection with all negotiated attributes
             let (client_token, connection_oid) = match rpc_client
                 .make_client_rpc_call(
                     client_id,
@@ -213,6 +262,7 @@ impl Listener {
                             Symbol::mk("text_markdown"),
                             Symbol::mk("text_plain"),
                         ]),
+                        connection_attributes: Some(connection_attributes.clone()),
                     },
                 )
                 .await
@@ -221,7 +271,11 @@ impl Listener {
                     token,
                     objid,
                 ))) => {
-                    info!("Connection established, connection ID: {}", objid);
+                    info!(
+                        "Connection established with {} attributes, connection ID: {}",
+                        connection_attributes.len(),
+                        objid
+                    );
                     (token, objid)
                 }
                 Ok(ReplyResult::Failure(f)) => {
@@ -256,10 +310,7 @@ impl Listener {
                 client_id, events_address
             );
 
-            // Re-ify the connection.
-            let framed_stream = Framed::new(stream, LinesCodec::new());
-            let (write, read): (SplitSink<Framed<TcpStream, LinesCodec>, String>, _) =
-                framed_stream.split();
+            // Use the already-split stream from negotiation
             let mut tcp_connection = TelnetConnection {
                 handler_object,
                 peer_addr,
@@ -277,6 +328,7 @@ impl Listener {
                 output_prefix: None,
                 output_suffix: None,
                 flush_command: crate::connection::DEFAULT_FLUSH_COMMAND.to_string(),
+                connection_attributes,
             };
 
             tcp_connection.run().await?;
@@ -284,4 +336,300 @@ impl Listener {
         });
         Ok(())
     }
+}
+
+/// Send telnet negotiation requests before connection establishment
+async fn negotiate_telnet_capabilities(
+    write: &mut SplitSink<Framed<TcpStream, TelnetCodec>, nectar::event::TelnetEvent>,
+) -> Result<(), eyre::Error> {
+    use nectar::{event::TelnetEvent, option::TelnetOption};
+
+    // Request NAWS (window size)
+    let naws_request = TelnetEvent::Do(TelnetOption::NAWS);
+    write.send(naws_request).await?;
+
+    // Request terminal type
+    let term_type_request = TelnetEvent::Do(TelnetOption::Unknown(24)); // Terminal Type
+    write.send(term_type_request).await?;
+
+    // Request GMCP for modern MUD clients
+    let gmcp_request = TelnetEvent::Do(TelnetOption::GMCP);
+    write.send(gmcp_request).await?;
+
+    // Request charset negotiation
+    let charset_request = TelnetEvent::Do(TelnetOption::Charset);
+    write.send(charset_request).await?;
+
+    Ok(())
+}
+
+/// Collect telnet negotiation results with timeout
+async fn collect_negotiation_results(
+    read: &mut SplitStream<Framed<TcpStream, TelnetCodec>>,
+    _base_attributes: &std::collections::HashMap<Symbol, moor_var::Var>,
+) -> Result<std::collections::HashMap<Symbol, moor_var::Var>, eyre::Error> {
+    use futures_util::StreamExt;
+    use nectar::event::TelnetEvent;
+    use std::time::Duration;
+
+    let mut negotiated_attrs = std::collections::HashMap::new();
+    let timeout_duration = Duration::from_millis(500); // Short timeout for negotiation
+
+    // Collect negotiation responses for a short time
+    let deadline = tokio::time::Instant::now() + timeout_duration;
+
+    while tokio::time::Instant::now() < deadline {
+        let timeout_result = tokio::time::timeout(Duration::from_millis(50), read.next()).await;
+
+        let Some(event_result) = timeout_result.ok().flatten() else {
+            continue;
+        };
+
+        let event = match event_result {
+            Ok(event) => event,
+            Err(_) => continue,
+        };
+
+        match event {
+            TelnetEvent::Will(option) => {
+                handle_will_option(&mut negotiated_attrs, option);
+            }
+            TelnetEvent::Subnegotiate(subneg_type) => {
+                handle_subnegotiation(&mut negotiated_attrs, subneg_type);
+            }
+            TelnetEvent::Message(_) => {
+                // Client sent actual text data, negotiation phase is likely over
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    debug!(
+        "Negotiation complete, collected {} attributes",
+        negotiated_attrs.len()
+    );
+    Ok(negotiated_attrs)
+}
+
+fn handle_will_option(
+    negotiated_attrs: &mut std::collections::HashMap<Symbol, moor_var::Var>,
+    option: TelnetOption,
+) {
+    match option {
+        TelnetOption::NAWS => {
+            negotiated_attrs.insert(Symbol::mk("supports-naws"), moor_var::Var::mk_bool(true));
+            debug!("Client supports NAWS");
+        }
+        TelnetOption::Unknown(24) => {
+            // Terminal Type
+            negotiated_attrs.insert(
+                Symbol::mk("supports-terminal-type"),
+                moor_var::Var::mk_bool(true),
+            );
+            debug!("Client supports terminal type");
+        }
+        TelnetOption::GMCP => {
+            negotiated_attrs.insert(Symbol::mk("supports-gmcp"), moor_var::Var::mk_bool(true));
+            debug!("Client supports GMCP");
+        }
+        TelnetOption::Charset => {
+            negotiated_attrs.insert(Symbol::mk("supports-charset"), moor_var::Var::mk_bool(true));
+            debug!("Client supports charset negotiation");
+        }
+        _ => debug!("Client will: {:?}", option),
+    }
+}
+
+fn handle_subnegotiation(
+    negotiated_attrs: &mut std::collections::HashMap<Symbol, moor_var::Var>,
+    subneg_type: SubnegotiationType,
+) {
+    match subneg_type {
+        SubnegotiationType::WindowSize(width, height) => {
+            negotiated_attrs.insert(
+                Symbol::mk("terminal-width"),
+                moor_var::Var::from(width as i64),
+            );
+            negotiated_attrs.insert(
+                Symbol::mk("terminal-height"),
+                moor_var::Var::from(height as i64),
+            );
+            debug!("NAWS: terminal size {}x{}", width, height);
+        }
+        SubnegotiationType::Unknown(option, data) => {
+            handle_unknown_subnegotiation(negotiated_attrs, option, &data);
+        }
+        _ => debug!("Unhandled subnegotiation: {:?}", subneg_type),
+    }
+}
+
+fn handle_unknown_subnegotiation(
+    negotiated_attrs: &mut std::collections::HashMap<Symbol, moor_var::Var>,
+    option: TelnetOption,
+    data: &[u8],
+) {
+    match option {
+        TelnetOption::Unknown(24) => {
+            // Terminal Type
+            handle_terminal_type_subneg(negotiated_attrs, data);
+        }
+        opt if format!("{:?}", opt).contains("GMCP") => {
+            handle_gmcp_subneg(negotiated_attrs, data);
+        }
+        _ => debug!("Unknown subnegotiation option: {:?}", option),
+    }
+}
+
+fn handle_terminal_type_subneg(
+    negotiated_attrs: &mut std::collections::HashMap<Symbol, moor_var::Var>,
+    data: &[u8],
+) {
+    if data.is_empty() || data[0] != 0 {
+        return;
+    }
+
+    let Ok(terminal_type) = String::from_utf8(data[1..].to_vec()) else {
+        return;
+    };
+
+    negotiated_attrs.insert(
+        Symbol::mk("terminal-type"),
+        moor_var::Var::from(terminal_type),
+    );
+    debug!("Terminal type received");
+}
+
+fn handle_gmcp_subneg(
+    negotiated_attrs: &mut std::collections::HashMap<Symbol, moor_var::Var>,
+    data: &[u8],
+) {
+    let Ok(gmcp_msg) = String::from_utf8(data.to_vec()) else {
+        return;
+    };
+
+    let Some(space_pos) = gmcp_msg.find(' ') else {
+        return;
+    };
+
+    let package_msg = &gmcp_msg[..space_pos];
+    let json_data = &gmcp_msg[space_pos + 1..];
+
+    if package_msg != "Core.Hello" {
+        return;
+    }
+
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_data) else {
+        return;
+    };
+
+    let Some(obj) = parsed.as_object() else {
+        return;
+    };
+
+    let pairs: Vec<moor_var::Var> = obj
+        .iter()
+        .map(|(key, value)| {
+            let moo_key = moor_var::Var::from(key.clone());
+            let moo_value = match value {
+                serde_json::Value::String(s) => moor_var::Var::from(s.clone()),
+                serde_json::Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        moor_var::Var::from(i)
+                    } else {
+                        moor_var::Var::from(n.to_string())
+                    }
+                }
+                serde_json::Value::Bool(b) => moor_var::Var::from(if *b { 1i64 } else { 0i64 }),
+                _ => moor_var::Var::from(value.to_string()),
+            };
+            moor_var::v_list(&[moo_key, moo_value])
+        })
+        .collect();
+
+    negotiated_attrs.insert(Symbol::mk("gmcp-client"), moor_var::v_list(&pairs));
+    debug!("GMCP client info received");
+}
+
+/// Send UTF-8 charset request to client
+async fn send_utf8_charset_request(
+    write: &mut SplitSink<Framed<TcpStream, TelnetCodec>, nectar::event::TelnetEvent>,
+) -> Result<(), eyre::Error> {
+    use nectar::{event::TelnetEvent, subnegotiation::SubnegotiationType};
+
+    // Send UTF-8 charset request
+    let utf8_request = b"REQUEST UTF-8".to_vec();
+    let charset_request = TelnetEvent::Subnegotiate(SubnegotiationType::CharsetRequest(vec![
+        utf8_request.into(),
+    ]));
+
+    write.send(charset_request).await?;
+    Ok(())
+}
+
+/// Collect charset response from client with timeout
+async fn collect_charset_response(
+    read: &mut SplitStream<Framed<TcpStream, TelnetCodec>>,
+) -> Result<std::collections::HashMap<Symbol, moor_var::Var>, eyre::Error> {
+    use futures_util::StreamExt;
+    use nectar::{event::TelnetEvent, subnegotiation::SubnegotiationType};
+    use std::time::Duration;
+
+    let mut charset_attrs = std::collections::HashMap::new();
+    let timeout_duration = Duration::from_millis(500); // Short timeout for charset response
+
+    let deadline = tokio::time::Instant::now() + timeout_duration;
+
+    while tokio::time::Instant::now() < deadline {
+        let timeout_result = tokio::time::timeout(Duration::from_millis(50), read.next()).await;
+
+        let Some(event_result) = timeout_result.ok().flatten() else {
+            continue;
+        };
+
+        let event = match event_result {
+            Ok(event) => event,
+            Err(_) => continue,
+        };
+
+        match event {
+            TelnetEvent::Subnegotiate(subneg_type) => {
+                match subneg_type {
+                    SubnegotiationType::CharsetAccepted(charset) => {
+                        debug!("Client accepted charset: {:?}", charset);
+                        if let Ok(charset_str) = String::from_utf8(charset.to_vec()) {
+                            charset_attrs.insert(
+                                Symbol::mk("charset"),
+                                moor_var::Var::from(charset_str.clone()),
+                            );
+                            debug!("Client accepted charset: {}", charset_str);
+                        }
+                        break; // Got response, we're done
+                    }
+                    SubnegotiationType::CharsetRejected => {
+                        debug!("Client rejected charset request");
+                        charset_attrs
+                            .insert(Symbol::mk("charset-rejected"), moor_var::Var::mk_bool(true));
+                        break; // Got response, we're done
+                    }
+                    _ => {
+                        // Other subnegotiation, continue waiting
+                    }
+                }
+            }
+            TelnetEvent::Message(_) => {
+                // Client sent text, charset negotiation is probably done
+                break;
+            }
+            _ => {
+                // Other events, continue waiting
+            }
+        }
+    }
+
+    debug!(
+        "Charset response collection complete, collected {} attributes",
+        charset_attrs.len()
+    );
+    Ok(charset_attrs)
 }

@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 use uuid::Uuid;
@@ -22,7 +23,6 @@ use eyre::Report as Error;
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
-use std::collections::HashMap;
 use std::path::Path;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
@@ -49,6 +49,7 @@ pub trait ConnectionRegistry {
         hostname: String,
         player: Option<Obj>,
         acceptable_content_types: Option<Vec<Symbol>>,
+        connection_attributes: Option<HashMap<Symbol, Var>>,
     ) -> Result<Obj, RpcMessageError>;
 
     /// Record activity for the given client.
@@ -151,7 +152,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None, None)
+            .new_connection(client_id, "test.host".to_string(), None, None, None)
             .unwrap();
 
         assert_eq!(
@@ -169,7 +170,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "persistent.host".to_string(), None, None)
+            .new_connection(client_id, "persistent.host".to_string(), None, None, None)
             .unwrap();
 
         assert_eq!(
@@ -191,7 +192,7 @@ mod tests {
         for db in configs {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, "compat.test".to_string(), None, None)
+                .new_connection(client_id, "compat.test".to_string(), None, None, None)
                 .unwrap();
 
             // Basic operations should work identically
@@ -221,7 +222,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None, None)
+            .new_connection(client_id, "test.host".to_string(), None, None, None)
             .unwrap();
 
         // Initially no player associated

@@ -47,8 +47,10 @@ figment.workspace = true
 
 # Serialization & Data Formats
 serde.workspace = true
+serde_json.workspace = true
 
 # Networking & Communication
+nectar.workspace = true
 tmq.workspace = true
 
 # Async Runtime & Concurrency
