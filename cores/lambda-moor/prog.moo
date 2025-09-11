@@ -1603,7 +1603,11 @@ object PROG
             for k in [1..length(lineseq) / 2]
               for i in [lineseq[2 * k - 1]..lineseq[2 * k] - 1]
                 if (nflag)
-                  player:notify(tostr(" "[1..i < 10], i, ":  ", code[i]));
+                  end = 0;
+                  if (i < 10)
+                    end = 1;
+                  endif
+                  player:notify(tostr(" "[1..end], i, ":  ", code[i]));
                 else
                   player:notify(code[i]);
                 endif
