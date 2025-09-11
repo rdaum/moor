@@ -50,6 +50,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 # Networking & Communication
+hickory-resolver.workspace = true
 nectar.workspace = true
 tmq.workspace = true
 

@@ -49,6 +49,7 @@ serde_json.workspace = true
 
 # Networking & Communication
 axum.workspace = true
+hickory-resolver.workspace = true
 tmq.workspace = true
 
 # Async Runtime & Concurrency

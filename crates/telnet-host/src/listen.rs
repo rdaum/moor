@@ -17,6 +17,7 @@ use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
+use hickory_resolver::TokioResolver;
 use moor_var::{Obj, Symbol};
 use nectar::{TelnetCodec, option::TelnetOption, subnegotiation::SubnegotiationType};
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -24,7 +25,7 @@ use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
 use rpc_common::{CLIENT_BROADCAST_TOPIC, DaemonToClientReply, ReplyResult};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tmq::{request, subscribe};
@@ -33,6 +34,22 @@ use tokio::select;
 use tokio_util::codec::Framed;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Perform async reverse DNS lookup for an IP address
+async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
+    // Create a new resolver using system configuration
+    let resolver = TokioResolver::builder_tokio()?.build();
+
+    // Perform reverse DNS lookup
+    let response = resolver.reverse_lookup(ip).await?;
+
+    // Get the first hostname from the response
+    if let Some(name) = response.iter().next() {
+        Ok(name.to_string().trim_end_matches('.').to_string())
+    } else {
+        Err(eyre::eyre!("No PTR record found"))
+    }
+}
 
 pub struct Listeners {
     listeners: HashMap<SocketAddr, Listener>,
@@ -251,12 +268,26 @@ impl Listener {
                 connection_attributes.len()
             );
 
+            // Perform reverse DNS lookup for hostname
+            let hostname = {
+                match resolve_hostname(peer_addr.ip()).await {
+                    Ok(hostname) => {
+                        debug!("Resolved {} to hostname: {}", peer_addr.ip(), hostname);
+                        hostname
+                    }
+                    Err(_) => {
+                        debug!("Failed to resolve {}, using IP address", peer_addr.ip());
+                        peer_addr.to_string()
+                    }
+                }
+            };
+
             // Now establish the connection with all negotiated attributes
             let (client_token, connection_oid) = match rpc_client
                 .make_client_rpc_call(
                     client_id,
                     ConnectionEstablish {
-                        peer_addr: peer_addr.to_string(),
+                        peer_addr: hostname,
                         acceptable_content_types: Some(vec![
                             Symbol::mk("text_djot"),
                             Symbol::mk("text_markdown"),

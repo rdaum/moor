@@ -109,6 +109,7 @@ fs2 = "0.4"
 
 # Networking & Communication
 axum = { version = "0.8", features = ["ws"] }
+hickory-resolver = "0.25"
 nectar = "0.4"
 reqwest = "0.12"
 tmq = "0.5"

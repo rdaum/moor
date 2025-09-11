@@ -361,7 +361,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-                connection_attributes: None,
+            connection_attributes: None,
         };
 
         let establish_result = env.transport.process_client_message(
@@ -411,7 +411,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-                connection_attributes: None,
+            connection_attributes: None,
         };
 
         let establish_result = env.transport.process_client_message(
@@ -714,7 +714,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-                connection_attributes: None,
+            connection_attributes: None,
         };
 
         let establish_result = env.transport.process_client_message(
@@ -818,7 +818,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-                connection_attributes: None,
+            connection_attributes: None,
         };
 
         let establish_result = env.transport.process_client_message(
@@ -955,7 +955,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let establish_message_2 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8081".to_string(),
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-                connection_attributes: None,
+            connection_attributes: None,
         };
 
         let establish_result_2 = env.transport.process_client_message(

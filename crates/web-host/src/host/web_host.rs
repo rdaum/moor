@@ -21,6 +21,7 @@ use axum::extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use eyre::eyre;
+use hickory_resolver::TokioResolver;
 
 use moor_common::model::ObjectRef;
 use moor_common::tasks::Event;
@@ -36,11 +37,27 @@ use rpc_common::{
 use rpc_common::{ClientToken, RpcMessageError};
 use serde_derive::Deserialize;
 use serde_json::json;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use tmq::{request, subscribe};
 use tracing::warn;
 use tracing::{debug, error, info};
 use uuid::Uuid;
+
+/// Perform async reverse DNS lookup for an IP address
+async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
+    // Create a new resolver using system configuration
+    let resolver = TokioResolver::builder_tokio()?.build();
+
+    // Perform reverse DNS lookup
+    let response = resolver.reverse_lookup(ip).await?;
+
+    // Get the first hostname from the response
+    if let Some(name) = response.iter().next() {
+        Ok(name.to_string().trim_end_matches('.').to_string())
+    } else {
+        Err(eyre::eyre!("No PTR record found"))
+    }
+}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LoginType {
@@ -103,6 +120,18 @@ impl WebHost {
         );
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
+        // Perform reverse DNS lookup for hostname
+        let hostname = match resolve_hostname(peer_addr.ip()).await {
+            Ok(hostname) => {
+                debug!("Resolved {} to hostname: {}", peer_addr.ip(), hostname);
+                hostname
+            }
+            Err(_) => {
+                debug!("Failed to resolve {}, using IP address", peer_addr.ip());
+                peer_addr.to_string()
+            }
+        };
+
         let (client_token, player) = match rpc_client
             .make_client_rpc_call(
                 client_id,
@@ -110,7 +139,7 @@ impl WebHost {
                     auth_token,
                     connect_type,
                     handler_object: self.handler_object,
-                    peer_addr: peer_addr.to_string(),
+                    peer_addr: hostname,
                     acceptable_content_types: Some(vec![
                         Symbol::mk("text_html"),
                         Symbol::mk("text_djot"),
@@ -210,11 +239,23 @@ impl WebHost {
         let client_id = Uuid::new_v4();
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
+        // Perform reverse DNS lookup for hostname
+        let hostname = match resolve_hostname(addr.ip()).await {
+            Ok(hostname) => {
+                debug!("Resolved {} to hostname: {}", addr.ip(), hostname);
+                hostname
+            }
+            Err(_) => {
+                debug!("Failed to resolve {}, using IP address", addr.ip());
+                addr.to_string()
+            }
+        };
+
         let client_token = match rpc_client
             .make_client_rpc_call(
                 client_id,
                 ConnectionEstablish {
-                    peer_addr: addr.to_string(),
+                    peer_addr: hostname,
                     acceptable_content_types: Some(vec![
                         Symbol::mk("text_plain"),
                         Symbol::mk("text_html"),
