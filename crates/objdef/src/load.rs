@@ -334,7 +334,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         let compiled_def = compiled_defs.into_iter().next().unwrap();
         let oid = if let Some(target_obj) = target_object {
-            if target_obj.id().0 < 0 {
+            if !target_obj.is_positive() {
                 // Negative object ID means allocate next available (max + 1)
                 let max_obj = self.loader.max_object().map_err(|e| {
                     DirDumpReaderError::ObjectDefParseError(
