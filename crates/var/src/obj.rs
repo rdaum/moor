@@ -347,11 +347,19 @@ impl TryFrom<&str> for Obj {
     type Error = DecodingError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Some(value) = value.strip_prefix('#') {
-            let value = value.parse::<i32>().map_err(|e| {
-                DecodingError::CouldNotDecode(format!("Could not parse Objid: {e}"))
-            })?;
-            Ok(Self::mk_id(value))
+        if let Some(stripped) = value.strip_prefix('#') {
+            // First try to parse as i32
+            if let Ok(id) = stripped.parse::<i32>() {
+                Ok(Self::mk_id(id))
+            } else if stripped.contains('-') {
+                // If i32 parsing failed and contains '-', try UUID format
+                let uuid = UuObjid::from_uuid_string(stripped)?;
+                Ok(Self::mk_uuobjid(uuid))
+            } else {
+                Err(DecodingError::CouldNotDecode(format!(
+                    "Could not parse '{stripped}' as either integer objid or UUID format after stripping #"
+                )))
+            }
         } else if value.contains('-') {
             // Try to parse as UUID format: FFFFF-FFFFFFFFFF
             let uuid = UuObjid::from_uuid_string(value)?;
@@ -528,6 +536,11 @@ mod tests {
         // Test string parsing
         let obj_from_str = Obj::try_from("048D05-1234567890").unwrap();
         assert_eq!(obj_from_str, obj);
+
+        // Test parsing with # prefix
+        let obj_from_str_with_hash = Obj::try_from("#048D05-1234567890").unwrap();
+        assert_eq!(obj_from_str_with_hash, obj);
+        assert!(obj_from_str_with_hash.is_uuobjid());
     }
 
     #[test]

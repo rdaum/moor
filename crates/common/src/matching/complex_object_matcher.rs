@@ -35,11 +35,12 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
             return Ok(None);
         }
 
-        // Handle object number references (e.g. "#123")
-        if let Some(stripped) = object_name.strip_prefix('#')
-            && let Ok(object_number) = stripped.parse::<i32>()
-        {
-            return Ok(Some(Obj::mk_id(object_number)));
+        // Handle object number references (e.g. "#123" or UUID format)
+        if object_name.starts_with('#') {
+            if let Ok(obj) = Obj::try_from(object_name) {
+                return Ok(Some(obj));
+            }
+            // Continue with name matching if parsing fails
         }
 
         // Check if the player is valid
@@ -139,6 +140,21 @@ mod tests {
         };
         let result = matcher.match_object("#4");
         assert_eq!(result.unwrap(), Some(MOCK_THING1));
+    }
+
+    #[test]
+    fn test_complex_match_uuid_object() {
+        let env = setup_mock_environment();
+        let matcher = ComplexObjectNameMatcher {
+            env,
+            player: MOCK_PLAYER,
+        };
+        // Test with a UUID format object reference
+        let result = matcher.match_object("#048D05-1234567890");
+        assert!(result.is_ok());
+        let obj = result.unwrap().unwrap();
+        assert!(obj.is_uuobjid());
+        assert_eq!(obj.to_literal(), "048D05-1234567890");
     }
 
     #[test]

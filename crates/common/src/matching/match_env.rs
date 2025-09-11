@@ -102,13 +102,13 @@ impl<M: MatchEnvironment> ObjectNameMatcher for DefaultObjectNameMatcher<M> {
             return Ok(None);
         }
 
-        // If if's an object number (is prefixed with # and is followed by a valid integer), return
-        // an Objid directly.
-        if let Some(stripped) = object_name.strip_prefix('#') {
-            let object_number = stripped.parse::<i32>();
-            if let Ok(object_number) = object_number {
-                return Ok(Some(Obj::mk_id(object_number)));
+        // If it's an object number (is prefixed with # and is followed by a valid integer or UUID), return
+        // an Obj directly.
+        if object_name.starts_with('#') {
+            if let Ok(obj) = Obj::try_from(object_name) {
+                return Ok(Some(obj));
             }
+            // Continue with name matching if parsing fails
         }
 
         // Check if the player is valid.
@@ -274,6 +274,21 @@ mod tests {
         };
         let result = menv.match_object("#4");
         assert_eq!(result.unwrap(), Some(MOCK_THING1));
+    }
+
+    #[test]
+    fn test_match_uuid_object() {
+        let env = setup_mock_environment();
+        let menv = DefaultObjectNameMatcher {
+            env,
+            player: MOCK_PLAYER,
+        };
+        // Test with a UUID format object reference
+        let result = menv.match_object("#048D05-1234567890");
+        assert!(result.is_ok());
+        let obj = result.unwrap().unwrap();
+        assert!(obj.is_uuobjid());
+        assert_eq!(obj.to_literal(), "048D05-1234567890");
     }
 
     #[test]
