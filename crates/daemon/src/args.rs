@@ -144,6 +144,15 @@ pub struct Args {
 
     #[arg(long, help = "Generate ED25519 keypair and exit")]
     pub generate_keypair: bool,
+
+    #[cfg(feature = "trace_events")]
+    #[arg(
+        long,
+        value_name = "trace-output",
+        help = "Path to output Chrome trace events JSON file. If not specified, tracing is disabled.",
+        value_hint = ValueHint::FilePath
+    )]
+    pub trace_output: Option<PathBuf>,
 }
 
 /// Formats for import or export
@@ -386,5 +395,17 @@ impl Args {
             }
             None => self.data_dir.join("events.db"),
         }
+    }
+
+    #[cfg(feature = "trace_events")]
+    /// Resolve the trace output path relative to data_dir
+    pub(crate) fn resolved_trace_output_path(&self) -> Option<PathBuf> {
+        self.trace_output.as_ref().map(|path| {
+            if path.is_absolute() {
+                path.clone()
+            } else {
+                self.data_dir.join(path)
+            }
+        })
     }
 }

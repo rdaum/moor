@@ -2818,6 +2818,7 @@ dependencies = [
  "moor-var",
  "num-traits",
  "serde",
+ "serde_json",
  "shadow-rs",
  "strsim",
  "strum",

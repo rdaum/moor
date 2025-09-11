@@ -174,7 +174,7 @@ impl TelnetConnection {
         // Check if this is GMCP
         let is_gmcp = match option {
             TelnetOption::Unknown(opt_num) => *opt_num == constants::GMCP,
-            _ => format!("{:?}", option).contains("GMCP"),
+            _ => format!("{option:?}").contains("GMCP"),
         };
 
         if is_gmcp {
@@ -368,7 +368,7 @@ impl TelnetConnection {
                     _ => {
                         debug!("Unhandled subnegotiation type: {:?}", subneg_type);
                         // Log any charset-related subnegotiation we might be missing
-                        if format!("{:?}", subneg_type)
+                        if format!("{subneg_type:?}")
                             .to_lowercase()
                             .contains("charset")
                         {

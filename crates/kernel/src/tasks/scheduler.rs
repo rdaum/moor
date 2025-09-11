@@ -45,6 +45,10 @@ use crate::tasks::{
 };
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::{Fork, TaskSuspend};
+use crate::{
+    trace_task_create_command, trace_task_create_eval, trace_task_create_oob,
+    trace_task_create_verb,
+};
 use moor_common::tasks::SchedulerError::{
     CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
     TaskAbortedException, TaskAbortedLimit,
@@ -469,6 +473,8 @@ impl Scheduler {
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
 
+                trace_task_create_command!(task_id, &player, &command, &handler_object);
+
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -520,6 +526,11 @@ impl Scheduler {
                     }
                 };
 
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+
+                trace_task_create_verb!(task_id, &player, &verb.as_string(), &vloc);
+
                 let task_start = TaskStart::StartVerb {
                     player,
                     vloc,
@@ -527,8 +538,6 @@ impl Scheduler {
                     args,
                     argstr,
                 };
-                let task_id = self.next_task_id;
-                self.next_task_id += 1;
 
                 let result = task_q.start_task_thread(
                     task_id,
@@ -591,6 +600,11 @@ impl Scheduler {
                 session,
                 reply,
             } => {
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+
+                trace_task_create_oob!(task_id, &player, &command);
+
                 let args = command.into_iter().map(v_string);
                 let args = List::from_iter(args);
                 let task_start = TaskStart::StartVerb {
@@ -600,8 +614,7 @@ impl Scheduler {
                     args,
                     argstr,
                 };
-                let task_id = self.next_task_id;
-                self.next_task_id += 1;
+
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -628,9 +641,13 @@ impl Scheduler {
                 sessions,
                 reply,
             } => {
-                let task_start = TaskStart::StartEval { player, program };
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
+
+                trace_task_create_eval!(task_id, &player);
+
+                let task_start = TaskStart::StartEval { player, program };
+
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,

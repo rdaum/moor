@@ -40,6 +40,17 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use tracing::{error, warn};
 
+use crate::{
+    trace_task_abort, trace_task_complete, trace_task_start, trace_task_suspend,
+    trace_task_suspend_with_delay,
+};
+
+#[cfg(feature = "trace_events")]
+use crate::{
+    trace_task_create_command, trace_task_create_eval, trace_task_create_fork,
+    trace_task_create_verb,
+};
+
 use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_common::tasks::CommandError;
 use moor_common::tasks::CommandError::PermissionDenied;
@@ -114,6 +125,29 @@ impl Task {
         );
 
         let retry_state = vm_host.snapshot_state();
+
+        // Emit task creation trace event based on task start type
+        #[cfg(feature = "trace_events")]
+        {
+            match &task_start {
+                TaskStart::StartCommandVerb { command, handler_object, .. } => {
+                    trace_task_create_command!(task_id, &player, command, handler_object);
+                }
+                TaskStart::StartDoCommand { command, handler_object, .. } => {
+                    trace_task_create_command!(task_id, &player, command, handler_object);
+                }
+                TaskStart::StartVerb { verb, vloc, .. } => {
+                    trace_task_create_verb!(task_id, &player, &verb.as_string(), vloc);
+                }
+                TaskStart::StartFork { .. } => {
+                    trace_task_create_fork!(task_id, &player);
+                }
+                TaskStart::StartEval { .. } => {
+                    trace_task_create_eval!(task_id, &player);
+                }
+            }
+        }
+
         Box::new(Self {
             task_id,
             player,
@@ -134,6 +168,8 @@ impl Task {
         config: Arc<Config>,
     ) {
         // Transaction context is already set up by the caller
+
+        trace_task_start!(task.task_id);
 
         // Try to pick a high thread priority for user tasks.
         gdt_cpus::set_thread_priority(gdt_cpus::ThreadPriority::AboveNormal).ok();
@@ -247,6 +283,8 @@ impl Task {
                 self.retry_state = self.vm_host.snapshot_state();
                 self.vm_host.stop();
 
+                trace_task_suspend_with_delay!(self.task_id, delay.as_ref());
+
                 // Let the scheduler know about our suspension, which can be of the form:
                 //      * Indefinite, wake-able only with Resume
                 //      * Scheduled, a duration is given, and we'll wake up after that duration
@@ -272,6 +310,8 @@ impl Task {
 
                 self.retry_state = self.vm_host.snapshot_state();
                 self.vm_host.stop();
+
+                trace_task_suspend!(self.task_id, "Waiting for input");
 
                 // Consume us, passing back to the scheduler that we're waiting for input.
                 task_scheduler_client.request_input(self);
@@ -335,6 +375,8 @@ impl Task {
 
                 self.vm_host.stop();
 
+                trace_task_complete!(self.task_id, &format!("{result:?}"));
+
                 task_scheduler_client.success(result, mutations_made, timestamp);
                 None
             }
@@ -344,6 +386,8 @@ impl Task {
                 rollback_current_transaction().expect("Could not rollback world state transaction");
 
                 self.vm_host.stop();
+
+                trace_task_abort!(self.task_id, "Task aborted");
 
                 task_scheduler_client.abort_cancelled();
                 None
@@ -372,6 +416,11 @@ impl Task {
 
                 warn!(task_id = self.task_id, ?exception, "Task exception");
                 self.vm_host.stop();
+
+                trace_task_abort!(
+                    self.task_id,
+                    &format!("Exception: {}", exception.error.err_type)
+                );
 
                 task_scheduler_client.exception(exception);
                 None

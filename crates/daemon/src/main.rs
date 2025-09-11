@@ -278,6 +278,24 @@ fn main() -> Result<(), Report> {
 
     let config = args.load_config()?;
 
+    // Initialize tracing if trace output is specified and feature is enabled
+    #[cfg(feature = "trace_events")]
+    {
+        let trace_output_path = args.resolved_trace_output_path();
+        if let Some(trace_path) = trace_output_path {
+            if moor_kernel::init_tracing(Some(trace_path.clone())) {
+                info!(
+                    "Chrome trace events enabled, output will be written to: {:?}",
+                    trace_path
+                );
+            } else {
+                warn!("Failed to initialize Chrome trace events");
+            }
+        } else {
+            info!("Chrome trace events disabled (no --trace-output specified)");
+        }
+    }
+
     let resolved_db_path = args.resolved_db_path();
     info!(
         "moor {} daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {:?}",
@@ -518,6 +536,12 @@ fn main() -> Result<(), Report> {
 
     if let Err(e) = scheduler_loop_jh.join() {
         error!("Scheduler thread panicked: {:?}", e);
+    }
+
+    // Shutdown tracing to flush any remaining events
+    #[cfg(feature = "trace_events")]
+    {
+        moor_kernel::shutdown_tracing();
     }
 
     info!("Done.");

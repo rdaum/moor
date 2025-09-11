@@ -15,11 +15,13 @@ mod bitarray;
 mod bitenum;
 mod bitset;
 mod perf_counter;
+mod trace_events;
 
 pub use bitarray::BitArray;
 pub use bitenum::BitEnum;
 pub use bitset::*;
 pub use perf_counter::{PerfCounter, PerfTimerGuard};
+pub use trace_events::*;
 
 /// Check single verb pattern for matches following LambdaMOO semantics.
 /// This exactly tries to mirror the C verbcasecmp() state machine from LambdaMOO's utils.c.

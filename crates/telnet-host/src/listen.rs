@@ -505,7 +505,7 @@ fn handle_unknown_subnegotiation(
             // Terminal Type
             handle_terminal_type_subneg(negotiated_attrs, data);
         }
-        opt if format!("{:?}", opt).contains("GMCP") => {
+        opt if format!("{opt:?}").contains("GMCP") => {
             handle_gmcp_subneg(negotiated_attrs, data);
         }
         _ => debug!("Unknown subnegotiation option: {:?}", option),

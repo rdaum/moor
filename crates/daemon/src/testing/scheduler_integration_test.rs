@@ -30,6 +30,8 @@ mod tests {
     use crate::testing::{MockEventLog, MockTransport};
     use moor_common::model::CommitResult;
     use moor_common::tasks::Event;
+    #[cfg(feature = "trace_events")]
+    use moor_common::util::{EventPhase, TraceFile};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::config::{Config, ImportExportFormat};
     use moor_kernel::tasks::NoopTasksDb;
@@ -790,12 +792,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             export_path.display()
         );
 
-        println!(
-            "✓ Blocking checkpoint completed successfully: {} ({} bytes)",
-            export_path.display(),
-            metadata.len()
-        );
-
         // Step 8: Verify there are no errors in the event log
         let events = env.event_log.get_all_events();
         for event in events {
@@ -1092,6 +1088,321 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 {
                     panic!("Unexpected traceback during GC test: {traceback:?}");
                 }
+            }
+        }
+    }
+
+    #[cfg(feature = "trace_events")]
+    #[test]
+    fn test_chrome_trace_events_round_trip() {
+        // Initialize trace events system before setting up the test environment
+        assert!(
+            moor_kernel::init_tracing(None),
+            "Should be able to initialize trace events"
+        );
+
+        let env = setup_test_environment_with_real_scheduler();
+        wait_for_scheduler_ready(&env.scheduler_client);
+
+        let client_id = Uuid::new_v4();
+
+        // Establish connection
+        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
+            peer_addr: "127.0.0.1:8080".to_string(),
+            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
+            connection_attributes: None,
+        };
+
+        let establish_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            establish_message,
+        );
+
+        let (client_token, _connection_obj) = match establish_result.unwrap() {
+            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+            other => panic!("Expected NewConnection, got {other:?}"),
+        };
+
+        // Welcome message call
+        let welcome_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec![],
+            do_attach: false,
+        };
+
+        let _welcome_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            welcome_message,
+        );
+
+        // Wait for welcome message
+        assert!(
+            env.transport.wait_for_narrative_events(1, 2000),
+            "Should receive welcome message events within 2 seconds"
+        );
+
+        // Login as wizard
+        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
+            client_token: client_token.clone(),
+            handler_object: SYSTEM_OBJECT,
+            connect_args: vec!["connect".to_string(), "wizard".to_string()],
+            do_attach: true,
+        };
+
+        let login_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            login_message,
+        );
+
+        let rpc_common::DaemonToClientReply::LoginResult(Some((
+            auth_token,
+            connect_type,
+            player_obj,
+        ))) = login_result.expect("Login should succeed")
+        else {
+            panic!("Expected successful login result");
+        };
+
+        assert_eq!(connect_type, rpc_common::ConnectType::Connected);
+        assert_eq!(player_obj, Obj::mk_id(2));
+
+        // Wait for connection events
+        wait_for_event_content(
+            &env.event_log,
+            player_obj,
+            |event| {
+                if let Event::Notify(content, _) = event {
+                    if let Some(str) = content.as_string() {
+                        str == "This is all there is right now."
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            },
+            5,
+            "connection events with room description",
+        );
+
+        // Execute several commands that should generate trace events
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "@create $thing named \"test object\"",
+            "You now have test object with object number",
+            "@create command execution",
+        );
+
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            ";max_object().name",
+            "=> \"test object\"",
+            "MOO expression execution",
+        );
+
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "@audit",
+            "test object",
+            "@audit command execution",
+        );
+
+        // Give the trace events system time to flush events
+        std::thread::sleep(Duration::from_millis(500));
+
+        // Shut down tracing to force final flush
+        moor_kernel::shutdown_tracing();
+
+        // Give additional time for shutdown to complete
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Find trace files in the current directory
+        let current_dir = std::env::current_dir().expect("Should be able to get current directory");
+        let entries =
+            std::fs::read_dir(&current_dir).expect("Should be able to read current directory");
+
+        let mut trace_files: Vec<_> = entries
+            .flatten()
+            .filter(|entry| {
+                if let Some(filename) = entry.file_name().to_str() {
+                    filename == "moor_trace.json" // The default filename from init_tracing
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        assert!(
+            !trace_files.is_empty(),
+            "Should find Chrome trace files in directory: {}",
+            current_dir.display()
+        );
+
+        // Get the most recent trace file
+        trace_files.sort_by_key(|entry| entry.metadata().unwrap().modified().unwrap());
+        let trace_path = trace_files.last().unwrap().path();
+
+        // Read and parse the trace file
+        let trace_content =
+            std::fs::read_to_string(&trace_path).expect("Should be able to read trace file");
+
+        let trace_file: TraceFile = serde_json::from_str(&trace_content)
+            .expect("Trace file should be valid JSON matching TraceFile format");
+
+        // Verify basic structure
+        assert!(
+            !trace_file.trace_events.is_empty(),
+            "Trace file should contain events"
+        );
+
+        // Find different types of events we expect
+        let mut task_create_events = 0;
+        let mut task_start_events = 0;
+        let mut task_complete_events = 0;
+        let mut verb_begin_events = 0;
+        let mut verb_end_events = 0;
+        let mut builtin_begin_events = 0;
+        let mut builtin_end_events = 0;
+
+        for event in &trace_file.trace_events {
+            match event.name.as_str() {
+                "Task Create" => task_create_events += 1,
+                "Task Execution" => {
+                    // Task Execution can be both Begin and End phases
+                    match event.ph {
+                        EventPhase::Begin => task_start_events += 1,
+                        EventPhase::End => task_complete_events += 1,
+                        _ => {} // Other phases
+                    }
+                }
+                // Skip metadata and special event types, count function/verb execution events
+                name if matches!(event.ph, EventPhase::Begin | EventPhase::End)
+                    && name != "Task Execution"
+                    && name != "process_name"
+                    && name != "Stack Unwind" =>
+                {
+                    // This is likely a verb or builtin function
+                    if name.chars().any(|c| c == ':') {
+                        // MOO verb name format (object:verb)
+                        match event.ph {
+                            EventPhase::Begin => verb_begin_events += 1,
+                            EventPhase::End => verb_end_events += 1,
+                            _ => {}
+                        }
+                    } else {
+                        // Builtin function or other executable
+                        match event.ph {
+                            EventPhase::Begin => builtin_begin_events += 1,
+                            EventPhase::End => builtin_end_events += 1,
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {} // Other event types
+            }
+
+            // Verify each event has required Chrome trace format fields
+            assert!(event.pid > 0, "Event should have valid process ID");
+            // tid can be 0 for task_id 0, so just check it's not u64::MAX or something invalid
+            // ph is an enum so it's always valid
+            assert!(!event.name.is_empty(), "Event should have name");
+        }
+
+        // Verify we captured the expected types of events
+        assert!(
+            task_create_events > 0,
+            "Should have captured task creation events"
+        );
+        assert!(
+            task_start_events > 0,
+            "Should have captured task start events"
+        );
+        assert!(
+            task_complete_events > 0,
+            "Should have captured task completion events"
+        );
+
+        // We should have captured either verb events or builtin events (or both)
+        let total_execution_events =
+            verb_begin_events + verb_end_events + builtin_begin_events + builtin_end_events;
+        assert!(
+            total_execution_events > 0,
+            "Should have captured some execution events (verbs or builtins)"
+        );
+        assert!(
+            builtin_begin_events > 0,
+            "Should have captured builtin begin events"
+        );
+
+        // Verify event pairing - each begin should have a corresponding end
+        // (allowing for substantial variance due to async nature and shutdown timing)
+        let verb_diff = (verb_begin_events as i32 - verb_end_events as i32).abs();
+        let builtin_diff = (builtin_begin_events as i32 - builtin_end_events as i32).abs();
+
+        // We allow up to 50% imbalance since some functions may not complete before shutdown
+        let max_verb_imbalance = std::cmp::max(1, verb_begin_events / 2);
+        let max_builtin_imbalance = std::cmp::max(1, builtin_begin_events / 2);
+
+        if verb_begin_events > 0 || verb_end_events > 0 {
+            assert!(
+                verb_diff as usize <= max_verb_imbalance,
+                "Verb begin/end events should be somewhat balanced: {verb_begin_events} begin, {verb_end_events} end (diff: {verb_diff})"
+            );
+        }
+
+        if builtin_begin_events > 0 || builtin_end_events > 0 {
+            assert!(
+                builtin_diff as usize <= max_builtin_imbalance,
+                "Builtin begin/end events should be somewhat balanced: {builtin_begin_events} begin, {builtin_end_events} end (diff: {builtin_diff})"
+            );
+        }
+
+        // Verify we have at least some duration events (verb execution)
+        let duration_events = trace_file
+            .trace_events
+            .iter()
+            .filter(|e| matches!(e.ph, EventPhase::Begin | EventPhase::End))
+            .count();
+        assert!(duration_events > 0, "Should have captured duration events");
+
+        // Verify trace file size is reasonable (should contain substantial data)
+        let file_size = std::fs::metadata(&trace_path)
+            .expect("Should be able to get trace file metadata")
+            .len();
+        assert!(
+            file_size > 1000,
+            "Trace file should be substantial size, got {} bytes: {}",
+            file_size,
+            trace_path.display()
+        );
+
+        // Clean up trace file
+        let _ = std::fs::remove_file(&trace_path);
+
+        // Verify no unexpected tracebacks in the event log
+        let events = env.event_log.get_all_events();
+        for event in events {
+            if let Event::Traceback(traceback) = event.event.event {
+                panic!("Unexpected traceback during trace events test: {traceback:?}");
             }
         }
     }

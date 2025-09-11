@@ -21,6 +21,9 @@ use crate::vm::exec_state::VMExecState;
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 
+#[cfg(feature = "trace_events")]
+use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
+
 use lazy_static::lazy_static;
 use minstant::Instant;
 use moor_common::matching::ParsedCommand;
@@ -284,12 +287,51 @@ impl VMExecState {
     ) {
         let a = Activation::for_call(permissions, resolved_verb, call, command, program);
         self.stack.push(a);
+
+        // Emit VerbBegin trace event if this is a MOO verb
+        #[cfg(feature = "trace_events")]
+        if let Frame::Moo(_) = self.top().frame {
+            // Capture calling line number from the previous frame (before this push)
+            let calling_line = if self.stack.len() > 1 {
+                self.stack[self.stack.len() - 2].frame.find_line_no()
+            } else {
+                None
+            };
+
+            trace_verb_begin!(
+                self.task_id,
+                &self.top().verb_name.as_string(),
+                &self.top().this,
+                &self.top().verb_definer(),
+                calling_line,
+                &self.top().args
+            );
+        }
     }
 
     pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
         let a = Activation::for_eval(*permissions, player, program);
-
         self.stack.push(a);
+
+        // Emit VerbBegin trace event if this is a MOO eval
+        #[cfg(feature = "trace_events")]
+        if let Frame::Moo(_) = self.top().frame {
+            // Capture calling line number from the previous frame (before this push)
+            let calling_line = if self.stack.len() > 1 {
+                self.stack[self.stack.len() - 2].frame.find_line_no()
+            } else {
+                None
+            };
+
+            trace_verb_begin!(
+                self.task_id,
+                &self.top().verb_name.as_string(),
+                &self.top().this,
+                &self.top().verb_definer(),
+                calling_line,
+                &self.top().args
+            );
+        }
     }
 
     /// Execute a lambda call by creating a new lambda activation
@@ -301,6 +343,26 @@ impl VMExecState {
         let current_activation = self.top();
         let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect())?;
         self.stack.push(a);
+
+        // Emit VerbBegin trace event if this is a MOO lambda
+        #[cfg(feature = "trace_events")]
+        if let Frame::Moo(_) = self.top().frame {
+            // Capture calling line number from the previous frame (before this push)
+            let calling_line = if self.stack.len() > 1 {
+                self.stack[self.stack.len() - 2].frame.find_line_no()
+            } else {
+                None
+            };
+
+            trace_verb_begin!(
+                self.task_id,
+                &self.top().verb_name.as_string(),
+                &self.top().this,
+                &self.top().verb_definer(),
+                calling_line,
+                &self.top().args
+            );
+        }
         Ok(())
     }
 
@@ -326,6 +388,23 @@ impl VMExecState {
         // TODO how to set the task_id in the parent activation, as we no longer have a reference
         //  to it?
         self.stack = vec![a];
+
+        // Emit VerbBegin trace event for forked MOO verb
+        #[cfg(feature = "trace_events")]
+        {
+            // For forked tasks, we capture the line number from the original activation
+            // before it was modified by switch_to_fork_vector
+            let calling_line = self.top().frame.find_line_no();
+
+            trace_verb_begin!(
+                self.task_id,
+                &self.top().verb_name.as_string(),
+                &self.top().this,
+                &self.top().verb_definer(),
+                calling_line,
+                &self.top().args
+            );
+        }
     }
 
     /// If a bf_<xxx> wrapper function is present on #0, invoke that instead.
@@ -387,6 +466,18 @@ impl VMExecState {
         let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
         let bf_name = bf_desc.name;
 
+        // Emit builtin begin trace event
+        #[cfg(feature = "trace_events")]
+        {
+            // Capture calling line number before pushing builtin activation
+            let calling_line = if !self.stack.is_empty() {
+                self.top().frame.find_line_no()
+            } else {
+                None
+            };
+            trace_builtin_begin!(self.task_id, bf_name, calling_line, &args);
+        }
+
         // TODO: check for $server_options.protect_[func]
         // Check for builtin override at #0.
         if let Some(proxy_result) = self.maybe_invoke_bf_proxy(bf_desc.bf_override_name, &args) {
@@ -445,21 +536,32 @@ impl VMExecState {
         _session: &dyn Session,
     ) -> ExecutionResult {
         let start = Instant::now();
-        let bf_frame = match self.top().frame {
-            Frame::Bf(ref frame) => frame,
+        let bf_id = match self.top().frame {
+            Frame::Bf(ref frame) => frame.bf_id,
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
 
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
-        let Some(_) = bf_frame.bf_trampoline else {
-            let return_value = self.top_mut().frame.return_value();
-
-            return self.unwind_stack(FinallyReason::Return(return_value));
+        let has_trampoline = match self.top().frame {
+            Frame::Bf(ref frame) => frame.bf_trampoline.is_some(),
+            _ => false,
         };
 
-        let bf_id = bf_frame.bf_id;
+        if !has_trampoline {
+            let return_value = self.top_mut().frame.return_value();
+
+            // Emit builtin end trace event for non-trampoline builtins
+            #[cfg(feature = "trace_events")]
+            {
+                let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
+                trace_builtin_end!(self.task_id, bf_desc.name);
+            }
+
+            return self.unwind_stack(FinallyReason::Return(return_value));
+        }
+
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let verb_name = self.top().verb_name;
         let args = self.top().args.clone();
@@ -479,6 +581,13 @@ impl VMExecState {
             .counter_for(bf_id)
             .cumulative_duration_nanos()
             .add(elapsed_nanos as isize);
+
+        // Emit builtin end trace event
+        #[cfg(feature = "trace_events")]
+        {
+            let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
+            trace_builtin_end!(self.task_id, bf_desc.name);
+        }
 
         match bf_result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),

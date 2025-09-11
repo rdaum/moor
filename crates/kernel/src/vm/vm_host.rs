@@ -20,6 +20,9 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use tracing::{debug, error, warn};
 
+#[cfg(feature = "trace_events")]
+use crate::tracing_events::{TraceEventType, emit_trace_event};
+
 use moor_common::model::ObjFlag;
 use moor_common::model::VerbDef;
 use moor_common::tasks::{AbortLimitReason, TaskId};
@@ -476,6 +479,12 @@ impl VmHost {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
         self.running = true;
+
+        // Emit task resume trace event
+        #[cfg(feature = "trace_events")]
+        emit_trace_event(TraceEventType::TaskResume {
+            task_id: self.vm_exec_state.task_id,
+        });
 
         // If there's no activations at all, that means we're a Fork, not returning to something.
         if !self.vm_exec_state.stack.is_empty() {

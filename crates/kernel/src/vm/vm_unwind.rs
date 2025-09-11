@@ -16,6 +16,9 @@ use crate::vm::activation::{Activation, Frame};
 use crate::vm::exec_state::VMExecState;
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_host::ExecutionResult;
+
+#[cfg(feature = "trace_events")]
+use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
 use bincode::{Decode, Encode};
 use moor_common::model::Named;
 use moor_common::model::VerbFlag;
@@ -181,6 +184,20 @@ impl VMExecState {
     ///     * Error raises of various kinds
     ///     * Return common
     pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
+        // Emit stack unwind trace event
+        #[cfg(feature = "trace_events")]
+        {
+            let reason = match &why {
+                FinallyReason::Fallthrough => "Fallthrough".to_string(),
+                FinallyReason::Raise(exception) => format!("Raise({})", exception.error.err_type),
+                FinallyReason::Return(value) => format!("Return({})", to_literal(value)),
+                FinallyReason::Abort => "Abort".to_string(),
+                FinallyReason::Exit { stack, label } => {
+                    format!("Exit(stack: {stack:?}, label: {label:?})")
+                }
+            };
+            trace_stack_unwind!(self.task_id, &reason);
+        }
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             // If this is an error or exit attempt to find a handler for it.
@@ -249,7 +266,22 @@ impl VMExecState {
             }
 
             // No match in the frame, so we pop it.
-            self.stack.pop().expect("Stack underflow");
+            #[cfg(feature = "trace_events")]
+            let popped_frame = self.stack.pop().expect("Stack underflow");
+            #[cfg(not(feature = "trace_events"))]
+            self.stack.pop();
+
+            // Emit verb end trace event for each popped activation record
+            #[cfg(feature = "trace_events")]
+            match &popped_frame.frame {
+                Frame::Moo(_) => {
+                    trace_verb_end!(self.task_id, &popped_frame.verb_name.as_string());
+                }
+                Frame::Bf(bf_frame) => {
+                    let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
+                    trace_builtin_end!(self.task_id, bf_name);
+                }
+            }
 
             // No more frames to unwind, so break out and handle final exit.
             if self.stack.is_empty() {

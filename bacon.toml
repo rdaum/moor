@@ -66,6 +66,38 @@ command = [
 allow_warnings = true
 need_stdout = true
 
+[jobs.daemon-debug-traced]
+command = [
+    "cargo",
+    "run",
+    "--features",
+    "trace_events",
+    "-p",
+    "moor-daemon",
+    "--",
+    "./moor-data",
+    "--db",
+    "development.db",
+    "--import",
+    "cores/lambda-moor",
+    "--import-format",
+    "objdef",
+    "--export",
+    "development-export",
+    "--export-format",
+    "objdef",
+    "--checkpoint-interval-seconds",
+    "3600",
+    "--use-boolean-returns",
+    "true",
+    "--custom-errors",
+    "true",
+    "--trace-output",
+    "moor-trace.json",
+]
+allow_warnings = true
+need_stdout = true
+
 [jobs.telnet]
 command = ["cargo", "run", "-p", "moor-telnet-host"]
 allow_warnings = true

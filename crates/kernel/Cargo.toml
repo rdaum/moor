@@ -12,6 +12,10 @@ resolver = "2"
 rust-version.workspace = true
 description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
 
+[features]
+default = []
+trace_events = []
+
 [dev-dependencies]
 moor-db = { path = "../db" }
 tempfile.workspace = true

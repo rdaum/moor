@@ -91,3 +91,6 @@ uuid.workspace = true
 
 # Testing & Development
 tempfile.workspace = true
+
+[features]
+trace_events = ["moor-kernel/trace_events"]

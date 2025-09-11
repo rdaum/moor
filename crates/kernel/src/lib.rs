@@ -15,6 +15,7 @@ pub use crate::tasks::ServerOptions;
 pub use crate::tasks::scheduler_client::SchedulerClient;
 pub use crate::tasks::task::Task;
 pub use crate::tasks::task_q::{SuspendedTask, WakeCondition};
+pub use crate::tracing_events::{TraceEventType, emit_trace_event, init_tracing, shutdown_tracing};
 pub use moor_common::tasks::TaskId;
 
 use std::cell::Cell;
@@ -23,6 +24,7 @@ use std::marker::PhantomData;
 pub mod config;
 pub mod task_context;
 pub mod tasks;
+pub mod tracing_events;
 pub mod vm;
 
 pub mod testing;
