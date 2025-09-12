@@ -313,7 +313,7 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .connected_players()
         .expect("Connected players should always be available");
     let map = connected_player_set.iter().filter_map(|p| {
-        if p.id().0 < 0 && !include_all {
+        if !p.is_positive() && !include_all {
             return None;
         }
         Some(v_obj(*p))
