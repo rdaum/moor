@@ -33,10 +33,11 @@ use moor_common::tasks::Session;
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_var::VarType::TYPE_NONE;
 use moor_var::program::ProgramType;
+use moor_var::program::names::GlobalName;
 use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
-use moor_var::{Var, v_int, v_obj};
+use moor_var::{NOTHING, Var, v_empty_str, v_int, v_obj, v_string};
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list_proto");
@@ -59,8 +60,6 @@ pub struct VerbExecutionRequest {
     pub resolved_verb: VerbDef,
     /// The call parameters that were used to resolve the verb.
     pub call: Box<VerbCall>,
-    /// The parsed user command that led to this verb dispatch, if any.
-    pub command: Option<Box<ParsedCommand>>,
     /// The decoded MOO Binary that contains the verb to be executed.
     pub program: ProgramType,
 }
@@ -205,13 +204,7 @@ impl VMExecState {
 
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
-        self.exec_call_request(
-            permissions,
-            resolved_verb,
-            call,
-            self.top().command.clone(),
-            program,
-        );
+        self.exec_call_request(permissions, resolved_verb, call, program);
         ExecutionResult::More
     }
 
@@ -269,23 +262,89 @@ impl VMExecState {
             permissions: *permissions,
             resolved_verb,
             call: Box::new(call),
-            command: self.top().command.clone(),
             program,
         }))
     }
 
+    /// Entry point from scheduler for beginning the dispatch of an initial command verb execution.
+    /// This sets up the initial activation with parsing variables from the parsed command.
+    pub fn exec_command_request(
+        &mut self,
+        permissions: Obj,
+        resolved_verb: VerbDef,
+        call: Box<VerbCall>,
+        command: &ParsedCommand,
+        program: ProgramType,
+    ) {
+        // Initial command activation - no parent to inherit from
+        let mut a = Activation::for_call(permissions, resolved_verb, call, None, program);
+
+        // Set parsing variables from the parsed command
+        a.frame
+            .set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
+        a.frame
+            .set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
+        a.frame.set_global_variable(
+            GlobalName::dobjstr,
+            command
+                .dobjstr
+                .as_ref()
+                .map_or_else(v_empty_str, |s| v_string(s.clone())),
+        );
+        a.frame.set_global_variable(
+            GlobalName::prepstr,
+            command
+                .prepstr
+                .as_ref()
+                .map_or_else(v_empty_str, |s| v_string(s.clone())),
+        );
+        a.frame
+            .set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
+        a.frame.set_global_variable(
+            GlobalName::iobjstr,
+            command
+                .iobjstr
+                .as_ref()
+                .map_or_else(v_empty_str, |s| v_string(s.clone())),
+        );
+
+        self.stack.push(a);
+
+        // Emit VerbBegin trace event if this is a MOO verb
+        #[cfg(feature = "trace_events")]
+        if let Frame::Moo(_) = self.top().frame {
+            // No calling line number for initial command activation
+            trace_verb_begin!(
+                self.task_id,
+                &self.top().verb_name.as_string(),
+                &self.top().this,
+                &self.top().verb_definer(),
+                None,
+                &self.top().args
+            );
+        }
+    }
+
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
-    /// (non-command) in this VM.
+    /// (verb-to-verb call) in this VM.
     /// Actually creates the activation record and puts it on the stack.
     pub fn exec_call_request(
         &mut self,
         permissions: Obj,
         resolved_verb: VerbDef,
         call: Box<VerbCall>,
-        command: Option<Box<ParsedCommand>>,
         program: ProgramType,
     ) {
-        let a = Activation::for_call(permissions, resolved_verb, call, command, program);
+        // Get current activation to inherit global variables from, if any.
+        let current_activation = self.stack.last();
+
+        let a = Activation::for_call(
+            permissions,
+            resolved_verb,
+            call,
+            current_activation,
+            program,
+        );
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO verb
@@ -448,7 +507,6 @@ impl VMExecState {
                 resolved_verb,
                 program,
                 call: Box::new(call),
-                command: self.top().command.clone(),
             },
         )))
     }

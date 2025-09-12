@@ -161,6 +161,15 @@ impl MooStackFrame {
         self.environment[0][pos] = Some(value);
     }
 
+    pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {
+        let pos = gname as usize;
+        if pos < self.environment[0].len() {
+            self.environment[0][pos].as_ref()
+        } else {
+            None
+        }
+    }
+
     pub fn set_variable(&mut self, id: &Name, v: Var) {
         // This is a "trust us we know what we're doing" use of the explicit offset without check
         // into the names list like we did before. If the compiler produces garbage, it gets what

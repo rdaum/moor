@@ -94,7 +94,6 @@ fn create_object_with_initialize(
             argstr: "".to_string(),
             caller: bf_args.exec_state.top().this.clone(),
         }),
-        command: None,
     };
     Ok(VmInstr(DispatchVerb(Box::new(ve))))
 }
@@ -702,7 +701,6 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             }),
-                            command: None,
                         }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -774,7 +772,6 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this.clone(),
                         }),
-                        command: None,
                     }))));
                 }
             }
@@ -885,7 +882,6 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             }),
-                            command: None,
                         }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -963,7 +959,6 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             }),
-                            command: None,
                         }));
                         return Ok(VmInstr(continuation));
                     }
@@ -1012,7 +1007,6 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             }),
-                            command: None,
                         }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {

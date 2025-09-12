@@ -1461,7 +1461,6 @@ macro_rules! trace_transaction_rollback {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[test]
     fn test_tracing_disabled_by_default() {
@@ -1474,6 +1473,7 @@ mod tests {
     #[test]
     #[cfg(feature = "trace_events")]
     fn test_tracing_initialization() {
+        use std::time::Duration;
         use tempfile::tempdir;
 
         let temp_dir = tempdir().unwrap();

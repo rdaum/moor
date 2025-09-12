@@ -36,7 +36,6 @@ use moor_var::{Var, v_empty_list, v_list, v_obj, v_str, v_string};
 use crate::vm::VerbCall;
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::scatter_assign::scatter_assign;
-use moor_common::matching::ParsedCommand;
 use moor_var::program::ProgramType;
 use moor_var::program::names::{GlobalName, Name};
 
@@ -108,8 +107,6 @@ pub(crate) struct Activation {
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Obj,
-    /// The command that triggered this verb call, if any.
-    pub(crate) command: Option<Box<ParsedCommand>>,
 }
 
 impl Encode for Activation {
@@ -122,7 +119,6 @@ impl Encode for Activation {
         self.args.encode(encoder)?;
         self.verb_name.encode(encoder)?;
         self.permissions.encode(encoder)?;
-        self.command.encode(encoder)?;
 
         // verbdef gets encoded as its raw bytes from the flatbuffer
         let verbdef_bytes = self.verbdef.as_bytes().unwrap();
@@ -138,7 +134,6 @@ impl<C> Decode<C> for Activation {
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
         let permissions = Obj::decode(decoder)?;
-        let command = Option::<Box<ParsedCommand>>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
         let verbdef_bytes = ByteView::from(verbdef_bytes);
@@ -152,7 +147,6 @@ impl<C> Decode<C> for Activation {
             verb_name,
             verbdef,
             permissions,
-            command,
         })
     }
 }
@@ -165,7 +159,6 @@ impl<'de, C> BorrowDecode<'de, C> for Activation {
         let args = Vec::<Var>::borrow_decode(decoder)?;
         let verb_name = Symbol::borrow_decode(decoder)?;
         let permissions = Obj::borrow_decode(decoder)?;
-        let command = Option::<Box<ParsedCommand>>::borrow_decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::borrow_decode(decoder)?;
         let verbdef_bytes = ByteView::from(verbdef_bytes);
@@ -179,7 +172,6 @@ impl<'de, C> BorrowDecode<'de, C> for Activation {
             verb_name,
             verbdef,
             permissions,
-            command,
         })
     }
 }
@@ -216,6 +208,13 @@ impl Frame {
             Frame::Bf(_) => {
                 panic!("set_global_variable called for a built-in function frame")
             }
+        }
+    }
+
+    pub fn get_global_variable(&self, gname: GlobalName) -> Option<&Var> {
+        match self {
+            Frame::Moo(frame) => frame.get_gvar(gname),
+            Frame::Bf(_) => None,
         }
     }
 
@@ -267,7 +266,7 @@ impl Activation {
         _permissions: Obj,
         resolved_verb: VerbDef,
         call: Box<VerbCall>,
-        command: Option<Box<ParsedCommand>>,
+        current_activation: Option<&Activation>,
         program: ProgramType,
     ) -> Self {
         let verb_owner = resolved_verb.owner();
@@ -286,33 +285,65 @@ impl Activation {
         );
         frame.set_global_variable(GlobalName::args, call.args.clone().into());
 
-        // From the command, if any...
-        if let Some(ref command) = command {
-            frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
-            frame.set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
-            frame.set_global_variable(
-                GlobalName::dobjstr,
-                command
-                    .dobjstr
-                    .as_ref()
-                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
-            );
-            frame.set_global_variable(
-                GlobalName::prepstr,
-                command
-                    .prepstr
-                    .as_ref()
-                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
-            );
-            frame.set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
-            frame.set_global_variable(
-                GlobalName::iobjstr,
-                command
-                    .iobjstr
-                    .as_ref()
-                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
-            );
+        // Inherit parsing variables from the current activation, if any
+        // This maintains LambdaMOO-compatible behavior where parsing variables persist across verb calls
+        if let Some(current_activation) = current_activation {
+            // Copy parsing variables from the calling activation
+            if let Some(argstr) = current_activation
+                .frame
+                .get_global_variable(GlobalName::argstr)
+            {
+                frame.set_global_variable(GlobalName::argstr, argstr.clone());
+            } else {
+                frame.set_global_variable(GlobalName::argstr, v_string(call.argstr.clone()));
+            }
+
+            if let Some(dobj) = current_activation
+                .frame
+                .get_global_variable(GlobalName::dobj)
+            {
+                frame.set_global_variable(GlobalName::dobj, dobj.clone());
+            } else {
+                frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
+            }
+
+            if let Some(dobjstr) = current_activation
+                .frame
+                .get_global_variable(GlobalName::dobjstr)
+            {
+                frame.set_global_variable(GlobalName::dobjstr, dobjstr.clone());
+            } else {
+                frame.set_global_variable(GlobalName::dobjstr, v_str(""));
+            }
+
+            if let Some(prepstr) = current_activation
+                .frame
+                .get_global_variable(GlobalName::prepstr)
+            {
+                frame.set_global_variable(GlobalName::prepstr, prepstr.clone());
+            } else {
+                frame.set_global_variable(GlobalName::prepstr, v_str(""));
+            }
+
+            if let Some(iobj) = current_activation
+                .frame
+                .get_global_variable(GlobalName::iobj)
+            {
+                frame.set_global_variable(GlobalName::iobj, iobj.clone());
+            } else {
+                frame.set_global_variable(GlobalName::iobj, v_obj(NOTHING));
+            }
+
+            if let Some(iobjstr) = current_activation
+                .frame
+                .get_global_variable(GlobalName::iobjstr)
+            {
+                frame.set_global_variable(GlobalName::iobjstr, iobjstr.clone());
+            } else {
+                frame.set_global_variable(GlobalName::iobjstr, v_str(""));
+            }
         } else {
+            // No current activation, use defaults (this happens for initial command activation)
             frame.set_global_variable(GlobalName::argstr, v_string(call.argstr.clone()));
             frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
             frame.set_global_variable(GlobalName::dobjstr, v_str(""));
@@ -327,7 +358,6 @@ impl Activation {
             player: call.player,
             verbdef: resolved_verb,
             verb_name: call.verb_name,
-            command: command.clone(),
             args: call.args.clone(),
             permissions: verb_owner,
         }
@@ -495,41 +525,12 @@ impl Activation {
         frame.set_global_variable(GlobalName::verb, v_str(&lambda_name));
         frame.set_global_variable(GlobalName::args, v_list(&args));
 
-        // Copy command context if available
-        if let Some(ref command) = current_activation.command {
-            frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
-            frame.set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
-            frame.set_global_variable(
-                GlobalName::dobjstr,
-                command
-                    .dobjstr
-                    .as_ref()
-                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
-            );
-            frame.set_global_variable(
-                GlobalName::prepstr,
-                command
-                    .prepstr
-                    .as_ref()
-                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
-            );
-            frame.set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
-            frame.set_global_variable(
-                GlobalName::iobjstr,
-                command
-                    .iobjstr
-                    .as_ref()
-                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
-            );
-        }
-
         Ok(Self {
             frame,
             this: current_activation.this.clone(),
             player: current_activation.player,
             verbdef: current_activation.verbdef.clone(),
             verb_name: Symbol::mk(&lambda_name),
-            command: current_activation.command.clone(),
             args: args.iter().cloned().collect(),
             permissions: current_activation.permissions,
         })
@@ -566,7 +567,6 @@ impl Activation {
             player: *player,
             verbdef,
             verb_name: *EVAL_SYMBOL,
-            command: None,
             args: List::mk_list(&[]),
             permissions,
         }
@@ -601,7 +601,6 @@ impl Activation {
             player,
             verbdef,
             verb_name: bf_name,
-            command: None,
             args,
             permissions: NOTHING,
         }

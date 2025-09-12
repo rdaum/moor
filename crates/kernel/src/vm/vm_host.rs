@@ -177,14 +177,18 @@ impl VmHost {
         command: ParsedCommand,
         permissions: &Obj,
     ) {
-        self.start_execution(
-            task_id,
+        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.maximum_time = Some(self.max_time);
+        self.vm_exec_state.tick_count = 0;
+        self.vm_exec_state.task_id = task_id;
+        self.vm_exec_state.exec_command_request(
             *permissions,
             verb.1,
             Box::new(verb_call),
-            Some(Box::new(command)),
+            &command,
             verb.0,
         );
+        self.running = true;
     }
 
     /// Setup for executing a method call in this VM.
@@ -200,7 +204,6 @@ impl VmHost {
             *perms,
             verb_info.1,
             Box::new(verb_call),
-            None,
             verb_info.0,
         )
     }
@@ -222,7 +225,6 @@ impl VmHost {
         permissions: Obj,
         resolved_verb: VerbDef,
         call: Box<VerbCall>,
-        command: Option<Box<ParsedCommand>>,
         program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
@@ -230,7 +232,7 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state
-            .exec_call_request(permissions, resolved_verb, call, command, program);
+            .exec_call_request(permissions, resolved_verb, call, program);
         self.running = true;
     }
 
@@ -331,7 +333,6 @@ impl VmHost {
                         exec_request.permissions,
                         exec_request.resolved_verb,
                         exec_request.call,
-                        exec_request.command,
                         exec_request.program,
                     );
                     return ContinueOk;
