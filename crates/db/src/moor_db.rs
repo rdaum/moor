@@ -14,7 +14,7 @@
 use crate::config::DatabaseConfig;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
-use crate::prop_cache::PropResolutionCache;
+use crate::prop_cache::{PropResolutionCache, SysobjNameCache};
 use crate::tx_management::{
     Canonical, CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
 };
@@ -60,6 +60,7 @@ pub struct Caches {
     pub verb_resolution_cache: Box<VerbResolutionCache>,
     pub prop_resolution_cache: Box<PropResolutionCache>,
     pub ancestry_cache: Box<AncestryCache>,
+    pub sysobj_name_cache: Box<SysobjNameCache>,
 }
 
 impl Caches {
@@ -68,6 +69,7 @@ impl Caches {
             verb_resolution_cache: Box::new(VerbResolutionCache::new()),
             prop_resolution_cache: Box::new(PropResolutionCache::new()),
             ancestry_cache: Box::new(AncestryCache::default()),
+            sysobj_name_cache: Box::new(SysobjNameCache::new()),
         }
     }
 
@@ -76,6 +78,7 @@ impl Caches {
             verb_resolution_cache: self.verb_resolution_cache.fork(),
             prop_resolution_cache: self.prop_resolution_cache.fork(),
             ancestry_cache: self.ancestry_cache.fork(),
+            sysobj_name_cache: self.sysobj_name_cache.fork(),
         }
     }
 
@@ -83,6 +86,7 @@ impl Caches {
         self.verb_resolution_cache.has_changed()
             || self.prop_resolution_cache.has_changed()
             || self.ancestry_cache.has_changed()
+            || self.sysobj_name_cache.has_changed()
     }
 }
 
@@ -228,6 +232,7 @@ impl MoorDB {
             forked_caches.verb_resolution_cache,
             forked_caches.prop_resolution_cache,
             forked_caches.ancestry_cache,
+            forked_caches.sysobj_name_cache,
         )
     }
 
@@ -367,7 +372,7 @@ impl MoorDB {
                     // Get the transaction timestamp and mutations flag before extracting working sets
                     let tx_timestamp = ws.tx.ts;
                     let has_mutations = ws.has_mutations;
-                    let (relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
+                    let (relation_ws, verb_cache, prop_cache, ancestry_cache, sysobj_name_cache) = ws.extract_relation_working_sets();
                     {
                         if !checkers.check_all(&relation_ws) {
                             reply.send(CommitResult::ConflictRetry).ok();
@@ -385,6 +390,7 @@ impl MoorDB {
                                 verb_resolution_cache: verb_cache,
                                 prop_resolution_cache: prop_cache,
                                 ancestry_cache,
+                                sysobj_name_cache,
                             };
                             if combined_caches.has_changed() {
                                 this.caches.store(Arc::new(combined_caches));
@@ -453,6 +459,7 @@ impl MoorDB {
                             verb_resolution_cache: verb_cache,
                             prop_resolution_cache: prop_cache,
                             ancestry_cache,
+                            sysobj_name_cache,
                         };
                         if combined_caches.has_changed() {
                             this.caches.store(Arc::new(combined_caches));

@@ -126,6 +126,14 @@ impl Drop for TaskGuard {
     }
 }
 
+/// Check if there's an active transaction.
+pub fn has_current_transaction() -> bool {
+    CURRENT_CONTEXT.with(|ctx| {
+        let ctx_ref = ctx.borrow();
+        ctx_ref.is_some()
+    })
+}
+
 /// Execute a closure with access to the current transaction.
 /// Panics if no context is active.
 pub fn with_current_transaction<R>(f: impl FnOnce(&dyn WorldState) -> R) -> R {

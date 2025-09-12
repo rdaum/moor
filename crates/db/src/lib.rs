@@ -50,6 +50,7 @@ mod config;
 mod gc;
 pub mod prop_cache;
 mod snapshot_loader;
+mod sysobj_cache;
 mod tx_management;
 mod utils;
 pub mod verb_cache;

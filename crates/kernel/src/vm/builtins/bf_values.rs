@@ -14,10 +14,11 @@
 //! Builtin functions for value inspection, conversion, and manipulation.
 
 use crate::task_context::with_current_transaction;
+use crate::util::{ws_obj_print, ws_to_literal};
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
-use moor_compiler::{offset_for_builtin, to_literal};
+use moor_compiler::offset_for_builtin;
 use moor_var::{AsByteBuffer, Sequence};
 use moor_var::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_var::{Variant, v_err};
@@ -42,7 +43,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Float(f) => result.push_str(format!("{f:?}").as_str()),
             Variant::Str(s) => result.push_str(s.as_str()),
             Variant::Binary(b) => result.push_str(&format!("<binary {} bytes>", b.len())),
-            Variant::Obj(o) => result.push_str(&o.to_string()),
+            Variant::Obj(o) => result.push_str(&ws_obj_print(o)),
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
             Variant::Sym(s) => result.push_str(&s.to_string()),
@@ -110,7 +111,7 @@ fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    let literal = to_literal(&bf_args.args[0]);
+    let literal = ws_to_literal(&bf_args.args[0]);
     Ok(Ret(v_str(literal.as_str())))
 }
 
@@ -272,7 +273,7 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("value_hash() requires exactly 1 argument"),
         ));
     }
-    let s = to_literal(&bf_args.args[0]);
+    let s = ws_to_literal(&bf_args.args[0]);
     let hash_digest = md5::Md5::digest(s.as_bytes());
     Ok(Ret(v_str(
         format!("{hash_digest:x}").to_uppercase().as_str(),

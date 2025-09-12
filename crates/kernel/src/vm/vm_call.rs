@@ -24,13 +24,14 @@ use crate::vm::vm_unwind::FinallyReason;
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
 
+use crate::util::ws_to_literal;
 use lazy_static::lazy_static;
 use minstant::Instant;
 use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::model::WorldStateError;
 use moor_common::tasks::Session;
-use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
+use moor_compiler::{BUILTINS, BuiltinId, Program};
 use moor_var::VarType::TYPE_NONE;
 use moor_var::program::ProgramType;
 use moor_var::program::names::GlobalName;
@@ -192,7 +193,7 @@ impl VMExecState {
                 return self.push_error(E_VERBNF.with_msg(|| {
                     format!(
                         "Verb {}:{} not found",
-                        to_literal(&v_obj(location)),
+                        ws_to_literal(&v_obj(location)),
                         verb_name,
                     )
                 }));

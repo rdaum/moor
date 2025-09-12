@@ -226,6 +226,7 @@ macro_rules! define_relations {
                 /// - `verb_resolution_cache`: Forked verb resolution cache
                 /// - `prop_resolution_cache`: Forked property resolution cache
                 /// - `ancestry_cache`: Forked ancestry cache
+                /// - `sysobj_name_cache`: Forked sysobj name cache
                 #[allow(clippy::too_many_arguments)]
                 fn start_transaction(&self,
                     tx: Tx,
@@ -234,7 +235,8 @@ macro_rules! define_relations {
                     sequences: [Arc<CachePadded<AtomicI64>>; 16],
                     verb_resolution_cache: Box<VerbResolutionCache>,
                     prop_resolution_cache: Box<PropResolutionCache>,
-                    ancestry_cache: Box<AncestryCache>
+                    ancestry_cache: Box<AncestryCache>,
+                    sysobj_name_cache: Box<SysobjNameCache>
                 ) -> WorldStateTransaction {
                     WorldStateTransaction {
                         tx: tx.clone(),
@@ -245,6 +247,7 @@ macro_rules! define_relations {
                         verb_resolution_cache,
                         prop_resolution_cache,
                         ancestry_cache,
+                        sysobj_name_cache,
                         has_mutations: false,
                     }
                 }
@@ -281,6 +284,7 @@ macro_rules! define_relations {
                 pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
                 pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
                 pub(crate) ancestry_cache: Box<AncestryCache>,
+                pub(crate) sysobj_name_cache: Box<SysobjNameCache>,
                 pub(crate) has_mutations: bool,
             }
 
@@ -304,11 +308,12 @@ macro_rules! define_relations {
                 /// - `Box<VerbResolutionCache>`: Verb resolution cache
                 /// - `Box<PropResolutionCache>`: Property resolution cache
                 /// - `Box<AncestryCache>`: Ancestry cache
-                fn extract_relation_working_sets(self) -> (RelationWorkingSets, Box<VerbResolutionCache>, Box<PropResolutionCache>, Box<AncestryCache>) {
+                /// - `Box<SysobjNameCache>`: Sysobj name cache
+                fn extract_relation_working_sets(self) -> (RelationWorkingSets, Box<VerbResolutionCache>, Box<PropResolutionCache>, Box<AncestryCache>, Box<SysobjNameCache>) {
                     let ws = RelationWorkingSets {
                         $( $field: self.$field, )*
                     };
-                    (ws, self.verb_resolution_cache, self.prop_resolution_cache, self.ancestry_cache)
+                    (ws, self.verb_resolution_cache, self.prop_resolution_cache, self.ancestry_cache, self.sysobj_name_cache)
                 }
             }
 
@@ -342,6 +347,8 @@ macro_rules! define_relations {
                 pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
                 /// Local fork of the ancestry cache
                 pub(crate) ancestry_cache: Box<AncestryCache>,
+                /// Local fork of the sysobj name cache
+                pub(crate) sysobj_name_cache: Box<SysobjNameCache>,
                 /// Whether this transaction has performed any mutations
                 pub(crate) has_mutations: bool,
             }
@@ -365,6 +372,7 @@ macro_rules! define_relations {
                         verb_resolution_cache: self.verb_resolution_cache,
                         prop_resolution_cache: self.prop_resolution_cache,
                         ancestry_cache: self.ancestry_cache,
+                        sysobj_name_cache: self.sysobj_name_cache,
                         has_mutations: self.has_mutations,
                     });
 

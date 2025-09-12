@@ -944,6 +944,42 @@ impl WorldState for DbWorldState {
         self.get_tx().db_usage()
     }
 
+    fn sysobj_name_cache(
+        &self,
+        perms: &Obj,
+    ) -> Result<std::collections::HashMap<Obj, Vec<Symbol>>, WorldStateError> {
+        use moor_var::SYSTEM_OBJECT;
+
+        // Check cache first
+        if let Some(cached) = self.get_tx().sysobj_name_cache.lookup() {
+            return Ok(cached);
+        }
+
+        // Build the cache by looking at all properties of #0 that contain object values
+        let mut result = std::collections::HashMap::new();
+        let properties = self.properties(perms, &SYSTEM_OBJECT)?;
+
+        for propdef in properties.iter() {
+            let prop_value = match self.retrieve_property(perms, &SYSTEM_OBJECT, propdef.name()) {
+                Ok(value) => value,
+                Err(_) => continue, // Skip properties we can't read
+            };
+
+            // Check if the value is an object
+            if let Some(obj) = prop_value.as_object() {
+                // Build reverse mapping: object -> list of property names
+                result
+                    .entry(obj)
+                    .or_insert_with(Vec::new)
+                    .push(propdef.name());
+            }
+        }
+
+        // Cache the result
+        self.get_tx().sysobj_name_cache.fill(result.clone());
+        Ok(result)
+    }
+
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.commit);
         self.tx.commit()

@@ -16,7 +16,9 @@ mod tests {
     use crate::DatabaseConfig;
     use crate::ObjAndUUIDHolder;
 
+    use crate::db_worldstate::DbWorldState;
     use crate::moor_db::MoorDB;
+    use moor_common::model::WorldState;
     use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
     use moor_common::model::{HasUuid, Named};
     use moor_common::model::{ObjAttrs, PropFlag, ValSet};
@@ -29,7 +31,7 @@ mod tests {
     use moor_var::program::ProgramType;
     use moor_var::program::program::Program;
     use moor_var::{NOTHING, SYSTEM_OBJECT};
-    use moor_var::{v_int, v_str};
+    use moor_var::{v_int, v_obj, v_str};
     use std::sync::Arc;
 
     fn test_db() -> Arc<MoorDB> {
@@ -3681,5 +3683,517 @@ mod tests {
         assert!(tx.object_valid(&result).unwrap());
 
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    fn test_sysobj_name_cache_basic() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create some test objects to reference from system object
+        let obj1 = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test1"),
+            )
+            .unwrap();
+        let obj2 = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test2"),
+            )
+            .unwrap();
+
+        // Add properties to system object that reference our test objects
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("thing1"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_obj(obj1)),
+        )
+        .unwrap();
+
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("thing2"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_obj(obj2)),
+        )
+        .unwrap();
+
+        // Add a non-object property to verify it's not included
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("string_prop"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_str("not_an_object")),
+        )
+        .unwrap();
+
+        // Commit first so cache can see the changes
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+        // Test the sysobj_name_cache function
+        let read_tx = db.start_transaction();
+        let ws = DbWorldState { tx: read_tx };
+        let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+
+        // Should have entries for obj1 and obj2, but string_prop doesn't reference any objects
+        assert_eq!(cache_result.len(), 2);
+        assert_eq!(
+            cache_result.get(&obj1).unwrap(),
+            &vec![Symbol::mk("thing1")]
+        );
+        assert_eq!(
+            cache_result.get(&obj2).unwrap(),
+            &vec![Symbol::mk("thing2")]
+        );
+        // string_prop doesn't reference an object, so no object should be mapped to "string_prop"
+    }
+
+    #[test]
+    fn test_sysobj_name_cache_multiple_refs_same_object() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create one object that will be referenced by multiple properties
+        let obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "shared_obj"),
+            )
+            .unwrap();
+
+        // Add multiple properties referencing the same object
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("name1"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_obj(obj)),
+        )
+        .unwrap();
+
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("name2"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_obj(obj)),
+        )
+        .unwrap();
+
+        tx.define_property(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("alias"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_obj(obj)),
+        )
+        .unwrap();
+
+        // Commit first so cache can see the changes
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+        let read_tx = db.start_transaction();
+        let ws = DbWorldState { tx: read_tx };
+        let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+
+        // Should have one entry (the shared object) mapping to three property names
+        assert_eq!(cache_result.len(), 1);
+        let names = cache_result.get(&obj).unwrap();
+        assert_eq!(names.len(), 3);
+        assert!(names.contains(&Symbol::mk("name1")));
+        assert!(names.contains(&Symbol::mk("name2")));
+        assert!(names.contains(&Symbol::mk("alias")));
+    }
+
+    #[test]
+    fn test_sysobj_name_cache_invalidation_add_property() {
+        let db = test_db();
+
+        // First transaction - add initial property
+        {
+            let mut tx = db.start_transaction();
+            let obj1 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test1"),
+                )
+                .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("initial"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj1)),
+            )
+            .unwrap();
+
+            // Commit first so cache can see the changes
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 1);
+        }
+
+        // Second transaction - add another property and verify cache is updated
+        {
+            let mut tx = db.start_transaction();
+            let obj2 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test2"),
+                )
+                .unwrap();
+
+            // Cache should still show only initial property
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 1);
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("initial")))
+            );
+
+            // Add new property - this should invalidate the cache
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("added"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj2)),
+            )
+            .unwrap();
+
+            // Commit so cache can see the new property
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            // Cache should now show both properties
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 2);
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("initial")))
+            );
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("added")))
+            );
+        }
+    }
+
+    #[test]
+    fn test_sysobj_name_cache_invalidation_remove_property() {
+        let db = test_db();
+
+        // First transaction - add two properties
+        {
+            let mut tx = db.start_transaction();
+            let obj1 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test1"),
+                )
+                .unwrap();
+            let obj2 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test2"),
+                )
+                .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("prop1"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj1)),
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("prop2"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj2)),
+            )
+            .unwrap();
+
+            // Commit first so cache can see the changes
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 2);
+        }
+
+        // Second transaction - remove one property
+        {
+            let mut tx = db.start_transaction();
+
+            // Cache should show both properties
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 2);
+
+            // Remove one property - this should invalidate the cache
+            let prop1 = tx
+                .resolve_property(&SYSTEM_OBJECT, Symbol::mk("prop1"))
+                .unwrap();
+            tx.delete_property(&SYSTEM_OBJECT, prop1.0.uuid()).unwrap();
+
+            // Commit so cache can see the deletion
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            // Cache should now show only one property
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 1);
+            assert!(
+                !cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("prop1")))
+            );
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("prop2")))
+            );
+        }
+    }
+
+    #[test]
+    fn test_sysobj_name_cache_invalidation_update_property() {
+        let db = test_db();
+
+        // First transaction - add property with object value
+        {
+            let mut tx = db.start_transaction();
+            let obj1 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test1"),
+                )
+                .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("changeable"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj1)),
+            )
+            .unwrap();
+
+            // Commit first so cache can see the changes
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 1);
+        }
+
+        // Second transaction - update property to different object
+        {
+            let mut tx = db.start_transaction();
+            let obj2 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test2"),
+                )
+                .unwrap();
+
+            let (prop, _, _, _) = tx
+                .resolve_property(&SYSTEM_OBJECT, Symbol::mk("changeable"))
+                .unwrap();
+
+            // Update property to reference different object - this should invalidate cache
+            tx.set_property(&SYSTEM_OBJECT, prop.uuid(), v_obj(obj2))
+                .unwrap();
+
+            // Commit so cache can see the update
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            // Cache should now show the updated object reference
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 1);
+            assert_eq!(
+                cache_result.get(&obj2).unwrap(),
+                &vec![Symbol::mk("changeable")]
+            );
+        }
+
+        // Third transaction - update property to non-object value
+        {
+            let mut tx = db.start_transaction();
+
+            let (prop, _, _, _) = tx
+                .resolve_property(&SYSTEM_OBJECT, Symbol::mk("changeable"))
+                .unwrap();
+
+            // Update property to string value - should remove from cache
+            tx.set_property(&SYSTEM_OBJECT, prop.uuid(), v_str("not_object"))
+                .unwrap();
+
+            // Commit so cache can see the update
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            // Cache should now be empty since no object properties exist
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 0);
+        }
+    }
+
+    #[test]
+    fn test_sysobj_name_cache_cross_transaction_consistency() {
+        let db = test_db();
+
+        // First transaction - create objects and properties
+        {
+            let mut tx = db.start_transaction();
+            let obj1 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test1"),
+                )
+                .unwrap();
+            let obj2 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test2"),
+                )
+                .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("persistent1"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj1)),
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("persistent2"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj2)),
+            )
+            .unwrap();
+
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+        }
+
+        // Second transaction - verify cache persists across transactions
+        {
+            let _tx = db.start_transaction();
+
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 2);
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("persistent1")))
+            );
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("persistent2")))
+            );
+
+            // No commit needed for read-only transaction
+        }
+
+        // Third transaction - modify and verify changes visible in new transaction
+        {
+            let mut tx = db.start_transaction();
+            let obj3 = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
+                )
+                .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("new_prop"),
+                &SYSTEM_OBJECT,
+                BitEnum::new(),
+                Some(v_obj(obj3)),
+            )
+            .unwrap();
+
+            // Commit so cache can see the new property
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 3);
+        }
+
+        // Fourth transaction - verify changes are visible
+        {
+            let _tx = db.start_transaction();
+
+            let read_tx = db.start_transaction();
+            let ws = DbWorldState { tx: read_tx };
+            let cache_result = ws.sysobj_name_cache(&SYSTEM_OBJECT).unwrap();
+            assert_eq!(cache_result.len(), 3);
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("persistent1")))
+            );
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("persistent2")))
+            );
+            assert!(
+                cache_result
+                    .values()
+                    .any(|symbols| symbols.contains(&Symbol::mk("new_prop")))
+            );
+        }
     }
 }

@@ -943,6 +943,12 @@ impl WorldStateTransaction {
         }
 
         self.has_mutations = true;
+
+        // Invalidate sysobj name cache if we're setting a property on the system object
+        if *obj == moor_var::SYSTEM_OBJECT {
+            self.sysobj_name_cache.flush();
+        }
+
         Ok(())
     }
 
@@ -986,6 +992,11 @@ impl WorldStateTransaction {
         })?;
         self.has_mutations = true;
         self.prop_resolution_cache.flush();
+
+        // Invalidate sysobj name cache if we're defining a property on the system object
+        if *location == moor_var::SYSTEM_OBJECT {
+            self.sysobj_name_cache.flush();
+        }
 
         // Always create propflags entry for the defining location (canonical permissions)
         upsert(
@@ -1068,6 +1079,12 @@ impl WorldStateTransaction {
             })?;
         self.has_mutations = true;
         self.prop_resolution_cache.flush();
+
+        // Invalidate sysobj name cache if we're clearing a property on the system object
+        if *obj == moor_var::SYSTEM_OBJECT {
+            self.sysobj_name_cache.flush();
+        }
+
         Ok(())
     }
 
@@ -1085,6 +1102,12 @@ impl WorldStateTransaction {
         }
         self.has_mutations = true;
         self.prop_resolution_cache.flush();
+
+        // Invalidate sysobj name cache if we're deleting a property from the system object
+        if *obj == moor_var::SYSTEM_OBJECT {
+            self.sysobj_name_cache.flush();
+        }
+
         Ok(())
     }
 
@@ -1281,13 +1304,16 @@ impl WorldStateTransaction {
         // Did we have any mutations at all?  If not, just fire and forget the verb cache and
         // return immediate success.
         if !self.has_mutations {
-            if self.verb_resolution_cache.has_changed() || self.prop_resolution_cache.has_changed()
+            if self.verb_resolution_cache.has_changed()
+                || self.prop_resolution_cache.has_changed()
+                || self.sysobj_name_cache.has_changed()
             {
                 self.commit_channel
                     .send(CommitSet::CommitReadOnly(Caches {
                         verb_resolution_cache: self.verb_resolution_cache,
                         prop_resolution_cache: self.prop_resolution_cache,
                         ancestry_cache: self.ancestry_cache,
+                        sysobj_name_cache: self.sysobj_name_cache,
                     }))
                     .expect("Unable to send commit request for read-only transaction");
             }
