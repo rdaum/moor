@@ -580,6 +580,7 @@ function AppWrapper() {
         Array<{
             content: string | string[];
             contentType?: string;
+            noNewline?: boolean;
         }>
     >([]);
 
@@ -588,6 +589,7 @@ function AppWrapper() {
         _timestamp?: string,
         contentType?: string,
         isHistorical?: boolean,
+        noNewline?: boolean,
     ) => {
         // Handle array content by processing each line
         if (Array.isArray(content)) {
@@ -606,9 +608,10 @@ function AppWrapper() {
                     narrativeRef.current.addNarrativeContent(
                         filteredContent,
                         contentType as "text/plain" | "text/djot" | "text/html",
+                        noNewline,
                     );
                 } else {
-                    setPendingMessages(prev => [...prev, { content: filteredContent, contentType }]);
+                    setPendingMessages(prev => [...prev, { content: filteredContent, contentType, noNewline }]);
                 }
             }
         } else {
@@ -619,9 +622,10 @@ function AppWrapper() {
                     narrativeRef.current.addNarrativeContent(
                         content,
                         contentType as "text/plain" | "text/djot" | "text/html",
+                        noNewline,
                     );
                 } else {
-                    setPendingMessages(prev => [...prev, { content, contentType }]);
+                    setPendingMessages(prev => [...prev, { content, contentType, noNewline }]);
                 }
             }
         }
@@ -639,8 +643,8 @@ function AppWrapper() {
     const narrativeCallbackRef = useCallback((node: NarrativeRef | null) => {
         if (node) {
             // Process any pending messages
-            pendingMessages.forEach(({ content, contentType }) => {
-                node.addNarrativeContent(content, contentType as "text/plain" | "text/djot" | "text/html");
+            pendingMessages.forEach(({ content, contentType, noNewline }) => {
+                node.addNarrativeContent(content, contentType as "text/plain" | "text/djot" | "text/html", noNewline);
             });
             if (pendingMessages.length > 0) {
                 setPendingMessages([]);

@@ -22,6 +22,7 @@ interface OutputWindowProps {
         timestamp?: number;
         isHistorical?: boolean;
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
+        noNewline?: boolean;
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
@@ -227,19 +228,75 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                 </div>
             )}
 
-            {/* Render all messages */}
-            {messages.map((message) => (
-                <div
-                    key={message.id}
-                    className={getMessageClassName(message.type, message.isHistorical)}
-                >
-                    <ContentRenderer
-                        content={message.content}
-                        contentType={message.contentType}
-                        onLinkClick={onLinkClick}
-                    />
-                </div>
-            ))}
+            {/* Render all messages, grouping no_newline messages */}
+            {(() => {
+                const groupedMessages = [];
+                let currentGroup = [];
+
+                for (let i = 0; i < messages.length; i++) {
+                    const message = messages[i];
+                    currentGroup.push(message);
+
+                    // If this message doesn't suppress newlines or it's the last message,
+                    // complete the current group
+                    if (!message.noNewline || i === messages.length - 1) {
+                        groupedMessages.push(currentGroup);
+                        currentGroup = [];
+                    }
+                }
+
+                return groupedMessages.map((group, groupIndex) => {
+                    if (group.length === 1) {
+                        // Single message - render normally without any grouping changes
+                        const message = group[0];
+                        return (
+                            <div
+                                key={message.id}
+                                className={getMessageClassName(message.type, message.isHistorical)}
+                            >
+                                <ContentRenderer
+                                    content={message.content}
+                                    contentType={message.contentType}
+                                    onLinkClick={onLinkClick}
+                                />
+                            </div>
+                        );
+                    } else {
+                        // Multiple messages grouped together - combine content preserving each message's format
+                        const lastMessage = group[group.length - 1];
+
+                        // Convert all messages to their rendered form and combine as HTML
+                        const combinedHtml = group.map(msg => {
+                            const content = typeof msg.content === "string"
+                                ? msg.content
+                                : Array.isArray(msg.content)
+                                ? msg.content.join("")
+                                : "";
+
+                            // If it's HTML, use as-is; if it's plain text, escape it
+                            if (msg.contentType === "text/html") {
+                                return content;
+                            } else {
+                                // Escape HTML characters for non-HTML content
+                                return content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                            }
+                        }).join("");
+
+                        return (
+                            <div
+                                key={`group_${groupIndex}_${lastMessage.id}`}
+                                className={getMessageClassName(lastMessage.type, lastMessage.isHistorical)}
+                            >
+                                <ContentRenderer
+                                    content={combinedHtml}
+                                    contentType="text/html"
+                                    onLinkClick={onLinkClick}
+                                />
+                            </div>
+                        );
+                    }
+                });
+            })()}
         </div>
     );
 };

@@ -37,8 +37,13 @@ pub struct NarrativeEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum Event {
     /// The typical "something happened" descriptive event.
-    /// Value & Content-Type
-    Notify(Var, Option<Symbol>),
+    /// Value, Content-Type, no_flush, no_newline
+    Notify {
+        value: Var,
+        content_type: Option<Symbol>,
+        no_flush: bool,
+        no_newline: bool,
+    },
     /// A "presentation" event, which is a recommendation to the client to present something to the
     /// user in a particular way.
     Present(Presentation),
@@ -74,12 +79,23 @@ pub struct Presentation {
 
 impl NarrativeEvent {
     #[must_use]
-    pub fn notify(author: Var, value: Var, content_type: Option<Symbol>) -> Self {
+    pub fn notify(
+        author: Var,
+        value: Var,
+        content_type: Option<Symbol>,
+        no_flush: bool,
+        no_newline: bool,
+    ) -> Self {
         Self {
             event_id: Uuid::now_v7(),
             timestamp: SystemTime::now(),
             author,
-            event: Event::Notify(value, content_type),
+            event: Event::Notify {
+                value,
+                content_type,
+                no_flush,
+                no_newline,
+            },
         }
     }
 

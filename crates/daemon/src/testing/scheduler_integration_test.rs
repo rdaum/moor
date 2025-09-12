@@ -136,7 +136,13 @@ mod tests {
             &env.event_log,
             player_obj,
             |event| {
-                if let Event::Notify(content, _) = event {
+                if let Event::Notify {
+                    value: content,
+                    content_type: _,
+                    no_flush: _,
+                    no_newline: _,
+                } = event
+                {
                     if let Some(str) = content.as_string() {
                         str.contains(expected_output)
                     } else {
@@ -567,7 +573,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &env.event_log,
             player_obj,
             |event| {
-                if let Event::Notify(content, _) = event {
+                if let Event::Notify {
+                    value: content,
+                    content_type: _,
+                    no_flush: _,
+                    no_newline: _,
+                } = event
+                {
                     if let Some(str) = content.as_string() {
                         str == "This is all there is right now."
                     } else {
@@ -890,7 +902,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             &env.event_log,
             player_obj,
             |event| {
-                if let Event::Notify(content, _) = event {
+                if let Event::Notify {
+                    value: content,
+                    content_type: _,
+                    no_flush: _,
+                    no_newline: _,
+                } = event
+                {
                     if let Some(str) = content.as_string() {
                         str == "This is all there is right now."
                     } else {
@@ -1024,7 +1042,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 &env.event_log,
                 player_obj_2,
                 |event| {
-                    if let Event::Notify(content, _) = event {
+                    if let Event::Notify {
+                        value: content,
+                        content_type: _,
+                        no_flush: _,
+                        no_newline: _,
+                    } = event
+                    {
                         if let Some(str) = content.as_string() {
                             str.contains("Permission denied") || str.contains("E_PERM")
                         } else {

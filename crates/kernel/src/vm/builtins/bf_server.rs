@@ -65,13 +65,13 @@ pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Sends a notification message to a player.
-/// MOO: `none notify(obj player, str message [, str content_type])`
+/// MOO: `none notify(obj player, str message [, int no_flush [, int no_newline [, str content_type]]])`
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If in non rich-mode `notify` can only send text.
     // Otherwise, it can send any value, and it's up to the host/client to interpret it.
     if !bf_args.config.rich_notify {
-        if bf_args.args.len() != 2 {
-            return Err(ErrValue(E_ARGS.msg("notify() requires 2 arguments")));
+        if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+            return Err(ErrValue(E_ARGS.msg("notify() requires 2 to 4 arguments")));
         }
         if bf_args.args[1].type_code() != TYPE_STR {
             return Err(ErrValue(
@@ -80,8 +80,8 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(ErrValue(E_ARGS.msg("notify() requires 2 or 3 arguments")));
+    if bf_args.args.len() < 2 || bf_args.args.len() > 5 {
+        return Err(ErrValue(E_ARGS.msg("notify() requires 2 to 5 arguments")));
     }
 
     let Some(player) = bf_args.args[0].as_object() else {
@@ -96,16 +96,31 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_obj_owner_perms(&player)
         .map_err(world_state_bf_err)?;
 
-    let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 3 {
-        let content_type = bf_args.args[2].as_symbol().map_err(ErrValue)?;
+    let no_flush = if bf_args.args.len() > 2 {
+        bf_args.args[2].is_true()
+    } else {
+        false
+    };
+
+    let no_newline = if bf_args.args.len() > 3 {
+        bf_args.args[3].is_true()
+    } else {
+        false
+    };
+
+    let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 5 {
+        let content_type = bf_args.args[4].as_symbol().map_err(ErrValue)?;
         Some(content_type)
     } else {
         None
     };
+
     let event = NarrativeEvent::notify(
         bf_args.exec_state.this(),
         bf_args.args[1].clone(),
         content_type,
+        no_flush,
+        no_newline,
     );
     current_task_scheduler_client().notify(player, Box::new(event));
 

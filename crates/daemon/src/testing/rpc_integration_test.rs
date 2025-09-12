@@ -770,7 +770,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             event_id: uuid::Uuid::now_v7(),
             timestamp: std::time::SystemTime::now(),
             author: moor_var::v_str("test_author"),
-            event: moor_common::tasks::Event::Notify(moor_var::v_str("Test message"), None),
+            event: moor_common::tasks::Event::Notify {
+                value: moor_var::v_str("Test message"),
+                content_type: None,
+                no_flush: false,
+                no_newline: false,
+            },
         });
 
         // Test event logging
@@ -865,16 +870,22 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 moor_var::v_obj(SYSTEM_OBJECT),
                 moor_var::v_str("Hello, world!"),
                 None,
+                false,
+                false,
             ),
             NarrativeEvent::notify(
                 moor_var::v_obj(SYSTEM_OBJECT),
                 moor_var::v_str("System notification"),
                 Some(moor_var::Symbol::mk("text/plain")),
+                false,
+                false,
             ),
             NarrativeEvent::notify(
                 moor_var::v_obj(connection_obj),
                 moor_var::v_str("Connection message"),
                 None,
+                false,
+                false,
             ),
         ];
 
@@ -1718,7 +1729,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let input_reply_found = client_replies.iter().any(|(_, msg, reply)| {
             matches!(msg, rpc_common::HostClientToDaemonMessage::RequestedInput(_, _, captured_id, _) 
                      if *captured_id == request_id) &&
-            matches!(reply, Ok(rpc_common::DaemonToClientReply::InputThanks) | Err(_))
+                matches!(reply, Ok(rpc_common::DaemonToClientReply::InputThanks) | Err(_))
         });
         assert!(input_reply_found, "Should have found input response reply");
 

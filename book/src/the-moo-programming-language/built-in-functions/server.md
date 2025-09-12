@@ -2,11 +2,52 @@
 
 ### `notify`
 
-**Description:** Sends a notification message to a player or set of players.  
+**Description:** Sends a notification message to a player connection. This function supports both basic text output and
+rich content types for enhanced clients.
+
+**Syntax:** `int notify(obj player, any message [, bool no_flush [, bool no_newline [, str content_type]]])`
+
 **Arguments:**
 
-- : The player or list of players to notify `player`
-- : The message text to send `message`
+- `player`: The player or connection object to notify
+- `message`: The message content to send (can be any type
+  in [rich mode](../../the-system/server-configuration.md#language-features-configuration), must be string otherwise)
+- `no_flush`: (Optional) If true, don't immediately flush network buffers (performance optimization)
+- `no_newline`: (Optional) If true, don't add a newline character after the message
+- `content_type`: (Optional) Content type for rich clients ("text/plain", "text/html", "text/djot", etc.)
+
+**Returns:** Integer (typically 1 on success)
+
+**Permission Requirements:**
+
+- Must be the target player, own the target player, or be a wizard
+
+**Examples:**
+
+```moo
+// Basic notification
+notify(player, "Hello, world!");
+
+// Buffer control for performance  
+notify(player, "Multiple ", true, true);  // No flush, no newline
+notify(player, "messages ", true, true);  // No flush, no newline  
+notify(player, "together", false, false);   // Flush and add newline
+
+// Rich content notification (requires rich_notify server option)
+notify(player, "# Welcome\nThis is *markdown*!", false, false, "text/markdown");
+notify(player, "<h1>Welcome</h1><p>HTML content</p>", false, false, "text/html");
+notify(player, "= Welcome\nThis is {em}djot{/em}!", false, false, "text/djot");
+```
+
+**Notes:**
+
+- In non-rich mode, only strings are allowed for `message` and `content_type` is ignored
+- [Rich mode](../../the-system/server-configuration.md#language-features-configuration) allows any value type for
+  `message` - the client determines how to render it
+- `no_flush` controls network buffer flushing for performance optimization
+- `no_newline` controls whether a newline is automatically appended to messages
+- Content types help rich clients (web, mobile) render content appropriately
+- Telnet clients receive formatted plain text regardless of content type
 
 ### `present`
 

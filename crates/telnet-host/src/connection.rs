@@ -686,11 +686,26 @@ impl TelnetConnection {
 
     async fn output(&mut self, event: Event) -> Result<(), eyre::Error> {
         match event {
-            Event::Notify(msg, content_type) => {
-                let Ok(formatted) = output_format(&msg, content_type) else {
+            Event::Notify {
+                value: msg,
+                content_type,
+                no_flush,
+                no_newline,
+            } => {
+                let Ok(mut formatted) = output_format(&msg, content_type) else {
                     warn!("Failed to format message: {:?}", msg);
                     return Ok(());
                 };
+
+                // Handle no_newline: if false, add newline; if true, don't add newline
+                if !no_newline && !formatted.ends_with('\n') {
+                    formatted.push('\n');
+                }
+
+                // TODO: Handle no_flush - for now telnet doesn't have buffer control
+                //   but we could potentially batch messages or use different send methods
+                let _ = no_flush; // Acknowledge parameter for now
+
                 self.write
                     .send(TelnetEvent::Message(formatted))
                     .await
@@ -1081,13 +1096,24 @@ impl TelnetConnection {
             ClientEvent::Narrative(_author, event) => {
                 let msg = event.event();
                 match &msg {
-                    Event::Notify(msg, content_type) => {
-                        let output_str = output_format(msg, *content_type)?;
+                    Event::Notify {
+                        value: msg,
+                        content_type,
+                        no_flush,
+                        no_newline,
+                    } => {
+                        let mut output_str = output_format(msg, *content_type)?;
+
+                        // Handle no_newline: if false, add newline; if true, don't add newline
+                        if !no_newline && !output_str.ends_with('\n') {
+                            output_str.push('\n');
+                        }
+
+                        // TODO: Handle no_flush - acknowledge for now
+                        let _ = no_flush;
+
                         self.write
-                            .send(TelnetEvent::Message(output_str_format(
-                                &output_str,
-                                *content_type,
-                            )?))
+                            .send(TelnetEvent::Message(output_str))
                             .await
                             .expect("Unable to send message to client");
                     }

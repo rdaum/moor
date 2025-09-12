@@ -70,6 +70,9 @@ pub struct NarrativeOutput {
     /// If this is a message, the content type of the message, e.g. text/plain, text/html, etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     content_type: Option<String>,
+    /// Whether to suppress the automatic newline for this message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    no_newline: Option<bool>,
     /// When the event happened, in the server's system time.
     server_time: SystemTime,
     /// If this is a presentation, the presentation.
@@ -241,7 +244,15 @@ impl WebSocketConnection {
                 let msg = event.event();
                 let event_id = event.event_id().to_string();
                 match &msg {
-                    Event::Notify(msg, content_type) => {
+                    Event::Notify {
+                        value: msg,
+                        content_type,
+                        no_flush,
+                        no_newline,
+                    } => {
+                        // In web context, no_flush isn't directly applicable (websockets handle buffering)
+                        // but no_newline can be passed to the client for proper message concatenation.
+                        let _ = no_flush; // Acknowledge parameter - not used in websocket context
                         let content_type =
                             Self::normalize_content_type(content_type.map(|s| s.to_string()));
                         Self::emit_narrative_msg(
@@ -250,6 +261,7 @@ impl WebSocketConnection {
                             event.author(),
                             content_type,
                             msg.clone(),
+                            if *no_newline { Some(true) } else { None },
                         )
                         .await;
                     }
@@ -566,6 +578,7 @@ impl WebSocketConnection {
                 system_message: None,
                 message: None,
                 content_type: Self::normalize_content_type(Some(present.content_type.clone())),
+                no_newline: None,
                 server_time: SystemTime::now(),
                 present: Some(present),
                 unpresent: None,
@@ -589,6 +602,7 @@ impl WebSocketConnection {
                 system_message: None,
                 message: None,
                 content_type: None,
+                no_newline: None,
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: Some(id),
@@ -604,6 +618,7 @@ impl WebSocketConnection {
         author: &Var,
         content_type: Option<String>,
         msg: Var,
+        no_newline: Option<bool>,
     ) {
         Self::emit_narrative(
             ws_sender,
@@ -613,6 +628,7 @@ impl WebSocketConnection {
                 system_message: None,
                 message: Some(var_as_json(&msg)),
                 content_type,
+                no_newline,
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: None,
@@ -636,6 +652,7 @@ impl WebSocketConnection {
                 system_message: Some(msg),
                 message: None,
                 content_type,
+                no_newline: None,
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: None,
@@ -666,6 +683,7 @@ impl WebSocketConnection {
                 system_message: None,
                 message: None,
                 content_type: None,
+                no_newline: None,
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: None,

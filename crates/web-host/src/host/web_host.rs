@@ -614,7 +614,10 @@ pub async fn history_handler(
                     "event_id": e.event.event_id(),
                     "author": var_as_json(e.event.author()),
                     "message": match e.event.event() {
-                        Event::Notify(msg, content_type) => {
+                        Event::Notify { value: msg, content_type, no_flush, no_newline } => {
+                            // TODO: In web/JSON context, no_flush and no_newline are not directly applicable
+                            //  but we could potentially expose them as attributes for client handling
+                            let _ = (no_flush, no_newline); // Acknowledge parameters
                             // Normalize content type to match live events (text_djot -> text/djot, etc.)
                             let normalized_content_type = content_type.as_ref().map(|ct| {
                                 match ct.as_string().as_str() {

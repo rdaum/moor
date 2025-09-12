@@ -69,21 +69,40 @@ You can discover the content types supported by a connection using the `connecti
 foreach conn in (connections())
     {connection_obj, hostname, idle_time, content_types} = conn;
     if ("text/html" in content_types)
-        notify(connection_obj, "<h1>Welcome!</h1>", "text/html");
+        notify(connection_obj, "<h1>Welcome!</h1>", false, false, "text/html");
     else
-        notify(connection_obj, "# Welcome!", "text/markdown");
+        notify(connection_obj, "# Welcome!", false, false, "text/markdown");
     endif
 endfor
 ```
 
-### Using Content Types with notify()
+### Advanced notify() Options
 
-The `notify()` function supports an optional third argument for specifying content type:
+The `notify()` function supports additional optional arguments for performance control and content types:
+
+**Full Syntax:** `notify(player, message [, no_flush [, no_newline [, content_type]]])`
+
+- **3rd argument (`no_flush`)**: If true, don't immediately flush network buffers - useful for sending multiple messages
+  quickly
+- **4th argument (`no_newline`)**: If true, don't add a newline after the message - useful for building output on one
+  line
+- **5th argument (`content_type`)**: Specify content type for rich clients ("text/plain", "text/html", "
+  text/markdown", "text/djot", etc.)
 
 ```moo
-notify(player, "Hello **world**!", "text/markdown");
-notify(player, "<strong>Hello world!</strong>", "text/html");
-notify(player, "Hello world!");  // defaults to text/plain
+// Basic usage
+notify(player, "Hello world!");
+
+// Performance optimization - send multiple parts without flushing
+notify(player, "Loading", true, true);        // no flush, no newline
+notify(player, ".", true, true);              // no flush, no newline  
+notify(player, ".", true, true);              // no flush, no newline
+notify(player, ". done!", false, false);      // flush and add newline
+
+// Rich content with different formats
+notify(player, "Hello **world**!", false, false, "text/markdown");
+notify(player, "<strong>Hello world!</strong>", false, false, "text/html");
+notify(player, "Hello world!");               // defaults to text/plain
 ```
 
 ### The `connections()` Function
@@ -94,6 +113,7 @@ or a specified player (with wizard permissions).
 **Syntax**: `connections()` or `connections(player)`
 
 **Returns**: A list of lists containing connection details. Each inner list contains:
+
 - Index 0: The connection object (negative ID, e.g., #-42)
 - Index 1: The hostname/connection name (string)
 - Index 2: The idle time in seconds (float)
@@ -297,15 +317,16 @@ until the worker completes the request and then wake it to return the result.
 
 ### The `workers()` Function
 
-The `workers()` builtin function provides information about all available workers and their current state. This is 
+The `workers()` builtin function provides information about all available workers and their current state. This is
 useful for monitoring worker health, debugging worker-related issues, and understanding system capacity.
 
 **Syntax**: `workers()`
 
 **Returns**: A list of lists containing worker information. Each inner list contains:
+
 - Index 1: The worker type (string or symbol, e.g., "curl")
 - Index 2: The number of workers of this type currently active (integer)
-- Index 3: The total number of requests currently queued across all workers of this type (integer) 
+- Index 3: The total number of requests currently queued across all workers of this type (integer)
 - Index 4: The average response time in milliseconds (float, currently always 0.0)
 - Index 5: The time in seconds since the last ping from workers of this type (float)
 
@@ -349,7 +370,7 @@ result = worker_request("curl", {"GET", "https://api.example.com/status"});
 The `workers()` function is particularly useful for:
 
 - **System monitoring**: Check if workers are healthy and responsive
-- **Load balancing**: Understand queue sizes before sending requests  
+- **Load balancing**: Understand queue sizes before sending requests
 - **Debugging**: Diagnose worker-related issues when requests fail
 - **Capacity planning**: Monitor worker utilization over time
 

@@ -141,7 +141,13 @@ impl EventLogOps for MockEventLog {
         let event_id = event.event_id();
 
         match &event.event {
-            moor_common::tasks::Event::Notify(_, _) | moor_common::tasks::Event::Traceback(_) => {
+            moor_common::tasks::Event::Notify {
+                value: _,
+                content_type: _,
+                no_flush: _,
+                no_newline: _,
+            }
+            | moor_common::tasks::Event::Traceback(_) => {
                 // Store narrative events
                 let logged_event = LoggedNarrativeEvent { player, event };
                 self.narrative_events

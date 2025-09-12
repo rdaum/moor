@@ -442,7 +442,13 @@ impl EventLog {
         }
 
         match &event.event {
-            Event::Notify(_, _) | Event::Traceback(_) => {
+            Event::Notify {
+                value: _,
+                content_type: _,
+                no_flush: _,
+                no_newline: _,
+            }
+            | Event::Traceback(_) => {
                 // Store narrative events in chronological log
                 self.append_narrative_event(player, event)
             }
@@ -1139,7 +1145,12 @@ mod tests {
             event_id: Uuid::now_v7(),
             timestamp: SystemTime::now(),
             author: v_str("test"),
-            event: Event::Notify(v_str(message), None),
+            event: Event::Notify {
+                value: v_str(message),
+                content_type: None,
+                no_flush: false,
+                no_newline: false,
+            },
         })
     }
 
@@ -1664,10 +1675,7 @@ mod tests {
         for event in &disk_events {
             assert_eq!(event.player, player);
             // Verify it's a notify event
-            assert!(matches!(
-                event.event.event,
-                moor_common::tasks::Event::Notify(_, _)
-            ));
+            assert!(matches!(event.event.event, Event::Notify { .. }));
         }
     }
 

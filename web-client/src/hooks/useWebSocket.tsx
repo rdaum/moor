@@ -22,6 +22,7 @@ export interface WebSocketMessage {
     unpresent?: string;
     traceback?: any;
     server_time?: string;
+    no_newline?: boolean;
 }
 
 export interface WebSocketState {
@@ -40,6 +41,7 @@ export const useWebSocket = (
         timestamp?: string,
         contentType?: string,
         isHistorical?: boolean,
+        noNewline?: boolean,
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
@@ -87,7 +89,7 @@ export const useWebSocket = (
                 const contentType = (data as any).content_type;
 
                 if (onNarrativeMessage) {
-                    onNarrativeMessage(content, data.server_time, contentType, false); // WebSocket messages are always live (not historical)
+                    onNarrativeMessage(content, data.server_time, contentType, false, data.no_newline); // WebSocket messages are always live (not historical)
                 }
             } else if (data.present) {
                 // Presentation message - handle present
@@ -104,7 +106,7 @@ export const useWebSocket = (
                 console.error("MOO Traceback:", data.traceback);
                 if (onNarrativeMessage) {
                     const tracebackText = `${data.traceback.error}\n${data.traceback.traceback.join("\n")}`;
-                    onNarrativeMessage(tracebackText, data.server_time, "text/traceback", false);
+                    onNarrativeMessage(tracebackText, data.server_time, "text/traceback", false, false);
                 }
             }
 
