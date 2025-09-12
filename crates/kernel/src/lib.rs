@@ -28,6 +28,7 @@ pub mod tracing_events;
 pub mod vm;
 
 pub mod testing;
+mod util;
 
 /// A phantom type for explicitly marking types as !Sync
 type PhantomUnsync = PhantomData<Cell<()>>;

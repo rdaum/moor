@@ -17,13 +17,14 @@ use crate::vm::exec_state::VMExecState;
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_host::ExecutionResult;
 
+use crate::util::{ws_obj_print, ws_to_literal};
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
 use bincode::{Decode, Encode};
 use moor_common::model::Named;
 use moor_common::model::VerbFlag;
 use moor_common::tasks::Exception;
-use moor_compiler::{BUILTINS, Label, Offset, to_literal};
+use moor_compiler::{BUILTINS, Label, Offset};
 use moor_var::{Error, NOTHING, v_arc_string, v_bool, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
 use tracing::warn;
@@ -101,7 +102,11 @@ impl VMExecState {
             // TODO: abstract this a bit further, putting it onto the frame itself
             match &a.frame {
                 Frame::Moo(_) => {
-                    pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
+                    pieces.push(format!(
+                        "{}:{}",
+                        ws_obj_print(&a.verb_definer()),
+                        a.verb_name
+                    ));
                 }
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
@@ -109,7 +114,7 @@ impl VMExecState {
                 }
             }
             if v_obj(a.verb_definer()) != a.this {
-                pieces.push(format!(" (this == {})", to_literal(&a.this)));
+                pieces.push(format!(" (this == {})", ws_to_literal(&a.this)));
             }
             if let Some(line_num) = a.frame.find_line_no() {
                 pieces.push(format!(" (line {line_num})"));
@@ -152,7 +157,7 @@ impl VMExecState {
         let verb_this_name = verb_frame.map(|a| {
             format!(
                 "{}:{} line: {:?}",
-                to_literal(&a.this),
+                ws_to_literal(&a.this),
                 a.verb_name.as_arc_string(),
                 a.frame.find_line_no()
             )

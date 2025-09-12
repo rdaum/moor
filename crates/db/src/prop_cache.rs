@@ -33,6 +33,8 @@ lazy_static! {
     pub static ref VERB_CACHE_STATS: CacheStats = CacheStats::new();
     /// Global cache statistics for ancestry lookups
     pub static ref ANCESTRY_CACHE_STATS: CacheStats = CacheStats::new();
+    /// Global cache statistics for sysobj name lookups
+    pub static ref SYSOBJ_NAME_CACHE_STATS: CacheStats = CacheStats::new();
 }
 
 pub struct PropResolutionCache {
@@ -157,4 +159,82 @@ impl PropResolutionCache {
         inner.version += 1;
         inner.first_parent_cache_mut().insert(*obj, parent);
     }
+}
+
+pub struct SysobjNameCache {
+    inner: Mutex<SysobjInner>,
+}
+
+impl Default for SysobjNameCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SysobjNameCache {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(SysobjInner {
+                version: 0,
+                orig_version: 0,
+                flushed: false,
+                cached_data: Arc::new(None),
+            }),
+        }
+    }
+
+    pub fn fork(&self) -> Box<Self> {
+        let inner = self.inner.lock().unwrap();
+        let mut forked_inner = inner.clone();
+        forked_inner.orig_version = inner.version;
+        forked_inner.flushed = false;
+        Box::new(Self {
+            inner: Mutex::new(forked_inner),
+        })
+    }
+
+    pub fn has_changed(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        inner.version > inner.orig_version
+    }
+
+    pub fn lookup(&self) -> Option<std::collections::HashMap<Obj, Vec<Symbol>>> {
+        let inner = self.inner.lock().unwrap();
+        let result = inner.cached_data.as_ref().as_ref().cloned();
+
+        if result.is_some() {
+            SYSOBJ_NAME_CACHE_STATS.hit();
+        } else {
+            SYSOBJ_NAME_CACHE_STATS.miss();
+        }
+
+        result
+    }
+
+    pub fn flush(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.flushed = true;
+        inner.version += 1;
+        inner.cached_data = Arc::new(None);
+        SYSOBJ_NAME_CACHE_STATS.flush();
+        SYSOBJ_NAME_CACHE_STATS.remove_entries(1);
+    }
+
+    pub fn fill(&self, data: std::collections::HashMap<Obj, Vec<Symbol>>) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.version += 1;
+        let was_empty = inner.cached_data.is_none();
+        inner.cached_data = Arc::new(Some(data));
+        if was_empty {
+            SYSOBJ_NAME_CACHE_STATS.add_entry();
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SysobjInner {
+    orig_version: i64,
+    version: i64,
+    flushed: bool,
+    cached_data: Arc<Option<std::collections::HashMap<Obj, Vec<Symbol>>>>,
 }

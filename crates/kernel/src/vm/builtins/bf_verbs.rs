@@ -17,6 +17,7 @@ use strum::EnumCount;
 use tracing::{error, warn};
 
 use crate::task_context::{with_current_transaction, with_current_transaction_mut};
+use crate::util::ws_to_literal;
 use crate::vm::builtins::BfRet::{Ret, RetNil};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldStateError;
@@ -30,7 +31,7 @@ use moor_compiler::Program;
 use moor_compiler::offset_for_builtin;
 use moor_compiler::program_to_tree;
 use moor_compiler::unparse;
-use moor_compiler::{compile, to_literal};
+use moor_compiler::compile;
 use moor_var::Obj;
 use moor_var::Sequence;
 use moor_var::Symbol;
@@ -599,7 +600,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Write literals indexed by their offset #
     disassembly.push(v_str("LITERALS:"));
     for (i, l) in program.literals().iter().enumerate() {
-        disassembly.push(v_string(format!("{: >3}: {}", i, to_literal(l))));
+        disassembly.push(v_string(format!("{: >3}: {}", i, ws_to_literal(l))));
     }
 
     // Write jump labels indexed by their offset & showing position & optional name

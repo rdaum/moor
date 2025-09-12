@@ -13,12 +13,13 @@
 
 use crate::config::FeaturesConfig;
 use crate::task_context::with_current_transaction_mut;
+use crate::util::ws_to_literal;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::scatter_assign::scatter_assign;
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
-use moor_compiler::{Op, ScatterLabel, to_literal};
+use moor_compiler::{Op, ScatterLabel};
 use moor_var::program::names::Name;
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_bool, v_error,
@@ -743,11 +744,9 @@ pub fn moo_frame_execute(
                 let (propname, obj) = (f.pop(), f.peek_top());
 
                 let Ok(propname) = propname.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(&propname))
-                        }),
-                    );
+                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
+                        format!("Invalid property name: {}", ws_to_literal(&propname))
+                    }));
                 };
 
                 let value = get_property(&permissions, obj, propname, features_config);
@@ -764,11 +763,9 @@ pub fn moo_frame_execute(
                 let (propname, obj) = f.peek2();
 
                 let Ok(propname) = propname.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(propname))
-                        }),
-                    );
+                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
+                        format!("Invalid property name: {}", ws_to_literal(propname))
+                    }));
                 };
 
                 let value = get_property(&permissions, obj, propname, features_config);
@@ -786,15 +783,13 @@ pub fn moo_frame_execute(
 
                 let Some(obj) = obj.as_object() else {
                     return ExecutionResult::PushError(E_TYPE.with_msg(|| {
-                        format!("Invalid value for property access: {}", to_literal(obj))
+                        format!("Invalid value for property access: {}", ws_to_literal(obj))
                     }));
                 };
                 let Ok(propname) = propname.as_symbol() else {
-                    return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| {
-                            format!("Invalid property name: {}", to_literal(&propname))
-                        }),
-                    );
+                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
+                        format!("Invalid property name: {}", ws_to_literal(&propname))
+                    }));
                 };
                 let update_result = with_current_transaction_mut(|world_state| {
                     world_state.update_property(&permissions, &obj, propname, &rhs.clone())
@@ -837,7 +832,7 @@ pub fn moo_frame_execute(
                 let args = f.pop();
                 let Some(args) = args.as_list() else {
                     return ExecutionResult::PushError(E_TYPE.with_msg(|| {
-                        format!("Invalid target for verb dispatch: {}", to_literal(&args))
+                        format!("Invalid target for verb dispatch: {}", ws_to_literal(&args))
                     }));
                 };
                 return ExecutionResult::DispatchVerbPass(args.clone());
@@ -846,12 +841,12 @@ pub fn moo_frame_execute(
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                 let Some(l) = args.as_list() else {
                     return ExecutionResult::PushError(E_TYPE.with_msg(|| {
-                        format!("Invalid target for verb dispatch: {}", to_literal(&args))
+                        format!("Invalid target for verb dispatch: {}", ws_to_literal(&args))
                     }));
                 };
                 let Ok(verb) = verb.as_symbol() else {
                     return ExecutionResult::PushError(
-                        E_TYPE.with_msg(|| format!("Invalid verb name: {}", to_literal(&verb))),
+                        E_TYPE.with_msg(|| format!("Invalid verb name: {}", ws_to_literal(&verb))),
                     );
                 };
                 return ExecutionResult::PrepareVerbDispatch {
@@ -1008,8 +1003,9 @@ pub fn moo_frame_execute(
                 let rhs_values = {
                     let rhs = f.peek_top();
                     let Some(rhs_values) = rhs.as_list() else {
-                        let scatter_err = E_TYPE
-                            .with_msg(|| format!("Invalid value for scatter: {}", to_literal(rhs)));
+                        let scatter_err = E_TYPE.with_msg(|| {
+                            format!("Invalid value for scatter: {}", ws_to_literal(rhs))
+                        });
                         f.pop();
                         return ExecutionResult::PushError(scatter_err);
                     };
@@ -1287,9 +1283,7 @@ fn get_property(
             };
             Ok(value)
         }
-        _ => {
-            Err(E_INVIND
-                .with_msg(|| format!("Invalid value for property access: {}", to_literal(obj))))
-        }
+        _ => Err(E_INVIND
+            .with_msg(|| format!("Invalid value for property access: {}", ws_to_literal(obj)))),
     }
 }

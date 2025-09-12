@@ -25,7 +25,6 @@ use uuid::Uuid;
 
 use moor_common::model::{CommitResult, Perms};
 use moor_common::model::{ObjectRef, WorldState};
-use moor_compiler::to_literal;
 use moor_db::Database;
 
 use crate::config::{Config, ImportExportFormat};
@@ -43,6 +42,7 @@ use crate::tasks::{
     DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult,
     TaskStart, sched_counters,
 };
+use crate::util::ws_to_literal;
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::{Fork, TaskSuspend};
 use crate::{
@@ -888,7 +888,7 @@ impl Scheduler {
                         warn!(?task_id, ticks = t, "Task aborted, ticks exceeded");
                         format!(
                             "Abort: Task exceeded ticks limit of {t} @ {}:{verb}:{line_number}",
-                            to_literal(&this)
+                            ws_to_literal(&this)
                         )
                     }
                     AbortLimitReason::Time(t) => {

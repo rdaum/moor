@@ -438,6 +438,15 @@ pub trait WorldState: Send {
         target: Option<&Obj>,
     ) -> Result<Obj, WorldStateError>;
 
+    /// Get all properties on the system object (#0) that contain object values.
+    /// Returns a mapping from property name to list of objects (since multiple properties
+    /// could reference the same object).
+    /// This is used to build reverse mappings from objects to their system names.
+    fn sysobj_name_cache(
+        &self,
+        perms: &Obj,
+    ) -> Result<std::collections::HashMap<Obj, Vec<Symbol>>, WorldStateError>;
+
     /// Commit all modifications made to the state of this world since the start of its transaction.
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 

@@ -23,7 +23,6 @@ object PLAYER
   property last_connect_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
   property last_disconnect_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
   property last_password_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
-  property linebuffer (owner: HACKER, flags: "") = {};
   property linelen (owner: HACKER, flags: "r") = -79;
   property lines (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = 0;
   property linesleft (owner: HACKER, flags: "r") = 0;
