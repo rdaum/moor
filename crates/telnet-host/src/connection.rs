@@ -692,22 +692,23 @@ impl TelnetConnection {
                 no_flush,
                 no_newline,
             } => {
-                let Ok(mut formatted) = output_format(&msg, content_type) else {
+                let Ok(formatted) = output_format(&msg, content_type) else {
                     warn!("Failed to format message: {:?}", msg);
                     return Ok(());
                 };
-
-                // Handle no_newline: if false, add newline; if true, don't add newline
-                if !no_newline && !formatted.ends_with('\n') {
-                    formatted.push('\n');
-                }
 
                 // TODO: Handle no_flush - for now telnet doesn't have buffer control
                 //   but we could potentially batch messages or use different send methods
                 let _ = no_flush; // Acknowledge parameter for now
 
+                let telnet_event = if no_newline {
+                    TelnetEvent::RawMessage(formatted)
+                } else {
+                    TelnetEvent::Message(formatted)
+                };
+
                 self.write
-                    .send(TelnetEvent::Message(formatted))
+                    .send(telnet_event)
                     .await
                     .with_context(|| "Unable to send message to client")?;
             }
@@ -1102,18 +1103,19 @@ impl TelnetConnection {
                         no_flush,
                         no_newline,
                     } => {
-                        let mut output_str = output_format(msg, *content_type)?;
-
-                        // Handle no_newline: if false, add newline; if true, don't add newline
-                        if !no_newline && !output_str.ends_with('\n') {
-                            output_str.push('\n');
-                        }
+                        let output_str = output_format(msg, *content_type)?;
 
                         // TODO: Handle no_flush - acknowledge for now
                         let _ = no_flush;
 
+                        let telnet_event = if *no_newline {
+                            TelnetEvent::RawMessage(output_str)
+                        } else {
+                            TelnetEvent::Message(output_str)
+                        };
+
                         self.write
-                            .send(TelnetEvent::Message(output_str))
+                            .send(telnet_event)
                             .await
                             .expect("Unable to send message to client");
                     }
