@@ -34,15 +34,18 @@ use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use eyre::Report;
 use mimalloc::MiMalloc;
 use moor_common::build;
+use moor_common::model::ObjectRef;
+use moor_common::tasks::{SchedulerError, SessionFactory};
 use moor_db::{Database, TxDB};
 use moor_kernel::config::{Config, ImportExportFormat};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::textdump_load;
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use rand::{Rng, rngs::OsRng};
 use rpc_common::load_keypair;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 mod args;
 mod connections;
@@ -506,6 +509,13 @@ fn main() -> Result<(), Report> {
         .name("moor-scheduler".to_string())
         .spawn(move || scheduler.run(scheduler_rpc_server))?;
 
+    // Invoke server_started hook if it exists
+    let player = Obj::mk_id(-1);
+    let Ok(session) = rpc_server.clone().mk_background_session(&player) else {
+        error!("Failed to create background session for server_started hook");
+        return Ok(());
+    };
+
     let rpc_loop_scheduler_client = scheduler_client.clone();
     let rpc_listen = args.rpc_listen.clone();
     let rpc_loop_thread = std::thread::Builder::new()
@@ -525,6 +535,30 @@ fn main() -> Result<(), Report> {
         events_endpoint = args.events_listen,
         "Daemon started. Listening for RPC events."
     );
+    let server_started_verb = Symbol::mk("server_started");
+
+    match scheduler_client.submit_verb_task(
+        &player,
+        &ObjectRef::Id(SYSTEM_OBJECT),
+        server_started_verb,
+        List::mk_list(&[]),
+        String::new(),
+        &SYSTEM_OBJECT,
+        session,
+    ) {
+        Ok(task_handle) => {
+            info!(
+                "Server started hook invoked successfully, task_id: {:?}",
+                task_handle.task_id()
+            );
+        }
+        Err(SchedulerError::TaskAbortedError) => {
+            debug!("No server_started verb found, skipping hook");
+        }
+        Err(e) => {
+            error!("Failed to invoke server_started hook: {:?}", e);
+        }
+    }
     if let Err(e) = rpc_loop_thread.join() {
         error!("RPC thread panicked: {:?}", e);
     }
