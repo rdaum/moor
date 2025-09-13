@@ -105,10 +105,11 @@ impl<M: MatchEnvironment> ObjectNameMatcher for DefaultObjectNameMatcher<M> {
         // If it's an object number (is prefixed with # and is followed by a valid integer or UUID), return
         // an Obj directly.
         if object_name.starts_with('#')
-            && let Ok(obj) = Obj::try_from(object_name) {
-                return Ok(Some(obj));
-            }
-            // Continue with name matching if parsing fails
+            && let Ok(obj) = Obj::try_from(object_name)
+        {
+            return Ok(Some(obj));
+        }
+        // Continue with name matching if parsing fails
 
         // Check if the player is valid.
         if !self.env.obj_valid(&self.player)? {

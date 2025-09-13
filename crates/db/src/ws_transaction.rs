@@ -1764,9 +1764,10 @@ impl WorldStateTransaction {
 
             // 3. Check location relationship
             if let Ok(location) = self.get_object_location(&obj)
-                && location.is_anonymous() {
-                    obj_refs.insert(location);
-                }
+                && location.is_anonymous()
+            {
+                obj_refs.insert(location);
+            }
 
             // 4. Check verb definitions for object references
             if let Ok(verbdefs) = self.get_verbs(&obj) {
