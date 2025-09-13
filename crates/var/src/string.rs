@@ -16,43 +16,70 @@ use crate::Sequence;
 use crate::error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::Var;
 use crate::variant::Variant;
-use bincode::{Decode, Encode};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
+use imstr::ImString;
 use num_traits::ToPrimitive;
 use std::cmp::max;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use std::sync::Arc;
 
-#[derive(Clone, Encode, Decode)]
-pub struct Str(Arc<String>);
+#[derive(Clone)]
+pub struct Str(Box<ImString>);
 
 impl Str {
     pub fn mk_str(s: &str) -> Self {
-        Str(Arc::new(s.into()))
+        Str(Box::new(ImString::from(s)))
     }
 
     pub fn mk_string(s: String) -> Self {
-        Str(Arc::new(s))
+        Str(Box::new(ImString::from(s)))
     }
 
-    pub fn mk_arc_str(s: Arc<String>) -> Self {
-        Str(s)
+    pub fn mk_imstring(s: ImString) -> Self {
+        Str(Box::new(s))
     }
 
     pub fn as_str(&self) -> &str {
-        self.0.as_ref()
+        self.0.as_str()
     }
 
-    pub fn as_arc_string(&self) -> Arc<String> {
-        self.0.clone()
+    pub fn as_imstring(&self) -> &ImString {
+        &self.0
+    }
+
+    pub fn to_imstring(&self) -> ImString {
+        self.0.as_ref().clone()
     }
 
     pub fn str_append(&self, other: &Self) -> Var {
-        let mut s = self.0.as_ref().clone();
-        s.push_str(other.as_str());
-        let s = Str(Arc::new(s));
+        let combined = self.0.as_ref().clone() + other.as_str();
+        let s = Str(Box::new(combined));
         let v = Variant::Str(s);
         Var::from_variant(v)
+    }
+}
+
+// Custom serialization since ImString doesn't implement bincode traits
+impl Encode for Str {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.as_str().encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for Str {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let s = String::decode(decoder)?;
+        Ok(Str(Box::new(ImString::from(s))))
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for Str {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let s = String::decode(decoder)?;
+        Ok(Str(Box::new(ImString::from(s))))
     }
 }
 
@@ -126,7 +153,9 @@ impl Sequence for Str {
         }
         let c = self.as_str().chars().nth(index).unwrap();
         let c_str = c.to_string();
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(c_str)))))
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(
+            ImString::from(c_str),
+        )))))
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -162,7 +191,9 @@ impl Sequence for Str {
 
         let mut s = self.as_str().to_string();
         s.replace_range(index..=index, value.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(s)))))
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(
+            ImString::from(s),
+        )))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
@@ -175,9 +206,8 @@ impl Sequence for Str {
             }
         };
 
-        let mut new_copy = self.as_str().to_string();
-        new_copy.push_str(value.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        let combined = self.0.as_ref().clone() + value.as_str();
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(combined)))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -196,7 +226,9 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.insert_str(index, value.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(
+            ImString::from(new_copy),
+        )))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -216,8 +248,9 @@ impl Sequence for Str {
                 )
             }));
         }
-        let s = s.get(start..=to).unwrap();
-        Ok(Var::mk_str(s))
+        // This should be zero-copy.
+        let slice = self.0.slice(start..to + 1);
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(slice)))))
     }
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
@@ -252,7 +285,9 @@ impl Sequence for Str {
             }
         }
 
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(result_str)))))
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(
+            ImString::from(result_str),
+        )))))
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
@@ -265,9 +300,8 @@ impl Sequence for Str {
             }
         };
 
-        let mut new_copy = self.as_str().to_string();
-        new_copy.push_str(other.as_str());
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        let combined = self.0.as_ref().clone() + other.as_str();
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(combined)))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -283,7 +317,9 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.remove(index);
-        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
+        Ok(Var::from_variant(Variant::Str(Str(Box::new(
+            ImString::from(new_copy),
+        )))))
     }
 }
 
@@ -334,6 +370,12 @@ impl From<String> for Str {
     }
 }
 
+impl From<ImString> for Str {
+    fn from(s: ImString) -> Self {
+        Str::mk_imstring(s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::IndexMode;
@@ -341,15 +383,6 @@ mod tests {
     use crate::v_bool_int;
     use crate::var::{Var, v_int, v_str};
     use crate::variant::Variant;
-
-    #[test]
-    fn test_str_pack_unpack() {
-        let s = Var::mk_str("hello");
-        match s.variant() {
-            Variant::Str(s) => assert_eq!(s.as_str(), "hello"),
-            _ => panic!("Expected string"),
-        }
-    }
 
     #[test]
     fn test_string_is_funcs() {

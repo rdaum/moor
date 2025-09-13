@@ -2304,6 +2304,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "imstr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d3441deb04ea9c6b472f313be54d585428cd6a68cdb8dcf40cf43744bec78fe"
+
+[[package]]
 name = "indenter"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3117,6 +3123,7 @@ dependencies = [
  "boxcar",
  "byteview",
  "im",
+ "imstr",
  "lazy_static",
  "moor-bench-utils",
  "num-traits",

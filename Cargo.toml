@@ -161,6 +161,7 @@ pest_derive = "2.8"
 # Collections & Data Structures
 ahash = "0.8"
 im = "15.1"
+imstr = "0.2.0"
 indexmap = "2.9"
 itertools = "0.14"
 
