@@ -36,12 +36,11 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
         }
 
         // Handle object number references (e.g. "#123" or UUID format)
-        if object_name.starts_with('#') {
-            if let Ok(obj) = Obj::try_from(object_name) {
+        if object_name.starts_with('#')
+            && let Ok(obj) = Obj::try_from(object_name) {
                 return Ok(Some(obj));
             }
             // Continue with name matching if parsing fails
-        }
 
         // Check if the player is valid
         if !self.env.obj_valid(&self.player)? {

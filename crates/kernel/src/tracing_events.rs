@@ -242,11 +242,10 @@ pub fn emit_trace_event(event: TraceEventType) {
 pub fn shutdown_tracing() {
     #[cfg(feature = "trace_events")]
     {
-        if let Ok(guard) = TRACING_SENDER.lock() {
-            if let Some(sender) = guard.as_ref() {
+        if let Ok(guard) = TRACING_SENDER.lock()
+            && let Some(sender) = guard.as_ref() {
                 let _ = sender.send(TracingMessage::Shutdown);
             }
-        }
     }
 }
 
