@@ -24,7 +24,9 @@ use uuid::Uuid;
 use crate::connections::persistence::{
     ClientMappingChanges, ConnectionRegistryPersistence, PlayerConnectionChanges,
 };
-use crate::connections::registry::{CONNECTION_TIMEOUT_DURATION, ConnectionRegistry};
+use crate::connections::registry::{
+    CONNECTION_TIMEOUT_DURATION, ConnectionRegistry, NewConnectionParams,
+};
 use crate::connections::{ConnectionRecord, ConnectionsRecords};
 
 /// Pure in-memory implementation of connections database with optional persistence
@@ -222,14 +224,16 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         Ok(())
     }
 
-    fn new_connection(
-        &self,
-        client_id: Uuid,
-        hostname: String,
-        player: Option<Obj>,
-        acceptable_content_types: Option<Vec<Symbol>>,
-        connection_attributes: Option<std::collections::HashMap<Symbol, Var>>,
-    ) -> Result<Obj, RpcMessageError> {
+    fn new_connection(&self, params: NewConnectionParams) -> Result<Obj, RpcMessageError> {
+        let NewConnectionParams {
+            client_id,
+            hostname,
+            local_port,
+            remote_port,
+            player,
+            acceptable_content_types,
+            connection_attributes,
+        } = params;
         let mut inner = self.inner.lock().unwrap();
 
         let connection_id = {
@@ -252,6 +256,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             last_activity: now,
             last_ping: now,
             hostname,
+            local_port,
+            remote_port,
             acceptable_content_types: acceptable_content_types
                 .unwrap_or_else(|| vec![Symbol::mk("text_plain")]),
             client_attributes: connection_attributes.unwrap_or_default(),
@@ -467,12 +473,16 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             .or_else(|| inner.player_connections.get(&player))
             .ok_or(SessionError::NoConnectionForPlayer(player))?;
 
-        let name = connections_records
+        let connection_record = connections_records
             .connections
-            .iter()
-            .map(|cr| cr.hostname.clone())
-            .next()
+            .first()
             .ok_or(SessionError::NoConnectionForPlayer(player))?;
+
+        // Format: "port <lport> from <host>, port <port>"
+        let name = format!(
+            "port {} from {}, port {}",
+            connection_record.local_port, connection_record.hostname, connection_record.remote_port
+        );
 
         Ok(name)
     }
@@ -740,7 +750,15 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None, None, None)
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
             .unwrap();
 
         // Test basic operations
@@ -822,7 +840,15 @@ mod tests {
         // Create connection - should not trigger persistence calls (no player logged in)
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None, None, None)
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
             .unwrap();
 
         assert_eq!(client_calls.load(Ordering::SeqCst), 0);
@@ -857,7 +883,15 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("host-{i}-{j}.test");
 
-                    match db.new_connection(client_id, hostname, None, None, None) {
+                    match db.new_connection(NewConnectionParams {
+                        client_id,
+                        hostname,
+                        local_port: 7777,
+                        remote_port: 12345,
+                        player: None,
+                        acceptable_content_types: None,
+                        connection_attributes: None,
+                    }) {
                         Ok(connection_obj) => {
                             created_clients.push((client_id, connection_obj));
                         }
@@ -902,7 +936,15 @@ mod tests {
         for i in 0..5 {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, format!("host-{i}.test"), None, None, None)
+                .new_connection(NewConnectionParams {
+                    client_id,
+                    hostname: format!("host-{i}.test"),
+                    local_port: 7777,
+                    remote_port: 12345,
+                    player: None,
+                    acceptable_content_types: None,
+                    connection_attributes: None,
+                })
                 .unwrap();
             client_connections.push((client_id, connection_obj));
         }
@@ -976,9 +1018,15 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("host-{thread_id}-{i}.test");
 
-                    if let Ok(connection_obj) =
-                        db.new_connection(client_id, hostname, None, None, None)
-                    {
+                    if let Ok(connection_obj) = db.new_connection(NewConnectionParams {
+                        client_id,
+                        hostname,
+                        local_port: 7777,
+                        remote_port: 12345,
+                        player: None,
+                        acceptable_content_types: None,
+                        connection_attributes: None,
+                    }) {
                         creation_count.fetch_add(1, Ordering::SeqCst);
                         local_connections.push((client_id, connection_obj));
 
@@ -1036,7 +1084,15 @@ mod tests {
         for i in 0..3 {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, format!("old-host-{i}.test"), None, None, None)
+                .new_connection(NewConnectionParams {
+                    client_id,
+                    hostname: format!("old-host-{i}.test"),
+                    local_port: 7777,
+                    remote_port: 12345,
+                    player: None,
+                    acceptable_content_types: None,
+                    connection_attributes: None,
+                })
                 .unwrap();
             old_connections.push((client_id, connection_obj));
         }
@@ -1073,9 +1129,15 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("new-host-{i}-{j}.test");
 
-                    if let Ok(connection_obj) =
-                        db.new_connection(client_id, hostname, None, None, None)
-                    {
+                    if let Ok(connection_obj) = db.new_connection(NewConnectionParams {
+                        client_id,
+                        hostname,
+                        local_port: 7777,
+                        remote_port: 12345,
+                        player: None,
+                        acceptable_content_types: None,
+                        connection_attributes: None,
+                    }) {
                         // Keep these connections alive
                         let _ = db.notify_is_alive(client_id, connection_obj);
                         let _ = db.record_client_activity(client_id, connection_obj);
@@ -1187,9 +1249,15 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("persist-host-{thread_id}-{i}.test");
 
-                    if let Ok(connection_obj) =
-                        db.new_connection(client_id, hostname, None, None, None)
-                    {
+                    if let Ok(connection_obj) = db.new_connection(NewConnectionParams {
+                        client_id,
+                        hostname,
+                        local_port: 7777,
+                        remote_port: 12345,
+                        player: None,
+                        acceptable_content_types: None,
+                        connection_attributes: None,
+                    }) {
                         connections.push((client_id, connection_obj));
 
                         // For some connections, associate a player to test player persistence

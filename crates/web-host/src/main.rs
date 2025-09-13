@@ -106,23 +106,32 @@ impl Listeners {
 
             match listeners_channel.recv().await {
                 Some(ListenersMessage::AddListener(handler, addr)) => {
+                    let listener = match TcpListener::bind(addr).await {
+                        Ok(listener) => listener,
+                        Err(e) => {
+                            error!(?addr, "Unable to bind listener: {}", e);
+                            return;
+                        }
+                    };
+
+                    let local_addr = match listener.local_addr() {
+                        Ok(addr) => addr,
+                        Err(e) => {
+                            error!(?addr, "Unable to get local address: {}", e);
+                            return;
+                        }
+                    };
+
                     let ws_host = WebHost::new(
                         self.rpc_address.clone(),
                         self.events_address.clone(),
                         handler,
+                        local_addr.port(),
                     );
                     let main_router = match mk_routes(ws_host) {
                         Ok(mr) => mr,
                         Err(e) => {
                             warn!(?e, "Unable to create main router");
-                            return;
-                        }
-                    };
-
-                    let listener = match TcpListener::bind(addr).await {
-                        Ok(listener) => listener,
-                        Err(e) => {
-                            error!(?addr, "Unable to bind listener: {}", e);
                             return;
                         }
                     };

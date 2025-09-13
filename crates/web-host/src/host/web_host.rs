@@ -71,6 +71,7 @@ pub struct WebHost {
     rpc_addr: String,
     pubsub_addr: String,
     pub(crate) handler_object: Obj,
+    local_port: u16,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -84,13 +85,19 @@ pub enum WsHostError {
 }
 
 impl WebHost {
-    pub fn new(rpc_addr: String, narrative_addr: String, handler_object: Obj) -> Self {
+    pub fn new(
+        rpc_addr: String,
+        narrative_addr: String,
+        handler_object: Obj,
+        local_port: u16,
+    ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
             zmq_context: tmq_context,
             rpc_addr,
             pubsub_addr: narrative_addr,
             handler_object,
+            local_port,
         }
     }
 }
@@ -140,6 +147,8 @@ impl WebHost {
                     connect_type,
                     handler_object: self.handler_object,
                     peer_addr: hostname,
+                    local_port: self.local_port,
+                    remote_port: peer_addr.port(),
                     acceptable_content_types: Some(vec![
                         Symbol::mk("text_html"),
                         Symbol::mk("text_djot"),
@@ -256,6 +265,8 @@ impl WebHost {
                 client_id,
                 ConnectionEstablish {
                     peer_addr: hostname,
+                    local_port: self.local_port,
+                    remote_port: addr.port(),
                     acceptable_content_types: Some(vec![
                         Symbol::mk("text_plain"),
                         Symbol::mk("text_html"),

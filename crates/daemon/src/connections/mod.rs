@@ -25,7 +25,7 @@ mod registry;
 
 pub const FIRST_CONNECTION_ID: i32 = -4;
 
-pub use registry::{ConnectionRegistry, ConnectionRegistryFactory};
+pub use registry::{ConnectionRegistry, ConnectionRegistryFactory, NewConnectionParams};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ConnectionRecord {
@@ -34,6 +34,8 @@ pub struct ConnectionRecord {
     pub last_activity: SystemTime,
     pub last_ping: SystemTime,
     pub hostname: String,
+    pub local_port: u16,
+    pub remote_port: u16,
     pub acceptable_content_types: Vec<Symbol>,
     pub client_attributes: HashMap<Symbol, Var>,
 }

@@ -133,6 +133,8 @@ pub async fn create_user_session(
             client_id,
             ConnectionEstablish {
                 peer_addr: peer_addr.to_string(),
+                local_port: 7777,
+                remote_port: 12345,
                 acceptable_content_types: None,
                 connection_attributes: None,
             },

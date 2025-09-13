@@ -27,6 +27,18 @@ use std::path::Path;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
+/// Parameters for creating a new connection
+#[derive(Debug)]
+pub struct NewConnectionParams {
+    pub client_id: Uuid,
+    pub hostname: String,
+    pub local_port: u16,
+    pub remote_port: u16,
+    pub player: Option<Obj>,
+    pub acceptable_content_types: Option<Vec<Symbol>>,
+    pub connection_attributes: Option<HashMap<Symbol, Var>>,
+}
+
 pub trait ConnectionRegistry {
     /// Associate the given player object with the connection object.
     /// This is used when a player logs in.
@@ -43,14 +55,7 @@ pub trait ConnectionRegistry {
     -> Result<(), eyre::Error>;
 
     /// Create a new connection object for the given client.
-    fn new_connection(
-        &self,
-        client_id: Uuid,
-        hostname: String,
-        player: Option<Obj>,
-        acceptable_content_types: Option<Vec<Symbol>>,
-        connection_attributes: Option<HashMap<Symbol, Var>>,
-    ) -> Result<Obj, RpcMessageError>;
+    fn new_connection(&self, params: NewConnectionParams) -> Result<Obj, RpcMessageError>;
 
     /// Record activity for the given client.
     fn record_client_activity(&self, client_id: Uuid, connobj: Obj) -> Result<(), eyre::Error>;
@@ -145,6 +150,7 @@ impl ConnectionRegistryFactory {
 
 #[cfg(test)]
 mod tests {
+    use crate::connections::NewConnectionParams;
     use crate::connections::registry::ConnectionRegistryFactory;
     use uuid::Uuid;
 
@@ -154,7 +160,15 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None, None, None)
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
             .unwrap();
 
         assert_eq!(
@@ -172,7 +186,15 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "persistent.host".to_string(), None, None, None)
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "persistent.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
             .unwrap();
 
         assert_eq!(
@@ -194,7 +216,15 @@ mod tests {
         for db in configs {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, "compat.test".to_string(), None, None, None)
+                .new_connection(NewConnectionParams {
+                    client_id,
+                    hostname: "compat.test".to_string(),
+                    local_port: 7777,
+                    remote_port: 12345,
+                    player: None,
+                    acceptable_content_types: None,
+                    connection_attributes: None,
+                })
                 .unwrap();
 
             // Basic operations should work identically
@@ -224,7 +254,15 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None, None, None)
+            .new_connection(NewConnectionParams {
+                client_id,
+                hostname: "test.host".to_string(),
+                local_port: 7777,
+                remote_port: 12345,
+                player: None,
+                acceptable_content_types: None,
+                connection_attributes: None,
+            })
             .unwrap();
 
         // Initially no player associated

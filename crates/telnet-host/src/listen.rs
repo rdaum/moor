@@ -288,6 +288,8 @@ impl Listener {
                     client_id,
                     ConnectionEstablish {
                         peer_addr: hostname,
+                        local_port: listener_port,
+                        remote_port: peer_addr.port(),
                         acceptable_content_types: Some(vec![
                             Symbol::mk("text_djot"),
                             Symbol::mk("text_markdown"),

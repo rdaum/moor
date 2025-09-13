@@ -25,7 +25,7 @@ use uuid::Uuid;
 use super::hosts::Hosts;
 use super::session::{RpcSession, SessionActions};
 use super::transport::Transport;
-use crate::connections::ConnectionRegistry;
+use crate::connections::{ConnectionRegistry, NewConnectionParams};
 use crate::event_log::EventLogOps;
 use crate::tasks::task_monitor::TaskMonitor;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
@@ -852,16 +852,20 @@ impl RpcMessageHandler {
         match message {
             HostClientToDaemonMessage::ConnectionEstablish {
                 peer_addr: hostname,
+                local_port,
+                remote_port,
                 acceptable_content_types,
                 connection_attributes,
             } => {
-                let oid = self.connections.new_connection(
+                let oid = self.connections.new_connection(NewConnectionParams {
                     client_id,
                     hostname,
-                    None,
+                    local_port,
+                    remote_port,
+                    player: None,
                     acceptable_content_types,
                     connection_attributes,
-                )?;
+                })?;
                 let token = self.make_client_token(client_id);
                 Ok(NewConnection(token, oid))
             }
@@ -870,18 +874,22 @@ impl RpcMessageHandler {
                 connect_type,
                 handler_object,
                 peer_addr: hostname,
+                local_port,
+                remote_port,
                 acceptable_content_types,
             } => {
                 // Validate the auth token, and get the player.
                 let player = self.validate_auth_token(auth_token, None)?;
 
-                self.connections.new_connection(
+                self.connections.new_connection(NewConnectionParams {
                     client_id,
                     hostname,
-                    Some(player),
+                    local_port,
+                    remote_port,
+                    player: Some(player),
                     acceptable_content_types,
-                    None,
-                )?;
+                    connection_attributes: None,
+                })?;
                 let client_token = self.make_client_token(client_id);
 
                 if let Some(connect_type) = connect_type

@@ -366,6 +366,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test establishing a connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -416,6 +418,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // First establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -725,6 +729,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -823,6 +829,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // First establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -966,6 +974,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let establish_message_2 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8081".to_string(),
+            local_port: 7777,
+            remote_port: 8081,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };

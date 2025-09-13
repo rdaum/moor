@@ -265,6 +265,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
         let connect_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -344,6 +346,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Step 2: Establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -443,6 +447,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Establish first connection
         let establish_message_1 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -466,6 +472,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Establish second connection
         let establish_message_2 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8081".to_string(),
+            local_port: 7777,
+            remote_port: 8081,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/html")]),
             connection_attributes: None,
         };
@@ -589,6 +597,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test 3: Client connection establishment should reply with NewConnection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -845,6 +855,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = uuid::Uuid::new_v4();
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:12345".to_string(),
+            local_port: 7777,
+            remote_port: 12345,
             acceptable_content_types: None,
             connection_attributes: None,
         };
@@ -1010,6 +1022,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Step 1: Establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -1083,6 +1097,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Step 1: Establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:12345".to_string(),
+            local_port: 7777,
+            remote_port: 12345,
             acceptable_content_types: None,
             connection_attributes: None,
         };
@@ -1142,6 +1158,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Step 1: Establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -1191,6 +1209,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Establish connection first
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:12345".to_string(),
+            local_port: 7777,
+            remote_port: 12345,
             acceptable_content_types: None,
             connection_attributes: None,
         };
@@ -1299,6 +1319,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Establish client connection first
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:12345".to_string(),
+            local_port: 7777,
+            remote_port: 12345,
             acceptable_content_types: None,
             connection_attributes: None,
         };
@@ -1394,6 +1416,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test client token validation with a real token
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -1433,6 +1457,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Setup: Establish connection and login
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -1537,6 +1563,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Setup: Establish connection
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:8080".to_string(),
+            local_port: 7777,
+            remote_port: 8080,
             acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
             connection_attributes: None,
         };
@@ -1614,6 +1642,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = uuid::Uuid::new_v4();
         let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
             peer_addr: "127.0.0.1:12345".to_string(),
+            local_port: 7777,
+            remote_port: 12345,
             acceptable_content_types: None,
             connection_attributes: None,
         };
