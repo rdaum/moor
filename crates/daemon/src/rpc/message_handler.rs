@@ -1332,15 +1332,18 @@ impl RpcMessageHandler {
             debug!("Token does not contain player");
             return Err(RpcMessageError::PermissionDenied);
         };
-        let Some(token_player) = token_player.as_i64() else {
+        let Some(token_player) = token_player.as_str() else {
+            debug!("Token player is not valid (expected string, found: {token_player:?})");
+            return Err(RpcMessageError::PermissionDenied);
+        };
+        let Ok(token_player) = Obj::try_from(token_player) else {
             debug!("Token player is not valid");
             return Err(RpcMessageError::PermissionDenied);
         };
-        if token_player < i32::MIN as i64 || token_player > i32::MAX as i64 {
+        if !token_player.is_positive() {
             debug!("Token player is not a valid objid");
             return Err(RpcMessageError::PermissionDenied);
         }
-        let token_player = Obj::mk_id(token_player as i32);
         if let Some(objid) = objid {
             // Does the 'player' match objid? If not, reject it.
             if objid.ne(&token_player) {
@@ -1386,7 +1389,7 @@ impl RpcMessageHandler {
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
             .set_payload(Payload::from(
                 json!({
-                    "player": oid,
+                    "player": oid.to_string(),
                 })
                 .to_string()
                 .as_str(),
