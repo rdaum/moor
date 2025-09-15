@@ -125,7 +125,9 @@ impl Sequence for List {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "attempt to index {} in list of length {}",
-                    index,
+                    // We adjust this for 1-indexing because we don't actually know the indexing mode and 1 is our most common.
+                    // Here and below.
+                    index + 1,
                     self.len()
                 )
             }));
@@ -138,7 +140,7 @@ impl Sequence for List {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "attempt to set index {} in list of length {}",
-                    index,
+                    index + 1,
                     self.len()
                 )
             }));
@@ -167,6 +169,7 @@ impl Sequence for List {
         }
         if from > len + 1 || to > len {
             return Err(E_RANGE.with_msg(|| {
+                let (from, to) = (from + 1, to + 1);
                 format!(
                     "attempt to access out of bounds range {from}..{to} in list of length {len}"
                 )
@@ -204,7 +207,10 @@ impl Sequence for List {
         // E_RANGE if from is greater than the length of the list + 1
         if from > base_len + 1 {
             return Err(E_RANGE.with_msg(|| {
-                format!("attempt to set range with index {from} in list of length {base_len}")
+                format!(
+                    "attempt to set range with index {} in list of length {base_len}",
+                    from + 1
+                )
             }));
         }
 
@@ -249,7 +255,7 @@ impl Sequence for List {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "attempt to remove index {} in list of length {}",
-                    index,
+                    index + 1,
                     self.len()
                 )
             }));
