@@ -874,7 +874,8 @@ object WIZ_UTILS
     new = $quota_utils:bi_create($player_class, $nothing);
     new.name = name;
     new.aliases = {name};
-    new.password = crypt(password = $wiz_utils:random_password(5));
+    salt_str = salt();
+    new.password = argon2(password = $wiz_utils:random_password(5), salt_str);
     new.last_password_time = time();
     new.last_connect_time = $maxint;
     "Last disconnect time is creation time, until they login.";
@@ -994,7 +995,8 @@ object WIZ_UTILS
     endif
     whostr = $string_utils:nn(who);
     player:notify(tostr("About to change password for ", whostr, ". Old encrypted password is \"", who.password, "\""));
-    who.password = crypt(password);
+    salt_str = salt();
+    who.password = argon2(password, salt_str);
     who.last_password_time = time();
     player:notify(tostr(whostr, " new password is `", password, "'."));
     if (!$wiz_utils:get_email_address(who))

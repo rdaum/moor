@@ -175,7 +175,7 @@ object LOGIN
         "=== Candidate requires a password";
         if (password)
           "=== Candidate requires a password, and one was provided";
-          if (strcmp(crypt(password, cp), cp))
+          if (!argon2_verify(cp, password))
             "=== Candidate requires a password, and one was provided, which was wrong";
             server_log(tostr("FAILED CONNECT: ", name, " (", candidate, ") on ", connection_name(player), $string_utils:connection_hostname(connection_name(player)) in candidate.all_connect_places ? "" | "******"));
             raise(E_INVARG, "Invalid password.");
@@ -303,7 +303,8 @@ object LOGIN
       new.name = name;
       new.aliases = {name};
       new.programmer = $player_class.programmer;
-      new.password = crypt(password);
+      salt_str = salt();
+      new.password = argon2(password, salt_str);
       new.last_password_time = time();
       new.last_connect_time = $maxint;
       "Last disconnect time is creation time, until they login.";

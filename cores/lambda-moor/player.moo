@@ -2277,7 +2277,8 @@ object PLAYER
       $mail_agent:send_message($new_player_log, $new_player_log, "reg " + $string_utils:nn(this), {email, tostr("formerly ", old)});
       $registration_db:add(this, email, "Reregistered at " + ctime());
       $wiz_utils:set_email_address(this, email);
-      who.password = crypt(password);
+      salt_str = salt();
+      who.password = argon2(password, salt_str);
       who.last_password_time = time();
     else
       who:notify("No automatic reregistration: your request will be forwarded.");
@@ -2469,7 +2470,7 @@ object PLAYER
     elseif (length(args) != 2)
       player:notify(tostr("Usage:  ", verb, " <old-password> <new-password>"));
       return;
-    elseif (player.password != crypt(tostr(args[1]), player.password))
+    elseif (!argon2_verify(player.password, tostr(args[1])))
       player:notify("That's not your old password.");
       return;
     elseif (is_clear_property(player, "password"))
@@ -2485,7 +2486,8 @@ object PLAYER
       player:notify(r);
       return;
     endif
-    player.password = crypt(tostr(new_password));
+    salt_str = salt();
+    player.password = argon2(new_password, salt_str);
     player.last_password_time = time();
     player:notify("New password set.");
   endverb
