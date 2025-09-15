@@ -44,7 +44,7 @@ services:
         --events-listen=tcp://0.0.0.0:7898 
         --workers-response-listen=tcp://0.0.0.0:7897 
         --workers-request-listen=tcp://0.0.0.0:7896 
-        --import=/db/cores/lambda-moor --import-format=objdef
+        --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export --export-format objdef
     ports:
       # ZMQ ports
