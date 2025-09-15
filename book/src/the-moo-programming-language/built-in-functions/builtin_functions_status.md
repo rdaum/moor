@@ -235,6 +235,13 @@ Functions not part of the original LambdaMOO, but added in moor
 | `xml_parse` | Parse a string containing XML into a tree of flyweight objects   | Available only if the flyweights feature is turned on |
 | `to_xml`    | Convert a tree of flyweight objects into a string containing XML | Available only if the flyweights feature is turned on |
 
+### Import/Export of Objects
+
+| Name          | Description                                                                                                                                | Notes
+|---------------|--------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| `load_object` | Takes a list of strings in the objdef format and creates a new object in the database. Target and map of constants are optional arguments. | Wiz only          |
+| `dump_object` | Takes an object and returns a list of strings representing the object definition in objdef format.                                         | Wiz or owner only |
+
 ### Flyweights & Symbols (new types)
 
 | Name          | Description                                                             | Notes                                                 |
