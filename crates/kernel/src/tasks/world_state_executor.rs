@@ -284,7 +284,7 @@ impl WorldStateActionExecutor {
                     )))
                 })?;
 
-                let unparsed = unparse(&decompiled).map_err(|e| {
+                let unparsed = unparse(&decompiled, false, true).map_err(|e| {
                     SchedulerError::VerbRetrievalFailed(WorldStateError::DatabaseError(format!(
                         "Could not unparse decompiled verb: {e:?}"
                     )))

@@ -51,6 +51,12 @@ pub enum DecompileError {
     UnsupportedConstruct(String),
 }
 
+impl From<std::fmt::Error> for DecompileError {
+    fn from(_: std::fmt::Error) -> Self {
+        DecompileError::MalformedProgram("Format error during unparsing".to_string())
+    }
+}
+
 struct Decompile {
     /// The program we are decompiling.
     program: Program,

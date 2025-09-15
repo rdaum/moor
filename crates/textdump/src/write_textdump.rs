@@ -49,7 +49,7 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
     (flags | arg_flags, prepflags)
 }
 
-/// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
+/// Take a transaction and scan the relations and build a Textdump representing a snapshot of the world as it
 /// exists in the transaction.
 pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
     // To create the objects list, we need to scan all objects.
@@ -180,7 +180,7 @@ pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
                 let ast = moor_compiler::program_to_tree(&program)
                     .expect("Failed to decompile verb binary");
                 let program =
-                    moor_compiler::unparse(&ast).expect("Failed to decompile verb binary");
+                    moor_compiler::unparse(&ast, false, true).expect("Failed to decompile verb binary");
                 Some(program.join("\n"))
             } else {
                 None

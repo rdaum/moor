@@ -359,7 +359,19 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let verbdef = get_verbdef(&obj, bf_args.args[1].clone(), bf_args)?;
 
-    // TODO: bf_verbs: fully-paren and indent options. For now we ignore these.
+    // Parse optional fully_paren parameter (defaults to false)
+    let fully_paren = if bf_args.args.len() > 2 {
+        bf_args.args[2].as_bool().unwrap_or(false)
+    } else {
+        false
+    };
+
+    // Parse optional indent parameter (defaults to true)  
+    let indent = if bf_args.args.len() > 3 {
+        bf_args.args[3].as_bool().unwrap_or(true)
+    } else {
+        true
+    };
 
     // Retrieve the binary for the verb.
     let verb_info = with_current_transaction(|world_state| {
@@ -386,7 +398,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     };
 
-    let unparsed = match unparse(&decompiled) {
+    let unparsed = match unparse(&decompiled, fully_paren, indent) {
         Ok(unparsed) => unparsed,
         Err(e) => {
             warn!(object=?bf_args.args[0], verb=?bf_args.args[1], error = ?e, "verb_code: verb program could not be unparsed");

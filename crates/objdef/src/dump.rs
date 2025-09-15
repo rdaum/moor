@@ -533,7 +533,7 @@ fn dump_verb(
     let ProgramType::MooR(program) = &v.program;
     let decompiled =
         program_to_tree(program).map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
-    let unparsed = unparse(&decompiled).map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?;
+    let unparsed = unparse(&decompiled, false, true).map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?;
 
     verb_lines.push(format!(
         "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\""

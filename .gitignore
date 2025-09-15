@@ -19,6 +19,13 @@ development-export/
 node_modules/
 dist/
 
+# Claude artifacts
 CLAUDE.md
+CLAUDE.sessions.md
+sessions/
+/.claude/
 
+development.db/
 moor-data/
+/connections.db/
+/development.db/

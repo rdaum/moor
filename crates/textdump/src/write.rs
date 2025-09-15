@@ -123,7 +123,7 @@ impl<W: io::Write> TextdumpWriter<W> {
         let decompiled = program_to_tree(&lambda.0.body)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         let unparsed =
-            unparse(&decompiled).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            unparse(&decompiled, false, true).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         // Write the source code
         writeln!(self.writer, "{}", unparsed.len())?;
