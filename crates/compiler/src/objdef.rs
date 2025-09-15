@@ -31,7 +31,6 @@ use pest::Parser;
 use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
 use std::collections::HashMap;
-use std::str::FromStr;
 
 pub struct ObjFileContext(HashMap<Symbol, Var>);
 impl Default for ObjFileContext {
@@ -376,18 +375,11 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
                 // Parse anonymous object format: anon_XXXXXX-XXXXXXXXXX
                 // Remove "anon_" prefix
                 if anon_part.len() == 17 && anon_part.chars().nth(6) == Some('-') {
-                    let first_part = &anon_part[..6];
-                    let second_part = &anon_part[7..];
+                    let uuid = UuObjid::from_uuid_string(anon_part).map_err(|_| {
+                        ObjDefParseError::InvalidObjectId(pair.as_str().to_string())
+                    })?;
 
-                    let first_hex = u64::from_str_radix(first_part, 16).unwrap();
-                    let second_hex = u64::from_str_radix(second_part, 16).unwrap();
-
-                    // Extract components from the packed representation
-                    let autoincrement = ((first_hex >> 6) & 0x3FFF) as u16;
-                    let rng = (first_hex & 0x3F) as u8;
-                    let epoch_ms = second_hex;
-
-                    let anon_id = AnonymousObjid::new(autoincrement, rng, epoch_ms);
+                    let anon_id = AnonymousObjid(uuid.0);
                     let objid = Obj::mk_anonymous(anon_id);
                     Ok(objid)
                 } else {
@@ -395,15 +387,9 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
                         "Invalid anonymous object format: {ostr}"
                     )))
                 }
-            } else if ostr.len() == 17 && ostr.chars().nth(5) == Some('-') {
-                // This is an uuobjid probably, so we can safely assemble from there.
-                let uuobjid = UuObjid::from_uuid_string(ostr).unwrap();
-                let objid = Obj::mk_uuobjid(uuobjid);
-                Ok(objid)
             } else {
-                let oid = i32::from_str(ostr).unwrap();
-                let objid = Obj::mk_id(oid);
-                Ok(objid)
+                let oid = pair.as_str();
+                Obj::try_from(oid).map_err(|_| ObjDefParseError::InvalidObjectId(oid.to_string()))
             }
         }
         _ => {
