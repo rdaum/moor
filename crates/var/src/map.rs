@@ -24,21 +24,29 @@ use std::cmp::Ordering;
 use std::hash::Hash;
 
 #[derive(Clone)]
-pub struct Map(Box<im::OrdMap<Var, Var>>);
+pub struct Map(Box<im::Vector<(Var, Var)>>);
 
 impl Map {
-    // Construct from an Iterator of pairs
+    // Construct from an Iterator of paris
     pub(crate) fn build<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        let map = pairs
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect::<im::OrdMap<Var, Var>>();
-        let m = Map(Box::new(map));
-        Var::from_variant(Variant::Map(m))
+        // We use a vector of pairs, sorted, so binary search can be used to find
+        // keys in O(log n) time.
+        // Construction, however, is O(n) because we need to insert the pairs in sorted order.
+        // And make a copy, to boot.
+        let mut sorted: Vec<_> = pairs.collect();
+        sorted.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        Self::build_presorted(sorted.into_iter())
     }
 
     pub(crate) fn build_presorted<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        // With OrdMap, we don't need special handling for presorted data
-        Self::build(pairs)
+        let l = im::Vector::from(
+            pairs
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect::<Vec<_>>(),
+        );
+        let m = Map(Box::new(l));
+        Var::from_variant(Variant::Map(m))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (Var, Var)> + '_ {
@@ -86,9 +94,14 @@ impl Associative for Map {
     }
 
     fn get(&self, key: &Var) -> Result<Var, Error> {
-        match self.0.get(key) {
-            Some(value) => Ok(value.clone()),
-            None => Err(E_RANGE.with_msg(|| format!("Key not found: {key:?}"))),
+        // Binary search for the key.
+        let pos = self.0.binary_search_by(|(k, _)| k.cmp(key));
+        match pos {
+            Ok(pos) => {
+                let entry = &self.0[pos];
+                Ok(entry.1.clone())
+            }
+            Err(_) => Err(E_RANGE.with_msg(|| format!("Key not found: {key:?}"))),
         }
     }
 
@@ -104,41 +117,54 @@ impl Associative for Map {
             }));
         }
 
-        // With OrdMap, this is now an efficient O(log N) operation
-        let new_map = self.0.update(key.clone(), value.clone());
-        let variant = Variant::Map(Map(Box::new(new_map)));
-        Ok(Var::from_variant(variant))
+        // If the key is already in the map, we replace the value.
+        // Otherwise, we add a new key-value pair, which requires re-sorting...
+        // So no matter what, this is an expensive O(N) operation, requiring multiple copies.
+        // We'll just build a new, vector, and then pass the iterator into the build function.
+
+        // TODO: find a way to construct chained iterators for this instead...
+
+        let mut new_vec = Vec::with_capacity(self.len() + 1);
+        let mut found = false;
+        for (k, v) in self.iter() {
+            if k == *key {
+                new_vec.push((key.clone(), value.clone()));
+                found = true;
+            } else {
+                new_vec.push((k, v));
+            }
+        }
+        if !found {
+            new_vec.push((key.clone(), value.clone()));
+        }
+        Ok(Self::build(new_vec.iter()))
     }
 
     fn index(&self, index: usize) -> Result<(Var, Var), Error> {
-        match self.iter().nth(index) {
-            Some((k, v)) => Ok((k, v)),
-            None => Err(E_RANGE.with_msg(|| {
-                format!(
-                    "Index {} out of bounds for map of length {}",
-                    index,
-                    self.len()
-                )
-            })),
-        }
+        let (k, v) = &self.0[index];
+        Ok((k.clone(), v.clone()))
     }
 
     /// Return the range of key-value pairs between the two keys.
     fn range(&self, from: &Var, to: &Var) -> Result<Var, Error> {
-        // Check if the from key exists
-        if !self.0.contains_key(from) {
-            return Err(E_RANGE.with_msg(|| format!("Key not found: {from:?}")));
+        // Find start with binary search.
+        let start = match self.0.binary_search_by(|(k, _)| k.cmp(from)) {
+            Ok(pos) => pos,
+            Err(_) => return Err(E_RANGE.with_msg(|| format!("Key not found: {from:?}"))),
+        };
+
+        // Now scan forward to find the end.
+        let mut new_vec = Vec::new();
+        for i in start..self.len() {
+            let (k, v) = &self.0[i];
+            let ordering = k.cmp(to);
+            if ordering == Ordering::Greater || ordering == Ordering::Equal {
+                break;
+            }
+            new_vec.push((k.clone(), v.clone()));
         }
 
-        // Use OrdMap's range functionality to get keys >= from
-        let range_pairs: Vec<(Var, Var)> = self
-            .0
-            .range(from..)
-            .take_while(|(k, _)| (*k).cmp(to) == Ordering::Less)
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-
-        Ok(Self::build_presorted(range_pairs.iter()))
+        Ok(Self::build_presorted(new_vec.iter()))
     }
 
     fn range_set(&self, _from: &Var, _to: &Var, _with: &Var) -> Result<Var, Error> {
@@ -146,50 +172,47 @@ impl Associative for Map {
     }
 
     fn keys(&self) -> Vec<Var> {
-        self.0.keys().cloned().collect()
+        self.0.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>()
     }
 
     fn values(&self) -> Vec<Var> {
-        self.0.values().cloned().collect()
+        self.0.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>()
     }
 
     fn contains_key(&self, key: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        if case_sensitive {
-            // For case-sensitive comparison, we need to check each key manually
-            // since OrdMap uses the default comparison
-            for existing_key in self.0.keys() {
-                if existing_key.cmp_case_sensitive(key) == Ordering::Equal {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        } else {
-            Ok(self.0.contains_key(key))
+        if self.is_empty() {
+            return Ok(false);
         }
+        let cmp = |a: &Var, b: &Var| {
+            if case_sensitive {
+                a.cmp_case_sensitive(b)
+            } else {
+                a.cmp(b)
+            }
+        };
+        Ok(self.0.binary_search_by(|(k, _)| cmp(k, key)).is_ok())
     }
 
     /// Return this map with the key/value pair removed.
     /// Return the new map and the value that was removed, if any
     fn remove(&self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
-        if case_sensitive {
-            // For case-sensitive removal, we need to find the key manually
-            for existing_key in self.0.keys() {
-                if existing_key.cmp_case_sensitive(key) == Ordering::Equal {
-                    let removed_value = self.0.get(existing_key).cloned();
-                    let new_map = self.0.without(existing_key);
-                    let variant = Variant::Map(Map(Box::new(new_map)));
-                    return (Var::from_variant(variant), removed_value);
-                }
+        let position = self.0.binary_search_by(|(k, _)| {
+            if case_sensitive {
+                k.cmp_case_sensitive(key)
+            } else {
+                k.cmp(key)
             }
-            // Key not found
-            let variant = Variant::Map(self.clone());
-            (Var::from_variant(variant), None)
-        } else {
-            // Use OrdMap's efficient removal
-            let removed_value = self.0.get(key).cloned();
-            let new_map = self.0.without(key);
-            let variant = Variant::Map(Map(Box::new(new_map)));
-            (Var::from_variant(variant), removed_value)
+        });
+        match position {
+            Ok(pos) => {
+                let mut new = self.0.as_ref().clone();
+                new.remove(pos);
+                (Self::build(new.iter()), Some(self.0[pos].1.clone()))
+            }
+            Err(_) => {
+                let variant = Variant::Map(self.clone());
+                (Var::from_variant(variant), None)
+            }
         }
     }
 }
@@ -243,26 +266,24 @@ impl Encode for Map {
 impl<Context> Decode<Context> for Map {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
-        let mut map = im::OrdMap::new();
+        let mut l = im::Vector::new();
         for _ in 0..len {
-            let key = Var::decode(decoder)?;
-            let value = Var::decode(decoder)?;
-            map = map.update(key, value);
+            let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
+            l.push_back(pair);
         }
-        Ok(Map(Box::new(map)))
+        Ok(Map(Box::new(l)))
     }
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for Map {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
-        let mut map = im::OrdMap::new();
+        let mut l = im::Vector::new();
         for _ in 0..len {
-            let key = Var::borrow_decode(decoder)?;
-            let value = Var::borrow_decode(decoder)?;
-            map = map.update(key, value);
+            let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
+            l.push_back(pair);
         }
-        Ok(Map(Box::new(map)))
+        Ok(Map(Box::new(l)))
     }
 }
 
