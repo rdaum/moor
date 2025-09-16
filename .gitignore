@@ -2,6 +2,7 @@ target/
 .target
 .vscode/
 .cargo/
+.claude/
 
 /.idea/.gitignore
 /.idea/modules.xml
@@ -25,7 +26,6 @@ CLAUDE.sessions.md
 sessions/
 /.claude/
 
+connections.db/
 development.db/
 moor-data/
-/connections.db/
-/development.db/

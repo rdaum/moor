@@ -1,0 +1,94 @@
+// Test bitwise operations
+@programmer
+
+// test_bitwise_and
+; return 3 &. 1;
+1
+
+; return 5 &. 3;
+1
+
+; return 15 &. 7;
+7
+
+; return 0 &. 255;
+0
+
+// test_bitwise_or
+; return 5 |. 2;
+7
+
+; return 1 |. 2;
+3
+
+; return 8 |. 4;
+12
+
+; return 0 |. 255;
+255
+
+// test_bitwise_xor
+; return 6 ^. 3;
+5
+
+; return 15 ^. 7;
+8
+
+; return 255 ^. 0;
+255
+
+; return 5 ^. 5;
+0
+
+// test_left_shift
+; return 8 << 1;
+16
+
+; return 1 << 3;
+8
+
+; return 7 << 2;
+28
+
+; return 0 << 5;
+0
+
+// test_right_shift
+; return 16 >> 2;
+4
+
+; return 8 >> 1;
+4
+
+; return 28 >> 2;
+7
+
+; return 0 >> 5;
+0
+
+// test_bitwise_not
+; return ~5;
+-6
+
+; return ~0;
+-1
+
+; return ~(-1);
+0
+
+; return ~42;
+-43
+
+// test_bitwise_precedence - bitwise operators should bind tighter than logical
+; return 1 |. 2 && 3 &. 4;
+0
+
+; return 0 || 5 &. 3;
+1
+
+// test_bitwise_complex_expressions
+; return (15 &. 7) |. (8 ^. 12);
+7
+
+; return ~(5 &. 3) ^. (7 |. 1);
+-7

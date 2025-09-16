@@ -50,6 +50,186 @@ pub mod moo {
     pub struct MooParser;
 }
 
+// Rule to Expression mapping - a single source of truth for bidirectional mapping
+// This allows us to move rules across precedent groups as needed and still provide
+// Expression mapping to the correct shared level.
+macro_rules! rule_to_expr_mapping {
+    () => {
+        pub fn rule_to_expr_pattern(rule: &Rule, expr: &crate::ast::Expr) -> bool {
+            use crate::ast::{BinaryOp, Expr, UnaryOp};
+            match (rule, expr) {
+                (Rule::assign, Expr::Assign { .. }) => true,
+                (Rule::scatter_assign, Expr::Scatter(_, _)) => true,
+                (Rule::cond_expr, Expr::Cond { .. }) => true,
+                (Rule::lor, Expr::Or(_, _)) => true,
+                (Rule::land, Expr::And(_, _)) => true,
+                (Rule::bitor, Expr::Binary(BinaryOp::BitOr, _, _)) => true,
+                (Rule::bitxor, Expr::Binary(BinaryOp::BitXor, _, _)) => true,
+                (Rule::bitand, Expr::Binary(BinaryOp::BitAnd, _, _)) => true,
+                (Rule::eq, Expr::Binary(BinaryOp::Eq, _, _)) => true,
+                (Rule::neq, Expr::Binary(BinaryOp::NEq, _, _)) => true,
+                (Rule::gt, Expr::Binary(BinaryOp::Gt, _, _)) => true,
+                (Rule::lt, Expr::Binary(BinaryOp::Lt, _, _)) => true,
+                (Rule::gte, Expr::Binary(BinaryOp::GtE, _, _)) => true,
+                (Rule::lte, Expr::Binary(BinaryOp::LtE, _, _)) => true,
+                (Rule::in_range, Expr::Binary(BinaryOp::In, _, _)) => true,
+                (Rule::bitshl, Expr::Binary(BinaryOp::BitShl, _, _)) => true,
+                (Rule::bitshr, Expr::Binary(BinaryOp::BitShr, _, _)) => true,
+                (Rule::add, Expr::Binary(BinaryOp::Add, _, _)) => true,
+                (Rule::sub, Expr::Binary(BinaryOp::Sub, _, _)) => true,
+                (Rule::mul, Expr::Binary(BinaryOp::Mul, _, _)) => true,
+                (Rule::div, Expr::Binary(BinaryOp::Div, _, _)) => true,
+                (Rule::modulus, Expr::Binary(BinaryOp::Mod, _, _)) => true,
+                (Rule::pow, Expr::Binary(BinaryOp::Exp, _, _)) => true,
+                (Rule::neg, Expr::Unary(UnaryOp::Neg, _)) => true,
+                (Rule::not, Expr::Unary(UnaryOp::Not, _)) => true,
+                (Rule::bitnot, Expr::Unary(UnaryOp::BitNot, _)) => true,
+                (Rule::index_range, Expr::Index(_, _)) => true,
+                (Rule::index_single, Expr::Index(_, _)) => true,
+                (Rule::verb_call, Expr::Verb { .. }) => true,
+                (Rule::verb_expr_call, Expr::Verb { .. }) => true,
+                (Rule::prop, Expr::Prop { .. }) => true,
+                (Rule::prop_expr, Expr::Prop { .. }) => true,
+                _ => false,
+            }
+        }
+    };
+}
+
+// Makes the macro code available for creating the precedence level enum.
+rule_to_expr_mapping!();
+
+/// Macro to define operator precedence levels and generate both the PrecedenceLevel enum
+/// and the Pratt parser configuration from a single source of truth.
+///
+/// PRECEDENCE ORDER: Earlier levels = lower precedence, later levels = higher precedence
+/// (Assignment is lowest, Atomic is highest)
+///
+/// TO ADD NEW OPERATORS:
+/// - Add to existing level: insert Rule name in appropriate infix/prefix/postfix group
+/// - Create new level: add new precedence level in correct position in macro call
+///
+/// SYNTAX:
+/// ```
+/// LevelName => [
+///   infix(left|right): [rule1, rule2],    // Binary operators
+///   prefix(left): [rule3],                // Unary prefix operators
+///   postfix(left): [rule4],               // Unary postfix operators
+/// ]
+/// ```
+macro_rules! define_operators {
+    ($(
+        $level:ident => [
+            $($binding:ident($assoc:ident): [$($op:ident),* $(,)?]),* $(,)?
+        ]
+    ),* $(,)?) => {
+        // Generate the PrecedenceLevel enum
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum PrecedenceLevel {
+            $($level,)*
+        }
+
+        // Creates a Pratt parser definition based on the define_operators! structure.
+        fn build_pratt_parser() -> PrattParser<Rule> {
+            PrattParser::new()
+            $(
+                $(
+                    .op(define_operators!(@ops_group $binding($assoc): [$($op),*]))
+                )*
+            )*
+        }
+
+        // Generate expression precedence mapping function
+        pub fn expr_precedence_level(expr: &crate::ast::Expr) -> PrecedenceLevel {
+            match expr {
+                $(
+                    $(
+                        $(
+                            _ if rule_to_expr_pattern(&Rule::$op, expr) => PrecedenceLevel::$level,
+                        )*
+                    )*
+                )*
+                // DEFAULT: All other expressions are Atomic precedence
+                _ => PrecedenceLevel::Atomic,
+            }
+        }
+
+    };
+
+    // Generate union of ops for a group
+    (@ops_group $binding:ident($assoc:ident): []) => {
+        Op::infix(Rule::dummy, Assoc::Left) // Empty fallback - should not be used
+    };
+    (@ops_group $binding:ident($assoc:ident): [$op:ident]) => {
+        define_operators!(@make_op $binding, $assoc, $op)
+    };
+    (@ops_group $binding:ident($assoc:ident): [$op:ident, $($rest:ident),+]) => {
+        define_operators!(@make_op $binding, $assoc, $op) |
+        define_operators!(@ops_group $binding($assoc): [$($rest),+])
+    };
+
+    // Create the appropriate Op based on binding type
+    (@make_op infix, $assoc:ident, $op:ident) => {
+        Op::infix(Rule::$op, define_operators!(@assoc $assoc))
+    };
+    (@make_op prefix, $assoc:ident, $op:ident) => {
+        Op::prefix(Rule::$op)
+    };
+    (@make_op postfix, $assoc:ident, $op:ident) => {
+        Op::postfix(Rule::$op)
+    };
+
+    // Convert associativity
+    (@assoc left) => { Assoc::Left };
+    (@assoc right) => { Assoc::Right };
+}
+
+// This macro call creates the enum for PrecedentLevel, and also creates build_pratt_parser().
+define_operators! {
+
+    Assignment => [
+        postfix(left): [assign],
+        prefix(left): [scatter_assign],
+    ],
+    Conditional => [
+        postfix(left): [cond_expr],
+    ],
+    Logical => [
+        infix(left): [lor, land],
+    ],
+    BitwiseOr => [
+        infix(left): [bitor],
+    ],
+    BitwiseXor => [
+        infix(left): [bitxor],
+    ],
+    BitwiseAnd => [
+        infix(left): [bitand],
+    ],
+    Comparison => [
+        infix(left): [eq, neq, gt, lt, gte, lte, in_range],
+    ],
+    BitwiseShift => [
+        infix(left): [bitshl, bitshr],
+    ],
+    Arithmetic => [
+        infix(left): [add, sub],
+    ],
+    Multiplicative => [
+        infix(left): [mul, div, modulus],
+    ],
+    Exponent => [
+        infix(right): [pow],
+    ],
+    Unary => [
+        prefix(left): [neg, not, bitnot],
+    ],
+    Postfix => [
+        postfix(left): [index_range, index_single, verb_call, verb_expr_call, prop, prop_expr],
+    ],
+    Atomic => [], // DEFAULT: Everything else
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CompileOptions {
     /// Whether we allow lexical scope blocks. begin/end blocks and 'let' and 'global' statements
@@ -66,7 +246,7 @@ pub struct CompileOptions {
     pub bool_type: bool,
     /// Whether to support symbol types ('sym) in compilation
     pub symbol_type: bool,
-    /// Whether to support non-stanard custom error values.
+    /// Whether to support non-standard custom error values.
     pub custom_errors: bool,
     /// Whether to turn unsupported builtins into `call_function` invocations.
     /// Useful for textdump imports from other MOO dialects.
@@ -321,52 +501,7 @@ impl TreeTransformer {
     }
 
     fn parse_expr(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Expr, CompileError> {
-        let pratt = PrattParser::new()
-            // Generally following C-like precedence order as described:
-            //   https://en.cppreference.com/w/c/language/operator_precedence
-            // Precedence from lowest to highest.
-            // 14. Assignments & returns are lowest precedence.
-            .op(Op::postfix(Rule::assign) | Op::prefix(Rule::scatter_assign))
-            // 13. Ternary conditional
-            .op(Op::postfix(Rule::cond_expr))
-            // 12. Logical or.
-            .op(Op::infix(Rule::lor, Assoc::Left))
-            // 11. Logical and.
-            .op(Op::infix(Rule::land, Assoc::Left))
-            // 10. Bitwise or.
-            .op(Op::infix(Rule::bitor, Assoc::Left))
-            // 9. Bitwise xor.
-            .op(Op::infix(Rule::bitxor, Assoc::Left))
-            // 8. Bitwise and.
-            .op(Op::infix(Rule::bitand, Assoc::Left))
-            // 7. Equality/inequality
-            .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
-            // 6. Relational operators
-            .op(Op::infix(Rule::gt, Assoc::Left)
-                | Op::infix(Rule::lt, Assoc::Left)
-                | Op::infix(Rule::gte, Assoc::Left)
-                | Op::infix(Rule::lte, Assoc::Left))
-            // 5. Bitwise shift operators
-            .op(Op::infix(Rule::bitshl, Assoc::Left) | Op::infix(Rule::bitshr, Assoc::Left))
-            // 5. In operator ended up above add
-            .op(Op::infix(Rule::in_range, Assoc::Left))
-            // 4. Add & subtract same precedence
-            .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
-            // 3. * / % all same precedence
-            .op(Op::infix(Rule::mul, Assoc::Left)
-                | Op::infix(Rule::div, Assoc::Left)
-                | Op::infix(Rule::modulus, Assoc::Left))
-            // Exponent is higher than multiply/divide (not present in C)
-            .op(Op::infix(Rule::pow, Assoc::Left))
-            // 2. Unary negation & logical-not
-            .op(Op::prefix(Rule::neg) | Op::prefix(Rule::not) | Op::prefix(Rule::bitnot))
-            // 1. Indexing/suffix operator generally.
-            .op(Op::postfix(Rule::index_range)
-                | Op::postfix(Rule::index_single)
-                | Op::postfix(Rule::verb_call)
-                | Op::postfix(Rule::verb_expr_call)
-                | Op::postfix(Rule::prop)
-                | Op::postfix(Rule::prop_expr));
+        let pratt = build_pratt_parser();
 
         let primary_self = self.clone();
         let postfix_self = self.clone();
@@ -536,7 +671,7 @@ impl TreeTransformer {
                         for next in parts {
                             match next.as_rule() {
                                 Rule::flyweight_slots => {
-                                    // Parse the slots, they're a sequence of ident, expr pairs.
+                                    // Parse the slots. They're a sequence of ident, expr pairs.
                                     // Collect them into two iterators,
                                     let slot_pairs = next.clone().into_inner().chunks(2);
                                     for mut pair in &slot_pairs {
@@ -4040,5 +4175,119 @@ endif"#;
         // Test sysprop parsing
         let result_sysprop = parse_program(r#"x = $false;"#, CompileOptions::default());
         result_sysprop.unwrap();
+    }
+
+    #[test]
+    fn test_bitwise_operators_parse() {
+        use crate::ast::{BinaryOp, Expr, StmtNode, UnaryOp};
+        use moor_var::v_int;
+
+        // Test bitwise AND
+        let program = "return 3 &. 1;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Binary(
+                BinaryOp::BitAnd,
+                Box::new(Expr::Value(v_int(3))),
+                Box::new(Expr::Value(v_int(1))),
+            ))]
+        );
+
+        // Test bitwise OR
+        let program = "return 5 |. 2;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Binary(
+                BinaryOp::BitOr,
+                Box::new(Expr::Value(v_int(5))),
+                Box::new(Expr::Value(v_int(2))),
+            ))]
+        );
+
+        // Test bitwise XOR
+        let program = "return 6 ^. 3;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Binary(
+                BinaryOp::BitXor,
+                Box::new(Expr::Value(v_int(6))),
+                Box::new(Expr::Value(v_int(3))),
+            ))]
+        );
+
+        // Test left shift
+        let program = "return 8 << 1;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Binary(
+                BinaryOp::BitShl,
+                Box::new(Expr::Value(v_int(8))),
+                Box::new(Expr::Value(v_int(1))),
+            ))]
+        );
+
+        // Test right shift
+        let program = "return 16 >> 2;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Binary(
+                BinaryOp::BitShr,
+                Box::new(Expr::Value(v_int(16))),
+                Box::new(Expr::Value(v_int(2))),
+            ))]
+        );
+
+        // Test bitwise NOT
+        let program = "return ~5;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Unary(
+                UnaryOp::BitNot,
+                Box::new(Expr::Value(v_int(5))),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_bitwise_precedence() {
+        use crate::ast::{BinaryOp, Expr, StmtNode};
+        use moor_var::v_int;
+
+        // Test addition has higher precedence than bitwise AND
+        let program = "return 3 &. 1 + 2;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Binary(
+                BinaryOp::BitAnd,
+                Box::new(Expr::Value(v_int(3))),
+                Box::new(Expr::Binary(
+                    BinaryOp::Add,
+                    Box::new(Expr::Value(v_int(1))),
+                    Box::new(Expr::Value(v_int(2))),
+                )),
+            ))]
+        );
+
+        // Test logical OR has lower precedence than bitwise AND
+        let program = "return 1 || 5 &. 3;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::mk_return(Expr::Or(
+                Box::new(Expr::Value(v_int(1))),
+                Box::new(Expr::Binary(
+                    BinaryOp::BitAnd,
+                    Box::new(Expr::Value(v_int(5))),
+                    Box::new(Expr::Value(v_int(3))),
+                )),
+            ))]
+        );
     }
 }

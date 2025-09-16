@@ -13,17 +13,15 @@
 
 use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
-use crate::parse::{PrecedenceLevel, expr_precedence_level};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
+use crate::parse::{PrecedenceLevel, expr_precedence_level};
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
 use moor_var::program::names::Variable;
 use moor_var::program::opcode::ScatterLabel;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant};
 use std::collections::HashMap;
-
-// Issue #205: Now solved with enum-based precedence system in ast.rs
 
 #[derive(Debug, Clone, Copy)]
 pub enum ParenPosition {
@@ -33,15 +31,19 @@ pub enum ParenPosition {
 
 /// Check if an expression needs parentheses when used in a given position relative to a parent.
 /// Handles right-associative operators correctly.
-pub fn needs_parens(expr: &crate::ast::Expr, parent: &crate::ast::Expr, position: ParenPosition) -> bool {
+pub fn needs_parens(
+    expr: &crate::ast::Expr,
+    parent: &crate::ast::Expr,
+    position: ParenPosition,
+) -> bool {
+    use crate::ast::{BinaryOp, Expr};
     use std::cmp::Ordering;
-    use crate::ast::{Expr, BinaryOp};
 
     let expr_prec = expr_precedence_level(expr);
     let parent_prec = expr_precedence_level(parent);
 
     match expr_prec.cmp(&parent_prec) {
-        Ordering::Less => true,  // Lower precedence always needs parens
+        Ordering::Less => true,     // Lower precedence always needs parens
         Ordering::Greater => false, // Higher precedence never needs parens
         Ordering::Equal => {
             // Equal precedence: check associativity and position
@@ -70,10 +72,10 @@ const INDENT_LEVEL: usize = 2;
 impl<'a> Unparse<'a> {
     fn new(tree: &'a Parse, fully_paren: bool, should_indent: bool) -> Self {
         let indent_width = if should_indent { INDENT_LEVEL } else { 0 };
-        Self { 
-            tree, 
-            fully_paren, 
-            indent_width
+        Self {
+            tree,
+            fully_paren,
+            indent_width,
         }
     }
 
@@ -123,7 +125,8 @@ impl<'a> Unparse<'a> {
     fn unparse_expr(&self, current_expr: &Expr) -> Result<String, DecompileError> {
         let brace_if_needed = |expr: &Expr, position: ParenPosition| -> String {
             if (self.fully_paren && expr_precedence_level(expr) != PrecedenceLevel::Atomic)
-               || needs_parens(expr, current_expr, position) {
+                || needs_parens(expr, current_expr, position)
+            {
                 format!("({})", self.unparse_expr(expr).unwrap())
             } else {
                 self.unparse_expr(expr).unwrap()
@@ -155,14 +158,12 @@ impl<'a> Unparse<'a> {
             Expr::Value(var) => Ok(self.unparse_var(var, false)),
             Expr::TypeConstant(vt) => Ok(vt.to_literal().to_string()),
             Expr::Id(id) => Ok(self.unparse_variable(id).to_string()),
-            Expr::Binary(op, left_expr, right_expr) => {
-                Ok(format!(
-                    "{} {} {}",
-                    brace_if_needed(left_expr, ParenPosition::Left),
-                    op,
-                    brace_if_needed(right_expr, ParenPosition::Right)
-                ))
-            },
+            Expr::Binary(op, left_expr, right_expr) => Ok(format!(
+                "{} {} {}",
+                brace_if_needed(left_expr, ParenPosition::Left),
+                op,
+                brace_if_needed(right_expr, ParenPosition::Right)
+            )),
             Expr::And(left, right) => Ok(format!(
                 "{} && {}",
                 brace_if_needed(left, ParenPosition::Left),
@@ -173,7 +174,11 @@ impl<'a> Unparse<'a> {
                 brace_if_needed(left, ParenPosition::Left),
                 brace_if_needed(right, ParenPosition::Right)
             )),
-            Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_needed(expr, ParenPosition::Right))),
+            Expr::Unary(op, expr) => Ok(format!(
+                "{}{}",
+                op,
+                brace_if_needed(expr, ParenPosition::Right)
+            )),
             Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
                     (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
@@ -452,7 +457,12 @@ impl<'a> Unparse<'a> {
         }
     }
 
-    fn unparse_stmt<W: std::fmt::Write>(&self, stmt: &Stmt, writer: &mut W, indent: usize) -> Result<(), DecompileError> {
+    fn unparse_stmt<W: std::fmt::Write>(
+        &self,
+        stmt: &Stmt,
+        writer: &mut W,
+        indent: usize,
+    ) -> Result<(), DecompileError> {
         let indent_str = if self.indent_width > 0 {
             " ".repeat(indent * self.indent_width)
         } else {
@@ -469,12 +479,12 @@ impl<'a> Unparse<'a> {
                     writeln!(writer, "{indent_str}elseif ({cond_frag})")?;
                     self.unparse_stmts(&arm.statements, writer, indent + 1)?;
                 }
-                
+
                 if let Some(otherwise) = otherwise {
                     writeln!(writer, "{indent_str}else")?;
                     self.unparse_stmts(&otherwise.statements, writer, indent + 1)?;
                 }
-                
+
                 writeln!(writer, "{indent_str}endif")?;
                 Ok(())
             }
@@ -522,7 +532,7 @@ impl<'a> Unparse<'a> {
                 environment_width: _,
             } => {
                 let cond_frag = self.unparse_expr(condition)?;
-                
+
                 let mut base_str = "while ".to_string();
                 if let Some(id) = id {
                     let id = self.unparse_variable(id);
@@ -535,7 +545,7 @@ impl<'a> Unparse<'a> {
             }
             StmtNode::Fork { id, time, body } => {
                 let delay_frag = self.unparse_expr(time)?;
-                
+
                 let mut base_str = "fork".to_string();
                 if let Some(id) = id {
                     base_str.push(' ');
@@ -567,7 +577,7 @@ impl<'a> Unparse<'a> {
                     writeln!(writer, "{indent_str}{base_str}")?;
                     self.unparse_stmts(&except.statements, writer, indent + 1)?;
                 }
-                
+
                 writeln!(writer, "{indent_str}endtry")?;
                 Ok(())
             }
@@ -647,10 +657,10 @@ impl<'a> Unparse<'a> {
                         // Add body statements (with increased indentation)
                         // If the body is a Scope, unparse its contents directly to avoid begin...end
                         match &body.node {
-                            StmtNode::Scope { body: scope_body, .. } => {
-                                self.unparse_stmts(scope_body, writer, indent + 1)?
-                            }
-                            _ => self.unparse_stmt(body, writer, indent + 1)?
+                            StmtNode::Scope {
+                                body: scope_body, ..
+                            } => self.unparse_stmts(scope_body, writer, indent + 1)?,
+                            _ => self.unparse_stmt(body, writer, indent + 1)?,
                         }
 
                         writeln!(writer, "{indent_str}endfn")?;
@@ -675,7 +685,14 @@ impl<'a> Unparse<'a> {
                 let var_name = self.unparse_variable(id);
                 match expr {
                     Some(e) => {
-                        writeln!(writer, "{}{}{} = {};", indent_str, prefix, var_name, self.unparse_expr(e)?)?;
+                        writeln!(
+                            writer,
+                            "{}{}{} = {};",
+                            indent_str,
+                            prefix,
+                            var_name,
+                            self.unparse_expr(e)?
+                        )?;
                     }
                     None => {
                         writeln!(writer, "{indent_str}{prefix}{var_name};")?;
@@ -725,10 +742,14 @@ impl<'a> Unparse<'a> {
     }
 }
 
-pub fn unparse(tree: &Parse, fully_paren: bool, indent: bool) -> Result<Vec<String>, DecompileError> {
+pub fn unparse(
+    tree: &Parse,
+    fully_paren: bool,
+    indent: bool,
+) -> Result<Vec<String>, DecompileError> {
     let unparse = Unparse::new(tree, fully_paren, indent);
     let mut buffer = String::new();
-    
+
     unparse.unparse_stmts(&tree.stmts, &mut buffer, 0)?;
     Ok(buffer.lines().map(|s| s.to_string()).collect())
 }
@@ -1631,50 +1652,50 @@ end"#; "complex scatter declaration with optional and rest")]
     fn test_fully_paren_formatting() {
         let program = r#"return 1 + 2 * 3;"#;
         let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
-        
-        // Test normal precedence (should be: 1 + 2 * 3)  
+
+        // Test normal precedence (should be: 1 + 2 * 3)
         let normal = unparse(&tree, false, true).unwrap().join("\n");
         assert_eq!(normal.trim(), "return 1 + 2 * 3;");
-        
+
         // Test fully parenthesized (should be: (1) + ((2) * (3)))
         let fully_paren = unparse(&tree, true, true).unwrap().join("\n");
         assert_eq!(fully_paren.trim(), "return 1 + (2 * 3);");
     }
-    
+
     #[test]
     fn test_unindented_formatting() {
         let program = r#"if (1)
   return 2;
 endif"#;
         let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
-        
+
         // Test normal indented (should have indentation)
         let indented = unparse(&tree, false, true).unwrap().join("\n");
         assert!(indented.contains("  return 2;"));
-        
-        // Test unindented (should have no indentation)  
+
+        // Test unindented (should have no indentation)
         let unindented = unparse(&tree, false, false).unwrap().join("\n");
         let lines: Vec<&str> = unindented.lines().collect();
         assert_eq!(lines[0], "if (1)");
-        assert_eq!(lines[1], "return 2;");  // No leading spaces
+        assert_eq!(lines[1], "return 2;"); // No leading spaces
         assert_eq!(lines[2], "endif");
     }
-    
-    #[test]  
+
+    #[test]
     fn test_indented_vs_unindented() {
         let program = "if (1)\n  a = 2;\nendif";
         let tree = crate::parse::parse_program(program, CompileOptions::default()).unwrap();
-        
+
         let indented = unparse(&tree, false, true).unwrap().join("\n");
         let unindented = unparse(&tree, false, false).unwrap().join("\n");
-        
+
         // With indentation should have 2 spaces before "a = 2;"
         assert_eq!(indented, "if (1)\n  a = 2;\nendif");
-        
+
         // Without indentation should have no leading spaces
         assert_eq!(unindented, "if (1)\na = 2;\nendif");
     }
-    
+
     #[test]
     fn test_simple_fully_paren() {
         let program = "a + b;";
@@ -1718,7 +1739,8 @@ endif"#;
 
         // Let's also check with parentheses to verify the parsing
         let program_with_parens = "(a || b) && c;";
-        let tree_with_parens = crate::parse::parse_program(program_with_parens, CompileOptions::default()).unwrap();
+        let tree_with_parens =
+            crate::parse::parse_program(program_with_parens, CompileOptions::default()).unwrap();
         let result_with_parens = unparse(&tree_with_parens, false, true).unwrap().join("\n");
 
         // With MOO left-to-right precedence, "a || b && c" should parse the same as "(a || b) && c"

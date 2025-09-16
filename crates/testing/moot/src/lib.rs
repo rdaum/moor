@@ -140,6 +140,8 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
         .unwrap();
 
     let mut player = options.wizard_object;
+    let mut failures = Vec::new();
+
     for span in parser::parse(&test).context("parse").unwrap() {
         eprintln!(
             "{}{:?}{:#}",
@@ -147,12 +149,16 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
         );
         match &span.expr {
             MootBlock::ChangePlayer(change) => {
-                player = handle_change_player(options, change.name)
-                    .context("handle_change_player")
-                    .unwrap();
+                match handle_change_player(options, change.name).context("handle_change_player") {
+                    Ok(new_player) => player = new_player,
+                    Err(e) => {
+                        failures.push(format!("Line {}: {}", span.line_no, e));
+                        continue;
+                    }
+                }
             }
             MootBlock::Test(test) => {
-                handle_test(
+                if let Err(e) = handle_test(
                     &mut runner,
                     &player,
                     span.line_no,
@@ -161,9 +167,25 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
                     path,
                 )
                 .context("handle_test")
-                .unwrap();
+                {
+                    failures.push(format!("Line {}: {}", span.line_no, e));
+                }
             }
         }
+    }
+
+    // Report all failures at the end
+    if !failures.is_empty() {
+        eprintln!(
+            "{}Test failures ({}):{}",
+            MOOT_STYLESHEET.test_header,
+            failures.len(),
+            MOOT_STYLESHEET.test_header
+        );
+        for failure in &failures {
+            eprintln!("  {}", failure);
+        }
+        panic!("Test failed with {} failure(s)", failures.len());
     }
 }
 

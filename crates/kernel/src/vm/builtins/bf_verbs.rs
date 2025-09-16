@@ -366,7 +366,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         false
     };
 
-    // Parse optional indent parameter (defaults to true)  
+    // Parse optional indent parameter (defaults to true)
     let indent = if bf_args.args.len() > 3 {
         bf_args.args[3].as_bool().unwrap_or(true)
     } else {
