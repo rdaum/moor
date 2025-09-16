@@ -179,8 +179,8 @@ pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
             let prgstr = if !program.main_vector().is_empty() {
                 let ast = moor_compiler::program_to_tree(&program)
                     .expect("Failed to decompile verb binary");
-                let program =
-                    moor_compiler::unparse(&ast, false, true).expect("Failed to decompile verb binary");
+                let program = moor_compiler::unparse(&ast, false, true)
+                    .expect("Failed to decompile verb binary");
                 Some(program.join("\n"))
             } else {
                 None
