@@ -15,20 +15,20 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Lists
 
-| Name                                    | Complete | Notes |
-|-----------------------------------------|----------|-------|
-| [`length`](values.md#length)            | &check;  |       |
-| [`setadd`](list_sets.md#setadd)         | &check;  |       |
-| [`setremove`](list_sets.md#setremove)   | &check;  |       |
-| [`listappend`](list_sets.md#listappend) | &check;  |       |
-| [`listinsert`](list_sets.md#listinsert) | &check;  |       |
-| [`listdelete`](list_sets.md#listdelete) | &check;  |       |
-| [`listset`](list_sets.md#listset)       | &check;  |       |
-| [`equal`](values.md#equal)              | &check;  |       |
-| [`is_member`](list_sets.md#is_member)   | &check;  |       |
-| [`match`](regex.md#match)               | &check;  |       |
-| [`rmatch`](regex.md#rmatch)             | &check;  |       |
-| [`substitute`](regex.md#substitute)     | &check;  |       |
+| Name                                          | Complete | Notes                                          |
+|-----------------------------------------------|----------|------------------------------------------------|
+| [`length`](values.md#length)                  | &check;  |                                                |
+| [`setadd`](list_sets.md#setadd)               | &check;  |                                                |
+| [`setremove`](list_sets.md#setremove)         | &check;  |                                                |
+| [`listappend`](list_sets.md#listappend)       | &check;  |                                                |
+| [`listinsert`](list_sets.md#listinsert)       | &check;  |                                                |
+| [`listdelete`](list_sets.md#listdelete)       | &check;  |                                                |
+| [`listset`](list_sets.md#listset)             | &check;  |                                                |
+| [`equal`](values.md#equal)                    | &check;  |                                                |
+| [`is_member`](list_sets.md#is_member)         | &check;  |                                                |
+| [`match`](regex.md#match)                     | &check;  |                                                |
+| [`rmatch`](regex.md#rmatch)                   | &check;  |                                                |
+| [`substitute`](regex.md#substitute)           | &check;  |                                                |
 | [`complex_match`](list_sets.md#complex_match) | &check;  | Advanced pattern matching with ordinal support |
 
 ### Strings
@@ -138,7 +138,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | Name                                                   | Complete | Notes                                                                    |
 |--------------------------------------------------------|----------|--------------------------------------------------------------------------|
 | [`server_version`](server.md#server_version)           | &check;  | Crate version + short commit hash, for now                               |
-| [`renumber`](objects.md#renumber)                       | &check;  | Supports UUID to numbered conversion with auto-selection                 |
+| [`renumber`](objects.md#renumber)                      | &check;  | Supports UUID to numbered conversion with auto-selection                 |
 | [`reset_max_object`](server.md#reset_max_object)       |          |                                                                          |
 | [`memory_usage`](server.md#memory_usage)               | &check;  |                                                                          |
 | [`shutdown`](server.md#shutdown)                       | &check;  |                                                                          |
@@ -185,20 +185,22 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Network connections
 
-mooR handles outbound networking differently than classic LambdaMOO - see the [networking section](../networking.md#outbound-network-connections-via-curl_worker) for details on using workers for outbound connections.
+mooR handles outbound networking differently than classic LambdaMOO - see
+the [networking section](../networking.md#outbound-network-connections-via-curl_worker) for details on using workers for
+outbound connections.
 
-| Name                                                           | Complete | Notes                                                                                                |
-|----------------------------------------------------------------|----------|------------------------------------------------------------------------------------------------------|
-| [`set_connection_option`](server.md#set_connection_option)     |          | Not planned                                                                                          |
-| [`connection_option`](server.md#connection_option)             |          | Not planned                                                                                          |
-| [`connection_options`](server.md#connection_options)           |          | Not planned                                                                                          |
-| [`open_network_connection`](server.md#open_network_connection) |          | Not planned - use worker system instead                                                             |
-| [`listen`](server.md#listen)                                   | &check;  | `print-messages` not yet implemented. errors in binding not properly propagating back to the builtin |
-| [`unlisten`](server.md#unlisten)                               | &check;  |                                                                                                      |
-| [`listeners`](server.md#listeners)                             | &check;  |                                                                                                      |
-| [`output_delimiters`](server.md#output_delimiters)             | &check;  |                                                                                                      |
-| [`connection_attributes`](server.md#connection_attributes)     | &check;  | mooR extension - returns map/list based on features                                                 |
-| [`buffered_output_length`](server.md#buffered_output_length)   |          | Not planned                                                                                          |
+| Name                                                           | Complete | Notes                                                                                                                                         |
+|----------------------------------------------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| [`set_connection_option`](server.md#set_connection_option)     |          | Not planned                                                                                                                                   |
+| [`connection_option`](server.md#connection_option)             | &check;  | Works only for connections, not player objects, since moor has multiple connections per player. `connections(player)` returns all connections |
+| [`connection_options`](server.md#connection_options)           | &check;  | Works only for connections, not player objects, since moor has multiple connections per player. `connections(player)` returns all connections |
+| [`open_network_connection`](server.md#open_network_connection) |          | Not planned - use worker system instead                                                                                                       |
+| [`listen`](server.md#listen)                                   | &check;  | `print-messages` not yet implemented. errors in binding not properly propagating back to the builtin                                          |
+| [`unlisten`](server.md#unlisten)                               | &check;  |                                                                                                                                               |
+| [`listeners`](server.md#listeners)                             | &check;  |                                                                                                                                               |
+| [`output_delimiters`](server.md#output_delimiters)             | &check;  |                                                                                                                                               |
+| [`connection_attributes`](server.md#connection_attributes)     | &check;  | mooR extension - returns map/list based on features                                                                                           |
+| [`buffered_output_length`](server.md#buffered_output_length)   |          | Not planned                                                                                                                                   |
 
 ## Extension from Toast
 
@@ -237,10 +239,10 @@ Functions not part of the original LambdaMOO, but added in moor
 
 ### Import/Export of Objects
 
-| Name          | Description                                                                                                                                | Notes
-|---------------|--------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
-| [`load_object`](../../the-system/object-packaging.md#load_object) | Load an object from objdef format with optional conflict detection and resolution options. | Wiz only          |
-| `dump_object` | Takes an object and returns a list of strings representing the object definition in objdef format.                                         | Wiz or owner only |
+| Name                                                              | Description                                                                                        | Notes             
+|-------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|-------------------|
+| [`load_object`](../../the-system/object-packaging.md#load_object) | Load an object from objdef format with optional conflict detection and resolution options.         | Wiz only          |
+| `dump_object`                                                     | Takes an object and returns a list of strings representing the object definition in objdef format. | Wiz or owner only |
 
 ### Flyweights & Symbols (new types)
 
