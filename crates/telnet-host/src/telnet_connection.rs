@@ -15,16 +15,15 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Instant, SystemTime};
 
-use eyre::Context;
-use eyre::bail;
+use eyre::{Context, bail};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use moor_common::model::{CompileError, ObjectRef};
+use moor_common::model::ObjectRef;
 use moor_common::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_common::util::parse_into_words;
-use moor_var::{Obj, Symbol, Var, Variant, v_bool, v_str};
+use moor_var::{Obj, Symbol, Var, v_bool, v_str};
 use nectar::{
     TelnetCodec, constants, event::TelnetEvent, option::TelnetOption,
     subnegotiation::SubnegotiationType,
@@ -36,7 +35,6 @@ use rpc_common::{
     RpcMessageError, VerbProgramResponse,
 };
 use rpc_common::{DaemonToClientReply, HostClientToDaemonMessage};
-use termimad::MadSkin;
 use tmq::subscribe::Subscribe;
 use tokio::net::TcpStream;
 use tokio::select;
@@ -44,15 +42,15 @@ use tokio_util::codec::Framed;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-/// Out of band messages are prefixed with this string, e.g. for MCP clients.
+use crate::connection_shared::{
+    LineMode, PendingTask, TASK_TIMEOUT, describe_compile_error, output_format,
+};
+
+/// Out of band messages are prefixed with this string
 const OUT_OF_BAND_PREFIX: &str = "#$#";
 
 /// Default flush command
 pub(crate) const DEFAULT_FLUSH_COMMAND: &str = ".flush";
-
-// TODO: switch to djot
-const CONTENT_TYPE_MARKDOWN: &str = "text_markdown";
-const CONTENT_TYPE_DJOT: &str = "text_djot";
 
 pub(crate) struct TelnetConnection {
     pub(crate) peer_addr: SocketAddr,
@@ -83,72 +81,6 @@ pub(crate) struct TelnetConnection {
     /// Connection attributes (terminal size, type, etc.)
     pub(crate) connection_attributes: HashMap<Symbol, Var>,
 }
-
-/// The input modes the telnet session can be in.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum LineMode {
-    /// Receiving input
-    Input,
-    /// Spooling up .program input.
-    SpoolingProgram(String, String),
-}
-
-fn describe_compile_error(compile_error: CompileError) -> String {
-    match compile_error {
-        CompileError::StringLexError(_, le) => {
-            format!("String format error: {le}")
-        }
-        CompileError::ParseError {
-            error_position,
-            context: _,
-            end_line_col,
-            message,
-        } => {
-            let mut err = format!(
-                "Parse error at line {} column {}: {}",
-                error_position.line_col.0, error_position.line_col.1, message
-            );
-            if let Some(end_line_col) = end_line_col {
-                err.push_str(&format!(
-                    " (to line {} column {})",
-                    end_line_col.0, end_line_col.1
-                ));
-            }
-            err.push_str(format!(": {message}").as_str());
-            err
-        }
-        CompileError::UnknownBuiltinFunction(_, bf) => {
-            format!("Unknown builtin function: {bf}")
-        }
-        CompileError::UnknownLoopLabel(_, ll) => {
-            format!("Unknown break/loop label: {ll}")
-        }
-        CompileError::DuplicateVariable(_, dv) => {
-            format!("Duplicate variable: {dv}")
-        }
-        CompileError::AssignToConst(_, ac) => {
-            format!("Assignment to constant: {ac}")
-        }
-        CompileError::DisabledFeature(_, df) => {
-            format!("Disabled feature: {df}")
-        }
-        CompileError::BadSlotName(_, bs) => {
-            format!("Bad slot name in flyweight: {bs}")
-        }
-        CompileError::InvalidAssignemnt(_) => "Invalid l-value for assignment".to_string(),
-        CompileError::UnknownTypeConstant(_, t) => {
-            format!("Unknown type constant: {t}")
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct PendingTask {
-    task_id: usize,
-    start_time: Instant,
-}
-
-const TASK_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl TelnetConnection {
     /// Send connection attribute updates to the daemon
@@ -787,7 +719,7 @@ impl TelnetConnection {
                     let Some(event) = event else {
                         bail!("Connection closed before login");
                     };
-                    let event = event.unwrap();
+                    let event = event?;
                     let line = match event {
                         TelnetEvent::Message(text) => text,
                         ref negotiation_event => {
@@ -1412,52 +1344,4 @@ impl TelnetConnection {
         }
         Ok(())
     }
-}
-
-fn markdown_to_ansi(markdown: &str) -> String {
-    let skin = MadSkin::default_dark();
-    // TODO: permit different text stylings here. e.g. user themes for colours, styling, etc.
-    //   will require custom host-side commands to set these.
-    skin.text(markdown, None).to_string()
-}
-
-/// Produce the right kind of "telnet" compatible output for the given content.
-fn output_format(content: &Var, content_type: Option<Symbol>) -> Result<String, eyre::Error> {
-    match content.variant() {
-        Variant::Str(s) => output_str_format(s.as_str(), content_type),
-        Variant::Sym(s) => output_str_format(&s.as_arc_string(), content_type),
-        Variant::List(l) => {
-            // If the content is a list, it must be a list of strings.
-            let mut output = String::new();
-            for item in l.iter() {
-                let Some(item_str) = item.as_string() else {
-                    bail!("Expected list item to be a string, got: {:?}", item);
-                };
-                if !output.is_empty() {
-                    output.push('\n');
-                }
-                output.push_str(item_str);
-            }
-            output_str_format(&output, content_type)
-        }
-        _ => bail!("Unsupported content type: {:?}", content.variant()),
-    }
-}
-
-fn output_str_format(content: &str, content_type: Option<Symbol>) -> Result<String, eyre::Error> {
-    let Some(content_type) = content_type else {
-        return Ok(content.to_string());
-    };
-    let content_type = content_type.as_arc_string();
-    Ok(match content_type.as_str() {
-        CONTENT_TYPE_MARKDOWN => markdown_to_ansi(content),
-        CONTENT_TYPE_DJOT => {
-            // For now, we treat Djot as markdown.
-            // In the future, we might want to support Djot specifically, but in realiy, djot
-            // is mainly a (safer) subset of markdown.
-            markdown_to_ansi(content)
-        }
-        // text/plain, None, or unknown
-        _ => content.to_string(),
-    })
 }

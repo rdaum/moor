@@ -11,7 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::connection::TelnetConnection;
+use crate::tcp_connection::TcpConnection;
+use crate::telnet_connection::TelnetConnection;
 use eyre::bail;
 use futures_util::{
     SinkExt, StreamExt,
@@ -31,7 +32,7 @@ use std::sync::atomic::AtomicBool;
 use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
-use tokio_util::codec::Framed;
+use tokio_util::codec::{Framed, LinesCodec};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -241,27 +242,10 @@ impl Listener {
                 warn!("Failed to negotiate telnet capabilities: {}", e);
             }
 
-            // Collect negotiation results with timeout
-            if let Ok(negotiated_attrs) =
-                collect_negotiation_results(&mut read, &connection_attributes).await
-            {
-                // Check if client supports charset and send UTF-8 request
-                if negotiated_attrs.contains_key(&Symbol::mk("supports-charset")) {
-                    debug!("Client supports charset, sending UTF-8 request");
-                    if let Err(e) = send_utf8_charset_request(&mut write).await {
-                        debug!("Failed to send UTF-8 charset request: {}", e);
-                    } else {
-                        debug!("UTF-8 charset request sent");
-
-                        // Collect UTF-8 response with short timeout
-                        if let Ok(charset_attrs) = collect_charset_response(&mut read).await {
-                            connection_attributes.extend(charset_attrs);
-                        }
-                    }
-                }
-
-                connection_attributes.extend(negotiated_attrs);
-            }
+            // Test for initial Echo response to determine telnet capability
+            debug!("Checking for Echo response to test telnet capability");
+            let telnet_negotiation_success =
+                perform_telnet_negotiation(&mut write, &mut read, &mut connection_attributes).await;
 
             debug!(
                 "Telnet negotiation complete, establishing connection with {} attributes",
@@ -343,28 +327,82 @@ impl Listener {
                 client_id, events_address
             );
 
-            // Use the already-split stream from negotiation
-            let mut tcp_connection = TelnetConnection {
-                handler_object,
-                peer_addr,
-                connection_oid,
-                client_token,
-                client_id,
-                write,
-                read,
-                kill_switch: connection_kill_switch,
-                broadcast_sub,
-                narrative_sub: events_sub,
-                auth_token: None,
-                rpc_client,
-                pending_task: None,
-                output_prefix: None,
-                output_suffix: None,
-                flush_command: crate::connection::DEFAULT_FLUSH_COMMAND.to_string(),
-                connection_attributes,
-            };
+            if telnet_negotiation_success {
+                // Use telnet connection for clients that support telnet protocol
+                debug!("Using telnet connection for negotiated client");
+                let mut telnet_connection = TelnetConnection {
+                    handler_object,
+                    peer_addr,
+                    connection_oid,
+                    client_token,
+                    client_id,
+                    write,
+                    read,
+                    kill_switch: connection_kill_switch,
+                    broadcast_sub,
+                    narrative_sub: events_sub,
+                    auth_token: None,
+                    rpc_client,
+                    pending_task: None,
+                    output_prefix: None,
+                    output_suffix: None,
+                    flush_command: crate::telnet_connection::DEFAULT_FLUSH_COMMAND.to_string(),
+                    connection_attributes,
+                };
 
-            tcp_connection.run().await?;
+                telnet_connection.run().await?;
+            } else {
+                // Transfer to TCP connection for raw text clients
+                debug!("Transferring to TCP connection for non-telnet client");
+
+                // Reunite the telnet streams
+                let framed = write
+                    .reunite(read)
+                    .map_err(|_| eyre::eyre!("Failed to reunite telnet streams for transfer"))?;
+
+                // Extract the TCP stream and any buffered data
+                let parts = framed.into_parts();
+                debug!(
+                    "Transferring: {} bytes in read buffer",
+                    parts.read_buf.len()
+                );
+
+                // Create new framed stream with LinesCodec
+                // We lose the buffered data but this is acceptable for the fallback case
+                let lines_framed = Framed::new(parts.io, LinesCodec::new());
+
+                // Split again with LinesCodec types
+                let (lines_write, lines_read) = lines_framed.split();
+
+                // Update connection attributes for TCP mode
+                connection_attributes.insert(Symbol::mk("host-type"), moor_var::Var::from("tcp"));
+                connection_attributes.insert(
+                    Symbol::mk("supports-telnet-protocol"),
+                    moor_var::Var::mk_bool(false),
+                );
+
+                let mut tcp_connection = TcpConnection {
+                    handler_object,
+                    peer_addr,
+                    connection_oid,
+                    client_token,
+                    client_id,
+                    write: lines_write,
+                    read: lines_read,
+                    kill_switch: connection_kill_switch,
+                    broadcast_sub,
+                    narrative_sub: events_sub,
+                    auth_token: None,
+                    rpc_client,
+                    pending_task: None,
+                    output_prefix: None,
+                    output_suffix: None,
+                    flush_command: crate::tcp_connection::DEFAULT_FLUSH_COMMAND.to_string(),
+                    connection_attributes,
+                };
+
+                tcp_connection.run().await?;
+            }
             Ok(())
         });
         Ok(())
@@ -372,7 +410,134 @@ impl Listener {
 }
 
 /// Send telnet negotiation requests before connection establishment
+/// Start with Echo option only - if client responds, it's telnet-capable
 async fn negotiate_telnet_capabilities(
+    write: &mut SplitSink<Framed<TcpStream, TelnetCodec>, nectar::event::TelnetEvent>,
+) -> Result<(), eyre::Error> {
+    use nectar::{event::TelnetEvent, option::TelnetOption};
+
+    // Test with Echo option - most basic and universal telnet option
+    // Even basic telnet clients should respond to this with DO or DONT
+    let echo_request = TelnetEvent::Do(TelnetOption::Echo);
+    write.send(echo_request).await?;
+    debug!("Sent initial Echo DO request to test telnet capability");
+
+    Ok(())
+}
+
+/// Perform complete telnet negotiation with early returns to avoid deep nesting
+async fn perform_telnet_negotiation(
+    write: &mut SplitSink<Framed<TcpStream, TelnetCodec>, nectar::event::TelnetEvent>,
+    read: &mut SplitStream<Framed<TcpStream, TelnetCodec>>,
+    connection_attributes: &mut std::collections::HashMap<Symbol, moor_var::Var>,
+) -> bool {
+    let Ok(echo_responded) = check_initial_echo_response(read).await else {
+        debug!("Echo test failed - switching to raw TCP mode");
+        return false;
+    };
+
+    if !echo_responded {
+        debug!("No Echo response received - client is likely not telnet-capable");
+        return false;
+    }
+
+    debug!("Client responded to Echo - proceeding with full telnet negotiation");
+
+    if let Err(e) = send_full_telnet_negotiation(write).await {
+        warn!("Failed to send full telnet negotiation: {e}");
+    }
+
+    let Ok(negotiated_attrs) = collect_full_negotiation_results(read, connection_attributes).await
+    else {
+        debug!("Failed to collect negotiation results");
+        return true; // Still telnet-capable, just no extra attributes
+    };
+
+    debug!(
+        "Full telnet negotiation completed with {} attributes",
+        negotiated_attrs.len()
+    );
+
+    if negotiated_attrs.contains_key(&Symbol::mk("supports-charset")) {
+        debug!("Client supports charset, sending UTF-8 request");
+        if let Err(e) = send_utf8_charset_request(write).await {
+            debug!("Failed to send UTF-8 charset request: {e}");
+        } else {
+            debug!("UTF-8 charset request sent");
+            if let Ok(charset_attrs) = collect_charset_response(read).await {
+                connection_attributes.extend(charset_attrs);
+            }
+        }
+    }
+
+    connection_attributes.extend(negotiated_attrs);
+    true
+}
+
+/// Check for initial Echo response to determine if client supports telnet
+async fn check_initial_echo_response(
+    read: &mut SplitStream<Framed<TcpStream, TelnetCodec>>,
+) -> Result<bool, eyre::Error> {
+    use futures_util::StreamExt;
+    use nectar::event::TelnetEvent;
+    use std::time::Duration;
+
+    let timeout_duration = Duration::from_millis(200); // Short timeout for initial test
+    let deadline = tokio::time::Instant::now() + timeout_duration;
+
+    debug!("Waiting for Echo response from client");
+
+    while tokio::time::Instant::now() < deadline {
+        let timeout_result = tokio::time::timeout(Duration::from_millis(50), read.next()).await;
+
+        let Some(event_result) = timeout_result.ok().flatten() else {
+            continue;
+        };
+
+        let event = match event_result {
+            Ok(event) => event,
+            Err(_) => continue,
+        };
+
+        match event {
+            TelnetEvent::Will(_)
+            | TelnetEvent::Wont(_)
+            | TelnetEvent::Do(_)
+            | TelnetEvent::Dont(_) => {
+                // Any telnet negotiation response indicates telnet capability
+                debug!(
+                    "Client sent telnet negotiation response: {:?} - telnet capable",
+                    event
+                );
+                return Ok(true);
+            }
+            TelnetEvent::Subnegotiate(_) => {
+                // Subnegotiation also indicates telnet capability
+                debug!("Client sent telnet subnegotiation - telnet capable");
+                return Ok(true);
+            }
+            TelnetEvent::Message(_) => {
+                // Client sent text instead of telnet negotiation - not telnet capable
+                debug!("Client sent text message instead of telnet response - not telnet capable");
+                return Ok(false);
+            }
+            _ => {
+                // Other telnet events also indicate telnet capability
+                debug!(
+                    "Client sent other telnet event: {:?} - telnet capable",
+                    event
+                );
+                return Ok(true);
+            }
+        }
+    }
+
+    debug!("No telnet response received within timeout");
+    Ok(false)
+}
+
+/// Send full telnet negotiation after Echo test succeeds
+async fn send_full_telnet_negotiation(
     write: &mut SplitSink<Framed<TcpStream, TelnetCodec>, nectar::event::TelnetEvent>,
 ) -> Result<(), eyre::Error> {
     use nectar::{event::TelnetEvent, option::TelnetOption};
@@ -393,11 +558,12 @@ async fn negotiate_telnet_capabilities(
     let charset_request = TelnetEvent::Do(TelnetOption::Charset);
     write.send(charset_request).await?;
 
+    debug!("Sent full telnet negotiation requests");
     Ok(())
 }
 
-/// Collect telnet negotiation results with timeout
-async fn collect_negotiation_results(
+/// Collect full telnet negotiation results with timeout
+async fn collect_full_negotiation_results(
     read: &mut SplitStream<Framed<TcpStream, TelnetCodec>>,
     _base_attributes: &std::collections::HashMap<Symbol, moor_var::Var>,
 ) -> Result<std::collections::HashMap<Symbol, moor_var::Var>, eyre::Error> {
@@ -406,9 +572,9 @@ async fn collect_negotiation_results(
     use std::time::Duration;
 
     let mut negotiated_attrs = std::collections::HashMap::new();
-    let timeout_duration = Duration::from_millis(500); // Short timeout for negotiation
+    let timeout_duration = Duration::from_millis(1000); // Longer timeout for full negotiation
 
-    // Collect negotiation responses for a short time
+    // Collect negotiation responses for a reasonable time
     let deadline = tokio::time::Instant::now() + timeout_duration;
 
     while tokio::time::Instant::now() < deadline {
@@ -439,7 +605,7 @@ async fn collect_negotiation_results(
     }
 
     debug!(
-        "Negotiation complete, collected {} attributes",
+        "Full negotiation complete, collected {} attributes",
         negotiated_attrs.len()
     );
     Ok(negotiated_attrs)
