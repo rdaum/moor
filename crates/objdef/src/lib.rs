@@ -22,10 +22,13 @@ use std::io;
 use std::path::PathBuf;
 
 pub use dump::{collect_object, collect_object_definitions, dump_object, dump_object_definitions};
-pub use load::ObjectDefinitionLoader;
+pub use load::{
+    ConflictEntity, ConflictMode, Entity, ObjDefLoaderOptions, ObjDefLoaderResults,
+    ObjectDefinitionLoader,
+};
 
 #[derive(Debug, thiserror::Error)]
-pub enum DirDumpReaderError {
+pub enum ObjdefLoaderError {
     #[error("Directory not found: {0}")]
     DirectoryNotFound(PathBuf),
     #[error("Invalid object file name: {0} (should be number)")]
@@ -52,31 +55,29 @@ pub enum DirDumpReaderError {
     SingleObjectExpected(String, usize),
 }
 
-impl DirDumpReaderError {
+impl ObjdefLoaderError {
     pub fn source(&self) -> &str {
         match self {
-            DirDumpReaderError::DirectoryNotFound(path) => path.to_str().unwrap_or("<unknown>"),
-            DirDumpReaderError::InvalidObjectFilename(path) => path.to_str().unwrap_or("<unknown>"),
-            DirDumpReaderError::ObjectFileReadError(path, _) => {
-                path.to_str().unwrap_or("<unknown>")
-            }
-            DirDumpReaderError::ObjectDefParseError(source, _)
-            | DirDumpReaderError::CouldNotCreateObject(source, _, _)
-            | DirDumpReaderError::CouldNotSetObjectParent(source, _)
-            | DirDumpReaderError::CouldNotSetObjectLocation(source, _)
-            | DirDumpReaderError::CouldNotSetObjectOwner(source, _)
-            | DirDumpReaderError::CouldNotDefineProperty(source, _, _, _)
-            | DirDumpReaderError::CouldNotOverrideProperty(source, _, _, _)
-            | DirDumpReaderError::CouldNotDefineVerb(source, _, _, _)
-            | DirDumpReaderError::SingleObjectExpected(source, _) => source.as_str(),
+            ObjdefLoaderError::DirectoryNotFound(path) => path.to_str().unwrap_or("<unknown>"),
+            ObjdefLoaderError::InvalidObjectFilename(path) => path.to_str().unwrap_or("<unknown>"),
+            ObjdefLoaderError::ObjectFileReadError(path, _) => path.to_str().unwrap_or("<unknown>"),
+            ObjdefLoaderError::ObjectDefParseError(source, _)
+            | ObjdefLoaderError::CouldNotCreateObject(source, _, _)
+            | ObjdefLoaderError::CouldNotSetObjectParent(source, _)
+            | ObjdefLoaderError::CouldNotSetObjectLocation(source, _)
+            | ObjdefLoaderError::CouldNotSetObjectOwner(source, _)
+            | ObjdefLoaderError::CouldNotDefineProperty(source, _, _, _)
+            | ObjdefLoaderError::CouldNotOverrideProperty(source, _, _, _)
+            | ObjdefLoaderError::CouldNotDefineVerb(source, _, _, _)
+            | ObjdefLoaderError::SingleObjectExpected(source, _) => source.as_str(),
         }
     }
 
     pub fn path(&self) -> Option<&PathBuf> {
         match self {
-            DirDumpReaderError::DirectoryNotFound(path)
-            | DirDumpReaderError::InvalidObjectFilename(path)
-            | DirDumpReaderError::ObjectFileReadError(path, _) => Some(path),
+            ObjdefLoaderError::DirectoryNotFound(path)
+            | ObjdefLoaderError::InvalidObjectFilename(path)
+            | ObjdefLoaderError::ObjectFileReadError(path, _) => Some(path),
             _ => None,
         }
     }

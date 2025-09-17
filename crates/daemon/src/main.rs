@@ -12,16 +12,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::args::Args;
+use eyre::{bail, eyre};
+use fs2::FileExt;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-
-use crate::args::Args;
-use eyre::{bail, eyre};
-use fs2::FileExt;
+use std::time::Instant;
 
 use crate::connections::ConnectionRegistryFactory;
 use crate::event_log::{EventLog, EventLogConfig, EventLogOps, NoOpEventLog};
@@ -108,10 +108,19 @@ fn perform_import(
     // We have two ways of loading textdump.
     // legacy "textdump" format from LambdaMOO,
     // or our own exploded objdef format.
-    match &config.import_export.import_format {
+    let commit = match &config.import_export.import_format {
         ImportExportFormat::Objdef => {
             let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-            od.read_dirdump(config.features.compile_options(), import_path.as_ref())?;
+            let results =
+                od.load_objdef_directory(config.features.compile_options(), import_path.as_ref())?;
+            info!(
+                "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
+                results.loaded_objects.len(),
+                results.num_loaded_verbs,
+                results.num_loaded_property_definitions,
+                results.num_loaded_property_overrides
+            );
+            results.commit
         }
         ImportExportFormat::Textdump => {
             textdump_load(
@@ -120,19 +129,25 @@ fn perform_import(
                 version.clone(),
                 config.features.compile_options(),
             )?;
+            true
         }
-    }
+    };
 
-    let result = loader_interface.commit()?;
+    if commit {
+        let result = loader_interface.commit()?;
 
-    match result {
-        CommitResult::Success { .. } => {
-            info!("Import complete in {:?}", start.elapsed());
+        match result {
+            CommitResult::Success { .. } => {
+                info!("Import complete in {:?}", start.elapsed());
+            }
+            _ => {
+                error!("Import failed due to commit failure: {:?}", result);
+                bail!("Import failed");
+            }
         }
-        _ => {
-            error!("Import failed due to commit failure: {:?}", result);
-            bail!("Import failed");
-        }
+    } else {
+        warn!("Loaded requested rollback, not committing results");
+        // Just dropping the transaction (LoaderInterface) is sufficient here.
     }
     Ok(())
 }

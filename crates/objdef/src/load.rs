@@ -11,19 +11,94 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::DirDumpReaderError;
-use moor_common::model::ObjAttrs;
+use crate::ObjdefLoaderError;
 use moor_common::model::loader::LoaderInterface;
+use moor_common::model::{ObjAttrs, ObjFlag, PropDef, PropFlag, VerbDef};
 use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_object_definitions};
-use moor_var::{NOTHING, Obj};
+use moor_var::program::ProgramType;
+use moor_var::{NOTHING, Obj, Symbol, Var};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tracing::info;
+use uuid::Uuid;
 
 pub struct ObjectDefinitionLoader<'a> {
     object_definitions: HashMap<Obj, (PathBuf, ObjectDefinition)>,
     loader: &'a mut dyn LoaderInterface,
+}
+
+/// How to handle a situation where:
+///     * Object already exists
+///     * Provided flags or builtin-props differ from loaded objdef file
+///     * Parentage differs from loaded objdef file
+///     * An existing defined property differs in value or flags from loaded objdef file
+///     * An existing overridden property differs in value or flags from loaded objdef file
+///     * A verb differs in flags or content from loaded objdef file
+#[derive(Debug)]
+pub enum ConflictMode {
+    /// Indiscriminately overwrite the existing entity with the new value.
+    Clobber,
+    /// Skip all conflicts entirely and only add new verbs and properties that do not conflict.
+    Skip,
+}
+
+/// Entities for which we can give instructions for overrides and removals.
+#[derive(Debug)]
+pub enum Entity {
+    ObjectFlags,
+    BuiltinProps,
+    Parentage,
+    PropertyDef(Symbol),
+    PropertyValue(Symbol),
+    PropertyFlag(Symbol),
+    VerbDef(Vec<Symbol>),
+    VerbProgram(Vec<Symbol>),
+}
+
+#[derive(Debug)]
+pub struct ObjDefLoaderOptions {
+    /// True if we're running in "dry-run" mode where we test, and collect conflicts.
+    pub dry_run: bool,
+    /// How to handle conflicts.
+    pub conflict_mode: ConflictMode,
+    /// The set of entities for which we will allow overriding and treat as if their specific
+    /// ConflicTMode was "Clobber"
+    pub overrides: Vec<(Obj, Entity)>,
+    /// The set of entities which we will consider value for deletion
+    /// Note that flags, builtin props and parentage are not valid values here.
+    pub removals: Vec<(Obj, Entity)>,
+}
+
+#[derive(Debug)]
+pub enum ConflictEntity {
+    ObjectFlags(ObjFlag),
+    BuiltinProps(Symbol, Var),
+    Parentage(Obj),
+    PropertyDef(Symbol, PropDef),
+    PropertyValue(Symbol, Var),
+    PropertyFlag(Symbol, PropFlag),
+    VerbDef(Vec<Symbol>, VerbDef),
+    VerbProgram(Vec<Symbol>, ProgramType),
+}
+
+/// The results of loading either a directory or a single object
+/// Where conflicts are returned they take the form of:
+///         (conflicted-object, [entity], current-value, objdef-value)
+#[derive(Debug)]
+pub struct ObjDefLoaderResults {
+    /// True if the caller should commit the transaction, otherwise it should be rolled back, either
+    /// because we have a critical error, or the loader was run in dry-run mode.
+    pub commit: bool,
+    /// The set of conflicts discovered during loading, and handled using ConflictMode above
+    pub conflicts: Vec<(Obj, ConflictEntity)>,
+    /// The set of proposed or completed deletions (where objdef was lacking an entity found in
+    /// existing)
+    pub removals: Vec<(Obj, Entity)>,
+    pub loaded_objects: Vec<Obj>,
+    pub num_loaded_verbs: usize,
+    pub num_loaded_property_definitions: usize,
+    pub num_loaded_property_overrides: usize,
 }
 
 impl<'a> ObjectDefinitionLoader<'a> {
@@ -34,16 +109,16 @@ impl<'a> ObjectDefinitionLoader<'a> {
         }
     }
 
-    pub fn read_dirdump(
+    /// Read an entire directory of objdef files, along with `constants.moo`, process them, and
+    /// load them into the database.
+    pub fn load_objdef_directory(
         &mut self,
         compile_options: CompileOptions,
         dirpath: &Path,
-    ) -> Result<(), DirDumpReaderError> {
-        let start_time = Instant::now();
-
+    ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
         // Check that the directory exists
         if !dirpath.exists() {
-            return Err(DirDumpReaderError::DirectoryNotFound(dirpath.to_path_buf()));
+            return Err(ObjdefLoaderError::DirectoryNotFound(dirpath.to_path_buf()));
         }
 
         // Constant variables will go here.
@@ -67,7 +142,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
             .find(|f| f.file_name().unwrap() == "constants.moo");
         if let Some(constants_file) = constants_file {
             let constants_file_contents = std::fs::read_to_string(constants_file)
-                .map_err(|e| DirDumpReaderError::ObjectFileReadError(constants_file.clone(), e))?;
+                .map_err(|e| ObjdefLoaderError::ObjectFileReadError(constants_file.clone(), e))?;
             self.parse_objects(
                 constants_file,
                 &mut context,
@@ -87,7 +162,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
             }
 
             let object_file_contents = std::fs::read_to_string(object_file.clone())
-                .map_err(|e| DirDumpReaderError::ObjectFileReadError(object_file.clone(), e))?;
+                .map_err(|e| ObjdefLoaderError::ObjectFileReadError(object_file.clone(), e))?;
 
             self.parse_objects(
                 &object_file,
@@ -97,17 +172,17 @@ impl<'a> ObjectDefinitionLoader<'a> {
             )?;
         }
 
-        let num_total_verbs = self
+        let num_loaded_verbs = self
             .object_definitions
             .values()
             .map(|(_, d)| d.verbs.len())
             .sum::<usize>();
-        let num_total_properties = self
+        let num_loaded_property_definitions = self
             .object_definitions
             .values()
             .map(|(_, d)| d.property_definitions.len())
             .sum::<usize>();
-        let num_total_property_overrides = self
+        let num_loaded_property_overrides = self
             .object_definitions
             .values()
             .map(|(_, d)| d.property_overrides.len())
@@ -118,26 +193,25 @@ impl<'a> ObjectDefinitionLoader<'a> {
             self.object_definitions.len()
         );
         self.apply_attributes()?;
-        info!("Defining {} properties...", num_total_properties);
+        info!("Defining {} properties...", num_loaded_property_definitions);
         self.define_properties()?;
         info!(
             "Overriding {} property values...",
-            num_total_property_overrides
+            num_loaded_property_overrides
         );
         self.set_properties()?;
-        info!("Defining and compiling {} verbs...", num_total_verbs);
+        info!("Defining and compiling {} verbs...", num_loaded_verbs);
         self.define_verbs()?;
 
-        info!(
-            "Imported {} objects w/ {} verbs, {} properties and {} property overrides in {} seconds.",
-            self.object_definitions.len(),
-            num_total_verbs,
-            num_total_properties,
-            num_total_property_overrides,
-            start_time.elapsed().as_secs()
-        );
-
-        Ok(())
+        Ok(ObjDefLoaderResults {
+            commit: false,
+            conflicts: vec![],
+            removals: vec![],
+            loaded_objects: self.object_definitions.keys().cloned().collect(),
+            num_loaded_verbs,
+            num_loaded_property_definitions,
+            num_loaded_property_overrides,
+        })
     }
 
     fn parse_objects(
@@ -146,10 +220,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
         context: &mut ObjFileContext,
         object_file_contents: &str,
         compile_options: &CompileOptions,
-    ) -> Result<(), DirDumpReaderError> {
+    ) -> Result<(), ObjdefLoaderError> {
         let compiled_defs =
             compile_object_definitions(object_file_contents, compile_options, context).map_err(
-                |e| DirDumpReaderError::ObjectDefParseError(path.to_string_lossy().to_string(), e),
+                |e| ObjdefLoaderError::ObjectDefParseError(path.to_string_lossy().to_string(), e),
             )?;
 
         for compiled_def in compiled_defs {
@@ -167,7 +241,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ),
                 )
                 .map_err(|wse| {
-                    DirDumpReaderError::CouldNotCreateObject(
+                    ObjdefLoaderError::CouldNotCreateObject(
                         path.to_string_lossy().to_string(),
                         oid,
                         wse,
@@ -180,13 +254,13 @@ impl<'a> ObjectDefinitionLoader<'a> {
         Ok(())
     }
 
-    pub fn apply_attributes(&mut self) -> Result<(), DirDumpReaderError> {
+    pub fn apply_attributes(&mut self) -> Result<(), ObjdefLoaderError> {
         for (obj, (path, def)) in &self.object_definitions {
             if def.parent != NOTHING {
                 self.loader
                     .set_object_parent(obj, &def.parent)
                     .map_err(|e| {
-                        DirDumpReaderError::CouldNotSetObjectParent(
+                        ObjdefLoaderError::CouldNotSetObjectParent(
                             path.to_string_lossy().to_string(),
                             e,
                         )
@@ -196,7 +270,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 self.loader
                     .set_object_location(obj, &def.location)
                     .map_err(|e| {
-                        DirDumpReaderError::CouldNotSetObjectLocation(
+                        ObjdefLoaderError::CouldNotSetObjectLocation(
                             path.to_string_lossy().to_string(),
                             e,
                         )
@@ -204,17 +278,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
             }
             if def.owner != NOTHING {
                 self.loader.set_object_owner(obj, &def.owner).map_err(|e| {
-                    DirDumpReaderError::CouldNotSetObjectOwner(
-                        path.to_string_lossy().to_string(),
-                        e,
-                    )
+                    ObjdefLoaderError::CouldNotSetObjectOwner(path.to_string_lossy().to_string(), e)
                 })?;
             }
         }
         Ok(())
     }
 
-    pub fn define_verbs(&mut self) -> Result<(), DirDumpReaderError> {
+    pub fn define_verbs(&mut self) -> Result<(), ObjdefLoaderError> {
         for (obj, (path, def)) in &self.object_definitions {
             for v in &def.verbs {
                 self.loader
@@ -227,7 +298,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         v.program.clone(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotDefineVerb(
+                        ObjdefLoaderError::CouldNotDefineVerb(
                             path.to_string_lossy().to_string(),
                             *obj,
                             v.names.clone(),
@@ -238,7 +309,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         }
         Ok(())
     }
-    pub fn define_properties(&mut self) -> Result<(), DirDumpReaderError> {
+    pub fn define_properties(&mut self) -> Result<(), ObjdefLoaderError> {
         for (obj, (path, def)) in &self.object_definitions {
             for pd in &def.property_definitions {
                 self.loader
@@ -251,7 +322,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         pd.value.clone(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotDefineProperty(
+                        ObjdefLoaderError::CouldNotDefineProperty(
                             path.to_string_lossy().to_string(),
                             *obj,
                             (*pd.name.as_arc_string()).clone(),
@@ -264,7 +335,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         Ok(())
     }
 
-    fn set_properties(&mut self) -> Result<(), DirDumpReaderError> {
+    fn set_properties(&mut self) -> Result<(), ObjdefLoaderError> {
         for (obj, (path, def)) in &self.object_definitions {
             for pv in &def.property_overrides {
                 let pu = &pv.perms_update;
@@ -277,7 +348,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         pv.value.clone(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotOverrideProperty(
+                        ObjdefLoaderError::CouldNotOverrideProperty(
                             path.to_string_lossy().to_string(),
                             *obj,
                             (*pv.name.as_arc_string()).clone(),
@@ -297,7 +368,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         compile_options: CompileOptions,
         target_object: Option<moor_var::Obj>,
         constants: Option<moor_var::Map>,
-    ) -> Result<Obj, DirDumpReaderError> {
+    ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
         let start_time = Instant::now();
         let source_name = "<string>".to_string();
 
@@ -308,7 +379,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         if let Some(constants_map) = constants {
             for (key, value) in constants_map.iter() {
                 let key_symbol = key.as_symbol().map_err(|_| {
-                    DirDumpReaderError::ObjectDefParseError(
+                    ObjdefLoaderError::ObjectDefParseError(
                         source_name.clone(),
                         moor_compiler::ObjDefParseError::ConstantNotFound(format!(
                             "Constants map key must be string or symbol, got: {key:?}"
@@ -322,11 +393,11 @@ impl<'a> ObjectDefinitionLoader<'a> {
         // Parse the object definition
         let compiled_defs =
             compile_object_definitions(object_definition, &compile_options, &mut context)
-                .map_err(|e| DirDumpReaderError::ObjectDefParseError(source_name.clone(), e))?;
+                .map_err(|e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e))?;
 
         // Ensure we got exactly one object
         if compiled_defs.len() != 1 {
-            return Err(DirDumpReaderError::SingleObjectExpected(
+            return Err(ObjdefLoaderError::SingleObjectExpected(
                 source_name,
                 compiled_defs.len(),
             ));
@@ -337,7 +408,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
             if !target_obj.is_positive() {
                 // Negative numeric object ID means allocate next available (max + 1)
                 let max_obj = self.loader.max_object().map_err(|e| {
-                    DirDumpReaderError::ObjectDefParseError(
+                    ObjdefLoaderError::ObjectDefParseError(
                         source_name.clone(),
                         moor_compiler::ObjDefParseError::ConstantNotFound(format!(
                             "Failed to get max object: {e}"
@@ -365,7 +436,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 ),
             )
             .map_err(|wse| {
-                DirDumpReaderError::CouldNotCreateObject(source_name.clone(), oid, wse)
+                ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), oid, wse)
             })?;
 
         // Store the definition for processing
@@ -378,21 +449,21 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 self.loader
                     .set_object_parent(&oid, &def.parent)
                     .map_err(|e| {
-                        DirDumpReaderError::CouldNotSetObjectParent(source_name.clone(), e)
+                        ObjdefLoaderError::CouldNotSetObjectParent(source_name.clone(), e)
                     })?;
             }
             if def.location != NOTHING {
                 self.loader
                     .set_object_location(&oid, &def.location)
                     .map_err(|e| {
-                        DirDumpReaderError::CouldNotSetObjectLocation(source_name.clone(), e)
+                        ObjdefLoaderError::CouldNotSetObjectLocation(source_name.clone(), e)
                     })?;
             }
             if def.owner != NOTHING {
                 self.loader
                     .set_object_owner(&oid, &def.owner)
                     .map_err(|e| {
-                        DirDumpReaderError::CouldNotSetObjectOwner(source_name.clone(), e)
+                        ObjdefLoaderError::CouldNotSetObjectOwner(source_name.clone(), e)
                     })?;
             }
         }
@@ -410,7 +481,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         pd.value.clone(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotDefineProperty(
+                        ObjdefLoaderError::CouldNotDefineProperty(
                             source_name.clone(),
                             oid,
                             (*pd.name.as_arc_string()).clone(),
@@ -433,7 +504,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         pv.value.clone(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotOverrideProperty(
+                        ObjdefLoaderError::CouldNotOverrideProperty(
                             source_name.clone(),
                             oid,
                             (*pv.name.as_arc_string()).clone(),
@@ -456,7 +527,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         v.program.clone(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotDefineVerb(
+                        ObjdefLoaderError::CouldNotDefineVerb(
                             source_name.clone(),
                             oid,
                             v.names.clone(),
@@ -466,13 +537,37 @@ impl<'a> ObjectDefinitionLoader<'a> {
             }
         }
 
+        let num_loaded_verbs = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.verbs.len())
+            .sum::<usize>();
+        let num_loaded_property_definitions = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.property_definitions.len())
+            .sum::<usize>();
+        let num_loaded_property_overrides = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.property_overrides.len())
+            .sum::<usize>();
+
         info!(
             "Loaded single object {} in {} ms",
             oid,
             start_time.elapsed().as_millis()
         );
 
-        Ok(oid)
+        Ok(ObjDefLoaderResults {
+            commit: true,
+            conflicts: vec![],
+            removals: vec![],
+            loaded_objects: vec![oid],
+            num_loaded_verbs,
+            num_loaded_property_definitions,
+            num_loaded_property_overrides,
+        })
     }
 }
 
@@ -652,11 +747,14 @@ mod tests {
                     endverb
                 endobject"#;
 
-        let oid = parser
+        let results = parser
             .load_single_object(spec, CompileOptions::default(), None, None)
             .unwrap();
+        assert_eq!(results.loaded_objects.len(), 1);
+        assert!(results.commit);
         loader.commit().unwrap();
 
+        let oid = results.loaded_objects[0];
         assert_eq!(oid, Obj::mk_id(42));
 
         // Verify the object was created correctly
@@ -707,7 +805,7 @@ mod tests {
         assert!(result.is_err());
 
         match result.unwrap_err() {
-            crate::DirDumpReaderError::SingleObjectExpected(_, count) => {
+            crate::ObjdefLoaderError::SingleObjectExpected(_, count) => {
                 assert_eq!(count, 2);
             }
             _ => panic!("Expected SingleObjectExpected error"),

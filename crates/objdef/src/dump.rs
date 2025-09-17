@@ -644,7 +644,7 @@ mod tests {
         let mut loader = db.loader_client().unwrap();
         let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
         defloader
-            .read_dirdump(CompileOptions::default(), tmpdir_path)
+            .load_objdef_directory(CompileOptions::default(), tmpdir_path)
             .unwrap();
 
         // Round trip worked, so we'll just leave it at that for now. A more anal retentive test
@@ -790,7 +790,7 @@ mod tests {
             let mut loader = db2.loader_client().unwrap();
             let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
             defloader
-                .read_dirdump(CompileOptions::default(), tmpdir_path)
+                .load_objdef_directory(CompileOptions::default(), tmpdir_path)
                 .unwrap();
             assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }
@@ -1013,7 +1013,7 @@ mod tests {
             let mut loader = db2.loader_client().unwrap();
             let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
             defloader
-                .read_dirdump(CompileOptions::default(), tmpdir_path)
+                .load_objdef_directory(CompileOptions::default(), tmpdir_path)
                 .unwrap();
             assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }

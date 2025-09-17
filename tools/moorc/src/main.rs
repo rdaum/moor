@@ -219,16 +219,34 @@ fn main() -> Result<(), eyre::Report> {
         let start = std::time::Instant::now();
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
 
-        if let Err(e) = od.read_dirdump(features.compile_options(), objdef_dir.as_ref()) {
-            error!("Compilation failure @ {}", e.source());
-            error!("{:#}", e);
-            return Ok(());
-        }
+        let commit = match od.load_objdef_directory(features.compile_options(), objdef_dir.as_ref())
+        {
+            Ok(results) => {
+                info!(
+                    "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
+                    results.loaded_objects.len(),
+                    results.num_loaded_verbs,
+                    results.num_loaded_property_definitions,
+                    results.num_loaded_property_overrides
+                );
+
+                results.commit
+            }
+            Err(e) => {
+                error!("Object load failure @ {}", e.source());
+                error!("{:#}", e);
+                return Ok(());
+            }
+        };
         info!("Loaded objdef directory in {:?}", start.elapsed());
-        loader_interface
-            .commit()
-            .expect("Failure to commit loaded database...");
-        info!("Committed. Total time: {:?}", start.elapsed());
+        if commit {
+            loader_interface
+                .commit()
+                .expect("Failure to commit loaded database...");
+            info!("Committed. Total time: {:?}", start.elapsed());
+        } else {
+            info!("Object loader requested rollback (dry-run).")
+        }
     }
 
     info!(
@@ -316,7 +334,7 @@ fn main() -> Result<(), eyre::Report> {
             PropFlag::rw(),
             None,
         )
-        .unwrap();
+        .expect("Could not create scratch object for integration test execution");
         tx.commit().unwrap();
     }
 

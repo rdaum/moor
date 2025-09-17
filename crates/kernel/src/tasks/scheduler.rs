@@ -61,7 +61,7 @@ use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object, dump_object};
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool_int, v_error};
+use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool, v_bool_int, v_error};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
@@ -1329,7 +1329,7 @@ impl Scheduler {
         let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader_client.as_mut());
 
         // Load the single object with optional target and constants
-        let oid = object_loader
+        let results = object_loader
             .load_single_object(
                 &object_definition,
                 self.config.features.compile_options(),
@@ -1338,12 +1338,23 @@ impl Scheduler {
             )
             .map_err(|e| E_INVARG.with_msg(|| format!("Failed to load object: {e}")))?;
 
-        // Commit the changes
-        loader_client
-            .commit()
-            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to commit object load: {e:?}")))?;
-
-        Ok(oid)
+        if results.loaded_objects.len() != 1 {
+            return Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Expected 1 loaded object, found {}. Object not loaded.",
+                    results.loaded_objects.len()
+                )
+            }));
+        }
+        if results.commit {
+            // Commit the changes
+            loader_client.commit().map_err(|e| {
+                E_INVARG.with_msg(|| format!("Failed to commit object load: {e:?}"))
+            })?;
+            Ok(results.loaded_objects[0])
+        } else {
+            Err(E_EXEC.with_msg(|| "Object not loaded due to conflicts".to_string()))
+        }
     }
 
     fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {
