@@ -59,12 +59,15 @@ pub enum Entity {
     VerbProgram(Vec<Symbol>),
 }
 
-#[derive(Debug)]
 pub struct ObjDefLoaderOptions {
     /// True if we're running in "dry-run" mode where we test, and collect conflicts.
     pub dry_run: bool,
     /// How to handle conflicts.
     pub conflict_mode: ConflictMode,
+    /// Optional target object to update instead of creating new
+    pub target_object: Option<Obj>,
+    /// Optional constants for compilation
+    pub constants: Option<moor_var::Map>,
     /// The set of entities for which we will allow overriding and treat as if their specific
     /// ConflicTMode was "Clobber"
     pub overrides: Vec<(Obj, Entity)>,
@@ -408,12 +411,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 }
                 if should_proceed {
                     // Update object flags to match objdef
-                    self.loader.update_object_flags(obj, def.flags).map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectParent(
-                            path.to_string_lossy().to_string(),
-                            e,
-                        )
-                    })?;
+                    self.loader
+                        .update_object_flags(obj, def.flags)
+                        .map_err(|e| {
+                            ObjdefLoaderError::CouldNotSetObjectParent(
+                                path.to_string_lossy().to_string(),
+                                e,
+                            )
+                        })?;
                 }
             } else {
                 // Object doesn't exist yet, add all non-nothing attributes
@@ -1065,6 +1070,8 @@ mod tests {
         let options = ObjDefLoaderOptions {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
+            target_object: None,
+            constants: None,
             overrides: vec![],
             removals: vec![],
         };
@@ -1145,6 +1152,8 @@ mod tests {
         let options = ObjDefLoaderOptions {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
+            target_object: None,
+            constants: None,
             overrides: vec![],
             removals: vec![],
         };
@@ -1204,6 +1213,8 @@ mod tests {
         let options = ObjDefLoaderOptions {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
+            target_object: None,
+            constants: None,
             overrides: vec![],
             removals: vec![],
         };
@@ -1264,6 +1275,8 @@ mod tests {
         let options = ObjDefLoaderOptions {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
+            target_object: None,
+            constants: None,
             overrides: vec![],
             removals: vec![],
         };

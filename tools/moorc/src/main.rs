@@ -222,11 +222,16 @@ fn main() -> Result<(), eyre::Report> {
         let options = moor_objdef::ObjDefLoaderOptions {
             dry_run: false,
             conflict_mode: moor_objdef::ConflictMode::Clobber,
+            target_object: None,
+            constants: None,
             overrides: vec![],
             removals: vec![],
         };
-        let commit = match od.load_objdef_directory(features.compile_options(), objdef_dir.as_ref(), options)
-        {
+        let commit = match od.load_objdef_directory(
+            features.compile_options(),
+            objdef_dir.as_ref(),
+            options,
+        ) {
             Ok(results) => {
                 info!(
                     "Imported {} objects w/ {} verbs, {} properties and {} property overrides",

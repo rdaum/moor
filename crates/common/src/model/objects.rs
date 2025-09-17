@@ -111,6 +111,56 @@ pub enum ObjFlag {
     Fertile = 7,
 }
 
+impl ObjFlag {
+    pub fn parse_str(s: &str) -> Option<BitEnum<Self>> {
+        let mut flags: u8 = 0;
+        for c in s.chars() {
+            if c == 'u' {
+                flags |= 1 << ObjFlag::User as u8;
+            } else if c == 'p' {
+                flags |= 1 << ObjFlag::Programmer as u8;
+            } else if c == 'w' {
+                flags |= 1 << ObjFlag::Wizard as u8;
+            } else if c == 'r' {
+                flags |= 1 << ObjFlag::Read as u8;
+            } else if c == 'W' {
+                // capital W to distinguish from wizard
+                flags |= 1 << ObjFlag::Write as u8;
+            } else if c == 'f' {
+                flags |= 1 << ObjFlag::Fertile as u8;
+            } else {
+                return None;
+            }
+        }
+
+        Some(BitEnum::from_u8(flags))
+    }
+}
+
+pub fn obj_flags_string(flags: BitEnum<ObjFlag>) -> String {
+    let mut flags_string = String::new();
+    if flags.contains(ObjFlag::User) {
+        flags_string.push('u');
+    }
+    if flags.contains(ObjFlag::Programmer) {
+        flags_string.push('p');
+    }
+    if flags.contains(ObjFlag::Wizard) {
+        flags_string.push('w');
+    }
+    if flags.contains(ObjFlag::Read) {
+        flags_string.push('r');
+    }
+    if flags.contains(ObjFlag::Write) {
+        flags_string.push('W');
+    }
+    if flags.contains(ObjFlag::Fertile) {
+        flags_string.push('f');
+    }
+
+    flags_string
+}
+
 // The set of built-in object attributes
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, Primitive, Decode, Encode)]
 pub enum ObjAttr {

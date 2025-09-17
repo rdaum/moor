@@ -354,17 +354,15 @@ impl TaskSchedulerClient {
     pub fn load_object(
         &self,
         object_definition: String,
-        target_object: Option<Obj>,
-        constants: Option<moor_var::Map>,
-    ) -> Result<Obj, Error> {
+        options: moor_objdef::ObjDefLoaderOptions,
+    ) -> Result<moor_objdef::ObjDefLoaderResults, Error> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((
                 self.task_id,
                 TaskControlMsg::LoadObject {
                     object_definition,
-                    target_object,
-                    constants,
+                    options: Box::new(options),
                     reply,
                 },
             ))
@@ -497,9 +495,8 @@ pub enum TaskControlMsg {
     /// Request to load an object from objdef format string
     LoadObject {
         object_definition: String,
-        target_object: Option<Obj>,
-        constants: Option<moor_var::Map>,
-        reply: oneshot::Sender<Result<Obj, Error>>,
+        options: Box<moor_objdef::ObjDefLoaderOptions>,
+        reply: oneshot::Sender<Result<moor_objdef::ObjDefLoaderResults, Error>>,
     },
     /// Request information about all workers
     GetWorkersInfo {

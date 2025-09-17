@@ -18,14 +18,16 @@ use tracing::{debug, error, trace};
 
 use moor_common::model::Named;
 use moor_common::model::WorldStateError;
-use moor_common::model::{ObjFlag, ObjectKind, ValSet};
+use moor_common::model::{ObjFlag, ObjectKind, ValSet, obj_flags_string, prop_flags_string};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
+use moor_objdef::{ConflictEntity, ConflictMode, Entity, ObjDefLoaderOptions};
 use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_str, v_sym};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Obj, v_int, v_obj};
 use moor_var::{Sequence, Symbol, v_list};
+use moor_var::{Var, v_empty_map};
 
 use crate::task_context::{
     current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
@@ -42,6 +44,30 @@ lazy_static! {
     static ref CREATE_SYM: Symbol = Symbol::mk("create");
     static ref RECYCLE_SYM: Symbol = Symbol::mk("recycle");
     static ref ACCEPT_SYM: Symbol = Symbol::mk("accept");
+
+    // Entity type symbols
+    static ref OBJECT_FLAGS_SYM: Symbol = Symbol::mk("object_flags");
+    static ref BUILTIN_PROPS_SYM: Symbol = Symbol::mk("builtin_props");
+    static ref PARENTAGE_SYM: Symbol = Symbol::mk("parentage");
+    static ref PROPERTY_DEF_SYM: Symbol = Symbol::mk("property_def");
+    static ref PROPERTY_VALUE_SYM: Symbol = Symbol::mk("property_value");
+    static ref PROPERTY_FLAG_SYM: Symbol = Symbol::mk("property_flag");
+    static ref VERB_DEF_SYM: Symbol = Symbol::mk("verb_def");
+    static ref VERB_PROGRAM_SYM: Symbol = Symbol::mk("verb_program");
+
+    // Options symbols
+    static ref DRY_RUN_SYM: Symbol = Symbol::mk("dry_run");
+    static ref CONFLICT_MODE_SYM: Symbol = Symbol::mk("conflict_mode");
+    static ref TARGET_OBJECT_SYM: Symbol = Symbol::mk("target_object");
+    static ref CONSTANTS_SYM: Symbol = Symbol::mk("constants");
+    static ref OVERRIDES_SYM: Symbol = Symbol::mk("overrides");
+    static ref REMOVALS_SYM: Symbol = Symbol::mk("removals");
+    static ref RETURN_CONFLICTS_SYM: Symbol = Symbol::mk("return_conflicts");
+
+    // Conflict mode symbols
+    static ref CLOBBER_SYM: Symbol = Symbol::mk("clobber");
+    static ref SKIP_SYM: Symbol = Symbol::mk("skip");
+    static ref DETECT_SYM: Symbol = Symbol::mk("detect");
 }
 
 /// Helper function to create an object and call its :initialize verb if it exists.
@@ -1223,11 +1249,11 @@ fn bf_dump_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 /// Loads a single object definition from a list of strings and creates it in the database.
 /// This creates the object and all its properties/verbs. Wizard-only.
-/// MOO: `obj load_object(list object_lines [, obj target_object [, map constants]])`
+/// MOO: `obj load_object(list object_lines [, map options])`
 fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("load_object() requires 1-3 arguments"),
+            E_ARGS.msg("load_object() requires 1-2 arguments"),
         ));
     }
 
@@ -1249,40 +1275,165 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let object_definition = lines.join("\n");
 
-    // Parse optional target object (second argument)
-    let target_object = if bf_args.args.len() >= 2 {
-        let Some(target_obj) = bf_args.args[1].as_object() else {
-            return Err(BfErr::ErrValue(
-                E_TYPE.msg("load_object() second argument must be an object"),
-            ));
-        };
-        Some(target_obj)
+    // Parse options map (second argument)
+    let options_map = if bf_args.args.len() == 2 {
+        bf_args.map_or_alist_to_map(&bf_args.args[1])?
     } else {
-        None
+        v_empty_map().as_map().unwrap().clone()
     };
 
-    // Parse optional constants map (third argument)
-    let constants = if bf_args.args.len() >= 3 {
-        let Some(constants_map) = bf_args.args[2].as_map() else {
-            return Err(BfErr::ErrValue(
-                E_TYPE.msg("load_object() third argument must be a map of constants"),
-            ));
-        };
-        Some(constants_map.clone())
-    } else {
-        None
-    };
+    // Extract options from the map using symbol constants
+    let mut dry_run = false;
+    let mut conflict_mode = ConflictMode::Clobber;
+    let mut target_object = None;
+    let mut constants = None;
+    let mut overrides = Vec::new();
+    let mut removals = Vec::new();
+    let mut return_conflicts = false;
+
+    for (key, value) in options_map.iter() {
+        let key_sym = key.as_symbol().map_err(BfErr::ErrValue)?;
+
+        if key_sym == *DRY_RUN_SYM {
+            dry_run = value.is_true();
+        } else if key_sym == *CONFLICT_MODE_SYM {
+            let mode_sym = value.as_symbol().map_err(BfErr::ErrValue)?;
+            if mode_sym == *CLOBBER_SYM {
+                conflict_mode = ConflictMode::Clobber;
+            } else if mode_sym == *SKIP_SYM {
+                conflict_mode = ConflictMode::Skip;
+            } else if mode_sym == *DETECT_SYM {
+                // "detect" mode is essentially dry_run + return_conflicts
+                dry_run = true;
+                return_conflicts = true;
+            } else {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("conflict_mode must be `clobber, `skip, or `detect"),
+                ));
+            }
+        } else if key_sym == *TARGET_OBJECT_SYM {
+            target_object =
+                Some(value.as_object().ok_or_else(|| {
+                    BfErr::ErrValue(E_TYPE.msg("target_object must be an object"))
+                })?);
+        } else if key_sym == *CONSTANTS_SYM {
+            let const_map = bf_args.map_or_alist_to_map(&value)?;
+            constants = Some(const_map);
+        } else if key_sym == *OVERRIDES_SYM {
+            let Some(overrides_list) = value.as_list() else {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("overrides must be a list of {obj, entity} pairs"),
+                ));
+            };
+            for override_pair in overrides_list.iter() {
+                let Some(pair_list) = override_pair.as_list() else {
+                    return Err(BfErr::ErrValue(
+                        E_TYPE.msg("overrides must be a list of {obj, entity} pairs"),
+                    ));
+                };
+                if pair_list.len() != 2 {
+                    return Err(BfErr::ErrValue(
+                        E_ARGS.msg("override pairs must have exactly 2 elements: {obj, entity}"),
+                    ));
+                }
+                let obj = pair_list
+                    .index(0)
+                    .map_err(BfErr::ErrValue)?
+                    .as_object()
+                    .ok_or_else(|| {
+                        BfErr::ErrValue(E_TYPE.msg("override object must be an object"))
+                    })?;
+                let entity =
+                    moo_entity_to_entity(bf_args, &pair_list.index(1).map_err(BfErr::ErrValue)?)?;
+                overrides.push((obj, entity));
+            }
+        } else if key_sym == *REMOVALS_SYM {
+            let Some(removals_list) = value.as_list() else {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("removals must be a list of {obj, entity} pairs"),
+                ));
+            };
+            for removal_pair in removals_list.iter() {
+                let Some(pair_list) = removal_pair.as_list() else {
+                    return Err(BfErr::ErrValue(
+                        E_TYPE.msg("removals must be a list of {obj, entity} pairs"),
+                    ));
+                };
+                if pair_list.len() != 2 {
+                    return Err(BfErr::ErrValue(
+                        E_ARGS.msg("removal pairs must have exactly 2 elements: {obj, entity}"),
+                    ));
+                }
+                let obj = pair_list
+                    .index(0)
+                    .map_err(BfErr::ErrValue)?
+                    .as_object()
+                    .ok_or_else(|| {
+                        BfErr::ErrValue(E_TYPE.msg("removal object must be an object"))
+                    })?;
+                let entity =
+                    moo_entity_to_entity(bf_args, &pair_list.index(1).map_err(BfErr::ErrValue)?)?;
+                removals.push((obj, entity));
+            }
+        } else if key_sym == *RETURN_CONFLICTS_SYM {
+            return_conflicts = value.is_true();
+        }
+    }
 
     // Check permissions: wizard only (object creation with arbitrary properties/verbs)
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     task_perms.check_wizard().map_err(world_state_bf_err)?;
 
+    // Create options object for the loader
+    let loader_options = ObjDefLoaderOptions {
+        dry_run,
+        conflict_mode,
+        target_object,
+        constants,
+        overrides,
+        removals,
+    };
+
     // Use the task scheduler client to request the load from the scheduler
-    let oid = current_task_scheduler_client()
-        .load_object(object_definition, target_object, constants)
+    let result = current_task_scheduler_client()
+        .load_object(object_definition, loader_options)
         .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to load object: {e}"))))?;
 
-    Ok(Ret(v_obj(oid)))
+    if return_conflicts {
+        // Return detailed result: {success, conflicts, removals, loaded_objects}
+        let conflicts = result
+            .conflicts
+            .iter()
+            .map(|(obj, conflict)| {
+                v_list(&[v_obj(*obj), conflict_entity_to_moo(bf_args, conflict)])
+            })
+            .collect::<Vec<_>>();
+
+        let removals_result = result
+            .removals
+            .iter()
+            .map(|(obj, entity)| v_list(&[v_obj(*obj), entity_to_moo(bf_args, entity)]))
+            .collect::<Vec<_>>();
+
+        let loaded_objects = result
+            .loaded_objects
+            .iter()
+            .map(|obj| v_obj(*obj))
+            .collect::<Vec<_>>();
+
+        Ok(Ret(v_list(&[
+            bf_args.v_bool(result.commit),
+            v_list(&conflicts),
+            v_list(&removals_result),
+            v_list(&loaded_objects),
+        ])))
+    } else {
+        // Return simple object ID (backward compatibility)
+        if result.loaded_objects.is_empty() {
+            return Err(BfErr::ErrValue(E_INVARG.msg("No objects were loaded")));
+        }
+        Ok(Ret(v_obj(result.loaded_objects[0])))
+    }
 }
 
 /// Renumber an object to a new object number
@@ -1362,6 +1513,151 @@ fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     Ok(Ret(v_bool(obj.is_anonymous())))
+}
+
+/// Convert a MOO entity specification to an internal Entity enum.
+/// Entity specs can be:
+/// - `object_flags / "object_flags"
+/// - `builtin_props / "builtin_props"
+/// - `parentage / "parentage"
+/// - {`property_def, propname} / {"property_def", propname}
+/// - {`property_value, propname} / {"property_value", propname}
+/// - {`property_flag, propname} / {"property_flag", propname}
+/// - {`verb_def, {name1, name2, ...}} / {"verb_def", {name1, name2, ...}}
+/// - {`verb_program, {name1, name2, ...}} / {"verb_program", {name1, name2, ...}}
+fn moo_entity_to_entity(_bf_args: &mut BfCallState<'_>, moo_entity: &Var) -> Result<Entity, BfErr> {
+    match moo_entity.variant() {
+        Variant::Str(_) | Variant::Sym(_) => {
+            let sym = moo_entity.as_symbol().map_err(BfErr::ErrValue)?;
+            if sym == *OBJECT_FLAGS_SYM {
+                Ok(Entity::ObjectFlags)
+            } else if sym == *BUILTIN_PROPS_SYM {
+                Ok(Entity::BuiltinProps)
+            } else if sym == *PARENTAGE_SYM {
+                Ok(Entity::Parentage)
+            } else {
+                Err(BfErr::ErrValue(E_INVARG.msg("Invalid entity type")))
+            }
+        }
+        Variant::List(l) => {
+            if l.len() != 2 {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("Entity specification must be {type, specifier}"),
+                ));
+            }
+            let entity_type = l.index(0).map_err(BfErr::ErrValue)?;
+            let specifier = l.index(1).map_err(BfErr::ErrValue)?;
+
+            let type_sym = entity_type.as_symbol().map_err(BfErr::ErrValue)?;
+
+            if type_sym == *PROPERTY_DEF_SYM {
+                let prop_name = specifier.as_symbol().map_err(BfErr::ErrValue)?;
+                Ok(Entity::PropertyDef(prop_name))
+            } else if type_sym == *PROPERTY_VALUE_SYM {
+                let prop_name = specifier.as_symbol().map_err(BfErr::ErrValue)?;
+                Ok(Entity::PropertyValue(prop_name))
+            } else if type_sym == *PROPERTY_FLAG_SYM {
+                let prop_name = specifier.as_symbol().map_err(BfErr::ErrValue)?;
+                Ok(Entity::PropertyFlag(prop_name))
+            } else if type_sym == *VERB_DEF_SYM {
+                let Some(names_list) = specifier.as_list() else {
+                    return Err(BfErr::ErrValue(E_TYPE.msg("Verb names must be a list")));
+                };
+                let mut names = Vec::new();
+                for name_var in names_list.iter() {
+                    let name = name_var.as_symbol().map_err(BfErr::ErrValue)?;
+                    names.push(name);
+                }
+                Ok(Entity::VerbDef(names))
+            } else if type_sym == *VERB_PROGRAM_SYM {
+                let Some(names_list) = specifier.as_list() else {
+                    return Err(BfErr::ErrValue(E_TYPE.msg("Verb names must be a list")));
+                };
+                let mut names = Vec::new();
+                for name_var in names_list.iter() {
+                    let name = name_var.as_symbol().map_err(BfErr::ErrValue)?;
+                    names.push(name);
+                }
+                Ok(Entity::VerbProgram(names))
+            } else {
+                Err(BfErr::ErrValue(E_INVARG.msg("Invalid entity type")))
+            }
+        }
+        _ => Err(BfErr::ErrValue(
+            E_TYPE.msg("Entity must be string/symbol or {type, specifier}"),
+        )),
+    }
+}
+
+/// Convert an internal ConflictEntity back to MOO format for return values.
+fn conflict_entity_to_moo(bf_args: &mut BfCallState<'_>, conflict: &ConflictEntity) -> Var {
+    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
+    let sym_or_str = |sym: Symbol| {
+        if use_symbols {
+            v_sym(sym)
+        } else {
+            v_str(&sym.as_string())
+        }
+    };
+
+    match conflict {
+        ConflictEntity::ObjectFlags(flags) => v_list(&[
+            sym_or_str(*OBJECT_FLAGS_SYM),
+            v_str(&obj_flags_string(*flags)),
+        ]),
+        ConflictEntity::BuiltinProps(prop, value) => {
+            v_list(&[sym_or_str(*BUILTIN_PROPS_SYM), v_sym(*prop), value.clone()])
+        }
+        ConflictEntity::Parentage(parent) => v_list(&[sym_or_str(*PARENTAGE_SYM), v_obj(*parent)]),
+        ConflictEntity::PropertyDef(prop, _def) => {
+            v_list(&[sym_or_str(*PROPERTY_DEF_SYM), v_sym(*prop)])
+        }
+        ConflictEntity::PropertyValue(prop, value) => {
+            v_list(&[sym_or_str(*PROPERTY_VALUE_SYM), v_sym(*prop), value.clone()])
+        }
+        ConflictEntity::PropertyFlag(prop, flags) => v_list(&[
+            sym_or_str(*PROPERTY_FLAG_SYM),
+            v_sym(*prop),
+            v_str(&prop_flags_string(*flags)),
+        ]),
+        ConflictEntity::VerbDef(names, _def) => {
+            let name_vars = names.iter().map(|n| v_sym(*n)).collect::<Vec<_>>();
+            v_list(&[sym_or_str(*VERB_DEF_SYM), v_list(&name_vars)])
+        }
+        ConflictEntity::VerbProgram(names, _program) => {
+            let name_vars = names.iter().map(|n| v_sym(*n)).collect::<Vec<_>>();
+            v_list(&[sym_or_str(*VERB_PROGRAM_SYM), v_list(&name_vars)])
+        }
+    }
+}
+
+/// Convert an internal Entity back to MOO format for return values.
+fn entity_to_moo(bf_args: &mut BfCallState<'_>, entity: &Entity) -> Var {
+    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
+    let sym_or_str = |sym: Symbol| {
+        if use_symbols {
+            v_sym(sym)
+        } else {
+            v_str(&sym.as_string())
+        }
+    };
+
+    match entity {
+        Entity::ObjectFlags => sym_or_str(*OBJECT_FLAGS_SYM),
+        Entity::BuiltinProps => sym_or_str(*BUILTIN_PROPS_SYM),
+        Entity::Parentage => sym_or_str(*PARENTAGE_SYM),
+        Entity::PropertyDef(prop) => v_list(&[sym_or_str(*PROPERTY_DEF_SYM), v_sym(*prop)]),
+        Entity::PropertyValue(prop) => v_list(&[sym_or_str(*PROPERTY_VALUE_SYM), v_sym(*prop)]),
+        Entity::PropertyFlag(prop) => v_list(&[sym_or_str(*PROPERTY_FLAG_SYM), v_sym(*prop)]),
+        Entity::VerbDef(names) => {
+            let name_vars = names.iter().map(|n| v_sym(*n)).collect::<Vec<_>>();
+            v_list(&[sym_or_str(*VERB_DEF_SYM), v_list(&name_vars)])
+        }
+        Entity::VerbProgram(names) => {
+            let name_vars = names.iter().map(|n| v_sym(*n)).collect::<Vec<_>>();
+            v_list(&[sym_or_str(*VERB_PROGRAM_SYM), v_list(&name_vars)])
+        }
+    }
 }
 
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {

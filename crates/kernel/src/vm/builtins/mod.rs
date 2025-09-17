@@ -37,6 +37,7 @@ use moor_common::model::WorldStateError;
 use moor_common::util::PerfCounter;
 use moor_compiler::{BUILTINS, BuiltinId};
 use moor_var::Var;
+use moor_var::{E_TYPE, Map, Sequence, Variant, v_map};
 use moor_var::{Error, List};
 use moor_var::{ErrorCode, Symbol};
 use moor_var::{Obj, v_bool_int};
@@ -180,6 +181,36 @@ impl BfCallState<'_> {
             v_bool_int(truthy)
         } else {
             Var::mk_bool(truthy)
+        }
+    }
+
+    /// Convert a map or alist (list of {key, value} pairs) to a Map.
+    /// Returns an error if the value is neither a map nor a valid alist.
+    pub fn map_or_alist_to_map(&self, value: &Var) -> Result<Map, BfErr> {
+        match value.variant() {
+            Variant::Map(m) => Ok(m.clone()),
+            Variant::List(l) => {
+                let mut pairs = Vec::new();
+                for item in l.iter() {
+                    let Some(pair_list) = item.as_list() else {
+                        return Err(BfErr::ErrValue(
+                            E_TYPE.msg("Alist must be a list of {key, value} pairs"),
+                        ));
+                    };
+                    if pair_list.len() != 2 {
+                        return Err(BfErr::ErrValue(
+                            E_TYPE.msg("Alist pairs must have exactly 2 elements"),
+                        ));
+                    }
+                    let key = pair_list.index(0).map_err(BfErr::ErrValue)?;
+                    let val = pair_list.index(1).map_err(BfErr::ErrValue)?;
+                    pairs.push((key, val));
+                }
+                Ok(v_map(&pairs).as_map().unwrap().clone())
+            }
+            _ => Err(BfErr::ErrValue(
+                E_TYPE.msg("Expected map or alist (list of {key, value} pairs)"),
+            )),
         }
     }
 }

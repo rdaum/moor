@@ -113,11 +113,16 @@ fn perform_import(
             let options = moor_objdef::ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: moor_objdef::ConflictMode::Clobber,
+                target_object: None,
+                constants: None,
                 overrides: vec![],
                 removals: vec![],
             };
-            let results =
-                od.load_objdef_directory(config.features.compile_options(), import_path.as_ref(), options)?;
+            let results = od.load_objdef_directory(
+                config.features.compile_options(),
+                import_path.as_ref(),
+                options,
+            )?;
             info!(
                 "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
                 results.loaded_objects.len(),
