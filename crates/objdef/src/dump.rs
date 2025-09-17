@@ -643,8 +643,14 @@ mod tests {
         // Now load
         let mut loader = db.loader_client().unwrap();
         let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
+        let options = crate::ObjDefLoaderOptions {
+            dry_run: false,
+            conflict_mode: crate::ConflictMode::Clobber,
+            overrides: vec![],
+            removals: vec![],
+        };
         defloader
-            .load_objdef_directory(CompileOptions::default(), tmpdir_path)
+            .load_objdef_directory(CompileOptions::default(), tmpdir_path, options)
             .unwrap();
 
         // Round trip worked, so we'll just leave it at that for now. A more anal retentive test
@@ -789,8 +795,14 @@ mod tests {
         {
             let mut loader = db2.loader_client().unwrap();
             let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
+            let options = crate::ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: crate::ConflictMode::Clobber,
+                overrides: vec![],
+                removals: vec![],
+            };
             defloader
-                .load_objdef_directory(CompileOptions::default(), tmpdir_path)
+                .load_objdef_directory(CompileOptions::default(), tmpdir_path, options)
                 .unwrap();
             assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }
@@ -1012,8 +1024,14 @@ mod tests {
         {
             let mut loader = db2.loader_client().unwrap();
             let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
+            let options = crate::ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: crate::ConflictMode::Clobber,
+                overrides: vec![],
+                removals: vec![],
+            };
             defloader
-                .load_objdef_directory(CompileOptions::default(), tmpdir_path)
+                .load_objdef_directory(CompileOptions::default(), tmpdir_path, options)
                 .unwrap();
             assert!(matches!(loader.commit(), Ok(CommitResult::Success { .. })));
         }

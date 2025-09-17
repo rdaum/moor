@@ -19,8 +19,8 @@ use crate::model::VerbArgsSpec;
 use crate::model::VerbDefs;
 use crate::model::VerbFlag;
 use crate::model::{CommitResult, WorldStateError};
-use crate::model::{ObjAttrs, PropPerms};
-use crate::model::{PropDef, PropDefs};
+use crate::model::{ObjAttrs, ObjFlag, PropPerms};
+use crate::model::{PropDef, PropDefs, VerbDef};
 use crate::util::BitEnum;
 use moor_var::Var;
 use moor_var::program::ProgramType;
@@ -125,4 +125,37 @@ pub trait LoaderInterface: Send {
 
     /// Commit all changes made through this loader
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
+
+    /// Check if an object with the given ID already exists
+    fn object_exists(&self, objid: &Obj) -> Result<bool, WorldStateError>;
+
+    /// Get the existing object attributes if the object exists
+    fn get_existing_object(&self, objid: &Obj) -> Result<Option<ObjAttrs>, WorldStateError>;
+
+    /// Get the existing verbs on an object
+    fn get_existing_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError>;
+
+    /// Get the existing properties defined on an object
+    fn get_existing_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError>;
+
+    /// Get an existing property value and permissions by property name
+    fn get_existing_property_value(
+        &self,
+        obj: &Obj,
+        propname: Symbol,
+    ) -> Result<Option<(Var, PropPerms)>, WorldStateError>;
+
+    /// Find an existing verb by its name(s)
+    fn get_existing_verb_by_names(
+        &self,
+        obj: &Obj,
+        names: &[Symbol],
+    ) -> Result<Option<(Uuid, VerbDef)>, WorldStateError>;
+
+    /// Update the flags of an existing object
+    fn update_object_flags(
+        &mut self,
+        obj: &Obj,
+        flags: BitEnum<ObjFlag>,
+    ) -> Result<(), WorldStateError>;
 }

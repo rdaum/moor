@@ -21,7 +21,6 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::Instant;
 
 use crate::connections::ConnectionRegistryFactory;
 use crate::event_log::{EventLog, EventLogConfig, EventLogOps, NoOpEventLog};
@@ -111,8 +110,14 @@ fn perform_import(
     let commit = match &config.import_export.import_format {
         ImportExportFormat::Objdef => {
             let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
+            let options = moor_objdef::ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: moor_objdef::ConflictMode::Clobber,
+                overrides: vec![],
+                removals: vec![],
+            };
             let results =
-                od.load_objdef_directory(config.features.compile_options(), import_path.as_ref())?;
+                od.load_objdef_directory(config.features.compile_options(), import_path.as_ref(), options)?;
             info!(
                 "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
                 results.loaded_objects.len(),

@@ -13,7 +13,8 @@
 
 use crate::ObjdefLoaderError;
 use moor_common::model::loader::LoaderInterface;
-use moor_common::model::{ObjAttrs, ObjFlag, PropDef, PropFlag, VerbDef};
+use moor_common::model::{ObjAttrs, ObjFlag, PropDef, PropFlag, ValSet, VerbDef};
+use moor_common::util::BitEnum;
 use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_object_definitions};
 use moor_var::program::ProgramType;
 use moor_var::{NOTHING, Obj, Symbol, Var};
@@ -21,11 +22,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tracing::info;
-use uuid::Uuid;
 
 pub struct ObjectDefinitionLoader<'a> {
     object_definitions: HashMap<Obj, (PathBuf, ObjectDefinition)>,
     loader: &'a mut dyn LoaderInterface,
+    // Track conflicts and removals as we go
+    conflicts: Vec<(Obj, ConflictEntity)>,
+    removals: Vec<(Obj, Entity)>,
 }
 
 /// How to handle a situation where:
@@ -35,7 +38,7 @@ pub struct ObjectDefinitionLoader<'a> {
 ///     * An existing defined property differs in value or flags from loaded objdef file
 ///     * An existing overridden property differs in value or flags from loaded objdef file
 ///     * A verb differs in flags or content from loaded objdef file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConflictMode {
     /// Indiscriminately overwrite the existing entity with the new value.
     Clobber,
@@ -44,7 +47,7 @@ pub enum ConflictMode {
 }
 
 /// Entities for which we can give instructions for overrides and removals.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Entity {
     ObjectFlags,
     BuiltinProps,
@@ -70,14 +73,14 @@ pub struct ObjDefLoaderOptions {
     pub removals: Vec<(Obj, Entity)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConflictEntity {
-    ObjectFlags(ObjFlag),
+    ObjectFlags(BitEnum<ObjFlag>),
     BuiltinProps(Symbol, Var),
     Parentage(Obj),
     PropertyDef(Symbol, PropDef),
     PropertyValue(Symbol, Var),
-    PropertyFlag(Symbol, PropFlag),
+    PropertyFlag(Symbol, BitEnum<PropFlag>),
     VerbDef(Vec<Symbol>, VerbDef),
     VerbProgram(Vec<Symbol>, ProgramType),
 }
@@ -106,7 +109,62 @@ impl<'a> ObjectDefinitionLoader<'a> {
         Self {
             object_definitions: HashMap::new(),
             loader,
+            conflicts: Vec::new(),
+            removals: Vec::new(),
         }
+    }
+
+    /// Check if an entity should be overridden regardless of conflict mode
+    fn should_override(&self, obj: &Obj, entity: &Entity, options: &ObjDefLoaderOptions) -> bool {
+        options.overrides.contains(&(*obj, entity.clone()))
+    }
+
+    /// Determine the effective conflict mode for a given entity
+    fn effective_conflict_mode(
+        &self,
+        obj: &Obj,
+        entity: &Entity,
+        options: &ObjDefLoaderOptions,
+    ) -> ConflictMode {
+        if self.should_override(obj, entity, options) {
+            ConflictMode::Clobber
+        } else {
+            options.conflict_mode.clone()
+        }
+    }
+
+    /// Check if we should proceed with an operation based on conflict detection
+    /// Returns (should_proceed, conflict_option)
+    fn check_conflict<T: Clone + PartialEq>(
+        &self,
+        obj: &Obj,
+        entity: Entity,
+        current_value: Option<T>,
+        new_value: &T,
+        conflict_entity_fn: impl FnOnce(T) -> ConflictEntity,
+        options: &ObjDefLoaderOptions,
+    ) -> (bool, Option<(Obj, ConflictEntity)>) {
+        // If there's no current value, no conflict
+        let Some(current) = current_value else {
+            return (true, None);
+        };
+
+        // If values are the same, no conflict
+        if &current == new_value {
+            return (true, None);
+        }
+
+        // We have a conflict - create conflict record
+        let conflict = conflict_entity_fn(current.clone());
+        let conflict_record = (*obj, conflict);
+
+        // Determine how to handle the conflict
+        let should_proceed = match self.effective_conflict_mode(obj, &entity, options) {
+            ConflictMode::Clobber => true, // Proceed with overwrite
+            ConflictMode::Skip => false,   // Skip this operation
+        };
+
+        (should_proceed, Some(conflict_record))
     }
 
     /// Read an entire directory of objdef files, along with `constants.moo`, process them, and
@@ -115,6 +173,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         &mut self,
         compile_options: CompileOptions,
         dirpath: &Path,
+        options: ObjDefLoaderOptions,
     ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
         // Check that the directory exists
         if !dirpath.exists() {
@@ -192,21 +251,24 @@ impl<'a> ObjectDefinitionLoader<'a> {
             "Created {} objects. Adjusting inheritance, location, and ownership attributes...",
             self.object_definitions.len()
         );
-        self.apply_attributes()?;
+        self.apply_attributes(&options)?;
         info!("Defining {} properties...", num_loaded_property_definitions);
-        self.define_properties()?;
+        self.define_properties(&options)?;
         info!(
             "Overriding {} property values...",
             num_loaded_property_overrides
         );
-        self.set_properties()?;
+        self.set_properties(&options)?;
         info!("Defining and compiling {} verbs...", num_loaded_verbs);
-        self.define_verbs()?;
+        self.define_verbs(&options)?;
+
+        // Detect removals if specified in options
+        self.detect_removals(&options)?;
 
         Ok(ObjDefLoaderResults {
-            commit: false,
-            conflicts: vec![],
-            removals: vec![],
+            commit: !options.dry_run,
+            conflicts: self.conflicts.clone(),
+            removals: self.removals.clone(),
             loaded_objects: self.object_definitions.keys().cloned().collect(),
             num_loaded_verbs,
             num_loaded_property_definitions,
@@ -254,49 +316,162 @@ impl<'a> ObjectDefinitionLoader<'a> {
         Ok(())
     }
 
-    pub fn apply_attributes(&mut self) -> Result<(), ObjdefLoaderError> {
+    pub fn apply_attributes(
+        &mut self,
+        options: &ObjDefLoaderOptions,
+    ) -> Result<(), ObjdefLoaderError> {
+        // First phase: collect all conflicts
+        let mut attribute_actions = Vec::new();
+
         for (obj, (path, def)) in &self.object_definitions {
-            if def.parent != NOTHING {
-                self.loader
-                    .set_object_parent(obj, &def.parent)
-                    .map_err(|e| {
+            // Check if object already exists
+            let existing_attrs = self.loader.get_existing_object(obj).map_err(|e| {
+                ObjdefLoaderError::CouldNotSetObjectParent(path.to_string_lossy().to_string(), e)
+            })?;
+
+            if let Some(existing) = existing_attrs {
+                // Check parent conflict
+                if def.parent != NOTHING {
+                    let (should_proceed, conflict) = self.check_conflict(
+                        obj,
+                        Entity::Parentage,
+                        existing.parent(),
+                        &def.parent,
+                        ConflictEntity::Parentage,
+                        options,
+                    );
+                    if let Some(conflict) = conflict {
+                        self.conflicts.push(conflict);
+                    }
+                    if should_proceed {
+                        attribute_actions.push((*obj, "parent", def.parent, path.clone()));
+                    }
+                }
+
+                // Check location conflict
+                if def.location != NOTHING {
+                    let (should_proceed, conflict) = self.check_conflict(
+                        obj,
+                        Entity::BuiltinProps,
+                        existing.location(),
+                        &def.location,
+                        |current| {
+                            ConflictEntity::BuiltinProps(
+                                Symbol::mk("location"),
+                                moor_var::v_obj(current),
+                            )
+                        },
+                        options,
+                    );
+                    if let Some(conflict) = conflict {
+                        self.conflicts.push(conflict);
+                    }
+                    if should_proceed {
+                        attribute_actions.push((*obj, "location", def.location, path.clone()));
+                    }
+                }
+
+                // Check owner conflict
+                if def.owner != NOTHING {
+                    let (should_proceed, conflict) = self.check_conflict(
+                        obj,
+                        Entity::BuiltinProps,
+                        existing.owner(),
+                        &def.owner,
+                        |current| {
+                            ConflictEntity::BuiltinProps(
+                                Symbol::mk("owner"),
+                                moor_var::v_obj(current),
+                            )
+                        },
+                        options,
+                    );
+                    if let Some(conflict) = conflict {
+                        self.conflicts.push(conflict);
+                    }
+                    if should_proceed {
+                        attribute_actions.push((*obj, "owner", def.owner, path.clone()));
+                    }
+                }
+
+                // Check flags conflict
+                let (should_proceed, conflict) = self.check_conflict(
+                    obj,
+                    Entity::ObjectFlags,
+                    Some(existing.flags()),
+                    &def.flags,
+                    ConflictEntity::ObjectFlags,
+                    options,
+                );
+                if let Some(conflict) = conflict {
+                    self.conflicts.push(conflict);
+                }
+                if should_proceed {
+                    // Update object flags to match objdef
+                    self.loader.update_object_flags(obj, def.flags).map_err(|e| {
                         ObjdefLoaderError::CouldNotSetObjectParent(
                             path.to_string_lossy().to_string(),
                             e,
                         )
                     })?;
+                }
+            } else {
+                // Object doesn't exist yet, add all non-nothing attributes
+                if def.parent != NOTHING {
+                    attribute_actions.push((*obj, "parent", def.parent, path.clone()));
+                }
+                if def.location != NOTHING {
+                    attribute_actions.push((*obj, "location", def.location, path.clone()));
+                }
+                if def.owner != NOTHING {
+                    attribute_actions.push((*obj, "owner", def.owner, path.clone()));
+                }
             }
-            if def.location != NOTHING {
-                self.loader
-                    .set_object_location(obj, &def.location)
-                    .map_err(|e| {
+        }
+
+        // Second phase: apply all the actions
+        for (obj, attr_type, value, path) in attribute_actions {
+            match attr_type {
+                "parent" => {
+                    self.loader.set_object_parent(&obj, &value).map_err(|e| {
+                        ObjdefLoaderError::CouldNotSetObjectParent(
+                            path.to_string_lossy().to_string(),
+                            e,
+                        )
+                    })?;
+                }
+                "location" => {
+                    self.loader.set_object_location(&obj, &value).map_err(|e| {
                         ObjdefLoaderError::CouldNotSetObjectLocation(
                             path.to_string_lossy().to_string(),
                             e,
                         )
                     })?;
-            }
-            if def.owner != NOTHING {
-                self.loader.set_object_owner(obj, &def.owner).map_err(|e| {
-                    ObjdefLoaderError::CouldNotSetObjectOwner(path.to_string_lossy().to_string(), e)
-                })?;
+                }
+                "owner" => {
+                    self.loader.set_object_owner(&obj, &value).map_err(|e| {
+                        ObjdefLoaderError::CouldNotSetObjectOwner(
+                            path.to_string_lossy().to_string(),
+                            e,
+                        )
+                    })?;
+                }
+                _ => unreachable!(),
             }
         }
         Ok(())
     }
 
-    pub fn define_verbs(&mut self) -> Result<(), ObjdefLoaderError> {
+    pub fn define_verbs(&mut self, options: &ObjDefLoaderOptions) -> Result<(), ObjdefLoaderError> {
+        // First phase: collect conflicts and determine actions
+        let mut verb_actions = Vec::new();
+
         for (obj, (path, def)) in &self.object_definitions {
             for v in &def.verbs {
-                self.loader
-                    .add_verb(
-                        obj,
-                        &v.names,
-                        &v.owner,
-                        v.flags,
-                        v.argspec,
-                        v.program.clone(),
-                    )
+                // Check if verb already exists
+                let existing_verb = self
+                    .loader
+                    .get_existing_verb_by_names(obj, &v.names)
                     .map_err(|wse| {
                         ObjdefLoaderError::CouldNotDefineVerb(
                             path.to_string_lossy().to_string(),
@@ -305,22 +480,79 @@ impl<'a> ObjectDefinitionLoader<'a> {
                             wse,
                         )
                     })?;
+
+                if let Some((existing_uuid, existing_verbdef)) = existing_verb {
+                    // Verb exists - check for conflicts
+                    // Create a comparable VerbDef for comparison
+                    let new_verbdef = VerbDef::new(
+                        existing_uuid, // Use existing UUID for fair comparison
+                        *obj,          // location
+                        v.owner,       // owner
+                        &v.names,      // names
+                        v.flags,       // flags
+                        v.argspec,     // args
+                    );
+
+                    let (should_proceed, conflict) = self.check_conflict(
+                        obj,
+                        Entity::VerbDef(v.names.clone()),
+                        Some(existing_verbdef.clone()),
+                        &new_verbdef,
+                        |current| ConflictEntity::VerbDef(v.names.clone(), current),
+                        options,
+                    );
+
+                    if let Some(conflict) = conflict {
+                        self.conflicts.push(conflict);
+                    }
+
+                    if should_proceed {
+                        // TODO: Ideally we need update_verb instead of add_verb for existing verbs
+                        // For now, add_verb may fail or create duplicate names
+                        verb_actions.push((*obj, v, path.clone()));
+                    }
+                } else {
+                    // Verb doesn't exist, add it
+                    verb_actions.push((*obj, v, path.clone()));
+                }
             }
+        }
+
+        // Second phase: apply all the verb actions
+        for (obj, verb, path) in verb_actions {
+            self.loader
+                .add_verb(
+                    &obj,
+                    &verb.names,
+                    &verb.owner,
+                    verb.flags,
+                    verb.argspec,
+                    verb.program.clone(),
+                )
+                .map_err(|wse| {
+                    ObjdefLoaderError::CouldNotDefineVerb(
+                        path.to_string_lossy().to_string(),
+                        obj,
+                        verb.names.clone(),
+                        wse,
+                    )
+                })?;
         }
         Ok(())
     }
-    pub fn define_properties(&mut self) -> Result<(), ObjdefLoaderError> {
+    pub fn define_properties(
+        &mut self,
+        options: &ObjDefLoaderOptions,
+    ) -> Result<(), ObjdefLoaderError> {
+        // First phase: collect conflicts and determine actions
+        let mut property_actions = Vec::new();
+
         for (obj, (path, def)) in &self.object_definitions {
             for pd in &def.property_definitions {
-                self.loader
-                    .define_property(
-                        obj,
-                        obj,
-                        pd.name,
-                        &pd.perms.owner(),
-                        pd.perms.flags(),
-                        pd.value.clone(),
-                    )
+                // Check if property already exists
+                let existing_value = self
+                    .loader
+                    .get_existing_property_value(obj, pd.name)
                     .map_err(|wse| {
                         ObjdefLoaderError::CouldNotDefineProperty(
                             path.to_string_lossy().to_string(),
@@ -329,24 +561,87 @@ impl<'a> ObjectDefinitionLoader<'a> {
                             wse,
                         )
                     })?;
+
+                if let Some((existing_val, existing_perms)) = existing_value {
+                    // Property exists - check for conflicts
+                    let mut should_proceed = true;
+
+                    // Check value conflict if we're defining a value
+                    if let Some(new_value) = &pd.value {
+                        let (proceed_value, conflict) = self.check_conflict(
+                            obj,
+                            Entity::PropertyValue(pd.name),
+                            Some(existing_val.clone()),
+                            new_value,
+                            |current| ConflictEntity::PropertyValue(pd.name, current),
+                            options,
+                        );
+                        if let Some(conflict) = conflict {
+                            self.conflicts.push(conflict);
+                        }
+                        should_proceed &= proceed_value;
+                    }
+
+                    // Check permissions conflict
+                    let (proceed_perms, conflict) = self.check_conflict(
+                        obj,
+                        Entity::PropertyFlag(pd.name),
+                        Some(existing_perms.flags()),
+                        &pd.perms.flags(),
+                        |current| ConflictEntity::PropertyFlag(pd.name, current),
+                        options,
+                    );
+                    if let Some(conflict) = conflict {
+                        self.conflicts.push(conflict);
+                    }
+                    should_proceed &= proceed_perms;
+
+                    if should_proceed {
+                        // TODO: Ideally we need update_property instead of define_property for existing props
+                        // For now, define_property may fail for existing properties
+                        property_actions.push((*obj, pd, path.clone()));
+                    }
+                } else {
+                    // Property doesn't exist, define it
+                    property_actions.push((*obj, pd, path.clone()));
+                }
             }
+        }
+
+        // Second phase: apply all the property actions
+        for (obj, prop_def, path) in property_actions {
+            self.loader
+                .define_property(
+                    &obj,
+                    &obj,
+                    prop_def.name,
+                    &prop_def.perms.owner(),
+                    prop_def.perms.flags(),
+                    prop_def.value.clone(),
+                )
+                .map_err(|wse| {
+                    ObjdefLoaderError::CouldNotDefineProperty(
+                        path.to_string_lossy().to_string(),
+                        obj,
+                        (*prop_def.name.as_arc_string()).clone(),
+                        wse,
+                    )
+                })?;
         }
 
         Ok(())
     }
 
-    fn set_properties(&mut self) -> Result<(), ObjdefLoaderError> {
+    fn set_properties(&mut self, options: &ObjDefLoaderOptions) -> Result<(), ObjdefLoaderError> {
+        // First phase: collect conflicts and determine actions
+        let mut override_actions = Vec::new();
+
         for (obj, (path, def)) in &self.object_definitions {
             for pv in &def.property_overrides {
-                let pu = &pv.perms_update;
-                self.loader
-                    .set_property(
-                        obj,
-                        pv.name,
-                        pu.as_ref().map(|p| p.owner()),
-                        pu.as_ref().map(|p| p.flags()),
-                        pv.value.clone(),
-                    )
+                // Check existing property value for conflicts
+                let existing_value = self
+                    .loader
+                    .get_existing_property_value(obj, pv.name)
                     .map_err(|wse| {
                         ObjdefLoaderError::CouldNotOverrideProperty(
                             path.to_string_lossy().to_string(),
@@ -355,8 +650,151 @@ impl<'a> ObjectDefinitionLoader<'a> {
                             wse,
                         )
                     })?;
+
+                let mut should_proceed = true;
+
+                if let Some((existing_val, existing_perms)) = existing_value {
+                    // Check value conflict if we're setting a new value
+                    if let Some(new_value) = &pv.value {
+                        let (proceed_value, conflict) = self.check_conflict(
+                            obj,
+                            Entity::PropertyValue(pv.name),
+                            Some(existing_val),
+                            new_value,
+                            |current| ConflictEntity::PropertyValue(pv.name, current),
+                            options,
+                        );
+                        if let Some(conflict) = conflict {
+                            self.conflicts.push(conflict);
+                        }
+                        should_proceed &= proceed_value;
+                    }
+
+                    // Check permissions conflict if we're updating permissions
+                    if let Some(pu) = &pv.perms_update {
+                        let (proceed_perms, conflict) = self.check_conflict(
+                            obj,
+                            Entity::PropertyFlag(pv.name),
+                            Some(existing_perms.flags()),
+                            &pu.flags(),
+                            |current| ConflictEntity::PropertyFlag(pv.name, current),
+                            options,
+                        );
+                        if let Some(conflict) = conflict {
+                            self.conflicts.push(conflict);
+                        }
+                        should_proceed &= proceed_perms;
+                    }
+                }
+
+                if should_proceed {
+                    override_actions.push((*obj, pv, path.clone()));
+                }
             }
         }
+
+        // Second phase: apply all the override actions
+        for (obj, prop_override, path) in override_actions {
+            let pu = &prop_override.perms_update;
+            self.loader
+                .set_property(
+                    &obj,
+                    prop_override.name,
+                    pu.as_ref().map(|p| p.owner()),
+                    pu.as_ref().map(|p| p.flags()),
+                    prop_override.value.clone(),
+                )
+                .map_err(|wse| {
+                    ObjdefLoaderError::CouldNotOverrideProperty(
+                        path.to_string_lossy().to_string(),
+                        obj,
+                        (*prop_override.name.as_arc_string()).clone(),
+                        wse,
+                    )
+                })?;
+        }
+        Ok(())
+    }
+
+    /// Detect entities that exist in the database but not in the objdef files
+    /// These are candidates for removal based on the options.removals list
+    fn detect_removals(&mut self, options: &ObjDefLoaderOptions) -> Result<(), ObjdefLoaderError> {
+        for (obj, entity) in &options.removals {
+            match entity {
+                Entity::PropertyDef(prop_name) => {
+                    // Check if this property exists in database but not in objdef
+                    let existing_props = self.loader.get_existing_properties(obj).map_err(|e| {
+                        ObjdefLoaderError::CouldNotDefineProperty(
+                            format!("object {obj}"),
+                            *obj,
+                            prop_name.as_arc_string().to_string(),
+                            e,
+                        )
+                    })?;
+
+                    // Check if property exists in database
+                    let prop_exists_in_db = existing_props.iter().any(|p| p.name() == *prop_name);
+
+                    if prop_exists_in_db {
+                        // Check if property is defined in any objdef file
+                        let prop_exists_in_objdef = self
+                            .object_definitions
+                            .get(obj)
+                            .map(|(_, def)| {
+                                def.property_definitions
+                                    .iter()
+                                    .any(|pd| pd.name == *prop_name)
+                            })
+                            .unwrap_or(false);
+
+                        if !prop_exists_in_objdef {
+                            // Property exists in DB but not in objdef - mark for removal
+                            self.removals.push((*obj, entity.clone()));
+                        }
+                    }
+                }
+
+                Entity::VerbDef(verb_names) => {
+                    // Check if this verb exists in database but not in objdef
+                    let existing_verb = self
+                        .loader
+                        .get_existing_verb_by_names(obj, verb_names)
+                        .map_err(|e| {
+                            ObjdefLoaderError::CouldNotDefineVerb(
+                                format!("object {obj}"),
+                                *obj,
+                                verb_names.clone(),
+                                e,
+                            )
+                        })?;
+
+                    if existing_verb.is_some() {
+                        // Check if verb is defined in objdef file
+                        let verb_exists_in_objdef = self
+                            .object_definitions
+                            .get(obj)
+                            .map(|(_, def)| {
+                                def.verbs.iter().any(|v| {
+                                    // Check if any verb name matches
+                                    v.names.iter().any(|name| verb_names.contains(name))
+                                })
+                            })
+                            .unwrap_or(false);
+
+                        if !verb_exists_in_objdef {
+                            // Verb exists in DB but not in objdef - mark for removal
+                            self.removals.push((*obj, entity.clone()));
+                        }
+                    }
+                }
+
+                // Other entity types can be added as needed
+                _ => {
+                    // For now, only support property and verb removal detection
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -368,6 +806,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         compile_options: CompileOptions,
         target_object: Option<moor_var::Obj>,
         constants: Option<moor_var::Map>,
+        options: ObjDefLoaderOptions,
     ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
         let start_time = Instant::now();
         let source_name = "<string>".to_string();
@@ -553,6 +992,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
             .map(|(_, d)| d.property_overrides.len())
             .sum::<usize>();
 
+        // Detect removals if specified in options
+        self.detect_removals(&options)?;
+
         info!(
             "Loaded single object {} in {} ms",
             oid,
@@ -560,9 +1002,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
         );
 
         Ok(ObjDefLoaderResults {
-            commit: true,
-            conflicts: vec![],
-            removals: vec![],
+            commit: !options.dry_run,
+            conflicts: self.conflicts.clone(),
+            removals: self.removals.clone(),
             loaded_objects: vec![oid],
             num_loaded_verbs,
             num_loaded_property_definitions,
@@ -573,7 +1015,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ObjectDefinitionLoader;
+    use crate::{ConflictMode, ObjDefLoaderOptions, ObjectDefinitionLoader};
     use moor_common::model::{Named, PrepSpec, WorldStateSource};
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
@@ -620,10 +1062,16 @@ mod tests {
             .parse_objects(mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
 
-        parser.apply_attributes().unwrap();
-        parser.define_verbs().unwrap();
-        parser.define_properties().unwrap();
-        parser.set_properties().unwrap();
+        let options = ObjDefLoaderOptions {
+            dry_run: false,
+            conflict_mode: ConflictMode::Clobber,
+            overrides: vec![],
+            removals: vec![],
+        };
+        parser.apply_attributes(&options).unwrap();
+        parser.define_verbs(&options).unwrap();
+        parser.define_properties(&options).unwrap();
+        parser.set_properties(&options).unwrap();
 
         loader.commit().unwrap();
 
@@ -694,10 +1142,16 @@ mod tests {
         parser
             .parse_objects(mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
-        parser.apply_attributes().unwrap();
-        parser.define_verbs().unwrap();
-        parser.define_properties().unwrap();
-        parser.set_properties().unwrap();
+        let options = ObjDefLoaderOptions {
+            dry_run: false,
+            conflict_mode: ConflictMode::Clobber,
+            overrides: vec![],
+            removals: vec![],
+        };
+        parser.apply_attributes(&options).unwrap();
+        parser.define_verbs(&options).unwrap();
+        parser.define_properties(&options).unwrap();
+        parser.set_properties(&options).unwrap();
         loader.commit().unwrap();
 
         let ws = db.new_world_state().unwrap();
@@ -747,8 +1201,14 @@ mod tests {
                     endverb
                 endobject"#;
 
+        let options = ObjDefLoaderOptions {
+            dry_run: false,
+            conflict_mode: ConflictMode::Clobber,
+            overrides: vec![],
+            removals: vec![],
+        };
         let results = parser
-            .load_single_object(spec, CompileOptions::default(), None, None)
+            .load_single_object(spec, CompileOptions::default(), None, None, options)
             .unwrap();
         assert_eq!(results.loaded_objects.len(), 1);
         assert!(results.commit);
@@ -801,7 +1261,14 @@ mod tests {
                     readable: true
                 endobject"#;
 
-        let result = parser.load_single_object(spec, CompileOptions::default(), None, None);
+        let options = ObjDefLoaderOptions {
+            dry_run: false,
+            conflict_mode: ConflictMode::Clobber,
+            overrides: vec![],
+            removals: vec![],
+        };
+        let result =
+            parser.load_single_object(spec, CompileOptions::default(), None, None, options);
         assert!(result.is_err());
 
         match result.unwrap_err() {

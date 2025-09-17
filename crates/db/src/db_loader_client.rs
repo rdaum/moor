@@ -22,8 +22,8 @@ use moor_common::model::VerbDefs;
 use moor_common::model::VerbFlag;
 use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
 use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
-use moor_common::model::{HasUuid, PropPerms, ValSet};
-use moor_common::model::{PropDef, PropDefs};
+use moor_common::model::{HasUuid, Named, ObjFlag, PropPerms, ValSet};
+use moor_common::model::{PropDef, PropDefs, VerbDef};
 use moor_common::util::BitEnum;
 use moor_var::Obj;
 use moor_var::Symbol;
@@ -108,6 +108,103 @@ impl LoaderInterface for DbWorldState {
 
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         self.tx.commit()
+    }
+
+    fn object_exists(&self, objid: &Obj) -> Result<bool, WorldStateError> {
+        match self.get_tx().get_object_flags(objid) {
+            Ok(_) => Ok(true),
+            Err(WorldStateError::ObjectNotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn get_existing_object(&self, objid: &Obj) -> Result<Option<ObjAttrs>, WorldStateError> {
+        if !self.object_exists(objid)? {
+            return Ok(None);
+        }
+
+        Ok(Some(ObjAttrs::new(
+            self.get_tx().get_object_owner(objid)?,
+            self.get_tx().get_object_parent(objid)?,
+            self.get_tx().get_object_location(objid)?,
+            self.get_tx().get_object_flags(objid)?,
+            &self.get_tx().get_object_name(objid)?,
+        )))
+    }
+
+    fn get_existing_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError> {
+        if !self.object_exists(objid)? {
+            return Ok(VerbDefs::empty());
+        }
+        self.get_tx().get_verbs(objid)
+    }
+
+    fn get_existing_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError> {
+        if !self.object_exists(objid)? {
+            return Ok(PropDefs::empty());
+        }
+        self.get_tx().get_properties(objid)
+    }
+
+    fn get_existing_property_value(
+        &self,
+        obj: &Obj,
+        propname: Symbol,
+    ) -> Result<Option<(Var, PropPerms)>, WorldStateError> {
+        if !self.object_exists(obj)? {
+            return Ok(None);
+        }
+
+        // First resolve the property to get its UUID
+        match self.get_tx().resolve_property(obj, propname) {
+            Ok((propdef, _, _, _)) => {
+                // Now retrieve the property value using the UUID
+                match self.get_tx().retrieve_property(obj, propdef.uuid()) {
+                    Ok((value, perms)) => {
+                        if let Some(value) = value {
+                            Ok(Some((value, perms)))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+                    Err(WorldStateError::PropertyNotFound(_, _)) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            }
+            Err(WorldStateError::PropertyNotFound(_, _)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn get_existing_verb_by_names(
+        &self,
+        obj: &Obj,
+        names: &[Symbol],
+    ) -> Result<Option<(Uuid, VerbDef)>, WorldStateError> {
+        if !self.object_exists(obj)? {
+            return Ok(None);
+        }
+
+        let verbs = self.get_tx().get_verbs(obj)?;
+
+        // Look for a verb that matches any of the provided names
+        for verb in verbs.iter() {
+            for verb_name in verb.names() {
+                if names.contains(verb_name) {
+                    return Ok(Some((verb.uuid(), verb.clone())));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn update_object_flags(
+        &mut self,
+        obj: &Obj,
+        flags: BitEnum<ObjFlag>,
+    ) -> Result<(), WorldStateError> {
+        self.get_tx_mut().set_object_flags(obj, flags)
     }
 }
 
