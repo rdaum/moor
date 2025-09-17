@@ -239,7 +239,7 @@ Functions not part of the original LambdaMOO, but added in moor
 
 | Name          | Description                                                                                                                                | Notes
 |---------------|--------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
-| `load_object` | Takes a list of strings in the objdef format and creates a new object in the database. Target and map of constants are optional arguments. | Wiz only          |
+| [`load_object`](../../the-system/object-packaging.md#load_object) | Load an object from objdef format with optional conflict detection and resolution options. | Wiz only          |
 | `dump_object` | Takes an object and returns a list of strings representing the object definition in objdef format.                                         | Wiz or owner only |
 
 ### Flyweights & Symbols (new types)

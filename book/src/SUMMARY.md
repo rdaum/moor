@@ -50,6 +50,8 @@
     - [Server Configuration](the-system/server-configuration.md)
     - [Event Logging](the-system/event-logging.md)
     - [Server Assumptions About the Database](the-system/server-assumptions-about-the-database.md)
+    - [Object Packaging and Management](the-system/object-packaging.md)
+    - [Object Definition File Format Reference](the-system/objdef-file-format.md)
     - [Telnet-Host Commands and Assumptions](the-system/telnet-host-commands-and-assumptions.md)
     - [Networking](./the-moo-programming-language/networking.md)
     - [Controlling the Execution of Tasks](the-system/controlling-the-execution-of-tasks.md)

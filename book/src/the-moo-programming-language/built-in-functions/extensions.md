@@ -8,7 +8,7 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `to_xml` - Convert a tree of flyweight objects into a string containing XML
 
 **Import/Export of Objects:**
-- `load_object` - Takes a list of strings in the objdef format and creates a new object in the database. Target and map of constants are optional arguments.
+- [`load_object`](../../the-system/object-packaging.md#load_object) - Load an object from objdef format with optional conflict detection and resolution options.
 - `dump_object` - Takes an object and returns a list of strings representing the object definition in objdef format.
 
 **Flyweights & Symbols (New Types):**
