@@ -110,7 +110,7 @@ rule_to_expr_mapping!();
 /// - Create new level: add new precedence level in correct position in macro call
 ///
 /// SYNTAX:
-/// ```
+/// ```text
 /// LevelName => [
 ///   infix(left|right): [rule1, rule2],    // Binary operators
 ///   prefix(left): [rule3],                // Unary prefix operators
