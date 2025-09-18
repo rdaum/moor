@@ -330,6 +330,9 @@ impl WebSocketConnection {
                     new_player, self.client_id
                 );
             }
+            ClientEvent::SetConnectionOption { connection_obj: _, option_name: _, value: _ } => {
+                // WebSocket connections don't currently support connection options
+            }
         }
 
         None

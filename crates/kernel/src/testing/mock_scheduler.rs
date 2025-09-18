@@ -597,6 +597,15 @@ mod tests {
             use moor_var::v_list;
             Ok(v_list(&[]))
         }
+
+        fn set_connection_attribute(
+            &self,
+            _connection_obj: Obj,
+            _key: Symbol,
+            _value: Var,
+        ) -> Result<(), moor_common::tasks::SessionError> {
+            Ok(())
+        }
     }
 
     #[test]

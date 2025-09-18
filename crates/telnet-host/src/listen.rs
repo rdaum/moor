@@ -235,6 +235,8 @@ impl Listener {
                 Symbol::mk("supports-telnet-protocol"),
                 moor_var::Var::mk_bool(true),
             );
+            // Default telnet echo state: client echoes input (client-echo = true)
+            connection_attributes.insert(Symbol::mk("client-echo"), moor_var::Var::mk_bool(true));
 
             // Perform telnet capability negotiation first
             debug!("Starting telnet capability negotiation");
@@ -334,6 +336,7 @@ impl Listener {
                     handler_object,
                     peer_addr,
                     connection_oid,
+                    player_obj: None,
                     client_token,
                     client_id,
                     write,
@@ -385,6 +388,7 @@ impl Listener {
                     handler_object,
                     peer_addr,
                     connection_oid,
+                    player_obj: None,
                     client_token,
                     client_id,
                     write: lines_write,

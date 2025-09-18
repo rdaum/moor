@@ -54,8 +54,10 @@ pub(crate) struct TcpConnection {
     /// The "handler" object, who is responsible for this connection, defaults to SYSTEM_OBJECT,
     /// but custom listeners can be set up to handle connections differently.
     pub(crate) handler_object: Obj,
-    /// The MOO connection object ID / player object ID.
+    /// The MOO connection object ID (negative ID for actual connection).
     pub(crate) connection_oid: Obj,
+    /// The player object ID (set after authentication).
+    pub(crate) player_obj: Option<Obj>,
     pub(crate) client_id: Uuid,
     /// Current PASETO token.
     pub(crate) client_token: ClientToken,
@@ -193,10 +195,13 @@ impl TcpConnection {
                             // We don't need to do anything with successes.
                         }
                         ClientEvent::PlayerSwitched { new_player, new_auth_token } => {
-                            info!("Switching player from {} to {} during authorization for client {}", self.connection_oid, new_player, self.client_id);
-                            self.connection_oid = new_player;
+                            info!("Switching player from {:?} to {} during authorization for client {}", self.player_obj, new_player, self.client_id);
+                            self.player_obj = Some(new_player);
                             self.auth_token = Some(new_auth_token);
                             info!("Player switched successfully to {} during authorization for client {}", new_player, self.client_id);
+                        }
+                        ClientEvent::SetConnectionOption { connection_obj: _, option_name: _, value: _ } => {
+                            // Ignore connection options before authentication
                         }
                     }
                 }
@@ -219,7 +224,7 @@ impl TcpConnection {
                     if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(
                         Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
-                        self.connection_oid = *player;
+                        self.player_obj = Some(*player);
                         return Ok((auth_token.clone(), *player, *connect_type))
                     }
                 }
@@ -289,9 +294,12 @@ impl TcpConnection {
                             self.send_output_suffix().await?;
                         }
                         ClientEvent::PlayerSwitched { new_player, new_auth_token } => {
-                            info!("Switching player from {} to {} for client {}", self.connection_oid, new_player, self.client_id);
-                            self.connection_oid = new_player;
+                            info!("Switching player from {:?} to {} for client {}", self.player_obj, new_player, self.client_id);
+                            self.player_obj = Some(new_player);
                             self.auth_token = Some(new_auth_token);
+                        }
+                        ClientEvent::SetConnectionOption { connection_obj: _, option_name: _, value: _ } => {
+                            // TCP connections don't support telnet options
                         }
                     }
                 }

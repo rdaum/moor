@@ -397,13 +397,6 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("queued_tasks", Q(0), Q(0), vec![], true),
         mk_builtin("kill_task", Q(1), Q(1), vec![Typed(TYPE_INT)], true),
         mk_builtin("output_delimiters", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
-        mk_builtin(
-            "connection_attributes",
-            Q(1),
-            Q(1),
-            vec![Typed(TYPE_OBJ)],
-            true,
-        ),
         mk_builtin("queue_info", Q(0), Q(1), vec![Typed(TYPE_OBJ)], false),
         mk_builtin("resume", Q(1), Q(2), vec![Typed(TYPE_INT), Any], true),
         mk_builtin(

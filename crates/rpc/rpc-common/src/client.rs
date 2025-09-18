@@ -264,4 +264,10 @@ pub enum ClientEvent {
         new_player: Obj,
         new_auth_token: crate::AuthToken,
     },
+    /// Set a connection option for a specific connection
+    SetConnectionOption {
+        connection_obj: Obj,
+        option_name: Symbol,
+        value: Var,
+    },
 }

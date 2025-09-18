@@ -57,8 +57,10 @@ pub(crate) struct TelnetConnection {
     /// The "handler" object, who is responsible for this connection, defaults to SYSTEM_OBJECT,
     /// but custom listeners can be set up to handle connections differently.
     pub(crate) handler_object: Obj,
-    /// The MOO connection object ID / player object ID.
+    /// The MOO connection object ID (negative ID for actual connection).
     pub(crate) connection_oid: Obj,
+    /// The player object ID (set after authentication).
+    pub(crate) player_obj: Option<Obj>,
     pub(crate) client_id: Uuid,
     /// Current PASETO token.
     pub(crate) client_token: ClientToken,
@@ -558,6 +560,9 @@ impl TelnetConnection {
             .insert(Symbol::mk("host-type"), Var::from("telnet".to_string()));
         self.connection_attributes
             .insert(Symbol::mk("supports-telnet-protocol"), v_bool(true));
+        // Default telnet echo state: client echoes input (client-echo = true)
+        self.connection_attributes
+            .insert(Symbol::mk("client-echo"), v_bool(true));
 
         // Send telnet capability negotiation first
         if let Err(e) = self.negotiate_telnet_capabilities().await {
@@ -707,10 +712,20 @@ impl TelnetConnection {
                             // We don't need to do anything with successes.
                         }
                         ClientEvent::PlayerSwitched { new_player, new_auth_token } => {
-                            info!("Switching player from {} to {} during authorization for client {}", self.connection_oid, new_player, self.client_id);
-                            self.connection_oid = new_player;
+                            info!("Switching player from {:?} to {} during authorization for client {}", self.player_obj, new_player, self.client_id);
+                            self.player_obj = Some(new_player);
                             self.auth_token = Some(new_auth_token);
                             info!("Player switched successfully to {} during authorization for client {}", new_player, self.client_id);
+                        }
+                        ClientEvent::SetConnectionOption { connection_obj, option_name, value } => {
+                            debug!("Received SetConnectionOption: connection_obj={}, option_name={}, value={:?}, our_connection={}",
+                                   connection_obj, option_name, value, self.connection_oid);
+                            // Only handle if this event is for our connection
+                            if connection_obj == self.connection_oid {
+                                self.handle_set_connection_option(option_name, value).await;
+                            } else {
+                                debug!("Ignoring SetConnectionOption for different connection");
+                            }
                         }
                     }
                 }
@@ -740,7 +755,7 @@ impl TelnetConnection {
                     if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(
                         Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
-                        self.connection_oid = *player;
+                        self.player_obj = Some(*player);
                         return Ok((auth_token.clone(), *player, *connect_type))
                     }
                 }
@@ -1116,15 +1131,32 @@ impl TelnetConnection {
                 new_auth_token,
             } => {
                 info!(
-                    "Switching player from {} to {} for client {}",
-                    self.connection_oid, new_player, self.client_id
+                    "Switching player from {:?} to {} for client {}",
+                    self.player_obj, new_player, self.client_id
                 );
-                self.connection_oid = new_player;
+                self.player_obj = Some(new_player);
                 self.auth_token = Some(new_auth_token);
                 info!(
                     "Player switched successfully to {} for client {}",
                     new_player, self.client_id
                 );
+            }
+            ClientEvent::SetConnectionOption {
+                connection_obj,
+                option_name,
+                value,
+            } => {
+                debug!(
+                    "Received SetConnectionOption: connection_obj={}, option_name={}, value={:?}, our_connection={}",
+                    connection_obj, option_name, value, self.connection_oid
+                );
+
+                // Only handle if this event is for our connection
+                if connection_obj == self.connection_oid {
+                    self.handle_set_connection_option(option_name, value).await;
+                } else {
+                    debug!("Ignoring SetConnectionOption for different connection");
+                }
             }
         }
 
@@ -1335,7 +1367,7 @@ impl TelnetConnection {
         Ok(())
     }
 
-    /// Send output suffix if defined  
+    /// Send output suffix if defined
     async fn send_output_suffix(&mut self) -> Result<(), eyre::Error> {
         if let Some(ref suffix) = self.output_suffix {
             self.write
@@ -1343,5 +1375,50 @@ impl TelnetConnection {
                 .await?;
         }
         Ok(())
+    }
+
+    /// Handle setting connection options from the daemon
+    async fn handle_set_connection_option(&mut self, option_name: Symbol, value: Var) {
+        let option_str = option_name.as_string();
+        debug!(
+            "Handling set_connection_option: {} = {:?}",
+            option_str, value
+        );
+
+        match option_str.as_str() {
+            "client-echo" => {
+                let enable_echo = value.is_true();
+                debug!("Setting client-echo to {}", enable_echo);
+
+                // Send telnet negotiation for echo - follow LambdaMOO logic:
+                // if client-echo = true: server won't echo (send WONT)
+                // if client-echo = false: server will echo (send WILL)
+                let echo_event = if enable_echo {
+                    TelnetEvent::Wont(nectar::option::TelnetOption::Echo)
+                } else {
+                    TelnetEvent::Will(nectar::option::TelnetOption::Echo)
+                };
+
+                if let Err(e) = self.write.send(echo_event).await {
+                    error!("Failed to send echo negotiation: {}", e);
+                }
+
+                // Update our connection attributes to reflect the change
+                self.connection_attributes
+                    .insert(option_name, value.clone());
+                // Sync the change back to the daemon
+                self.update_connection_attribute(option_name, Some(value))
+                    .await;
+            }
+            _ => {
+                debug!("Ignoring unsupported connection option: {}", option_str);
+                // For unsupported options, just store the value without taking action
+                self.connection_attributes
+                    .insert(option_name, value.clone());
+                // Sync the change back to the daemon
+                self.update_connection_attribute(option_name, Some(value))
+                    .await;
+            }
+        }
     }
 }

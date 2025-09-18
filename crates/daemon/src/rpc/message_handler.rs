@@ -489,6 +489,11 @@ impl MessageHandler for RpcMessageHandler {
                     error!(error = ?e, "Unable to send client attributes");
                 }
             }
+            SessionActions::SetClientAttribute(client_id, connection_obj, key, value) => {
+                if let Err(e) = self.set_client_attribute(client_id, connection_obj, key, value) {
+                    error!(error = ?e, client_id = ?client_id, "Unable to set client attribute");
+                }
+            }
             SessionActions::PublishTaskCompletion(client_id, task_event) => {
                 if let Err(e) = self.publish_task_completion(client_id, task_event) {
                     error!(error = ?e, client_id = ?client_id, "Unable to publish task completion");
@@ -748,6 +753,27 @@ impl RpcMessageHandler {
             }
             Ok(details)
         }
+    }
+
+    fn set_client_attribute(
+        &self,
+        client_id: Uuid,
+        connection_obj: Obj,
+        key: Symbol,
+        value: Var,
+    ) -> Result<(), Error> {
+        // Store the attribute in the connection registry
+        self.connections.set_client_attribute(client_id, key, Some(value.clone()))?;
+
+        // Send SetConnectionOption event to the host
+        self.transport.publish_client_event(
+            client_id,
+            ClientEvent::SetConnectionOption {
+                connection_obj,
+                option_name: key,
+                value,
+            },
+        )
     }
 
     fn publish_task_completion(

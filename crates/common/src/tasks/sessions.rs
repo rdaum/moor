@@ -131,6 +131,9 @@ pub trait Session: Send + Sync {
     /// If object is a player: returns a list of [connection_obj, attributes] pairs for all connections
     /// If object is a connection: returns just the attributes map for that connection
     fn connection_attributes(&self, obj: Obj) -> Result<Var, SessionError>;
+
+    /// Set a connection attribute for the given connection object.
+    fn set_connection_attribute(&self, connection_obj: Obj, key: Symbol, value: Var) -> Result<(), SessionError>;
 }
 
 /// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
@@ -254,6 +257,10 @@ impl Session for NoopClientSession {
     fn connection_attributes(&self, _obj: Obj) -> Result<Var, SessionError> {
         use moor_var::v_list;
         Ok(v_list(&[]))
+    }
+
+    fn set_connection_attribute(&self, _connection_obj: Obj, _key: Symbol, _value: Var) -> Result<(), SessionError> {
+        Ok(())
     }
 }
 
@@ -413,6 +420,10 @@ impl Session for MockClientSession {
     fn connection_attributes(&self, _obj: Obj) -> Result<Var, SessionError> {
         use moor_var::v_list;
         Ok(v_list(&[]))
+    }
+
+    fn set_connection_attribute(&self, _connection_obj: Obj, _key: Symbol, _value: Var) -> Result<(), SessionError> {
+        Ok(())
     }
 }
 

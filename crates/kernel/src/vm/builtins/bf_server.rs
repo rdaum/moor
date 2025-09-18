@@ -1936,11 +1936,31 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             )
         };
 
+        // Get connection options for this connection
+        let connection_options =
+            match current_session().connection_attributes(detail.connection_obj) {
+                Ok(attributes) => {
+                    // Convert attributes map to list of {name, value} pairs
+                    match attributes.variant() {
+                        moor_var::Variant::Map(m) => {
+                            let pairs: Vec<Var> = m
+                                .iter()
+                                .map(|(k, v)| v_list(&[k.clone(), v.clone()]))
+                                .collect();
+                            v_list(&pairs)
+                        }
+                        _ => v_list(&[]), // Empty list if not a map
+                    }
+                }
+                Err(_) => v_list(&[]), // Empty list on error
+            };
+
         let connection_list = v_list(&[
             v_obj(detail.connection_obj),
             v_str(&detail.peer_addr),
             v_float(detail.idle_seconds),
             content_types,
+            connection_options,
         ]);
         connections_list.push(connection_list);
     }
@@ -2248,13 +2268,37 @@ fn bf_output_delimiters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&[v_str(&prefix), v_str(&suffix)])))
 }
 
-/// Returns all connection attributes for the specified player.
-/// Returns a map if map support is enabled, otherwise returns an association list.
-/// MOO: `list connection_attributes(obj player)` or `map connection_attributes(obj player)`
-fn bf_connection_attributes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+/// Helper function to check if the current user owns the given connection object.
+/// Returns true if the user is a wizard or owns the connection.
+fn check_connection_ownership(
+    connection_obj: moor_var::Obj,
+    bf_args: &mut BfCallState<'_>,
+) -> Result<bool, BfErr> {
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+
+    // Wizards can access any connection
+    if task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+        return Ok(true);
+    }
+
+    // Get all connections for this user
+    let user_connections = match current_session().connection_details(Some(task_perms.who)) {
+        Ok(connections) => connections,
+        Err(_) => return Ok(false), // No connections for this user
+    };
+
+    // Check if the connection_obj is among the user's connections
+    Ok(user_connections
+        .iter()
+        .any(|detail| detail.connection_obj == connection_obj))
+}
+
+/// Returns connection options for the given connection object.
+/// MOO: `list connection_options(obj conn)`
+fn bf_connection_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(ErrValue(
-            E_ARGS.msg("connection_attributes() requires exactly 1 argument"),
+            E_ARGS.msg("connection_options() requires exactly 1 argument"),
         ));
     }
 
@@ -2262,21 +2306,15 @@ fn bf_connection_attributes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
         return Err(ErrValue(E_TYPE.msg("Argument must be an object")));
     };
 
-    // Permission check: can only query own attributes unless wizard
-    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    // connection_options() requires a connection object (negative ID), not a player object
+    if obj.is_positive() {
+        return Err(ErrValue(E_INVARG.msg(
+            "connection_options() requires a connection object, not a player object",
+        )));
+    }
 
-    // For connection objects, check if caller is the player associated with that connection
-    // For player objects, check if caller is that player or a wizard
-    let allowed = if !obj.is_positive() {
-        // Connection object - need to check if caller is associated with this connection
-        // For now, allow wizards and assume proper permission checking
-        task_perms.check_is_wizard().map_err(world_state_bf_err)?
-    } else {
-        // Player object - standard permission check
-        obj == task_perms.who || task_perms.check_is_wizard().map_err(world_state_bf_err)?
-    };
-
-    if !allowed {
+    // Permission check: can only query connection options if user owns the connection or is wizard
+    if !check_connection_ownership(obj, bf_args)? {
         return Err(ErrValue(E_PERM.msg("Permission denied")));
     }
 
@@ -2284,24 +2322,127 @@ fn bf_connection_attributes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
     let attributes = match current_session().connection_attributes(obj) {
         Ok(attributes) => attributes,
         Err(SessionError::NoConnectionForPlayer(_)) => {
-            // No active connection, return empty collection
-            return Ok(Ret(if bf_args.config.map_type {
-                v_map(&[])
-            } else {
-                v_list(&[])
-            }));
+            // No active connection, return empty list
+            return Ok(Ret(v_list(&[])));
         }
         Err(_) => {
-            return Err(ErrValue(
-                E_INVARG.msg("Unable to get connection attributes"),
-            ));
+            return Err(ErrValue(E_INVARG.msg("Unable to get connection options")));
         }
     };
 
-    // The session layer already returns the attributes in the correct format
-    // (either a list of [connection_obj, attributes] pairs for players,
-    //  or just the attributes map for connection objects)
-    Ok(Ret(attributes))
+    // Convert attributes to list of {name, value} pairs as expected by MOO
+    // Since we only accept connection objects, we should get a map back
+    let moor_var::Variant::Map(m) = attributes.variant() else {
+        // For connection objects, we should always get a map, but handle gracefully
+        return Ok(Ret(v_list(&[])));
+    };
+
+    // Convert map to list of {name, value} pairs
+    let pairs: Vec<Var> = m
+        .iter()
+        .map(|(k, v)| v_list(&[k.clone(), v.clone()]))
+        .collect();
+    Ok(Ret(v_list(&pairs)))
+}
+
+/// Returns the value of a specific connection option.
+/// MOO: `value connection_option(obj conn, str name)`
+fn bf_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(ErrValue(
+            E_ARGS.msg("connection_option() requires exactly 2 arguments"),
+        ));
+    }
+
+    let Some(obj) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(E_TYPE.msg("First argument must be an object")));
+    };
+
+    let Some(option_name) = bf_args.args[1].as_string() else {
+        return Err(ErrValue(E_TYPE.msg("Second argument must be a string")));
+    };
+
+    // connection_option() requires a connection object (negative ID), not a player object
+    if obj.is_positive() {
+        return Err(ErrValue(E_INVARG.msg(
+            "connection_option() requires a connection object, not a player object",
+        )));
+    }
+
+    // Permission check: can only query connection options if user owns the connection or is wizard
+    if !check_connection_ownership(obj, bf_args)? {
+        return Err(ErrValue(E_PERM.msg("Permission denied")));
+    }
+
+    // Get the attributes from the connection registry
+    let attributes = match current_session().connection_attributes(obj) {
+        Ok(attributes) => attributes,
+        Err(SessionError::NoConnectionForPlayer(_)) => {
+            // No active connection
+            return Err(ErrValue(E_INVARG.msg("No connection found")));
+        }
+        Err(_) => {
+            return Err(ErrValue(E_INVARG.msg("Unable to get connection options")));
+        }
+    };
+
+    // Look for the specific option in the attributes map
+    let Variant::Map(m) = attributes.variant() else {
+        // For connection objects, we should always get a map
+        return Err(ErrValue(E_INVARG.msg("Unable to get connection options")));
+    };
+
+    // Search for the option by name (case-sensitive)
+    for (key, value) in m.iter() {
+        if let Some(key_str) = key.as_string() {
+            if key_str == option_name {
+                return Ok(Ret(value.clone()));
+            }
+        }
+    }
+    // Option not found
+    Err(ErrValue(E_INVARG.msg(format!(
+        "Connection option '{option_name}' not found"
+    ))))
+}
+
+/// Sets a connection option for the given connection
+/// MOO: `void set_connection_option(obj connection, str option_name, any value)`
+fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 3 {
+        return Err(ErrValue(
+            E_ARGS.msg("set_connection_option() requires exactly 3 arguments"),
+        ));
+    }
+
+    let Some(obj) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(E_TYPE.msg("First argument must be an object")));
+    };
+
+    let Ok(option_symbol) = bf_args.args[1].as_symbol() else {
+        return Err(ErrValue(E_TYPE.msg("Second argument must be a string")));
+    };
+
+    let value = bf_args.args[2].clone();
+
+    // set_connection_option() requires a connection object (negative ID), not a player object
+    if obj.is_positive() {
+        return Err(ErrValue(E_INVARG.msg(
+            "set_connection_option() requires a connection object, not a player object",
+        )));
+    }
+
+    // Permission check: can only set connection options if user owns the connection or is wizard
+    if !check_connection_ownership(obj, bf_args)? {
+        return Err(ErrValue(E_PERM.msg("Permission denied")));
+    }
+
+    // Set the connection attribute
+    current_session()
+        .set_connection_attribute(obj, option_symbol, value)
+        .map_err(|e| ErrValue(E_INVARG.msg(format!("Failed to set connection option: {e}"))))?;
+
+    Ok(Ret(v_int(0)))
 }
 
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
@@ -2360,5 +2501,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("switch_player")] = Box::new(bf_switch_player);
     builtins[offset_for_builtin("workers")] = Box::new(bf_workers);
     builtins[offset_for_builtin("output_delimiters")] = Box::new(bf_output_delimiters);
-    builtins[offset_for_builtin("connection_attributes")] = Box::new(bf_connection_attributes);
+    builtins[offset_for_builtin("connection_options")] = Box::new(bf_connection_options);
+    builtins[offset_for_builtin("connection_option")] = Box::new(bf_connection_option);
+    builtins[offset_for_builtin("set_connection_option")] = Box::new(bf_set_connection_option);
 }

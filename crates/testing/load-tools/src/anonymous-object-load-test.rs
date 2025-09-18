@@ -179,6 +179,10 @@ impl Session for DirectSession {
         use moor_var::v_list;
         Ok(v_list(&[]))
     }
+
+    fn set_connection_attribute(&self, _connection_obj: Obj, _key: Symbol, _value: Var) -> Result<(), SessionError> {
+        Ok(())
+    }
 }
 
 /// Simple session factory for direct scheduler testing
