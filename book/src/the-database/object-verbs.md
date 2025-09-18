@@ -54,11 +54,10 @@ chapter on server assumptions about the database for details on how uncaught err
 set, then no error is raised, no message is printed, and the command is not aborted; instead the error value is returned
 as the result of the erroneous operation.
 
-> Note: The `d` bit exists only for historical reasons; it used to be the only way for MOO code to catch and handle
-> errors. With the introduction of the `try` -`except` statement and the error-catching expression, the `d` bit is no
-> longer useful. All new verbs should have the `d` bit set, using the newer facilities for error handling if desired.
-> Over time, old verbs written assuming the `d` bit would not be set should be changed to use the new facilities
-> instead.
+> Note: The `d` bit exists for historical reasons. Originally, MOO had no exception handling - errors were 
+> always returned as values. The `d` bit was introduced to enable exception-style error handling that could be 
+> caught with `try`-`except` statements. All new verbs should have the `d` bit set. Over time, old verbs written 
+> assuming the `d` bit would not be set should be changed to use exception handling instead.
 
 ## Verb argument specifiers
 
