@@ -417,11 +417,12 @@ works. This map can contain any combination of the following options:
 
 ## Complete Options Reference
 
-**Note about Examples**: The examples in this documentation
-use [symbols](../the-moo-programming-language/extensions.md#symbol-type) (like `'dry_run`), boolean values (`true`/
-`false`), and [maps](../the-moo-programming-language/extensions.md#map-type) (like `['key -> "value"]`) which are mooR
-extensions. If your MOO doesn't support these features, you can use strings (`"dry_run"`),
-integers (`1`/`0`), and alists (`{{"key", "value"}, ...}`) instead throughout - they work identically.
+> **Note about Examples**: The examples in this documentation
+> use [symbols](../the-moo-programming-language/extensions.md#symbol-type) (like `'dry_run`), boolean values (`true`/
+> `false`), and [maps](../the-moo-programming-language/extensions.md#map-type) (like `['key -> "value"]`) which are mooR
+> extensions. If your mooR instance is not configured with these extension features enabled, you can use strings (
+`"dry_run"`),
+> integers (`1`/`0`), and alists (`{{"key", "value"}, ...}`) instead throughout - they work identically.
 
 The following table provides a complete reference for all `load_object` options:
 
@@ -459,20 +460,22 @@ load_object(new_widget_def, [`target_object -> $my_widget]);
 **Type:** Map
 **Default:** Empty map
 
-Provide constants that will be available during verb compilation:
+Provide constants that will be available when resolving object references in property values:
 
 ```moo
 load_object(definition, [
     `constants -> [
-        `SERVER_NAME -> "MyMOO",
-        `MAX_ITEMS -> 100,
-        'ROOM -> #5,
+        `THING -> #789,
+        `ROOM -> #456,
+        `PLAYER -> #123,
+        `WIZARD -> #3,
     ]
 ]);
 ```
 
-These constants can be used in verb code during compilation, allowing you to customize behavior without modifying the
-source code.
+These constants are used to resolve symbolic object references in property values, similar to the `constants.moo` file
+in object definition directories. They allow object definitions to use readable names instead of hardcoded object
+numbers.
 
 ### Conflict Handling
 
@@ -742,7 +745,11 @@ not individual name matches. This has significant implications:
 
 ```moo
 // Existing verb in database: {"look", "l"}
-// Objdef file contains: {"look", "l", "examine"}
+
+// Objdef file contains:
+verb "look l examine" (this none none) owner: WIZARD flags: "rxd"
+  player:tell("You look around.");
+endverb
 
 // Result: Creates a NEW verb with all three names
 // The old {"look", "l"} verb remains unchanged
@@ -753,7 +760,11 @@ not individual name matches. This has significant implications:
 
 ```moo
 // Existing verb in database: {"look", "l", "examine"}
-// Objdef file contains: {"look", "l"}
+
+// Objdef file contains:
+verb "look l" (this none none) owner: WIZARD flags: "rxd"
+  player:tell("You look around.");
+endverb
 
 // Result: Creates a NEW verb with just two names
 // The old {"look", "l", "examine"} verb remains unchanged
@@ -776,7 +787,7 @@ Since the intent is ambiguous, the loader treats different name sets as differen
 
 ```moo
 // To add an alias to an existing verb:
-// 1. Use @verb to modify the existing verb in-world
+// 1. Use your MOO's verb management commands to modify the existing verb in-world
 // 2. Then export to capture the change in objdef format
 ```
 
@@ -850,29 +861,13 @@ load_object(new_version, [
 ]);
 ```
 
-### Development Workflow
-
-Loading objects into a development environment:
-
-```moo
-// Load with debug constants enabled
-load_object(dev_object, [
-    `constants -> [
-        `DEBUG -> true,
-        `TRACE_CALLS -> true,
-        `DEV_MODE -> true
-    ],
-    `target_object -> $test_object
-]);
-```
-
 ### Database Migration
 
 Moving objects between servers with different configurations:
 
 ```moo
 // Export from source server
-definitions = {};
+definitions = [];
 for obj in (objects_to_migrate)
     definitions[obj] = dump_object(obj);
 endfor
@@ -880,7 +875,7 @@ endfor
 // Import on target server with appropriate constants
 for obj in (keys(definitions))
     load_object(definitions[obj], [
-        `constants -> server_specific_constants(),
+        `constants -> [`THING -> #789, `ROOM -> #456, `PLAYER -> #123],
         `conflict_mode -> `skip  // Don't overwrite existing customizations
     ]);
 endfor
@@ -904,6 +899,7 @@ for conflict in (result[2])
 
     if (conflict_type == {'property_value, 'description})
         // Ask user whether to keep old or use new description
+        // Note: :choose is a hypothetical verb to prompt the user
         choice = player:choose("Keep existing description?");
         // Handle based on choice...
     endif
