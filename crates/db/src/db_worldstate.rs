@@ -436,6 +436,12 @@ impl WorldState for DbWorldState {
                 let Some(name) = value.as_string() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
+                
+                // For player objects (objects with User flag), only wizards can set the name
+                if flags.contains(ObjFlag::User) && !self.perms(perms)?.check_is_wizard()? {
+                    return Err(WorldStateError::PropertyPermissionDenied);
+                }
+                
                 self.get_tx_mut().set_object_name(obj, name.to_string())?;
                 return Ok(());
             }
