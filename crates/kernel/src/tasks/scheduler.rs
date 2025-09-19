@@ -61,7 +61,7 @@ use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object, dump_object};
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool_int, v_error};
+use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, v_bool_int, v_error};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
@@ -1419,7 +1419,21 @@ impl Scheduler {
                 let err = match error {
                     WorkerError::PermissionDenied(e) => E_PERM.with_msg(|| e),
                     WorkerError::NoWorkerAvailable(e) => E_TYPE.with_msg(|| e.to_string()),
-                    _ => E_INVARG.with_msg(|| "Invalid worker response".to_string()),
+                    WorkerError::InvalidRequest(e) => {
+                        E_INVARG.with_msg(|| format!("Invalid request: {}", e))
+                    }
+                    WorkerError::InternalError(e) => {
+                        E_EXEC.with_msg(|| format!("Internal error: {}", e))
+                    }
+                    WorkerError::RequestTimedOut(e) => {
+                        E_QUOTA.with_msg(|| format!("Request timed out: {}", e))
+                    }
+                    WorkerError::RequestError(e) => {
+                        E_INVARG.with_msg(|| format!("Request error: {}", e))
+                    }
+                    WorkerError::WorkerDetached(e) => {
+                        E_EXEC.with_msg(|| format!("Worker detached: {}", e))
+                    }
                 };
                 (request_id, v_error(err))
             }

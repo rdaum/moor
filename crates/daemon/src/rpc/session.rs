@@ -251,7 +251,12 @@ impl Session for RpcSession {
         rx.recv().map_err(|_e| SessionError::DeliveryError)?
     }
 
-    fn set_connection_attribute(&self, connection_obj: Obj, key: Symbol, value: Var) -> Result<(), SessionError> {
+    fn set_connection_attribute(
+        &self,
+        connection_obj: Obj,
+        key: Symbol,
+        value: Var,
+    ) -> Result<(), SessionError> {
         self.send
             .send(SessionActions::SetClientAttribute(
                 self.client_id,

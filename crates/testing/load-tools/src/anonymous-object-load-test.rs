@@ -180,7 +180,12 @@ impl Session for DirectSession {
         Ok(v_list(&[]))
     }
 
-    fn set_connection_attribute(&self, _connection_obj: Obj, _key: Symbol, _value: Var) -> Result<(), SessionError> {
+    fn set_connection_attribute(
+        &self,
+        _connection_obj: Obj,
+        _key: Symbol,
+        _value: Var,
+    ) -> Result<(), SessionError> {
         Ok(())
     }
 }

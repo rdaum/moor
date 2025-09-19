@@ -763,7 +763,8 @@ impl RpcMessageHandler {
         value: Var,
     ) -> Result<(), Error> {
         // Store the attribute in the connection registry
-        self.connections.set_client_attribute(client_id, key, Some(value.clone()))?;
+        self.connections
+            .set_client_attribute(client_id, key, Some(value.clone()))?;
 
         // Send SetConnectionOption event to the host
         self.transport.publish_client_event(
