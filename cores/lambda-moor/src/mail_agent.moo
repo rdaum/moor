@@ -430,7 +430,7 @@ object MAIL_AGENT
     else
       name = what.name;
     endif
-    while (m = match(string, "(#[0-9A-F\-]+)"))
+    while (m = $code_utils:match_objid(name))
       {s, e} = m[1..2];
       name[s..e] = "";
     endwhile
