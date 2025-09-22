@@ -2885,6 +2885,7 @@ dependencies = [
  "flume",
  "fs2",
  "gdt-cpus",
+ "lazy_static",
  "mimalloc",
  "minstant",
  "moor-common",

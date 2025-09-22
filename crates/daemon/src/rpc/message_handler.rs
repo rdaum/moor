@@ -16,6 +16,7 @@
 use ahash::AHasher;
 use eyre::{Context, Error};
 use flume::Sender;
+use lazy_static::lazy_static;
 use papaya::HashMap as PapayaHashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::{Arc, RwLock};
@@ -57,6 +58,17 @@ use rusty_paseto::core::{
 use rusty_paseto::prelude::Key;
 use serde_json::json;
 use tracing::{debug, error, info, warn};
+
+lazy_static! {
+    static ref USER_CONNECTED_SYM: Symbol = Symbol::mk("user_connected");
+    static ref USER_DISCONNECTED_SYM: Symbol = Symbol::mk("user_disconnected");
+    static ref USER_RECONNECTED_SYM: Symbol = Symbol::mk("user_reconnected");
+    static ref USER_CREATED_SYM: Symbol = Symbol::mk("user_created");
+    static ref DO_LOGIN_COMMAND: Symbol = Symbol::mk("do_login_command");
+    static ref SCHED_SYM: Symbol = Symbol::mk("sched");
+    static ref DB_SYM: Symbol = Symbol::mk("db");
+    static ref BF_SYM: Symbol = Symbol::mk("bf");
+}
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
 pub const HOST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -838,7 +850,7 @@ impl RpcMessageHandler {
                         c.cumulative_duration_nanos().sum(),
                     ));
                 }
-                all_counters.push((Symbol::mk("sched"), sch));
+                all_counters.push((*SCHED_SYM, sch));
 
                 let mut db = vec![];
                 for c in db_counters().all_counters() {
@@ -848,7 +860,7 @@ impl RpcMessageHandler {
                         c.cumulative_duration_nanos().sum(),
                     ));
                 }
-                all_counters.push((Symbol::mk("db"), db));
+                all_counters.push((*DB_SYM, db));
 
                 let mut bf = vec![];
                 for c in bf_perf_counters().all_counters() {
@@ -858,7 +870,7 @@ impl RpcMessageHandler {
                         c.cumulative_duration_nanos().sum(),
                     ));
                 }
-                all_counters.push((Symbol::mk("bf"), bf));
+                all_counters.push((*BF_SYM, bf));
 
                 DaemonToHostReply::PerfCounters(SystemTime::now(), all_counters)
             }
@@ -919,19 +931,27 @@ impl RpcMessageHandler {
                 })?;
                 let client_token = self.make_client_token(client_id);
 
-                if let Some(connect_type) = connect_type
-                    && let Err(e) = self.submit_connected_task(
+                if let Some(connect_type) = connect_type {
+                    let connection = self
+                        .connections
+                        .connection_object_for_client(client_id)
+                        .ok_or(RpcMessageError::InternalError(
+                            "Connection not found".to_string(),
+                        ))?;
+
+                    if let Err(e) = self.submit_connected_task(
                         &handler_object,
                         scheduler_client,
                         client_id,
                         &player,
+                        &connection,
                         connect_type,
-                    )
-                {
-                    error!(error = ?e, "Error submitting user_connected task");
+                    ) {
+                        error!(error = ?e, "Error submitting user_connected task");
 
-                    // Note we still continue to return a successful login result here, hoping for the best
-                    // but we do log the error.
+                        // Note we still continue to return a successful login result here, hoping for the best
+                        // but we do log the error.
+                    }
                 }
                 Ok(DaemonToClientReply::AttachResult(Some((
                     client_token,
@@ -1279,7 +1299,7 @@ impl RpcMessageHandler {
                 Ok(DaemonToClientReply::ClientAttributeSet)
             }
             HostClientToDaemonMessage::Detach(token, disconnected) => {
-                let _connection = self.client_auth(token, client_id)?;
+                let connection = self.client_auth(token, client_id)?;
 
                 // Submit disconnected only if there's a logged-in player, and if the intent is
                 // to actually disconnect.
@@ -1290,6 +1310,7 @@ impl RpcMessageHandler {
                         scheduler_client,
                         client_id,
                         &player,
+                        &connection,
                     )
                 {
                     error!(error = ?e, "Error submitting user_disconnected task");
@@ -1456,7 +1477,7 @@ impl RpcMessageHandler {
         let mut task_handle = match scheduler_client.submit_verb_task(
             connection,
             &ObjectRef::Id(*handler_object),
-            Symbol::mk("do_login_command"),
+            *DO_LOGIN_COMMAND,
             args.iter().map(|s| v_str(s)).collect(),
             args.join(" "),
             &SYSTEM_OBJECT,
@@ -1516,6 +1537,7 @@ impl RpcMessageHandler {
                 scheduler_client,
                 client_id,
                 &player,
+                connection,
                 connect_type,
             )
         {
@@ -1536,26 +1558,27 @@ impl RpcMessageHandler {
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         player: &Obj,
+        connection: &Obj,
         initiation_type: ConnectType,
     ) -> Result<(), Error> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            *player,
+            *connection,
             self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
         let connected_verb = match initiation_type {
-            ConnectType::Connected => Symbol::mk("user_connected"),
-            ConnectType::Reconnected => Symbol::mk("user_reconnected"),
-            ConnectType::Created => Symbol::mk("user_created"),
+            ConnectType::Connected => *USER_CONNECTED_SYM,
+            ConnectType::Reconnected => *USER_RECONNECTED_SYM,
+            ConnectType::Created => *USER_CREATED_SYM,
         };
         scheduler_client
             .submit_verb_task(
                 player,
                 &ObjectRef::Id(*handler_object),
                 connected_verb,
-                List::mk_list(&[v_obj(*player)]),
+                List::mk_list(&[v_obj(*player), v_obj(*connection)]),
                 "".to_string(),
                 &SYSTEM_OBJECT,
                 session,
@@ -1570,10 +1593,11 @@ impl RpcMessageHandler {
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         player: &Obj,
+        connection: &Obj,
     ) -> Result<(), Error> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            *player,
+            *connection,
             self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
@@ -1582,8 +1606,8 @@ impl RpcMessageHandler {
             .submit_verb_task(
                 player,
                 &ObjectRef::Id(*handler_object),
-                Symbol::mk("user_disconnected"),
-                List::mk_list(&[v_obj(*player)]),
+                *USER_DISCONNECTED_SYM,
+                List::mk_list(&[v_obj(*player), v_obj(*connection)]),
                 "".to_string(),
                 &SYSTEM_OBJECT,
                 session,
