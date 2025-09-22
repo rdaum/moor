@@ -541,7 +541,7 @@ impl Activation {
             Uuid::new_v4(),
             NOTHING,
             NOTHING,
-            &[Symbol::mk("eval")],
+            &[*EVAL_SYMBOL],
             BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
             VerbArgsSpec::this_none_this(),
         );

@@ -80,6 +80,7 @@ lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
     static ref HANDLE_UNCAUGHT_ERROR_SYM: Symbol = Symbol::mk("handle_uncaught_error");
     static ref HANDLE_TASK_TIMEOUT_SYM: Symbol = Symbol::mk("handle_task_timeout");
+    static ref DO_COMMAND_SYM: Symbol = Symbol::mk("do_command");
 }
 
 #[derive(Debug)]
@@ -628,8 +629,7 @@ impl Task {
                     if let Ok((program, verbdef)) = verb_lookup {
                         // Set flag to prevent infinite recursion and store original timeout info
                         self.handling_task_timeout = true;
-                        self.pending_timeout =
-                            Some((reason, this.clone(), verb_name, line_number));
+                        self.pending_timeout = Some((reason, this.clone(), verb_name, line_number));
 
                         // Prepare arguments for $handle_task_timeout(resource, traceback, formatted)
                         let resource = match reason {
@@ -835,7 +835,7 @@ impl Task {
         // that verb with the command as an argument. If that then fails (non-true return code)
         // we'll end up in the start_parse_command phase.
         let do_command =
-            world_state.find_method_verb_on(&self.perms, &SYSTEM_OBJECT, Symbol::mk("do_command"));
+            world_state.find_method_verb_on(&self.perms, &SYSTEM_OBJECT, *DO_COMMAND_SYM);
 
         match do_command {
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -845,7 +845,7 @@ impl Task {
                 let arguments = parse_into_words(command);
                 let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
                 let verb_call = VerbCall {
-                    verb_name: Symbol::mk("do_command"),
+                    verb_name: *DO_COMMAND_SYM,
                     location: v_obj(*handler_object),
                     this: v_obj(*handler_object),
                     player: *player,
