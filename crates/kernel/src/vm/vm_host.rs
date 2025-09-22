@@ -544,6 +544,20 @@ impl VmHost {
         self.vm_exec_state.top().frame.find_line_no().unwrap_or(0)
     }
 
+    /// Get the current traceback and formatted backtrace
+    pub fn get_traceback(&self) -> (Vec<Var>, Vec<Var>) {
+        use crate::vm::exec_state::VMExecState;
+        let stack = VMExecState::make_stack_list(&self.vm_exec_state.stack);
+        // For timeouts, we don't have an Error, so create a simple timeout "error" for formatting
+        let timeout_error = moor_var::Error::new(
+            moor_var::ErrorCode::E_MAXREC, // Use a generic error code
+            Some("Task timeout".to_string()),
+            None,
+        );
+        let backtrace = VMExecState::make_backtrace(&self.vm_exec_state.stack, &timeout_error);
+        (stack, backtrace)
+    }
+
     pub fn reset_ticks(&mut self) {
         self.vm_exec_state.tick_count = 0;
     }

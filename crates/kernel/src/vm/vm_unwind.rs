@@ -40,7 +40,7 @@ pub enum FinallyReason {
 impl VMExecState {
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
     /// upwards.
-    fn make_stack_list(activations: &[Activation]) -> Vec<Var> {
+    pub(crate) fn make_stack_list(activations: &[Activation]) -> Vec<Var> {
         let mut stack_list = vec![];
         for a in activations.iter().rev() {
             // Produce traceback line for each activation frame and append to stack_list
@@ -89,7 +89,7 @@ impl VMExecState {
     }
 
     /// Compose a backtrace list of strings for an error, starting from the current stack frame.
-    fn make_backtrace(activations: &[Activation], error: &Error) -> Vec<Var> {
+    pub(crate) fn make_backtrace(activations: &[Activation], error: &Error) -> Vec<Var> {
         // Walk live activation frames and produce a written representation of a traceback for each
         // frame.
         let mut backtrace_list = vec![];

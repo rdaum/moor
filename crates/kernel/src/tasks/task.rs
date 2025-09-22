@@ -54,13 +54,13 @@ use crate::{
 use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_common::tasks::CommandError;
 use moor_common::tasks::CommandError::PermissionDenied;
-use moor_common::tasks::Exception;
 use moor_common::tasks::TaskId;
+use moor_common::tasks::{AbortLimitReason, Exception};
 use moor_common::util::{PerfTimerGuard, parse_into_words};
 use moor_var::{List, v_int, v_str};
 use moor_var::{NOTHING, SYSTEM_OBJECT};
 use moor_var::{Obj, v_obj};
-use moor_var::{Symbol, Variant};
+use moor_var::{Symbol, Var, Variant};
 
 use crate::config::{Config, FeaturesConfig};
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
@@ -79,6 +79,7 @@ use moor_var::program::ProgramType;
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
     static ref HANDLE_UNCAUGHT_ERROR_SYM: Symbol = Symbol::mk("handle_uncaught_error");
+    static ref HANDLE_TASK_TIMEOUT_SYM: Symbol = Symbol::mk("handle_task_timeout");
 }
 
 #[derive(Debug)]
@@ -104,6 +105,10 @@ pub struct Task {
     pub(crate) handling_uncaught_error: bool,
     /// The original exception when calling handle_uncaught_error, in case it returns false.
     pub(crate) pending_exception: Option<Exception>,
+    /// True if we're currently handling a task timeout to prevent infinite recursion.
+    pub(crate) handling_task_timeout: bool,
+    /// The original timeout reason when calling handle_task_timeout, in case it returns false.
+    pub(crate) pending_timeout: Option<(AbortLimitReason, Var, Symbol, usize)>,
 }
 
 impl Task {
@@ -173,6 +178,8 @@ impl Task {
             retry_state,
             handling_uncaught_error: false,
             pending_exception: None,
+            handling_task_timeout: false,
+            pending_timeout: None,
         })
     }
 
@@ -382,7 +389,7 @@ impl Task {
                             commit_current_transaction().expect("Could not attempt commit");
 
                         let CommitResult::Success { .. } = commit_result else {
-                            warn!(
+                            error!(
                                 "Conflict during commit before exception handling, asking scheduler to retry task ({})",
                                 self.task_id
                             );
@@ -409,6 +416,38 @@ impl Task {
 
                     // Handler returned true, clear pending exception and continue with success
                     self.pending_exception = None;
+                }
+
+                // Special case: if we're returning from $handle_task_timeout, check the result
+                if self.handling_task_timeout {
+                    self.handling_task_timeout = false;
+
+                    // If handler returned false, proceed with normal timeout handling
+                    if !result.is_true() {
+                        let Some((reason, this, verb_name, line_number)) =
+                            self.pending_timeout.take()
+                        else {
+                            error!(
+                                task_id = self.task_id,
+                                "handle_task_timeout returned false, but original timeout info lost"
+                            );
+                            return None; // Can't restore timeout, abort task
+                        };
+
+                        // Restore the original timeout and handle it normally
+                        self.vm_host.stop();
+                        rollback_current_transaction().expect("Could not rollback world state");
+                        task_scheduler_client.abort_limits_reached(
+                            reason,
+                            this,
+                            verb_name,
+                            line_number,
+                        );
+                        return None;
+                    }
+
+                    // Handler returned true, clear pending timeout and continue with success
+                    self.pending_timeout = None;
                 }
 
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
@@ -576,6 +615,71 @@ impl Task {
                 let verb_name = self.vm_host.verb_name();
                 let line_number = self.vm_host.line_number();
 
+                // If we're not already handling a timeout, try to call $handle_task_timeout
+                if !self.handling_task_timeout {
+                    let verb_lookup = with_current_transaction(|world_state| {
+                        world_state.find_method_verb_on(
+                            &self.perms,
+                            &SYSTEM_OBJECT,
+                            *HANDLE_TASK_TIMEOUT_SYM,
+                        )
+                    });
+
+                    if let Ok((program, verbdef)) = verb_lookup {
+                        // Set flag to prevent infinite recursion and store original timeout info
+                        self.handling_task_timeout = true;
+                        self.pending_timeout =
+                            Some((reason, this.clone(), verb_name, line_number));
+
+                        // Prepare arguments for $handle_task_timeout(resource, traceback, formatted)
+                        let resource = match reason {
+                            AbortLimitReason::Ticks(_) => v_str("ticks"),
+                            AbortLimitReason::Time(_) => v_str("seconds"),
+                        };
+
+                        // Get proper traceback from VM stack
+                        let (stack_list, backtrace_list) = self.vm_host.get_traceback();
+                        let traceback = List::from_iter(stack_list);
+                        let formatted = List::from_iter(backtrace_list);
+
+                        let args =
+                            List::from_iter(vec![resource, traceback.into(), formatted.into()]);
+
+                        let verb_call = VerbCall {
+                            verb_name: *HANDLE_TASK_TIMEOUT_SYM,
+                            location: v_obj(SYSTEM_OBJECT),
+                            this: v_obj(SYSTEM_OBJECT),
+                            player: self.player,
+                            args,
+                            argstr: String::new(),
+                            caller: v_obj(self.player),
+                        };
+
+                        // Start the handler verb
+                        self.vm_host.start_call_method_verb(
+                            self.task_id,
+                            &self.perms,
+                            (program, verbdef),
+                            verb_call,
+                        );
+
+                        // Continue execution in the handler
+                        return Some(self);
+                    } else {
+                        // No handler exists or error looking it up, proceed with normal timeout handling
+                        match verb_lookup.unwrap_err() {
+                            WorldStateError::VerbNotFound(_, _) => {
+                                // No handler exists, proceed with normal timeout handling
+                            }
+                            e => {
+                                error!(task_id = ?self.task_id, "Error looking up handle_task_timeout: {:?}", e);
+                                // Proceed with normal timeout handling
+                            }
+                        }
+                    }
+                }
+
+                // Normal timeout handling (either no handler found, or we're already in handler)
                 self.vm_host.stop();
                 rollback_current_transaction().expect("Could not rollback world state");
                 task_scheduler_client.abort_limits_reached(reason, this, verb_name, line_number);
@@ -905,7 +1009,9 @@ impl Encode for Task {
         self.retries.encode(encoder)?;
         self.retry_state.encode(encoder)?;
         self.handling_uncaught_error.encode(encoder)?;
-        self.pending_exception.encode(encoder)
+        self.pending_exception.encode(encoder)?;
+        self.handling_task_timeout.encode(encoder)?;
+        self.pending_timeout.encode(encoder)
     }
 }
 
@@ -920,6 +1026,8 @@ impl<C> Decode<C> for Task {
         let retry_state = VMExecState::decode(decoder)?;
         let handling_uncaught_error = bool::decode(decoder)?;
         let pending_exception = Option::<Exception>::decode(decoder)?;
+        let handling_task_timeout = bool::decode(decoder)?;
+        let pending_timeout = Option::<(AbortLimitReason, Var, Symbol, usize)>::decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,
@@ -932,6 +1040,8 @@ impl<C> Decode<C> for Task {
             retry_state,
             handling_uncaught_error,
             pending_exception,
+            handling_task_timeout,
+            pending_timeout,
         })
     }
 }
@@ -947,6 +1057,8 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
         let retry_state = VMExecState::decode(decoder)?;
         let handling_uncaught_error = bool::decode(decoder)?;
         let pending_exception = Option::<Exception>::decode(decoder)?;
+        let handling_task_timeout = bool::decode(decoder)?;
+        let pending_timeout = Option::<(AbortLimitReason, Var, Symbol, usize)>::decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
 
         Ok(Task {
@@ -960,6 +1072,8 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
             retry_state,
             handling_uncaught_error,
             pending_exception,
+            handling_task_timeout,
+            pending_timeout,
         })
     }
 }
