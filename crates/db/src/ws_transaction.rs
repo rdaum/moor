@@ -1447,13 +1447,15 @@ impl WorldStateTransaction {
                     }
                     candidate_id += 1;
                 }
-                found_candidate.ok_or_else(|| {
-                    WorldStateError::InvalidRenumber(
-                        "No available object numbers found".to_string(),
-                    )
-                })?
+                // Per LambdaMOO spec: if no available numbers found, return original unchanged
+                found_candidate.unwrap_or(*old_obj)
             }
         };
+
+        // If no renumbering is needed (same object), return early
+        if new_obj == *old_obj {
+            return Ok(new_obj);
+        }
 
         // Validate cross-type renumbering restrictions
         match (old_obj.is_uuobjid(), new_obj.is_uuobjid()) {
@@ -1632,44 +1634,6 @@ impl WorldStateTransaction {
                     ))
                 })?;
 
-            // Move property values and flags for each property
-            for prop in propdefs.iter() {
-                let old_holder = ObjAndUUIDHolder::new(old_obj, prop.uuid());
-                let new_holder = ObjAndUUIDHolder::new(&new_obj, prop.uuid());
-
-                // Move property value if it exists
-                if let Ok(Some(value)) = self.object_propvalues.get(&old_holder) {
-                    self.object_propvalues.delete(&old_holder).map_err(|e| {
-                        WorldStateError::DatabaseError(format!(
-                            "Error deleting old property value: {e:?}"
-                        ))
-                    })?;
-                    self.object_propvalues
-                        .upsert(new_holder.clone(), value)
-                        .map_err(|e| {
-                            WorldStateError::DatabaseError(format!(
-                                "Error setting new property value: {e:?}"
-                            ))
-                        })?;
-                }
-
-                // Move property flags/permissions if they exist
-                if let Ok(Some(flags)) = self.object_propflags.get(&old_holder) {
-                    self.object_propflags.delete(&old_holder).map_err(|e| {
-                        WorldStateError::DatabaseError(format!(
-                            "Error deleting old property flags: {e:?}"
-                        ))
-                    })?;
-                    self.object_propflags
-                        .upsert(new_holder, flags)
-                        .map_err(|e| {
-                            WorldStateError::DatabaseError(format!(
-                                "Error setting new property flags: {e:?}"
-                            ))
-                        })?;
-                }
-            }
-
             // Update all property definitions in the inheritance hierarchy that reference old_obj as definer
             let all_propdefs = self.object_propdefs.get_all().map_err(|e| {
                 WorldStateError::DatabaseError(format!(
@@ -1704,6 +1668,50 @@ impl WorldStateTransaction {
                         })?;
                 }
             }
+        }
+
+        // Move all property values for this object
+        let all_prop_values = self
+            .object_propvalues
+            .scan(&|holder, _value| &holder.obj() == old_obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning property values: {e:?}"))
+            })?;
+
+        for (old_holder, value) in all_prop_values {
+            let new_holder = ObjAndUUIDHolder::new(&new_obj, old_holder.uuid());
+            self.object_propvalues.delete(&old_holder).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old property value: {e:?}"))
+            })?;
+            self.object_propvalues
+                .upsert(new_holder, value)
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error setting new property value: {e:?}"
+                    ))
+                })?;
+        }
+
+        // Move all property flags for this object
+        let all_prop_flags = self
+            .object_propflags
+            .scan(&|holder, _flags| &holder.obj() == old_obj)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error scanning property flags: {e:?}"))
+            })?;
+
+        for (old_holder, flags) in all_prop_flags {
+            let new_holder = ObjAndUUIDHolder::new(&new_obj, old_holder.uuid());
+            self.object_propflags.delete(&old_holder).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error deleting old property flags: {e:?}"))
+            })?;
+            self.object_propflags
+                .upsert(new_holder, flags)
+                .map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error setting new property flags: {e:?}"
+                    ))
+                })?;
         }
 
         self.has_mutations = true;

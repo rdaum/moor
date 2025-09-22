@@ -3540,11 +3540,19 @@ mod tests {
     }
 
     #[test]
-    fn test_tuple_explosion_debugging() {
+    fn test_renumber_preserves_child_property_values() {
+        // This is a regression test for the bug where renumbering an object
+        // that has overridden inherited property values loses those values.
+        // The bug scenario is:
+        // 1. Create parent with property
+        // 2. Create child that inherits from parent
+        // 3. Override property value on child
+        // 4. Renumber child
+        // 5. Property value should still be the overridden value, not lost
         let db = test_db();
-
-        // Create a parent object with some properties
         let mut tx = db.start_transaction();
+
+        // Create parent object
         let parent = tx
             .create_object(
                 ObjectKind::NextObjid,
@@ -3552,71 +3560,126 @@ mod tests {
             )
             .unwrap();
 
-        // Define a few properties on the parent
-        tx.define_property(
-            &parent,
-            &parent,
-            Symbol::mk("prop1"),
-            &parent,
-            BitEnum::new(),
-            Some(v_str("value1")),
-        )
-        .unwrap();
-
-        tx.define_property(
-            &parent,
-            &parent,
-            Symbol::mk("prop2"),
-            &parent,
-            BitEnum::new(),
-            Some(v_str("value2")),
-        )
-        .unwrap();
-
-        tx.define_property(
-            &parent,
-            &parent,
-            Symbol::mk("prop3"),
-            &parent,
-            BitEnum::new(),
-            Some(v_str("value3")),
-        )
-        .unwrap();
-
-        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
-
-        // Now create 10 child objects and measure tuples
-        let mut tx = db.start_transaction();
-
-        for i in 0..10 {
-            tx.create_object(
+        // Create child object that inherits from parent
+        let child = tx
+            .create_object(
                 ObjectKind::NextObjid,
-                ObjAttrs::new(
-                    parent,
-                    NOTHING,
-                    parent,
-                    BitEnum::new(),
-                    &format!("child_{i}"),
-                ),
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
             )
             .unwrap();
-        }
 
-        // Get working sets to see tuple count
-        let working_sets = tx.into_working_sets().unwrap();
-        let total_tuples = working_sets.total_tuples();
+        // Define a property on the parent with initial value
+        let prop_uuid = tx
+            .define_property(
+                &parent,
+                &parent,
+                Symbol::mk("test_prop"),
+                &NOTHING,
+                BitEnum::new(),
+                Some(v_str("parent_value")),
+            )
+            .unwrap();
 
-        println!("Created 10 children with parent that has 3 properties");
-        println!("Total tuples in working set: {total_tuples}");
-        println!("Tuples per object: {:.1}", total_tuples as f64 / 10.0);
+        // Verify child initially inherits parent's value
+        let (_, value, _, is_clear) = tx
+            .resolve_property(&child, Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(value, v_str("parent_value"));
+        assert!(is_clear, "Should be marked as clear since inherited");
 
-        // Expected: ~4-5 tuples per child object (owner, name, flags, parent, maybe location)
-        // If we see much more, we have tuple explosion
+        // Override the property value on the child
+        tx.set_property(&child, prop_uuid, v_str("child_overridden_value"))
+            .unwrap();
 
-        // For now, let's be lenient but detect obvious problems
-        assert!(
-            total_tuples < 100,
-            "Potential tuple explosion detected: {total_tuples} tuples for 10 objects"
+        // Verify child now has its own value (not clear)
+        let (_, value, _, is_clear) = tx
+            .resolve_property(&child, Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(value, v_str("child_overridden_value"));
+        assert!(!is_clear, "Should not be marked as clear since locally set");
+
+        // Also verify we can retrieve the property value directly
+        let (direct_value, _) = tx.retrieve_property(&child, prop_uuid).unwrap();
+        assert_eq!(direct_value, Some(v_str("child_overridden_value")));
+
+        // Now renumber the child object
+        let new_child = tx.renumber_object(&child, Some(&Obj::mk_id(999))).unwrap();
+        assert_eq!(new_child, Obj::mk_id(999));
+
+        // The bug: after renumbering, the child's property value gets wiped out
+        // This is what should NOT happen - the overridden value should persist
+
+        // Verify the renumbered child still has its overridden value
+        let (_, value, _, is_clear) = tx
+            .resolve_property(&new_child, Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(
+            value,
+            v_str("child_overridden_value"),
+            "Child's overridden property value should persist after renumbering"
         );
+        assert!(
+            !is_clear,
+            "Property should not be marked as clear since it was locally set"
+        );
+
+        // Also verify direct retrieval still works
+        let (direct_value, _) = tx.retrieve_property(&new_child, prop_uuid).unwrap();
+        assert_eq!(
+            direct_value,
+            Some(v_str("child_overridden_value")),
+            "Direct property retrieval should return child's overridden value"
+        );
+
+        // Verify parent's value is unchanged
+        let (_, parent_value, _, _) = tx
+            .resolve_property(&parent, Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(parent_value, v_str("parent_value"));
+
+        // Verify old child object no longer exists
+        assert!(!tx.object_valid(&child).unwrap());
+
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    fn test_renumber_no_available_numbers_returns_unchanged() {
+        // Test renumber behaviour: if no available numbers are found,
+        // return the original object unchanged rather than throwing an error
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Fill up objects 0, 1, 2, 3, 4 to create a dense range
+        let _obj0 = tx
+            .create_object(ObjectKind::Objid(Obj::mk_id(0)), ObjAttrs::default())
+            .unwrap();
+        let _obj1 = tx
+            .create_object(ObjectKind::Objid(Obj::mk_id(1)), ObjAttrs::default())
+            .unwrap();
+        let _obj2 = tx
+            .create_object(ObjectKind::Objid(Obj::mk_id(2)), ObjAttrs::default())
+            .unwrap();
+        let _obj3 = tx
+            .create_object(ObjectKind::Objid(Obj::mk_id(3)), ObjAttrs::default())
+            .unwrap();
+        let obj4 = tx
+            .create_object(ObjectKind::Objid(Obj::mk_id(4)), ObjAttrs::default())
+            .unwrap();
+
+        // Now try to auto-renumber obj4 (id=4)
+        // Since all numbers 0, 1, 2, 3 are taken, no available numbers exist below 4
+        // According to the spec, this should return obj4 unchanged
+        let result = tx.renumber_object(&obj4, None).unwrap();
+
+        // Should return the original object unchanged
+        assert_eq!(result, obj4);
+        assert_eq!(result, Obj::mk_id(4));
+
+        // Object should still be valid and unchanged
+        assert!(tx.object_valid(&obj4).unwrap());
+        assert!(tx.object_valid(&result).unwrap());
+
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
 }

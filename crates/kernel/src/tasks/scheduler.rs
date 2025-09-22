@@ -1420,19 +1420,19 @@ impl Scheduler {
                     WorkerError::PermissionDenied(e) => E_PERM.with_msg(|| e),
                     WorkerError::NoWorkerAvailable(e) => E_TYPE.with_msg(|| e.to_string()),
                     WorkerError::InvalidRequest(e) => {
-                        E_INVARG.with_msg(|| format!("Invalid request: {}", e))
+                        E_INVARG.with_msg(|| format!("Invalid request: {e}"))
                     }
                     WorkerError::InternalError(e) => {
-                        E_EXEC.with_msg(|| format!("Internal error: {}", e))
+                        E_EXEC.with_msg(|| format!("Internal error: {e}"))
                     }
                     WorkerError::RequestTimedOut(e) => {
-                        E_QUOTA.with_msg(|| format!("Request timed out: {}", e))
+                        E_QUOTA.with_msg(|| format!("Request timed out: {e}"))
                     }
                     WorkerError::RequestError(e) => {
-                        E_INVARG.with_msg(|| format!("Request error: {}", e))
+                        E_INVARG.with_msg(|| format!("Request error: {e}"))
                     }
                     WorkerError::WorkerDetached(e) => {
-                        E_EXEC.with_msg(|| format!("Worker detached: {}", e))
+                        E_EXEC.with_msg(|| format!("Worker detached: {e}"))
                     }
                 };
                 (request_id, v_error(err))
