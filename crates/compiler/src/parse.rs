@@ -188,8 +188,8 @@ macro_rules! define_operators {
 define_operators! {
 
     Assignment => [
-        postfix(left): [assign],
         prefix(left): [scatter_assign],
+        postfix(left): [assign],
     ],
     Conditional => [
         postfix(left): [cond_expr],

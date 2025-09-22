@@ -1480,4 +1480,10 @@ mod tests {
         let program = r#"for x in [1..5] break x; endfor for x in [1..5] break x; endfor"#;
         compile(program, CompileOptions::default()).unwrap();
     }
+
+    #[test]
+    fn regression_scatter_prec() {
+        let program = r#"{x} = y = z;"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
 }
