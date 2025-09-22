@@ -38,7 +38,19 @@ impl LoaderInterface for DbWorldState {
         attrs: &ObjAttrs,
     ) -> Result<Obj, WorldStateError> {
         let id_kind = match objid {
-            Some(id) => ObjectKind::Objid(id),
+            Some(id) => {
+                // Check if object already exists
+                if self.object_exists(&id)? {
+                    // Object exists, update its attributes
+                    self.get_tx_mut().set_object_flags(&id, attrs.flags())?;
+                    if let Some(name) = attrs.name() {
+                        self.get_tx_mut().set_object_name(&id, name)?;
+                    }
+                    return Ok(id);
+                } else {
+                    ObjectKind::Objid(id)
+                }
+            }
             None => ObjectKind::NextObjid,
         };
         self.get_tx_mut().create_object(id_kind, attrs.clone())
@@ -111,11 +123,7 @@ impl LoaderInterface for DbWorldState {
     }
 
     fn object_exists(&self, objid: &Obj) -> Result<bool, WorldStateError> {
-        match self.get_tx().get_object_flags(objid) {
-            Ok(_) => Ok(true),
-            Err(WorldStateError::ObjectNotFound(_)) => Ok(false),
-            Err(e) => Err(e),
-        }
+        self.get_tx().object_valid(objid)
     }
 
     fn get_existing_object(&self, objid: &Obj) -> Result<Option<ObjAttrs>, WorldStateError> {
