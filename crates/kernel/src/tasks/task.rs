@@ -54,6 +54,7 @@ use crate::{
 use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_common::tasks::CommandError;
 use moor_common::tasks::CommandError::PermissionDenied;
+use moor_common::tasks::Exception;
 use moor_common::tasks::TaskId;
 use moor_common::util::{PerfTimerGuard, parse_into_words};
 use moor_var::{List, v_int, v_str};
@@ -77,6 +78,7 @@ use moor_var::program::ProgramType;
 
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
+    static ref HANDLE_UNCAUGHT_ERROR_SYM: Symbol = Symbol::mk("handle_uncaught_error");
 }
 
 #[derive(Debug)]
@@ -98,6 +100,10 @@ pub struct Task {
     /// A copy of the VM state at the time the task was created or last committed/suspended.
     /// For restoring on retry.
     pub(crate) retry_state: VMExecState,
+    /// True if we're currently handling an uncaught error to prevent infinite recursion.
+    pub(crate) handling_uncaught_error: bool,
+    /// The original exception when calling handle_uncaught_error, in case it returns false.
+    pub(crate) pending_exception: Option<Exception>,
 }
 
 impl Task {
@@ -165,6 +171,8 @@ impl Task {
             kill_switch,
             retries: 0,
             retry_state,
+            handling_uncaught_error: false,
+            pending_exception: None,
         })
     }
 
@@ -355,6 +363,54 @@ impl Task {
                     }
                 }
 
+                // Special case: if we're returning from $handle_uncaught_error, check the result
+                if self.handling_uncaught_error {
+                    self.handling_uncaught_error = false;
+
+                    // If handler returned false, proceed with normal exception handling
+                    if !result.is_true() {
+                        let Some(original_exception) = self.pending_exception.take() else {
+                            warn!(
+                                task_id = self.task_id,
+                                "handle_uncaught_error returned false, but original exception lost"
+                            );
+                            return None; // Can't restore exception, abort task
+                        };
+
+                        // Restore the original exception and handle it normally
+                        let commit_result =
+                            commit_current_transaction().expect("Could not attempt commit");
+
+                        let CommitResult::Success { .. } = commit_result else {
+                            warn!(
+                                "Conflict during commit before exception handling, asking scheduler to retry task ({})",
+                                self.task_id
+                            );
+                            session.rollback().unwrap();
+                            task_scheduler_client.conflict_retry(self);
+                            return None;
+                        };
+
+                        warn!(
+                            task_id = self.task_id,
+                            ?original_exception,
+                            "Task exception (handle_uncaught_error returned false)"
+                        );
+                        self.vm_host.stop();
+
+                        trace_task_abort!(
+                            self.task_id,
+                            &format!("Exception: {}", original_exception.error.err_type)
+                        );
+
+                        task_scheduler_client.exception(Box::new(original_exception));
+                        return None;
+                    }
+
+                    // Handler returned true, clear pending exception and continue with success
+                    self.pending_exception = None;
+                }
+
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
                 let CommitResult::Success {
@@ -401,15 +457,80 @@ impl Task {
                 None
             }
             VMHostResponse::CompleteException(exception) => {
+                // If we're already handling uncaught error, proceed with normal exception handling
+                if self.handling_uncaught_error {
+                    // Fall through to normal exception handling
+                } else {
+                    // Try to find and call $handle_uncaught_error on #0 (SYSTEM_OBJECT)
+                    let verb_lookup = with_current_transaction(|world_state| {
+                        world_state.find_method_verb_on(
+                            &self.perms,
+                            &SYSTEM_OBJECT,
+                            *HANDLE_UNCAUGHT_ERROR_SYM,
+                        )
+                    });
+
+                    if let Ok((program, verbdef)) = verb_lookup {
+                        // Set flag to prevent infinite recursion and store original exception
+                        self.handling_uncaught_error = true;
+                        self.pending_exception = Some((*exception).clone());
+
+                        // Prepare arguments for $handle_uncaught_error(code, msg, value, traceback, formatted)
+                        let code = v_str(&format!("{}", exception.error.err_type));
+                        let msg = v_str(&exception.error.message());
+                        let value = exception
+                            .error
+                            .value
+                            .as_deref()
+                            .cloned()
+                            .unwrap_or(v_int(0));
+                        let traceback = List::from_iter(exception.stack.clone());
+                        let formatted = List::from_iter(exception.backtrace.clone());
+
+                        let args = List::from_iter(vec![
+                            code,
+                            msg,
+                            value,
+                            traceback.clone().into(),
+                            formatted.clone().into(),
+                        ]);
+
+                        let verb_call = VerbCall {
+                            verb_name: *HANDLE_UNCAUGHT_ERROR_SYM,
+                            location: v_obj(SYSTEM_OBJECT),
+                            this: v_obj(SYSTEM_OBJECT),
+                            player: self.player,
+                            args,
+                            argstr: String::new(),
+                            caller: v_obj(self.player),
+                        };
+
+                        // Start the handler verb
+                        self.vm_host.start_call_method_verb(
+                            self.task_id,
+                            &self.perms,
+                            (program, verbdef),
+                            verb_call,
+                        );
+
+                        // Continue execution in the handler
+                        return Some(self);
+                    }
+                    // No handler exists or error looking it up, proceed with normal exception handling
+                    match verb_lookup.unwrap_err() {
+                        WorldStateError::VerbNotFound(_, _) => {
+                            // No handler exists, proceed with normal exception handling
+                        }
+                        e => {
+                            error!(task_id = ?self.task_id, "Error looking up handle_uncaught_error: {:?}", e);
+                            // Proceed with normal exception handling
+                        }
+                    }
+                }
+
+                // Normal exception handling (either no handler found, or we're already in handler)
                 // Commands that end in exceptions are still expected to be committed, to
                 // conform with MOO's expectations.
-                // However a conflict-retry here is maybe not the best idea here, I think.
-                // So we'll just panic the task (abort) if we can't commit for now.
-                // TODO: Should tasks that throw exception always commit?
-                //   Right now to preserve MOO semantics, we do.
-                //   We may revisit this later and add a user-selectable mode for this, and
-                //   evaluate this behaviour generally.
-
                 let commit_result = commit_current_transaction().expect("Could not attempt commit");
 
                 let CommitResult::Success { .. } = commit_result else {
@@ -782,7 +903,9 @@ impl Encode for Task {
         self.vm_host.encode(encoder)?;
         self.perms.encode(encoder)?;
         self.retries.encode(encoder)?;
-        self.retry_state.encode(encoder)
+        self.retry_state.encode(encoder)?;
+        self.handling_uncaught_error.encode(encoder)?;
+        self.pending_exception.encode(encoder)
     }
 }
 
@@ -795,6 +918,8 @@ impl<C> Decode<C> for Task {
         let perms = Obj::decode(decoder)?;
         let retries = u8::decode(decoder)?;
         let retry_state = VMExecState::decode(decoder)?;
+        let handling_uncaught_error = bool::decode(decoder)?;
+        let pending_exception = Option::<Exception>::decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,
@@ -805,6 +930,8 @@ impl<C> Decode<C> for Task {
             kill_switch,
             retries,
             retry_state,
+            handling_uncaught_error,
+            pending_exception,
         })
     }
 }
@@ -818,6 +945,8 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
         let perms = Obj::borrow_decode(decoder)?;
         let retries = u8::decode(decoder)?;
         let retry_state = VMExecState::decode(decoder)?;
+        let handling_uncaught_error = bool::decode(decoder)?;
+        let pending_exception = Option::<Exception>::decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
 
         Ok(Task {
@@ -829,6 +958,8 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
             kill_switch,
             retries,
             retry_state,
+            handling_uncaught_error,
+            pending_exception,
         })
     }
 }
