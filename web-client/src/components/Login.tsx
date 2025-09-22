@@ -12,6 +12,7 @@
 //
 
 import React, { useEffect, useRef, useState } from "react";
+import { useAuthContext } from "../context/AuthContext";
 import { ContentRenderer } from "./ContentRenderer";
 
 interface LoginProps {
@@ -92,21 +93,25 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
     const [mode, setMode] = useState<"connect" | "create">("connect");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const { authState } = useAuthContext();
 
     const usernameRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);
+    const modeSelectRef = useRef<HTMLSelectElement>(null);
 
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
 
-        // Validate inputs
+        // Validate inputs with accessibility announcements
         if (!username.trim()) {
             usernameRef.current?.focus();
+            // Screen readers will announce the required field when focused
             return;
         }
 
         if (!password) {
             passwordRef.current?.focus();
+            // Screen readers will announce the required field when focused
             return;
         }
 
@@ -120,6 +125,17 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
         }
     };
 
+    // Auto-focus first field when login becomes visible and clear previous errors
+    useEffect(() => {
+        if (visible && !authState.isConnecting) {
+            // Small delay to ensure the component is fully rendered
+            const timer = setTimeout(() => {
+                usernameRef.current?.focus();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [visible, authState.isConnecting]);
+
     if (!visible) {
         return null;
     }
@@ -127,60 +143,109 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
     return (
         <div className="login_window" style={{ display: "block" }}>
             {/* Welcome message display */}
-            <div className="welcome_box">
+            <div className="welcome_box" role="banner" aria-label="Welcome message">
                 <ContentRenderer content={welcomeMessage} contentType={contentType} />
             </div>
             <br />
 
             {/* Login form */}
             <div className="login_prompt">
-                <fieldset>
-                    <legend>Player Authentication</legend>
-                    <label htmlFor="mode_select" className="sr-only">Connection type:</label>
-                    <select
-                        id="mode_select"
-                        value={mode}
-                        onChange={(e) => setMode(e.target.value as "connect" | "create")}
-                    >
-                        <option value="connect">Connect</option>
-                        <option value="create">Create</option>
-                    </select>{" "}
-                    <label htmlFor="login_username" className="login_label">
-                        Player:{" "}
-                        <input
-                            ref={usernameRef}
-                            id="login_username"
-                            name="username"
-                            type="text"
-                            placeholder="Username"
-                            autoComplete="username"
-                            spellCheck={false}
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            onKeyUp={handleKeyPress}
-                        />
-                    </label>{" "}
-                    <label htmlFor="login_password" className="login_label">
-                        Password:{" "}
-                        <input
-                            ref={passwordRef}
-                            id="login_password"
-                            name="password"
-                            type="password"
-                            placeholder="Password"
-                            autoComplete="current-password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            onKeyUp={handleKeyPress}
-                        />
-                    </label>{" "}
-                    <button
-                        onClick={handleSubmit}
-                        className="login_button"
-                    >
-                        Go
-                    </button>
-                </fieldset>
+                <form onSubmit={handleSubmit} noValidate role="form" aria-label="Player authentication">
+                    <fieldset>
+                        <legend>Player Authentication</legend>
+                        {authState.error && (
+                            <div
+                                id="login-error"
+                                className="login_error"
+                                style={{ color: "#ff6b6b", marginBottom: "10px", fontSize: "14px" }}
+                                role="alert"
+                                aria-live="assertive"
+                                aria-atomic="true"
+                            >
+                                {authState.error}
+                            </div>
+                        )}
+                        {authState.isConnecting && (
+                            <div
+                                id="login-status"
+                                className="login_status"
+                                style={{ color: "#4dabf7", marginBottom: "10px", fontSize: "14px" }}
+                                role="status"
+                                aria-live="polite"
+                                aria-atomic="true"
+                            >
+                                Connecting to server, please wait...
+                            </div>
+                        )}
+                        <label htmlFor="mode_select" className="sr-only">Connection type:</label>
+                        <select
+                            ref={modeSelectRef}
+                            id="mode_select"
+                            value={mode}
+                            onChange={(e) => setMode(e.target.value as "connect" | "create")}
+                            disabled={authState.isConnecting}
+                            aria-label="Choose whether to connect to existing account or create new account"
+                            aria-describedby={authState.error ? "login-error" : undefined}
+                        >
+                            <option value="connect">Connect</option>
+                            <option value="create">Create</option>
+                        </select>{" "}
+                        <label htmlFor="login_username" className="login_label">
+                            Player:{" "}
+                            <input
+                                ref={usernameRef}
+                                id="login_username"
+                                name="username"
+                                type="text"
+                                placeholder="Enter your username"
+                                autoComplete="username"
+                                spellCheck={false}
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                onKeyUp={handleKeyPress}
+                                disabled={authState.isConnecting}
+                                required
+                                aria-invalid={authState.error ? "true" : "false"}
+                                aria-describedby={authState.error ? "login-error" : undefined}
+                                aria-label="Enter your player username"
+                            />
+                        </label>{" "}
+                        <label htmlFor="login_password" className="login_label">
+                            Password:{" "}
+                            <input
+                                ref={passwordRef}
+                                id="login_password"
+                                name="password"
+                                type="password"
+                                placeholder="Enter your password"
+                                autoComplete="current-password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onKeyUp={handleKeyPress}
+                                disabled={authState.isConnecting}
+                                required
+                                aria-invalid={authState.error ? "true" : "false"}
+                                aria-describedby={authState.error ? "login-error" : undefined}
+                                aria-label="Enter your password"
+                            />
+                        </label>{" "}
+                        <button
+                            type="submit"
+                            className="login_button"
+                            disabled={authState.isConnecting}
+                            aria-describedby={authState.isConnecting
+                                ? "login-status"
+                                : authState.error
+                                ? "login-error"
+                                : undefined}
+                            aria-label={authState.isConnecting
+                                ? "Connecting to server, please wait"
+                                : `${mode === "connect" ? "Connect to existing account" : "Create new account"}`}
+                        >
+                            {authState.isConnecting ? "Connecting..." : "Go"}
+                        </button>
+                    </fieldset>
+                </form>
             </div>
         </div>
     );
