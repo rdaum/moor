@@ -510,7 +510,7 @@ impl TelnetConnection {
 
                 let line = match item {
                     ConnectionItem::Line(line) => line,
-                    ConnectionItem::Bytes(bytes) => {
+                    ConnectionItem::Bytes(_bytes) => {
                         if !self.is_binary_mode {
                             // Binary data in text mode is not expected
                             return ReadEvent::PendingEvent;

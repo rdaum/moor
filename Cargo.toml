@@ -95,13 +95,13 @@ figment = { version = "0.10", features = ["yaml", "json"] }
 
 # Serialization & Data Formats
 bincode = { version = "2.0", features = ["serde"] }
-csv = "1.3.1"
+csv = "1.3"
 edn-format = "3.3"
 humantime = "2.2"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_derive = "1.0"
 serde_json = "1.0"
-xml-rs = "0.8"
+xml-rs = "1.0"
 
 # Database & Persistence
 fjall = { version = "2.11", default-features = false, features = ["lz4"] }
@@ -110,10 +110,8 @@ fs2 = "0.4"
 # Networking & Communication
 axum = { version = "0.8", features = ["ws"] }
 hickory-resolver = "0.25"
-nectar = "0.4"
 reqwest = "0.12"
 tmq = "0.5"
-tower-http = { version = "0.6", features = ["fs"] }
 zmq = "0.10"
 
 # Async Runtime & Concurrency
@@ -125,9 +123,9 @@ futures-util = { version = "0.3", features = ["sink", "std"] }
 hierarchical_hash_wheel_timer = { version = "1.3", default-features = false, features = ["fx-hash"] }
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 papaya = "0.2"
-rayon = "1.10"
+rayon = "1.11"
 shuttle = "0.8"
-tokio = { version = "1.44", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 
 # Authentication & Security
@@ -161,7 +159,7 @@ pest_derive = "2.8"
 # Collections & Data Structures
 ahash = "0.8"
 im = "15.1"
-indexmap = "2.9"
+indexmap = "2.11"
 itertools = "0.14"
 
 # Error Handling & Logging
@@ -202,4 +200,4 @@ test_each_file = "0.3"
 unindent = "0.2"
 
 # Terminal & UI
-termimad = "0.33"
+termimad = "0.34"
