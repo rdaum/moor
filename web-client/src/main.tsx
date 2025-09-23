@@ -68,7 +68,7 @@ function AppContent({
     ) => void;
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
-    const { welcomeMessage, contentType } = useWelcomeMessage();
+    const { welcomeMessage, contentType, isServerReady } = useWelcomeMessage();
     const { authState, connect } = useAuthContext();
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
     const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -345,6 +345,7 @@ function AppContent({
                 visible={!isConnected}
                 welcomeMessage={welcomeMessage}
                 contentType={contentType}
+                isServerReady={isServerReady}
                 onConnect={handleConnect}
             />
 

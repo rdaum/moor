@@ -15,10 +15,56 @@ import React, { useEffect, useRef, useState } from "react";
 import { useAuthContext } from "../context/AuthContext";
 import { ContentRenderer } from "./ContentRenderer";
 
+/**
+ * Simple loading spinner component for server startup
+ */
+const LoadingSpinner: React.FC<{ message?: string }> = ({ message = "Connecting to server..." }) => (
+    <div
+        className="loading_spinner_container"
+        style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40px",
+            textAlign: "center",
+        }}
+        role="status"
+        aria-live="polite"
+        aria-label={message}
+    >
+        <div
+            className="loading_spinner"
+            style={{
+                width: "40px",
+                height: "40px",
+                border: "3px solid #f3f3f3",
+                borderTop: "3px solid #4dabf7",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+                marginBottom: "16px",
+            }}
+            aria-hidden="true"
+        />
+        <div style={{ color: "#666", fontSize: "14px" }}>
+            {message}
+        </div>
+        <style>
+            {`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `}
+        </style>
+    </div>
+);
+
 interface LoginProps {
     visible: boolean;
     welcomeMessage: string;
     contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
+    isServerReady: boolean;
     onConnect: (mode: "connect" | "create", username: string, password: string) => void;
 }
 
@@ -30,23 +76,26 @@ export const useWelcomeMessage = () => {
     const [contentType, setContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">(
         "text/plain",
     );
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isServerReady, setIsServerReady] = useState<boolean>(false);
 
     useEffect(() => {
-        const fetchWelcome = async () => {
+        let timeoutId: number;
+        let isComponentMounted = true;
+
+        const fetchWelcome = async (): Promise<boolean> => {
             try {
                 // Fetch welcome message
                 const messageResponse = await fetch("/system_property/login/welcome_message");
-                let welcomeText = "";
 
-                if (messageResponse.ok) {
-                    const welcomeArray = await messageResponse.json() as string[];
-                    welcomeText = welcomeArray.join("\n");
-                } else {
-                    console.error(
-                        `Failed to retrieve welcome text: ${messageResponse.status} ${messageResponse.statusText}`,
-                    );
-                    welcomeText = "Welcome to mooR";
+                if (!messageResponse.ok) {
+                    // Server not ready yet, return false to retry
+                    console.log(`Server not ready (${messageResponse.status}), retrying...`);
+                    return false;
                 }
+
+                const welcomeArray = await messageResponse.json() as string[];
+                const welcomeText = welcomeArray.join("\n");
 
                 // Fetch content type
                 let contentTypeValue: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
@@ -67,19 +116,40 @@ export const useWelcomeMessage = () => {
                     console.log("Content type not available, defaulting to text/plain:", error);
                 }
 
-                setWelcomeMessage(welcomeText);
-                setContentType(contentTypeValue);
+                if (isComponentMounted) {
+                    setWelcomeMessage(welcomeText);
+                    setContentType(contentTypeValue);
+                    setIsServerReady(true);
+                    setIsLoading(false);
+                }
+                return true;
             } catch (error) {
-                console.error("Error fetching welcome message:", error);
-                setWelcomeMessage("Welcome to mooR");
-                setContentType("text/plain");
+                console.log("Error fetching welcome message, retrying:", error);
+                return false;
             }
         };
 
-        fetchWelcome();
+        const pollForWelcome = async () => {
+            const success = await fetchWelcome();
+
+            if (!success && isComponentMounted) {
+                // Retry after 2 seconds
+                timeoutId = window.setTimeout(pollForWelcome, 2000);
+            }
+        };
+
+        // Start polling
+        pollForWelcome();
+
+        return () => {
+            isComponentMounted = false;
+            if (timeoutId) {
+                window.clearTimeout(timeoutId);
+            }
+        };
     }, []);
 
-    return { welcomeMessage, contentType };
+    return { welcomeMessage, contentType, isLoading, isServerReady };
 };
 
 /**
@@ -89,7 +159,7 @@ export const useWelcomeMessage = () => {
  * account or create a new one. The component automatically hides when
  * the user is connected and shows when disconnected.
  */
-export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentType, onConnect }) => {
+export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentType, isServerReady, onConnect }) => {
     const [mode, setMode] = useState<"connect" | "create">("connect");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -138,6 +208,15 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
 
     if (!visible) {
         return null;
+    }
+
+    // Show loading spinner if server is not ready
+    if (!isServerReady) {
+        return (
+            <div className="login_window" style={{ display: "block" }}>
+                <LoadingSpinner message="Starting server, please wait..." />
+            </div>
+        );
     }
 
     return (
