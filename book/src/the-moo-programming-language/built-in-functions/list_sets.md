@@ -246,11 +246,10 @@ length({})          =>   0
 
 ### `complex_match`
 
-Performs sophisticated string matching with ordinal support and three-tier matching precedence.
+Performs sophisticated string matching with ordinal support and object auto-detection.
 
 ```
-str | obj complex_match(STR token, LIST strings [, ANY fuzzy])
-obj complex_match(STR token, LIST objects, LIST keys [, ANY fuzzy])
+str | obj complex_match(STR token, LIST targets [, LIST keys] [, ANY fuzzy])
 ```
 
 The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "second", "1st", "2nd", "twenty-first") and four-tier matching precedence:
@@ -260,11 +259,16 @@ The `complex_match()` function provides advanced pattern matching with support f
 3. **Substring matches** - Strings that contain the search token anywhere
 4. **Fuzzy matches** - Strings with small edit distances (typo tolerance)
 
-The optional `fuzzy` parameter controls whether fuzzy matching is enabled:
-- Any truthy value (default): Enable fuzzy matching for typo tolerance  
-- Any falsy value: Disable fuzzy matching (exact/prefix/substring only)
+#### Arguments
 
-#### Two-argument form
+- `token` (STR): The search string to match against
+- `targets` (LIST): List of strings or objects to search through
+- `keys` (LIST, optional): List of key lists for object matching. Pass `false` to disable key-based matching.
+- `fuzzy` (ANY, optional): Controls fuzzy matching behavior:
+  - Any truthy value (default): Enable fuzzy matching for typo tolerance
+  - Any falsy value: Disable fuzzy matching (exact/prefix/substring only)
+
+#### String matching (2-argument form)
 
 The two-argument form matches against a list of strings directly:
 
@@ -274,15 +278,32 @@ complex_match("second foo", {"foobar", "food", "foot"}) => "food"
 complex_match("1st bar", {"foobar", "barfoo"})         => "foobar"
 ```
 
-#### Three-argument form
+#### Object auto-detection (2-argument form with objects)
 
-The three-argument form matches against object keys and returns the corresponding objects:
+When the targets list contains objects, `complex_match` automatically extracts their names:
+
+```
+players = {#123, #456, #789};  // Objects with names "Alice", "Bob", "Charlie"
+complex_match("alice", players)          => #123  // Case-insensitive name matching
+complex_match("second player", players)  => #456  // Ordinal selection by name
+```
+
+#### Object matching with keys (3-4 argument form)
+
+The three/four-argument form matches against explicit object keys:
 
 ```
 objs = {#123, #456, #789};
 keys = {{"lamp", "light"}, {"bottle", "container"}, {"book", "tome"}};
-complex_match("lamp", objs, keys)       => #123
-complex_match("second b", objs, keys)   => #789  // matches "book"
+complex_match("lamp", objs, keys)        => #123
+complex_match("second b", objs, keys)    => #789  // matches "book"
+complex_match("lamp", objs, keys, false) => #123  // fuzzy disabled
+```
+
+To disable key-based matching and force object auto-detection:
+
+```
+complex_match("alice", players, false)   => #123  // Use object names, not keys
 ```
 
 #### Ordinal support
@@ -298,25 +319,34 @@ The function supports various ordinal formats:
 
 - Returns the matched string/object for single matches
 - Returns the first match when multiple matches exist at the same precedence level
-- Returns `#-1` (FAILED_MATCH) when no matches are found
-- For the three-argument form, returns `#-2` (AMBIGUOUS) when multiple exact matches exist
+- Returns `#-3` (FAILED_MATCH) when no matches are found
+- For key-based matching, returns `#-2` (AMBIGUOUS) when multiple exact matches exist
 
 #### Examples
 
 ```
-// Basic matching
-complex_match("foo", {"foobar", "food"})           => "foobar"  // exact wins
-complex_match("bar", {"foobar", "barbaz"})         => "foobar"  // first prefix match
+// Basic string matching
+complex_match("foo", {"foobar", "food"})             => "foobar"  // exact wins
+complex_match("bar", {"foobar", "barbaz"})           => "foobar"  // first prefix match
 
 // Ordinal selection
 complex_match("2nd foo", {"foobar", "food", "foot"}) => "food"
 complex_match("third lamp", {"lamp1", "lamp2", "lamp3"}) => "lamp3"
 
-// Three-tier precedence
+// Four-tier precedence
 complex_match("test", {"testing", "test", "contest"}) => "test"  // exact beats prefix/substring
 
+// Object auto-detection
+players = players();  // Returns list of player objects
+complex_match("alice", players)                       => #123  // Finds player named Alice
+complex_match("archwizard", players)                  => #2    // Case-insensitive matching
+
+// Disable keys, force object auto-detection
+complex_match("alice", players, false)                => #123  // Use object names
+complex_match("alice", players, false, false)         => #123  // No fuzzy matching
+
 // No matches
-complex_match("xyz", {"abc", "def"})               => #-1
+complex_match("xyz", {"abc", "def"})                  => #-3
 ```
 
-This function is particularly useful for implementing sophisticated object matching in MOO commands and user interfaces.
+This function is particularly useful for implementing sophisticated object matching in MOO commands and user interfaces, especially with the new object auto-detection feature that automatically extracts object names for matching.

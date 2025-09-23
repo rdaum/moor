@@ -28,6 +28,7 @@ use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::ops::BitOr;
 use std::sync::Mutex;
 
+use crate::task_context::with_current_transaction;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 
@@ -893,72 +894,125 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// MOO: `any complex_match(str token, list targets [, bool fuzzy])`
+/// Helper function to handle ComplexMatchResult for simple string/var cases
+fn handle_simple_match_result(result: ComplexMatchResult<Var>) -> Result<BfRet, BfErr> {
+    match result {
+        ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
+        ComplexMatchResult::Single(result) => Ok(Ret(result)),
+        ComplexMatchResult::Multiple(results) => {
+            if !results.is_empty() {
+                Ok(Ret(results[0].clone()))
+            } else {
+                Ok(Ret(v_obj(FAILED_MATCH)))
+            }
+        }
+    }
+}
+
+/// MOO: `any complex_match(str token, list targets [, list keys] [, bool fuzzy])`
 /// Performs complex pattern matching with fuzzy matching support.
 fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let token = match bf_args.args[0].variant() {
-        Variant::Str(token) => token.as_str(),
-        _ => return Err(BfErr::Code(E_TYPE)),
+    let Variant::Str(token) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
     };
+    let token = token.as_str();
 
-    // Parse optional fuzzy parameter (defaults to true for backward compatibility)
-    let use_fuzzy = if bf_args.args.len() >= 3
-        && (bf_args.args.len() == 3 && matches!(bf_args.args[2].variant(), Variant::Int(_)))
-        || bf_args.args.len() == 4
-    {
-        let fuzzy_arg_index = if bf_args.args.len() == 3 { 2 } else { 3 };
-        bf_args.args[fuzzy_arg_index].is_true()
+    // Parse arguments: token, targets, [keys], [fuzzy]
+    // 2 args: complex_match(token, targets) - fuzzy=true, no keys
+    // 3 args: complex_match(token, targets, keys) - fuzzy=true, keys provided (or false)
+    // 4 args: complex_match(token, targets, keys, fuzzy) - explicit fuzzy setting
+
+    let use_keys = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
+    let use_fuzzy = if bf_args.args.len() == 4 {
+        bf_args.args[3].is_true()
     } else {
         true // Default to fuzzy matching enabled
     };
 
-    if bf_args.args.len() == 2
-        || (bf_args.args.len() == 3 && matches!(bf_args.args[2].variant(), Variant::Int(_)))
-    {
-        // Two argument form: complex_match(token, strings)
-        let strings = match bf_args.args[1].variant() {
-            Variant::List(strings) => strings,
-            _ => return Err(BfErr::Code(E_TYPE)),
-        };
-
-        let string_vars: Vec<Var> = strings.iter().collect();
-        match complex_match_strings_with_fuzzy(token, &string_vars, use_fuzzy) {
-            ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
-            ComplexMatchResult::Single(result) => Ok(Ret(result)),
-            ComplexMatchResult::Multiple(results) => {
-                // For 2-arg form, return first match when multiple
-                if !results.is_empty() {
-                    Ok(Ret(results[0].clone()))
-                } else {
-                    Ok(Ret(v_obj(FAILED_MATCH)))
-                }
-            }
-        }
-    } else {
-        // Three argument form: complex_match(token, objs, keys)
-        let (objs, keys) = match (bf_args.args[1].variant(), bf_args.args[2].variant()) {
-            (Variant::List(objs), Variant::List(keys)) => (objs, keys),
-            _ => return Err(BfErr::Code(E_TYPE)),
+    // Three/four argument form with keys: complex_match(token, objs, keys, [fuzzy])
+    if use_keys {
+        let (Variant::List(objs), Variant::List(keys)) =
+            (bf_args.args[1].variant(), bf_args.args[2].variant())
+        else {
+            return Err(BfErr::Code(E_TYPE));
         };
 
         let obj_vars: Vec<Var> = objs.iter().collect();
         let key_vars: Vec<Var> = keys.iter().collect();
 
-        match complex_match_objects_keys_with_fuzzy(token, &obj_vars, &key_vars, use_fuzzy) {
-            ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
-            ComplexMatchResult::Single(result) => Ok(Ret(result)),
-            ComplexMatchResult::Multiple(results) => {
-                // For 3-arg form, return first match when multiple
-                if !results.is_empty() {
-                    Ok(Ret(results[0].clone()))
-                } else {
-                    Ok(Ret(v_obj(FAILED_MATCH)))
+        return handle_simple_match_result(complex_match_objects_keys_with_fuzzy(
+            token, &obj_vars, &key_vars, use_fuzzy,
+        ));
+    }
+
+    // Two argument form: complex_match(token, strings_or_objects)
+    let Variant::List(candidates) = bf_args.args[1].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let candidate_vars: Vec<Var> = candidates.iter().collect();
+
+    // Check if we have objects - if so, extract names and match against those
+    let has_objects = candidate_vars
+        .iter()
+        .any(|v| matches!(v.variant(), Variant::Obj(_)));
+
+    if !has_objects {
+        return handle_simple_match_result(complex_match_strings_with_fuzzy(
+            token,
+            &candidate_vars,
+            use_fuzzy,
+        ));
+    }
+
+    // Extract names from objects and match against those
+    let mut object_names = Vec::new();
+    let mut objects = Vec::new();
+
+    for candidate in &candidate_vars {
+        let Variant::Obj(obj) = candidate.variant() else {
+            continue; // Skip non-objects in mixed lists
+        };
+
+        // Get the object's name using name_of
+        let name_result = with_current_transaction(|world_state| {
+            world_state.name_of(&bf_args.task_perms_who(), obj)
+        });
+        let Ok(name_str) = name_result else {
+            continue; // Skip objects without valid name
+        };
+
+        object_names.push(v_string(name_str));
+        objects.push(candidate.clone());
+    }
+
+    match complex_match_strings_with_fuzzy(token, &object_names, use_fuzzy) {
+        ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
+        ComplexMatchResult::Single(result) => {
+            // Find which object corresponds to the matched name and return the object
+            for (i, name) in object_names.iter().enumerate() {
+                if name == &result {
+                    return Ok(Ret(objects[i].clone()));
                 }
             }
+            Ok(Ret(v_obj(FAILED_MATCH)))
+        }
+        ComplexMatchResult::Multiple(results) => {
+            // For 2-arg form, return first matching object when multiple
+            if results.is_empty() {
+                return Ok(Ret(v_obj(FAILED_MATCH)));
+            }
+
+            for (i, name) in object_names.iter().enumerate() {
+                if name == &results[0] {
+                    return Ok(Ret(objects[i].clone()));
+                }
+            }
+            Ok(Ret(v_obj(FAILED_MATCH)))
         }
     }
 }
