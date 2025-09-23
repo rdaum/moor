@@ -31,10 +31,8 @@ use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 
-mod connection_shared;
+mod connection;
 mod listen;
-mod tcp_connection;
-mod telnet_connection;
 
 #[derive(Parser, Debug, Serialize, Deserialize)]
 struct Args {
