@@ -3064,6 +3064,7 @@ dependencies = [
 name = "moor-telnet-host"
 version = "0.9.0-alpha"
 dependencies = [
+ "bytes",
  "clap",
  "clap_derive",
  "color-eyre",
@@ -3075,7 +3076,6 @@ dependencies = [
  "moor-common",
  "moor-moot",
  "moor-var",
- "nectar",
  "rpc-async-client",
  "rpc-common",
  "serde",
@@ -3210,16 +3210,6 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
-]
-
-[[package]]
-name = "nectar"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e4712399433675c7b837e1dc1c40111e2359a9c2e780a29df51b65ffc211ee6"
-dependencies = [
- "bytes",
- "tokio-util",
 ]
 
 [[package]]

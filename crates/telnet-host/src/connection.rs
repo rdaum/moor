@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant, SystemTime};
 
+use crate::connection_codec::{ConnectionCodec, ConnectionFrame, ConnectionItem};
 use eyre::Context;
 use eyre::bail;
 use futures_util::stream::{SplitSink, SplitStream};
@@ -36,7 +37,7 @@ use termimad::MadSkin;
 use tmq::subscribe::Subscribe;
 use tokio::net::TcpStream;
 use tokio::select;
-use tokio_util::codec::{Framed, LinesCodec};
+use tokio_util::codec::Framed;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -56,14 +57,14 @@ pub(crate) struct TelnetConnection {
     /// but custom listeners can be set up to handle connections differently.
     pub(crate) handler_object: Obj,
     /// The MOO connection connection ID
-    pub(crate) connection_oid: Obj,
+    pub(crate) connection_object: Obj,
     /// The player we're authenticated to, if any.
-    pub(crate) player_obj: Option<Obj>,
+    pub(crate) player_object: Option<Obj>,
     pub(crate) client_id: Uuid,
     /// Current PASETO token.
     pub(crate) client_token: ClientToken,
-    pub(crate) write: SplitSink<Framed<TcpStream, LinesCodec>, String>,
-    pub(crate) read: SplitStream<Framed<TcpStream, LinesCodec>>,
+    pub(crate) write: SplitSink<Framed<TcpStream, ConnectionCodec>, ConnectionFrame>,
+    pub(crate) read: SplitStream<Framed<TcpStream, ConnectionCodec>>,
     pub(crate) kill_switch: Arc<AtomicBool>,
 
     pub(crate) broadcast_sub: Subscribe,
@@ -80,6 +81,12 @@ pub(crate) struct TelnetConnection {
     pub(crate) flush_command: String,
     /// Connection attributes (terminal size, type, etc.)
     pub(crate) connection_attributes: HashMap<Symbol, Var>,
+
+    /// Connection option states
+    pub(crate) is_binary_mode: bool,
+    /// When Some, input is held in the buffer for read() calls; when None, input is processed as commands
+    pub(crate) hold_input: Option<Vec<String>>,
+    pub(crate) disable_oob: bool,
 }
 
 /// The input modes the telnet session can be in.
@@ -156,6 +163,118 @@ pub enum ReadEvent {
 const TASK_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl TelnetConnection {
+    /// Send a line with automatic newline appending (like LambdaMOO's network_send_line)
+    pub async fn send_line(&mut self, line: &str) -> Result<(), eyre::Error> {
+        self.write
+            .send(ConnectionFrame::Line(line.to_string()))
+            .await
+            .with_context(|| "Unable to send line to client")
+    }
+
+    /// Send raw text without newline (for no_newline attribute)
+    pub async fn send_raw_text(&mut self, text: &str) -> Result<(), eyre::Error> {
+        self.write
+            .send(ConnectionFrame::RawText(text.to_string()))
+            .await
+            .with_context(|| "Unable to send raw text to client")
+    }
+
+    /// Send raw bytes without modification (like LambdaMOO's network_send_bytes)
+    pub async fn send_bytes(&mut self, bytes: &[u8]) -> Result<(), eyre::Error> {
+        self.write
+            .send(ConnectionFrame::Bytes(bytes::Bytes::copy_from_slice(bytes)))
+            .await
+            .with_context(|| "Unable to send bytes to client")
+    }
+
+    /// Explicitly flush the output (like LambdaMOO's flush control)
+    pub async fn flush(&mut self) -> Result<(), eyre::Error> {
+        self.write
+            .send(ConnectionFrame::Flush)
+            .await
+            .with_context(|| "Unable to flush output to client")
+    }
+
+    /// Handle connection option changes
+    async fn handle_connection_option(
+        &mut self,
+        option_name: Symbol,
+        value: Option<Var>,
+    ) -> Result<(), eyre::Error> {
+        let option_str = option_name.as_arc_string();
+
+        match option_str.as_str() {
+            "binary" => {
+                let binary_mode = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
+
+                debug!("Setting binary mode to {}", binary_mode);
+                self.is_binary_mode = binary_mode;
+
+                // Switch the codec mode by sending a SetMode frame
+                use crate::connection_codec::ConnectionMode;
+                let new_mode = if binary_mode {
+                    ConnectionMode::Binary
+                } else {
+                    ConnectionMode::Text
+                };
+
+                self.write
+                    .send(ConnectionFrame::SetMode(new_mode))
+                    .await
+                    .with_context(|| "Unable to set codec mode")?;
+            }
+            "hold-input" => {
+                let hold = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
+
+                debug!("Setting hold-input to {}", hold);
+                self.hold_input = if hold { Some(Vec::new()) } else { None };
+            }
+            "disable-oob" => {
+                let disable = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
+
+                debug!("Setting disable-oob to {}", disable);
+                self.disable_oob = disable;
+            }
+            "client-echo" => {
+                let echo_on = value.as_ref().map(|v| v.is_true()).unwrap_or(true);
+
+                debug!("Setting client-echo to {}", echo_on);
+                self.send_telnet_echo_command(echo_on).await?;
+            }
+            "flush-command" => {
+                let flush_cmd = value
+                    .as_ref()
+                    .and_then(|v| v.as_string())
+                    .unwrap_or(DEFAULT_FLUSH_COMMAND);
+
+                debug!("Setting flush-command to '{}'", flush_cmd);
+                self.flush_command = flush_cmd.to_string();
+            }
+            _ => {
+                warn!("Unsupported connection option: {}", option_str);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Send telnet WILL/WONT ECHO command
+    async fn send_telnet_echo_command(&mut self, echo_on: bool) -> Result<(), eyre::Error> {
+        // These values taken from RFC 854 and RFC 857
+        const TN_IAC: u8 = 255; // Interpret As Command
+        const TN_WILL: u8 = 251;
+        const TN_WONT: u8 = 252;
+        const TN_ECHO: u8 = 1;
+
+        let telnet_cmd = if echo_on {
+            [TN_IAC, TN_WONT, TN_ECHO] // Client should echo
+        } else {
+            [TN_IAC, TN_WILL, TN_ECHO] // Server will echo (client should not)
+        };
+
+        self.send_bytes(&telnet_cmd).await
+    }
+
     async fn update_connection_attribute(&mut self, key: Symbol, value: Option<Var>) {
         if let Some(auth_token) = &self.auth_token {
             let _ = self
@@ -199,9 +318,10 @@ impl TelnetConnection {
             ConnectType::Reconnected => "*** Reconnected ***",
             ConnectType::Created => "*** Created ***",
         };
-        self.write.send(connect_message.to_string()).await?;
+        self.send_line(connect_message).await?;
+        self.flush().await?;
 
-        debug!(?player, client_id = ?self.client_id, "Entering command dispatch loop");
+        debug!(?player, client_id = ?self.client_id, connection_obj = ?self.connection_object, "Entering command dispatch loop");
 
         // Now that we're authenticated, send all current connection attributes to daemon
         for (key, value) in self.connection_attributes.clone() {
@@ -226,19 +346,28 @@ impl TelnetConnection {
     async fn output(&mut self, event: Event) -> Result<(), eyre::Error> {
         match event {
             Event::Notify {
-                value: msg,
+                value,
                 content_type,
                 no_newline,
                 ..
             } => {
-                let Ok(formatted) = output_format(&msg, content_type) else {
-                    warn!("Failed to format message: {:?}", msg);
+                if let Variant::Binary(b) = value.variant() {
+                    self.send_bytes(b.as_bytes()).await?;
+                    return Ok(());
+                }
+                let Ok(formatted) = output_format(&value, content_type) else {
+                    warn!("Failed to format message: {:?}", value);
                     return Ok(());
                 };
-                self.write
-                    .send(formatted)
-                    .await
-                    .with_context(|| "Unable to send message to client")?;
+                if no_newline {
+                    self.send_raw_text(&formatted)
+                        .await
+                        .with_context(|| "Unable to send raw text to client")?;
+                } else {
+                    self.send_line(&formatted)
+                        .await
+                        .with_context(|| "Unable to send message to client")?;
+                }
             }
 
             Event::Traceback(e) => {
@@ -246,15 +375,13 @@ impl TelnetConnection {
                     let Some(s) = frame.as_string() else {
                         continue;
                     };
-                    self.write
-                        .send(s.to_string())
+                    self.send_line(s)
                         .await
                         .with_context(|| "Unable to send message to client")?;
                 }
             }
             _ => {
-                self.write
-                    .send(format!("Unsupported event for telnet: {event:?}"))
+                self.send_line(&format!("Unsupported event for telnet: {event:?}"))
                     .await
                     .with_context(|| "Unable to send message to client")?;
             }
@@ -273,7 +400,7 @@ impl TelnetConnection {
                     match event {
                         ClientsBroadcastEvent::PingPong(_server_time) => {
                             let _ = &mut self.rpc_client.make_client_rpc_call(self.client_id,
-                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid, HostType::TCP, self.peer_addr)).await?;
+                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_object, HostType::TCP, self.peer_addr)).await?;
                         }
                     }
                 }
@@ -281,7 +408,7 @@ impl TelnetConnection {
                     trace!(?event, "narrative_event");
                     match event {
                         ClientEvent::SystemMessage(_author, msg) => {
-                            self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
+                            self.send_line(&msg).await.with_context(|| "Unable to send message to client")?;
                         }
                         ClientEvent::Narrative(_author, event) => {
                             self.output(event.event()).await?;
@@ -301,17 +428,17 @@ impl TelnetConnection {
                             // We don't need to do anything with successes.
                         }
                               ClientEvent::PlayerSwitched { new_player, new_auth_token } => {
-                            info!("Switching player from {:?} to {} during authorization for client {}", self.player_obj, new_player, self.client_id);
-                            self.player_obj = Some(new_player);
+                            info!("Switching player from {:?} to {} during authorization for client {}", self.player_object, new_player, self.client_id);
+                            self.player_object = Some(new_player);
                             self.auth_token = Some(new_auth_token);
                             info!("Player switched successfully to {} during authorization for client {}", new_player, self.client_id);
                         }
                         ClientEvent::SetConnectionOption { connection_obj, option_name, value } => {
                             debug!("Received SetConnectionOption: connection_obj={}, option_name={}, value={:?}, our_connection={}",
-                                   connection_obj, option_name, value, self.connection_oid);
+                                   connection_obj, option_name, value, self.connection_object);
                             // Only handle if this event is for our connection
-                            if connection_obj == self.connection_oid {
-                                // TODO
+                            if connection_obj == self.connection_object {
+                                self.handle_connection_option(option_name, Some(value)).await?;
                             } else {
                                 debug!("Ignoring SetConnectionOption for different connection");
                             }
@@ -319,11 +446,18 @@ impl TelnetConnection {
                     }
                 }
                 // Auto loop
-                line = self.read.next() => {
-                    let Some(line) = line else {
+                item = self.read.next() => {
+                    let Some(item) = item else {
                         bail!("Connection closed before login");
                     };
-                    let line = line.unwrap();
+                    let item = item.unwrap();
+                    let line = match item {
+                        ConnectionItem::Line(line) => line,
+                        ConnectionItem::Bytes(_) => {
+                            // Binary data during login is not expected
+                            continue;
+                        }
+                    };
                     let words = parse_into_words(&line);
                     let response = &mut self.rpc_client.make_client_rpc_call(
                         self.client_id,
@@ -337,7 +471,7 @@ impl TelnetConnection {
                     if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(
                         Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
-                        self.connection_oid = *player;
+                        self.player_object = Some(*player);
                         return Ok((auth_token.clone(), *player, *connect_type))
                     }
                 }
@@ -370,8 +504,25 @@ impl TelnetConnection {
                     return ReadEvent::PendingEvent;
                 }
 
-                let Some(Ok(line)) = self.read.next().await else {
+                let Some(Ok(item)) = self.read.next().await else {
                     return ReadEvent::ConnectionClose;
+                };
+
+                let line = match item {
+                    ConnectionItem::Line(line) => line,
+                    ConnectionItem::Bytes(bytes) => {
+                        if !self.is_binary_mode {
+                            // Binary data in text mode is not expected
+                            return ReadEvent::PendingEvent;
+                        }
+
+                        // TODO: we'll need to receive binary data and send it to the server in
+                        //   some fashion. Likely a new RPC message type.
+                        //   Existing MOO code expects to be able to e.g. read() this kind of thing
+                        //   and we may be able to support that.
+                        //   But unprompted binary input is a bit trickier
+                        return ReadEvent::PendingEvent;
+                    }
                 };
 
                 if !expecting_input.is_empty() {
@@ -385,7 +536,13 @@ impl TelnetConnection {
                 line = input_future => {
                     match line {
                         ReadEvent::Command(line) => {
-                            line_mode = self.handle_command(&mut program_input, line_mode, line).await.expect("Unable to process command");
+                            if let Some(ref mut buffer) = self.hold_input {
+                                // When hold-input is active, store input in buffer for read() calls
+                                debug!("Holding input due to hold-input option: {}", line);
+                                buffer.push(line);
+                            } else {
+                                line_mode = self.handle_command(&mut program_input, line_mode, line).await.expect("Unable to process command");
+                            }
                         }
                         ReadEvent::InputReply(line) =>{
                             self.process_requested_input_line(line, &mut expecting_input).await.expect("Unable to process input reply");
@@ -426,7 +583,7 @@ impl TelnetConnection {
     ) -> Result<LineMode, eyre::Error> {
         // Handle flush command first - it should be processed immediately.
         if line.trim() == self.flush_command {
-            // We don't support flush, but just move on.
+            self.flush().await?;
             return Ok(line_mode);
         }
 
@@ -439,7 +596,7 @@ impl TelnetConnection {
                 };
                 let code = std::mem::take(program_input);
                 let target = ObjectRef::Match(target.clone());
-                let verb = Symbol::mk(&verb);
+                let verb = Symbol::mk(verb);
                 match self
                     .rpc_client
                     .make_client_rpc_call(
@@ -457,19 +614,17 @@ impl TelnetConnection {
                     ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(resp)) => {
                         match resp {
                             VerbProgramResponse::Success(o, verb) => {
-                                self.write
-                                    .send(format!(
-                                        "0 error(s).\nVerb {verb} programmed on object {o}"
-                                    ))
-                                    .await?;
+                                self.send_line(&format!(
+                                    "0 error(s).\nVerb {verb} programmed on object {o}"
+                                ))
+                                .await?;
                             }
                             VerbProgramResponse::Failure(VerbProgramError::CompilationError(e)) => {
                                 let desc = describe_compile_error(e);
-                                self.write.send(desc).await?;
+                                self.send_line(&desc).await?;
                             }
                             VerbProgramResponse::Failure(VerbProgramError::NoVerbToProgram) => {
-                                self.write
-                                    .send("That object does not have that verb.".to_string())
+                                self.send_line("That object does not have that verb.")
                                     .await?;
                             }
                             VerbProgramResponse::Failure(e) => {
@@ -507,12 +662,12 @@ impl TelnetConnection {
             let words = parse_into_words(&line);
             let usage_msg = "Usage: .program <target>:<verb>";
             if words.len() != 2 {
-                self.write.send(usage_msg.to_string()).await?;
+                self.send_line(usage_msg).await?;
                 return Ok(line_mode);
             }
             let verb_spec = words[1].split(':').collect::<Vec<_>>();
             if verb_spec.len() != 2 {
-                self.write.send(usage_msg.to_string()).await?;
+                self.send_line(usage_msg).await?;
                 return Ok(line_mode);
             }
             let target = verb_spec[0].to_string();
@@ -520,8 +675,7 @@ impl TelnetConnection {
 
             // verb must be a valid identifier
             if !verb.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                self.write
-                    .send("You must specify a verb; use the format object:verb.".to_string())
+                self.send_line("You must specify a verb; use the format object:verb.")
                     .await?;
                 return Ok(line_mode);
             }
@@ -533,15 +687,14 @@ impl TelnetConnection {
                 && !target.starts_with('"')
                 && !target.chars().all(|c| c.is_alphanumeric() || c == '_')
             {
-                self.write
-                    .send("You must specify a target; use the format object:verb.".to_string())
+                self.send_line("You must specify a target; use the format object:verb.")
                     .await?;
                 return Ok(line_mode);
             }
 
-            self.write
-                .send(format!("Now programming {}. Use \".\" to end.", words[1]))
+            self.send_line(&format!("Now programming {}. Use \".\" to end.", words[1]))
                 .await?;
+            self.flush().await?;
 
             return Ok(LineMode::SpoolingProgram(target, verb));
         }
@@ -639,8 +792,7 @@ impl TelnetConnection {
         trace!(?event, "narrative_event");
         match event {
             ClientEvent::SystemMessage(_, msg) => {
-                self.write
-                    .send(msg)
+                self.send_line(&msg)
                     .await
                     .expect("Unable to send message to client");
             }
@@ -653,8 +805,7 @@ impl TelnetConnection {
                         ..
                     } => {
                         let output_str = output_format(msg, *content_type)?;
-                        self.write
-                            .send(output_str_format(&output_str, *content_type)?)
+                        self.send_line(&output_str_format(&output_str, *content_type)?)
                             .await
                             .expect("Unable to send message to client");
                     }
@@ -663,8 +814,7 @@ impl TelnetConnection {
                             let Some(s) = frame.as_string() else {
                                 continue;
                             };
-                            self.write
-                                .send(s.to_string())
+                            self.send_line(s)
                                 .await
                                 .with_context(|| "Unable to send message to client")?;
                         }
@@ -676,14 +826,43 @@ impl TelnetConnection {
                 }
             }
             ClientEvent::RequestInput(request_id) => {
+                // If hold_input is active and has buffered input, return it immediately
+                if let Some(ref mut buffer) = self.hold_input {
+                    if let Some(input_line) = buffer.drain(..1).next() {
+                        debug!("Returning held input for read() call: {}", input_line);
+
+                        // Send the buffered input as an input reply
+                        let Some(auth_token) = self.auth_token.clone() else {
+                            bail!("Received input request before auth token was set");
+                        };
+
+                        self.rpc_client
+                            .make_client_rpc_call(
+                                self.client_id,
+                                HostClientToDaemonMessage::RequestedInput(
+                                    self.client_token.clone(),
+                                    auth_token,
+                                    request_id,
+                                    input_line,
+                                ),
+                            )
+                            .await?;
+
+                        return Ok(None);
+                    }
+                }
+
+                // No buffered input available, wait for user input
                 return Ok(Some(request_id));
             }
             ClientEvent::Disconnect() => {
                 self.pending_task = None;
-                self.write
-                    .send("** Disconnected **".to_string())
+                self.send_line("** Disconnected **")
                     .await
                     .expect("Unable to send disconnect message to client");
+                self.flush()
+                    .await
+                    .expect("Unable to flush disconnect message");
                 self.write
                     .close()
                     .await
@@ -724,16 +903,32 @@ impl TelnetConnection {
             } => {
                 info!(
                     "Switching player from {} to {} for client {}",
-                    self.connection_oid, new_player, self.client_id
+                    self.connection_object, new_player, self.client_id
                 );
-                self.connection_oid = new_player;
+                self.connection_object = new_player;
                 self.auth_token = Some(new_auth_token);
                 info!(
                     "Player switched successfully to {} for client {}",
                     new_player, self.client_id
                 );
             }
-            ClientEvent::SetConnectionOption { .. } => {}
+            ClientEvent::SetConnectionOption {
+                connection_obj,
+                option_name,
+                value,
+            } => {
+                debug!(
+                    "Received SetConnectionOption: connection_obj={}, option_name={}, value={:?}, our_connection={}",
+                    connection_obj, option_name, value, self.connection_object
+                );
+                // Only handle if this event is for our connection
+                if connection_obj == self.connection_object {
+                    self.handle_connection_option(option_name, Some(value))
+                        .await?;
+                } else {
+                    debug!("Ignoring SetConnectionOption for different connection");
+                }
+            }
         }
 
         Ok(None)
@@ -747,7 +942,7 @@ impl TelnetConnection {
         // Send output prefix before executing command
         self.send_output_prefix().await?;
 
-        let result = if line.starts_with(OUT_OF_BAND_PREFIX) {
+        let result = if line.starts_with(OUT_OF_BAND_PREFIX) && !self.disable_oob {
             self.rpc_client
                 .make_client_rpc_call(
                     self.client_id,
@@ -861,52 +1056,48 @@ impl TelnetConnection {
     async fn handle_task_error(&mut self, task_error: SchedulerError) -> Result<(), eyre::Error> {
         match task_error {
             SchedulerError::CommandExecutionError(CommandError::CouldNotParseCommand) => {
-                self.write
-                    .send("I couldn't understand that.".to_string())
-                    .await?;
+                self.send_line("I couldn't understand that.").await?;
+                self.flush().await?;
             }
             SchedulerError::CommandExecutionError(CommandError::NoObjectMatch) => {
-                self.write
-                    .send("I don't see that here.".to_string())
-                    .await?;
+                self.send_line("I don't see that here.").await?;
+                self.flush().await?;
             }
             SchedulerError::CommandExecutionError(CommandError::NoCommandMatch) => {
-                self.write
-                    .send("I couldn't understand that.".to_string())
-                    .await?;
+                self.send_line("I couldn't understand that.").await?;
+                self.flush().await?;
             }
             SchedulerError::CommandExecutionError(CommandError::PermissionDenied) => {
-                self.write.send("You can't do that.".to_string()).await?;
+                self.send_line("You can't do that.").await?;
+                self.flush().await?;
             }
             SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(
                 compile_error,
             )) => {
                 let ce = describe_compile_error(compile_error);
-                self.write.send(ce).await?;
-                self.write.send("Verb not programmed.".to_string()).await?;
+                self.send_line(&ce).await?;
+                self.send_line("Verb not programmed.").await?;
+                self.flush().await?;
             }
             SchedulerError::VerbProgramFailed(VerbProgramError::NoVerbToProgram) => {
-                self.write
-                    .send("That object does not have that verb definition.".to_string())
+                self.send_line("That object does not have that verb definition.")
                     .await?;
             }
             SchedulerError::TaskAbortedLimit(AbortLimitReason::Ticks(_)) => {
-                self.write.send("Task ran out of ticks".to_string()).await?;
+                self.send_line("Task ran out of ticks").await?;
             }
             SchedulerError::TaskAbortedLimit(AbortLimitReason::Time(_)) => {
-                self.write
-                    .send("Task ran out of seconds".to_string())
-                    .await?;
+                self.send_line("Task ran out of seconds").await?;
             }
             SchedulerError::TaskAbortedError => {
-                self.write.send("Task aborted".to_string()).await?;
+                self.send_line("Task aborted").await?;
             }
             SchedulerError::TaskAbortedException(e) => {
                 // This should not really be happening here... but?
-                self.write.send(format!("Task exception: {e}")).await?;
+                self.send_line(&format!("Task exception: {e}")).await?;
             }
             SchedulerError::TaskAbortedCancelled => {
-                self.write.send("Task cancelled".to_string()).await?;
+                self.send_line("Task cancelled").await?;
             }
             _ => {
                 warn!(?task_error, "Unhandled unexpected task error");
@@ -917,16 +1108,16 @@ impl TelnetConnection {
 
     /// Send output prefix if defined
     async fn send_output_prefix(&mut self) -> Result<(), eyre::Error> {
-        if let Some(ref prefix) = self.output_prefix {
-            self.write.send(prefix.clone()).await?;
+        if let Some(prefix) = self.output_prefix.clone() {
+            self.send_line(&prefix).await?;
         }
         Ok(())
     }
 
     /// Send output suffix if defined
     async fn send_output_suffix(&mut self) -> Result<(), eyre::Error> {
-        if let Some(ref suffix) = self.output_suffix {
-            self.write.send(suffix.clone()).await?;
+        if let Some(suffix) = self.output_suffix.clone() {
+            self.send_line(&suffix).await?;
         }
         Ok(())
     }

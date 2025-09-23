@@ -12,9 +12,9 @@
 //
 
 use crate::connection::TelnetConnection;
+use crate::connection_codec::ConnectionCodec;
 use eyre::bail;
 use futures_util::StreamExt;
-use futures_util::stream::SplitSink;
 use hickory_resolver::TokioResolver;
 use moor_var::{Obj, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -28,7 +28,7 @@ use std::sync::atomic::AtomicBool;
 use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
-use tokio_util::codec::{Framed, LinesCodec};
+use tokio_util::codec::Framed;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -306,14 +306,13 @@ impl Listener {
             );
 
             // Re-ify the connection.
-            let framed_stream = Framed::new(stream, LinesCodec::new());
-            let (write, read): (SplitSink<Framed<TcpStream, LinesCodec>, String>, _) =
-                framed_stream.split();
+            let framed_stream = Framed::new(stream, ConnectionCodec::new());
+            let (write, read) = framed_stream.split();
             let mut tcp_connection = TelnetConnection {
                 handler_object,
                 peer_addr,
-                connection_oid,
-                player_obj: None,
+                connection_object: connection_oid,
+                player_object: None,
                 client_token,
                 client_id,
                 write,
@@ -328,6 +327,9 @@ impl Listener {
                 output_suffix: None,
                 flush_command: crate::connection::DEFAULT_FLUSH_COMMAND.to_string(),
                 connection_attributes,
+                is_binary_mode: false,
+                hold_input: None,
+                disable_oob: false,
             };
 
             tcp_connection.run().await?;

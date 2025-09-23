@@ -51,7 +51,7 @@ serde_json.workspace = true
 
 # Networking & Communication
 hickory-resolver.workspace = true
-nectar.workspace = true
+bytes.workspace = true
 tmq.workspace = true
 
 # Async Runtime & Concurrency

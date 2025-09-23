@@ -32,6 +32,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 
 mod connection;
+mod connection_codec;
 mod listen;
 
 #[derive(Parser, Debug, Serialize, Deserialize)]
