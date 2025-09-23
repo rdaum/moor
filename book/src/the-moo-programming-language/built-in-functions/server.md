@@ -51,10 +51,83 @@ notify(player, "= Welcome\nThis is {em}djot{/em}!", false, false, "text/djot");
 
 ### `present`
 
-**Description:** Checks if a specified object is present in the current context.  
+**Description:** Emits a presentation event to the client. The client should interpret this as a request to present
+the content provided as a pop-up, panel, or other client-specific UI element (depending on 'target').
+If only the first two arguments are provided, the client should "unpresent" the presentation with that ID.
+
+**Syntax:** `none present(obj player, str id [, str content_type, str target, str content [, list attributes]])`
+
 **Arguments:**
 
-- : The object to check for presence `object`
+- `player`: The player or connection object to send the presentation to
+- `id`: A unique identifier for this presentation (used to update or remove it later)
+- `content_type`: (Optional) Content type for the presentation (e.g., "text/html", "text/markdown", "text/djot")
+- `target`: (Optional) Target UI element type. Supported values:
+  - `"window"`: Floating window
+  - `"navigation"`: Navigation panel (left dock on desktop, top on mobile)
+  - `"inventory"`: Inventory panel (right dock on desktop, bottom on mobile)
+  - `"status"`: Status panel (right dock on desktop, top on mobile)
+  - `"tools"`: Tools panel (right dock on desktop, bottom on mobile)
+  - `"communication"`: Communication panel (left dock on desktop, top on mobile)
+  - `"help"`: Help panel (right dock by default)
+  - `"verb-editor"`: Verb editor window
+- `content`: (Optional) The actual content to display
+- `attributes`: (Optional) Additional attributes as a list of {key, value} pairs or a map
+
+**Returns:** None
+
+**Permission Requirements:**
+
+- Must be the target player, own the target player, or be a wizard
+- Only available when rich_notify server option is enabled
+
+**Examples:**
+
+```moo
+// Remove/unpresent a presentation
+present(player, "my-window");
+
+// Create a floating window with HTML content
+present(player, "welcome-msg", "text/html", "window",
+        "<h1>Welcome!</h1><p>Thanks for joining our world.</p>");
+
+// Status panel with server info
+present(player, "server-info", "text/html", "status",
+        "<div>Online: 42 players<br>Uptime: 5 days</div>",
+        {{"title", "Server Status"}});
+
+// Help content
+present(player, "command-help", "text/markdown", "help",
+        "# Commands\n\n**Basic:**\n- `look` - examine surroundings\n- `say <message>` - speak to others");
+
+// Navigation menu
+present(player, "nav-menu", "text/html", "navigation",
+        "<ul><li>Lobby</li><li>Garden</li><li>Library</li></ul>");
+
+// Inventory display
+present(player, "my-items", "text/html", "inventory",
+        "<ul><li>a rusty key</li><li>leather bag</li></ul>");
+
+// Tools panel with djot content
+present(player, "builder-tools", "text/djot", "tools",
+        "= Builder Tools\n\n{*@dig*} - create rooms\n{*@create*} - make objects");
+
+// Communication panel
+present(player, "chat-window", "text/html", "communication",
+        "<div class='chat'>Welcome to the chat!</div>");
+
+// Launch verb editor (requires object and verb attributes)
+present(player, "edit-look", "text/plain", "verb-editor", "",
+        {{"object", "#123"}, {"verb", "look"}, {"title", "Edit look verb"}});
+```
+
+**Notes:**
+
+- Only available when the `rich_notify` server configuration option is enabled
+- Telnet clients will ignore presentation events
+- Web and mobile clients can render presentations as appropriate UI elements
+- The `id` parameter allows updating or removing presentations later
+- With only 2 arguments (player, id), removes/unpresents the specified presentation
 
 ### `connected_players`
 
