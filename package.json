@@ -13,10 +13,12 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "daemon:dev": "cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns false --custom-errors true --use-uuobjids true",
+    "daemon:traced": "cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns false --custom-errors true --use-uuobjids true --trace-output moor-trace.json",
     "web-host:dev": "cargo run --bin moor-web-host -- --debug",
     "web-host:build": "cargo build --release --bin moor-web-host",
     "web-host:run": "cargo run --release --bin moor-web-host",
     "full:dev": "concurrently \"npm run dev\" \"npm run daemon:dev\" \"npm run web-host:dev\"",
+    "full:dev-traced": "concurrently \"npm run dev\" \"npm run daemon:traced\" \"npm run web-host:dev\"",
     "full:build": "npm run build && npm run web-host:build"
   },
   "keywords": [
