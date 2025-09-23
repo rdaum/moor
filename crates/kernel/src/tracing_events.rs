@@ -168,6 +168,9 @@ enum TracingMessage {
 static TRACING_SENDER: Mutex<Option<Sender<TracingMessage>>> = Mutex::new(None);
 
 #[cfg(feature = "trace_events")]
+static TRACING_THREAD: Mutex<Option<thread::JoinHandle<()>>> = Mutex::new(None);
+
+#[cfg(feature = "trace_events")]
 static INIT: Once = Once::new();
 
 /// Initialize the tracing system (only called once)
@@ -184,14 +187,15 @@ pub fn init_tracing(output_path: Option<PathBuf>) -> bool {
             // Start the background thread
             let output_path = output_path.unwrap_or_else(|| PathBuf::from("moor_trace.json"));
 
-            if let Ok(_thread) = thread::Builder::new()
+            if let Ok(thread_handle) = thread::Builder::new()
                 .name("moor-trace-events".to_string())
                 .spawn(move || {
                     tracing_thread_main(receiver, output_path);
                 })
             {
-                // Store the sender globally
+                // Store the sender and thread handle globally
                 *TRACING_SENDER.lock().unwrap() = Some(sender);
+                *TRACING_THREAD.lock().unwrap() = Some(thread_handle);
                 INITIALIZED.store(true, Ordering::Relaxed);
             } else {
                 tracing::error!("Failed to start tracing thread");
@@ -242,10 +246,28 @@ pub fn emit_trace_event(event: TraceEventType) {
 pub fn shutdown_tracing() {
     #[cfg(feature = "trace_events")]
     {
+        // Send shutdown message
         if let Ok(guard) = TRACING_SENDER.lock()
             && let Some(sender) = guard.as_ref()
         {
             let _ = sender.send(TracingMessage::Shutdown);
+        }
+
+        // Wait for the background thread to finish
+        if let Ok(mut guard) = TRACING_THREAD.lock() {
+            if let Some(thread_handle) = guard.take() {
+                tracing::info!("Shutting down tracing thread...");
+                if let Err(e) = thread_handle.join() {
+                    tracing::error!("Failed to join tracing thread: {:?}", e);
+                } else {
+                    tracing::info!("Tracing thread shutdown complete");
+                }
+            }
+        }
+
+        // Clear the sender
+        if let Ok(mut guard) = TRACING_SENDER.lock() {
+            *guard = None;
         }
     }
 }
