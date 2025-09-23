@@ -1673,7 +1673,7 @@ impl RpcMessageHandler {
         client_id: Uuid,
         player: &Obj,
         input_request_id: Uuid,
-        input: String,
+        input: Var,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         // Get the connection object for activity tracking
         let connection = self

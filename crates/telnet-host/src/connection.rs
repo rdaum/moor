@@ -155,7 +155,7 @@ pub struct PendingTask {
 
 pub enum ReadEvent {
     Command(String),
-    InputReply(String),
+    InputReply(Var),
     ConnectionClose,
     PendingEvent,
 }
@@ -508,27 +508,28 @@ impl TelnetConnection {
                     return ReadEvent::ConnectionClose;
                 };
 
-                let line = match item {
-                    ConnectionItem::Line(line) => line,
-                    ConnectionItem::Bytes(_bytes) => {
+                match item {
+                    ConnectionItem::Line(line) => {
+                        if !expecting_input.is_empty() {
+                            ReadEvent::InputReply(v_str(&line))
+                        } else {
+                            ReadEvent::Command(line)
+                        }
+                    }
+                    ConnectionItem::Bytes(bytes) => {
                         if !self.is_binary_mode {
                             // Binary data in text mode is not expected
                             return ReadEvent::PendingEvent;
                         }
 
-                        // TODO: we'll need to receive binary data and send it to the server in
-                        //   some fashion. Likely a new RPC message type.
-                        //   Existing MOO code expects to be able to e.g. read() this kind of thing
-                        //   and we may be able to support that.
-                        //   But unprompted binary input is a bit trickier
-                        return ReadEvent::PendingEvent;
+                        if !expecting_input.is_empty() {
+                            // Convert binary data to Var::Binary for input reply
+                            ReadEvent::InputReply(Var::mk_binary(bytes.to_vec()))
+                        } else {
+                            // Binary data as unprompted command not yet supported
+                            return ReadEvent::PendingEvent;
+                        }
                     }
-                };
-
-                if !expecting_input.is_empty() {
-                    ReadEvent::InputReply(line)
-                } else {
-                    ReadEvent::Command(line)
                 }
             };
 
@@ -544,8 +545,8 @@ impl TelnetConnection {
                                 line_mode = self.handle_command(&mut program_input, line_mode, line).await.expect("Unable to process command");
                             }
                         }
-                        ReadEvent::InputReply(line) =>{
-                            self.process_requested_input_line(line, &mut expecting_input).await.expect("Unable to process input reply");
+                        ReadEvent::InputReply(input_data) =>{
+                            self.process_requested_input_line(input_data, &mut expecting_input).await.expect("Unable to process input reply");
                         }
                         ReadEvent::ConnectionClose => {
                             info!("Connection closed");
@@ -843,7 +844,7 @@ impl TelnetConnection {
                                     self.client_token.clone(),
                                     auth_token,
                                     request_id,
-                                    input_line,
+                                    v_str(&input_line),
                                 ),
                             )
                             .await?;
@@ -1000,11 +1001,9 @@ impl TelnetConnection {
 
     async fn process_requested_input_line(
         &mut self,
-        line: String,
+        input_data: Var,
         expecting_input: &mut VecDeque<Uuid>,
     ) -> Result<(), eyre::Error> {
-        let cmd = line.trim().to_string();
-
         let Some(input_request_id) = expecting_input.front() else {
             bail!("Attempt to send reply to input request without an input request");
         };
@@ -1021,7 +1020,7 @@ impl TelnetConnection {
                     self.client_token.clone(),
                     auth_token,
                     *input_request_id,
-                    cmd,
+                    input_data,
                 ),
             )
             .await
