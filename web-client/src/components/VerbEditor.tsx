@@ -70,6 +70,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const editorThemeObserverRef = useRef<MutationObserver | null>(null);
     const editorThemeListenerRef = useRef<(() => void) | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
 
     // Parse actual object ID from uploadAction and create enhanced title
     const enhancedTitle = React.useMemo(() => {
@@ -304,6 +305,26 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
         editorRef.current = editor;
+
+        // Create custom decoration collection for more visible error highlighting
+        errorDecorationsRef.current = editor.createDecorationsCollection();
+
+        // Add CSS for highly visible error decorations
+        const style = document.createElement("style");
+        style.textContent = `
+            .monaco-editor .moo-error-decoration {
+                background: rgba(255, 0, 0, 0.2) !important;
+                border: 1px solid #ff0000 !important;
+                border-radius: 2px !important;
+            }
+            .monaco-editor .moo-error-inline {
+                background: rgba(255, 0, 0, 0.3) !important;
+                color: #ffffff !important;
+                font-weight: bold !important;
+                text-decoration: underline wavy #ff0000 !important;
+            }
+        `;
+        document.head.appendChild(style);
 
         // Set Monaco theme to match client theme
         const savedTheme = localStorage.getItem("theme");
@@ -720,28 +741,104 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 const result = await response.json();
 
                 // Check for compilation errors
-                if (result && typeof result === "object" && Object.keys(result).length > 0) {
-                    // Parse compilation errors
+                if (result && typeof result === "object" && result.errors) {
+                    // Parse compilation errors from nested structure
                     const compilationErrors: CompileError[] = [];
 
-                    if (result.error && result.line && result.column) {
-                        compilationErrors.push({
-                            type: "parse",
-                            message: result.error,
-                            line: result.line,
-                            column: result.column,
-                        });
-                    } else if (result.error) {
+                    if (result.errors.ParseError) {
+                        const parseError = result.errors.ParseError;
+                        if (
+                            parseError.error_position && parseError.error_position.line_col
+                            && Array.isArray(parseError.error_position.line_col)
+                        ) {
+                            const lineCol = parseError.error_position.line_col;
+                            const line = lineCol[0];
+                            const column = lineCol[1];
+                            compilationErrors.push({
+                                type: "parse",
+                                message: parseError.message || "Parse error",
+                                line: line,
+                                column: column,
+                            });
+                        } else {
+                            compilationErrors.push({
+                                type: "parse",
+                                message: parseError.message || "Parse error",
+                            });
+                        }
+                    } else if (result.errors) {
+                        // Handle other error types if they exist
                         compilationErrors.push({
                             type: "other",
-                            message: result.error,
+                            message: JSON.stringify(result.errors),
                         });
                     }
 
                     setErrors(compilationErrors);
+
+                    // Set Monaco error markers
+                    if (editorRef.current) {
+                        const model = editorRef.current.getModel();
+                        if (model) {
+                            const markers = compilationErrors.map(error => {
+                                const line = error.line || 1;
+                                const column = error.column || 1;
+                                // Make the error span a wider area to be more visible
+                                const lineText = model.getLineContent(line);
+                                const wordEnd = lineText.indexOf(" ", column - 1);
+                                const endColumn = wordEnd !== -1 ? wordEnd + 1 : model.getLineMaxColumn(line);
+
+                                return {
+                                    severity: monaco.MarkerSeverity.Error,
+                                    message: error.message,
+                                    startLineNumber: line,
+                                    startColumn: column,
+                                    endLineNumber: line,
+                                    endColumn: Math.max(column + 5, endColumn), // Span at least 5 characters or to end of word
+                                };
+                            });
+                            monaco.editor.setModelMarkers(model, "moo-compiler", markers);
+
+                            // Add more visible decorations
+                            if (errorDecorationsRef.current) {
+                                const decorations = compilationErrors.map(error => {
+                                    const line = error.line || 1;
+                                    const column = error.column || 1;
+                                    const lineText = model.getLineContent(line);
+                                    const wordEnd = lineText.indexOf(" ", column - 1);
+                                    const endColumn = wordEnd !== -1 ? wordEnd + 1 : model.getLineMaxColumn(line);
+
+                                    return {
+                                        range: new monaco.Range(line, column, line, Math.max(column + 5, endColumn)),
+                                        options: {
+                                            className: "moo-error-decoration",
+                                            inlineClassName: "moo-error-inline",
+                                            hoverMessage: { value: error.message },
+                                            overviewRuler: {
+                                                color: "#ff0000",
+                                                position: monaco.editor.OverviewRulerLane.Right,
+                                            },
+                                        },
+                                    };
+                                });
+                                errorDecorationsRef.current.set(decorations);
+                            }
+                        }
+                    }
                 } else {
                     // Successful compilation
                     setErrors([]);
+
+                    // Clear Monaco error markers and decorations
+                    if (editorRef.current) {
+                        const model = editorRef.current.getModel();
+                        if (model) {
+                            monaco.editor.setModelMarkers(model, "moo-compiler", []);
+                        }
+                        if (errorDecorationsRef.current) {
+                            errorDecorationsRef.current.clear();
+                        }
+                    }
                 }
             }
         } catch (error) {
