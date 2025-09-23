@@ -582,7 +582,7 @@ impl Scheduler {
                 // Wake and bake.
                 let response = task_q.resume_task_thread(
                     sr.task,
-                    v_string(input),
+                    input,
                     sr.session,
                     sr.result_sender,
                     &self.task_control_sender,

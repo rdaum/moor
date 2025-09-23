@@ -1705,7 +1705,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             client_token.clone(),
             auth_token,
             request_id,
-            input_response.clone(),
+            moor_var::v_str(&input_response),
         );
 
         let response_result = transport.process_client_message(

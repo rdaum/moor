@@ -392,12 +392,18 @@ impl WebSocketConnection {
 
     async fn process_requested_input_line(
         &mut self,
-        line: Message,
+        message: Message,
         expecting_input: &mut VecDeque<Uuid>,
         ws_sender: &mut SplitSink<WebSocket, Message>,
     ) {
-        let line = line.into_text().unwrap();
-        let cmd = line.to_string(); // Don't trim input lines - preserve them exactly as sent
+        let cmd = match message {
+            Message::Text(text) => Var::mk_str(&text), // Convert text to Var::Str
+            Message::Binary(bytes) => Var::mk_binary(bytes.to_vec()), // Convert binary to Var::Binary
+            _ => {
+                warn!("Received unsupported message type for input");
+                return;
+            }
+        };
 
         let Some(input_request_id) = expecting_input.front() else {
             warn!("Attempt to send reply to input request without an input request");

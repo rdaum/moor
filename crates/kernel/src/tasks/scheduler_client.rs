@@ -112,7 +112,7 @@ impl SchedulerClient {
         &self,
         player: &Obj,
         input_request_id: Uuid,
-        input: String,
+        input: Var,
     ) -> Result<(), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
@@ -512,7 +512,7 @@ pub enum SchedulerClientMsg {
     SubmitTaskInput {
         player: Obj,
         input_request_id: Uuid,
-        input: String,
+        input: Var,
         reply: oneshot::Sender<Result<(), SchedulerError>>,
     },
     /// Submit an out-of-band task to be executed

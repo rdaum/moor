@@ -157,7 +157,7 @@ pub enum HostClientToDaemonMessage {
     /// Attempt to program the object with the given verb code
     Program(ClientToken, AuthToken, ObjectRef, Symbol, Vec<String>),
     /// Respond to a request for input.
-    RequestedInput(ClientToken, AuthToken, #[bincode(with_serde)] Uuid, String),
+    RequestedInput(ClientToken, AuthToken, #[bincode(with_serde)] Uuid, Var),
     /// Send an "out of band" command to be executed.
     OutOfBand(ClientToken, AuthToken, Obj, String),
     /// Evaluate a MOO expression.
