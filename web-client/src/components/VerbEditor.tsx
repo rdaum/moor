@@ -702,7 +702,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             } else {
                 // REST API compilation for present-triggered editors
                 const response = await fetch(
-                    `/verbs/${encodeURIComponent(objectCurie)}/${encodeURIComponent(verbName)}`,
+                    `/verbs/${objectCurie}/${encodeURIComponent(verbName)}`,
                     {
                         method: "POST",
                         headers: {

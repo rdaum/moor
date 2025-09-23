@@ -13,6 +13,17 @@
 
 import { useCallback, useState } from "react";
 
+export interface VerbMetadata {
+    location: number;
+    owner: number;
+    names: string[];
+    r: boolean; // readable
+    w: boolean; // writable
+    x: boolean; // executable
+    d: boolean; // ???
+    arg_spec: string[];
+}
+
 export interface EditorSession {
     id: string;
     title: string;
@@ -20,6 +31,7 @@ export interface EditorSession {
     verbName: string;
     content: string;
     uploadAction?: string; // For MCP-triggered editors
+    verbMetadata?: VerbMetadata; // Verb metadata from server
 }
 
 export const useVerbEditor = () => {
@@ -27,14 +39,14 @@ export const useVerbEditor = () => {
 
     // Launch verb editor with specific content
     const launchVerbEditor = useCallback(async (
-        title: string,
+        _title: string,
         objectCurie: string,
         verbName: string,
         authToken: string,
     ) => {
         try {
             // Fetch verb content from server
-            const response = await fetch(`/verbs/${encodeURIComponent(objectCurie)}/${encodeURIComponent(verbName)}`, {
+            const response = await fetch(`/verbs/${objectCurie}/${encodeURIComponent(verbName)}`, {
                 method: "GET",
                 headers: {
                     "X-Moor-Auth-Token": authToken,
@@ -45,15 +57,36 @@ export const useVerbEditor = () => {
                 throw new Error(`Failed to fetch verb: ${response.status} ${response.statusText}`);
             }
 
-            const content = await response.text();
+            const verbData = await response.json();
+
+            // Extract code array and join it into a single string
+            const content = Array.isArray(verbData.code)
+                ? verbData.code.join("\n")
+                : verbData.code || "";
+
+            // Extract verb metadata
+            const verbMetadata: VerbMetadata = {
+                location: verbData.location,
+                owner: verbData.owner,
+                names: verbData.names,
+                r: verbData.r,
+                w: verbData.w,
+                x: verbData.x,
+                d: verbData.d,
+                arg_spec: verbData.arg_spec,
+            };
+
+            // Create a more descriptive title using verb metadata
+            const verbTitle = `${verbMetadata.names[0]} on #${verbMetadata.location}`;
 
             // Create editor session
             setEditorSession({
                 id: `${objectCurie}:${verbName}`,
-                title,
+                title: verbTitle,
                 objectCurie,
                 verbName,
                 content,
+                verbMetadata,
             });
         } catch (error) {
             console.error("Error launching verb editor:", error);

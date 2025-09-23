@@ -49,8 +49,8 @@ figment.workspace = true
 serde.workspace = true
 
 # Networking & Communication
-hickory-resolver.workspace = true
 bytes.workspace = true
+hickory-resolver.workspace = true
 tmq.workspace = true
 
 # Async Runtime & Concurrency

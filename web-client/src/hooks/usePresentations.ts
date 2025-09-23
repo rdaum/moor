@@ -141,6 +141,10 @@ export const usePresentations = () => {
         getPresentationsByTarget,
     ]);
 
+    const getVerbEditorPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.VERB_EDITOR), [
+        getPresentationsByTarget,
+    ]);
+
     // API call to dismiss a presentation on the server
     const dismissPresentation = useCallback(async (id: string, authToken: string) => {
         try {
@@ -202,6 +206,7 @@ export const usePresentations = () => {
         getBottomDockPresentations,
         getWindowPresentations,
         getHelpPresentations,
+        getVerbEditorPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
     };
