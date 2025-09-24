@@ -12,51 +12,62 @@
 //
 
 import React, { useEffect, useState } from "react";
+import { applyTheme } from "./ThemeProvider";
+
+type Theme = "dark" | "light" | "crt" | "crt-amber";
 
 /**
- * Theme toggle component for switching between light and dark modes
+ * Theme toggle component for switching between dark, light, and CRT modes
  *
- * @returns A button that toggles between light and dark themes, hidden until hover
+ * @returns A button that cycles between dark, light, and CRT themes
  */
 export const ThemeToggle: React.FC = () => {
     // Check if user has a saved theme preference
-    const savedTheme = localStorage.getItem("theme");
+    const savedTheme = localStorage.getItem("theme") as Theme | null;
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
     // Initialize theme state (use saved preference, fallback to system preference, default to dark)
-    const [isDarkTheme, setIsDarkTheme] = useState<boolean>(
-        savedTheme ? savedTheme === "dark" : prefersDark,
+    const [currentTheme, setCurrentTheme] = useState<Theme>(
+        savedTheme || (prefersDark ? "dark" : "light"),
     );
 
-    // Apply the theme class on initial load and when state changes
+    // Apply the theme class when state changes
     useEffect(() => {
-        if (isDarkTheme) {
-            document.body.classList.remove("light-theme");
-            localStorage.setItem("theme", "dark");
-        } else {
-            document.body.classList.add("light-theme");
-            localStorage.setItem("theme", "light");
-        }
-    }, [isDarkTheme]);
+        applyTheme(currentTheme);
+    }, [currentTheme]);
 
-    // Toggle theme function
-    const toggleTheme = () => {
-        console.log("Theme toggle clicked! Current isDarkTheme:", isDarkTheme);
-        setIsDarkTheme(!isDarkTheme);
-        console.log("Theme toggle - new state should be:", !isDarkTheme);
+    // Cycle through themes: dark -> light -> crt -> crt-amber -> dark
+    const cycleTheme = () => {
+        const themeOrder: Theme[] = ["dark", "light", "crt", "crt-amber"];
+        const currentIndex = themeOrder.indexOf(currentTheme);
+        const nextIndex = (currentIndex + 1) % themeOrder.length;
+        setCurrentTheme(themeOrder[nextIndex]);
+    };
+
+    const getThemeDisplay = (theme: Theme) => {
+        switch (theme) {
+            case "dark":
+                return "🌙 Dark";
+            case "light":
+                return "☀️ Light";
+            case "crt":
+                return "📺 RetroGreen";
+            case "crt-amber":
+                return "🟠 RetroAmber";
+        }
     };
 
     // Return full-width clickable row for settings
     return (
         <button
             className="theme-toggle-row"
-            onClick={toggleTheme}
-            aria-label={`Switch to ${isDarkTheme ? "light" : "dark"} theme`}
-            aria-pressed={isDarkTheme ? "true" : "false"}
+            onClick={cycleTheme}
+            aria-label={`Switch theme (current: ${currentTheme})`}
+            title="Click to cycle through Dark → Light → RetroGreen → RetroAmber themes"
         >
             <span>Theme</span>
             <span className="theme-indicator">
-                {isDarkTheme ? "🌙 Dark" : "☀️ Light"}
+                {getThemeDisplay(currentTheme)}
             </span>
         </button>
     );

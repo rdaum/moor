@@ -3,6 +3,15 @@
  * Centralized design tokens for theming
  */
 
+/* Font Face Declarations */
+@font-face {
+  font-family: 'Glass_TTY_VT220';
+  src: url('./Glass_TTY_VT220.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: fallback;
+}
+
 :root {
   /* Default theme: dark */
 
@@ -57,6 +66,54 @@
   --light-color-button-primary: #3f51b5;
   --light-color-shadow: rgba(0, 0, 0, 0.1);
 
+  /* CRT Theme Colors - Classic phosphor green terminal */
+  --crt-color-bg-base: #000000;
+  --crt-color-bg-primary: #001100;
+  --crt-color-bg-secondary: #000800;
+  --crt-color-bg-tertiary: #001800;
+  --crt-color-bg-header: #002200;
+  --crt-color-bg-input: #000000;
+
+  --crt-color-text-primary: #00ff41;
+  --crt-color-text-secondary: #00cc33;
+  --crt-color-text-header: #00ff55;
+  --crt-color-text-accent: #55ff88;
+  --crt-color-text-error: #ff4444;
+  --crt-color-text-success: #44ff44;
+  --crt-color-text-historical: #008822;
+
+  --crt-color-border-light: #003300;
+  --crt-color-border-medium: #004400;
+  --crt-color-border-dark: #005500;
+
+  --crt-color-danger: #ff3333;
+  --crt-color-button-primary: #00aa22;
+  --crt-color-shadow: rgba(0, 255, 65, 0.3);
+
+  /* CRT Amber Theme Colors - Classic amber phosphor terminal */
+  --crt-amber-color-bg-base: #000000;
+  --crt-amber-color-bg-primary: #1a0f00;
+  --crt-amber-color-bg-secondary: #0f0800;
+  --crt-amber-color-bg-tertiary: #261200;
+  --crt-amber-color-bg-header: #332200;
+  --crt-amber-color-bg-input: #000000;
+
+  --crt-amber-color-text-primary: #FFA128;
+  --crt-amber-color-text-secondary: #cc7700;
+  --crt-amber-color-text-header: #ffaa44;
+  --crt-amber-color-text-accent: #ffcc66;
+  --crt-amber-color-text-error: #ff4444;
+  --crt-amber-color-text-success: #ffaa44;
+  --crt-amber-color-text-historical: #aa6600;
+
+  --crt-amber-color-border-light: #332200;
+  --crt-amber-color-border-medium: #442200;
+  --crt-amber-color-border-dark: #552200;
+
+  --crt-amber-color-danger: #ff3333;
+  --crt-amber-color-button-primary: #cc7700;
+  --crt-amber-color-shadow: rgba(255, 161, 40, 0.3);
+
   /* Spacing & Sizing - Shared between themes */
   --space-xs: 0.15em;
   --space-sm: 0.25em;
@@ -72,10 +129,18 @@
   /* Typography - Shared between themes */
   --font-mono: 'Roboto Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
   --font-sans: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-crt: 'Glass_TTY_VT220', 'Perfect DOS VGA 437', 'Px437 IBM VGA8', 'DOS', 'Courier New', 'Monaco', 'Menlo', monospace;
 
   /* Transitions */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.3s ease;
+
+  /* CRT Animations */
+  @keyframes crt-scanline {
+    0% { bottom: 100%; }
+    50% { bottom: 50%; }
+    100% { bottom: -120px; }
+  }
 }
 
 /* Light Theme Class - Applied to body or other container */
@@ -106,4 +171,400 @@
   --color-danger: var(--light-color-danger);
   --color-button-primary: var(--light-color-button-primary);
   --color-shadow: var(--light-color-shadow);
+}
+
+/* CRT Theme Class - Applied to body for retro phosphor terminal look */
+.crt-theme {
+  /* Color Palette - CRT Theme */
+  --color-bg-base: var(--crt-color-bg-base);
+  --color-bg-primary: var(--crt-color-bg-primary);
+  --color-bg-secondary: var(--crt-color-bg-secondary);
+  --color-bg-tertiary: var(--crt-color-bg-tertiary);
+  --color-bg-header: var(--crt-color-bg-header);
+  --color-bg-input: var(--crt-color-bg-input);
+
+  /* Text Colors - CRT Theme */
+  --color-text-primary: var(--crt-color-text-primary);
+  --color-text-secondary: var(--crt-color-text-secondary);
+  --color-text-header: var(--crt-color-text-header);
+  --color-text-accent: var(--crt-color-text-accent);
+  --color-text-error: var(--crt-color-text-error);
+  --color-text-success: var(--crt-color-text-success);
+  --color-text-historical: var(--crt-color-text-historical);
+
+  /* Border Colors - CRT Theme */
+  --color-border-light: var(--crt-color-border-light);
+  --color-border-medium: var(--crt-color-border-medium);
+  --color-border-dark: var(--crt-color-border-dark);
+
+  /* Interactive Elements - CRT Theme */
+  --color-danger: var(--crt-color-danger);
+  --color-button-primary: var(--crt-color-button-primary);
+  --color-shadow: var(--crt-color-shadow);
+
+  /* CRT-specific typography */
+  font-family: var(--font-crt);
+
+  /* CRT visual effects */
+  background-color: var(--color-bg-base);
+
+  /* Subtle phosphor glow on text */
+  * {
+    text-shadow: 0 0 2px currentColor;
+  }
+
+  /* Enhanced glow for primary text */
+  h1, h2, h3, .terminal-output, .command-input {
+    text-shadow:
+      0 0 3px currentColor,
+      0 0 6px currentColor;
+  }
+
+  /* Enhanced scanline effects */
+}
+
+.crt-theme::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    transparent 50%,
+    rgba(0, 255, 65, 0.008) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 1000;
+}
+
+/* Animated scanline sweeper - made more visible for testing */
+.crt-theme::after {
+  content: '';
+  position: fixed;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: 120px;
+  pointer-events: none;
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 255, 65, 0.3) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  opacity: 0.6;
+  z-index: 1001;
+  animation: crt-scanline 4s linear infinite;
+}
+
+/* CRT screen curvature simulation (very subtle) */
+.crt-theme * {
+  filter: contrast(1.1) brightness(1.05);
+}
+
+/* Override font families for CRT theme - everything uses the retro terminal font */
+.crt-theme .text_narrative,
+.crt-theme .output_window,
+.crt-theme .welcome_box {
+  font-size: 1.1em !important;
+}
+
+.crt-theme .text_narrative,
+.crt-theme .output_window,
+.crt-theme .input_area,
+.crt-theme .system_message_narrative,
+.crt-theme .traceback_narrative,
+.crt-theme .error_message_narrative,
+.crt-theme .input_echo,
+.crt-theme .nav-title,
+.crt-theme .welcome_box,
+.crt-theme .login_prompt,
+.crt-theme .settings-panel,
+.crt-theme .hamburger-menu,
+.crt-theme .settings-panel *,
+.crt-theme .settings-header h2,
+.crt-theme .settings-section h3,
+.crt-theme .settings-item,
+.crt-theme .settings-placeholder,
+.crt-theme .theme-toggle-row,
+.crt-theme .theme-indicator {
+  font-family: var(--font-crt) !important;
+}
+
+/* Fix placeholder text contrast in CRT theme */
+.crt-theme .input_area::placeholder {
+  color: var(--crt-color-text-secondary);
+  opacity: 0.8;
+}
+
+.crt-theme .input_area::-webkit-input-placeholder {
+  color: var(--crt-color-text-secondary);
+  opacity: 0.8;
+}
+
+.crt-theme .input_area::-moz-placeholder {
+  color: var(--crt-color-text-secondary);
+  opacity: 0.8;
+}
+
+.crt-theme .input_area:-ms-input-placeholder {
+  color: var(--crt-color-text-secondary);
+  opacity: 0.8;
+}
+
+/* Fix login form styling in CRT theme */
+.crt-theme .login_prompt input,
+.crt-theme .login_prompt select,
+.crt-theme .login_prompt button {
+  background-color: var(--color-bg-input) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border-medium) !important;
+  font-family: var(--font-crt) !important;
+  font-size: 14px !important;
+}
+
+/* Fix autocomplete styling in CRT theme */
+.crt-theme .login_prompt input:-webkit-autofill,
+.crt-theme .login_prompt input:-webkit-autofill:hover,
+.crt-theme .login_prompt input:-webkit-autofill:focus,
+.crt-theme .login_prompt input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--color-bg-input) inset !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+  background-color: var(--color-bg-input) !important;
+}
+
+.crt-theme .login_prompt input:focus,
+.crt-theme .login_prompt select:focus {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: -2px;
+}
+
+.crt-theme .login_prompt button {
+  background-color: var(--color-button-primary);
+  color: var(--color-bg-base);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.crt-theme .login_prompt button:hover {
+  opacity: 0.8;
+}
+
+.crt-theme .login_prompt input::placeholder {
+  color: var(--crt-color-text-secondary);
+  opacity: 0.7;
+}
+
+/* Fix form layout in CRT theme */
+.crt-theme .login_prompt fieldset {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+}
+
+.crt-theme .login_prompt .login_button {
+  align-self: center;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* CRT Amber Theme Class - Applied to body for retro amber terminal look */
+.crt-amber-theme {
+  /* Color Palette - CRT Amber Theme */
+  --color-bg-base: var(--crt-amber-color-bg-base);
+  --color-bg-primary: var(--crt-amber-color-bg-primary);
+  --color-bg-secondary: var(--crt-amber-color-bg-secondary);
+  --color-bg-tertiary: var(--crt-amber-color-bg-tertiary);
+  --color-bg-header: var(--crt-amber-color-bg-header);
+  --color-bg-input: var(--crt-amber-color-bg-input);
+
+  /* Text Colors - CRT Amber Theme */
+  --color-text-primary: var(--crt-amber-color-text-primary);
+  --color-text-secondary: var(--crt-amber-color-text-secondary);
+  --color-text-header: var(--crt-amber-color-text-header);
+  --color-text-accent: var(--crt-amber-color-text-accent);
+  --color-text-error: var(--crt-amber-color-text-error);
+  --color-text-success: var(--crt-amber-color-text-success);
+  --color-text-historical: var(--crt-amber-color-text-historical);
+
+  /* Border Colors - CRT Amber Theme */
+  --color-border-light: var(--crt-amber-color-border-light);
+  --color-border-medium: var(--crt-amber-color-border-medium);
+  --color-border-dark: var(--crt-amber-color-border-dark);
+
+  /* Interactive Elements - CRT Amber Theme */
+  --color-danger: var(--crt-amber-color-danger);
+  --color-button-primary: var(--crt-amber-color-button-primary);
+  --color-shadow: var(--crt-amber-color-shadow);
+
+  /* CRT-specific typography */
+  font-family: var(--font-crt);
+
+  /* CRT visual effects */
+  background-color: var(--color-bg-base);
+
+  /* Subtle phosphor glow on text */
+  * {
+    text-shadow: 0 0 2px currentColor;
+  }
+
+  /* Enhanced glow for primary text */
+  h1, h2, h3, .terminal-output, .command-input {
+    text-shadow:
+      0 0 3px currentColor,
+      0 0 6px currentColor;
+  }
+
+  /* Enhanced scanline effects - amber variant */
+}
+
+.crt-amber-theme::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    transparent 50%,
+    rgba(255, 161, 40, 0.008) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 1000;
+}
+
+/* Animated scanline sweeper - amber variant */
+.crt-amber-theme::after {
+  content: '';
+  position: fixed;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: 80px;
+  pointer-events: none;
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(255, 255, 255, 0.08) 10%,
+    rgba(255, 161, 40, 0.04) 100%
+  );
+  opacity: 0.15;
+  z-index: 1001;
+  animation: crt-scanline 8s linear infinite;
+}
+
+/* CRT screen curvature simulation (very subtle) - amber variant */
+.crt-amber-theme * {
+  filter: contrast(1.1) brightness(1.05);
+}
+
+/* Override font families for CRT amber theme */
+.crt-amber-theme .text_narrative,
+.crt-amber-theme .output_window,
+.crt-amber-theme .welcome_box {
+  font-size: 1.1em !important;
+}
+
+.crt-amber-theme .text_narrative,
+.crt-amber-theme .output_window,
+.crt-amber-theme .input_area,
+.crt-amber-theme .system_message_narrative,
+.crt-amber-theme .traceback_narrative,
+.crt-amber-theme .error_message_narrative,
+.crt-amber-theme .input_echo,
+.crt-amber-theme .nav-title,
+.crt-amber-theme .welcome_box,
+.crt-amber-theme .login_prompt,
+.crt-amber-theme .settings-panel,
+.crt-amber-theme .hamburger-menu,
+.crt-amber-theme .settings-panel *,
+.crt-amber-theme .settings-header h2,
+.crt-amber-theme .settings-section h3,
+.crt-amber-theme .settings-item,
+.crt-amber-theme .settings-placeholder,
+.crt-amber-theme .theme-toggle-row,
+.crt-amber-theme .theme-indicator {
+  font-family: var(--font-crt) !important;
+}
+
+/* Fix placeholder text contrast in CRT amber theme */
+.crt-amber-theme .input_area::placeholder {
+  color: var(--crt-amber-color-text-secondary);
+  opacity: 0.8;
+}
+
+.crt-amber-theme .input_area::-webkit-input-placeholder {
+  color: var(--crt-amber-color-text-secondary);
+  opacity: 0.8;
+}
+
+.crt-amber-theme .input_area::-moz-placeholder {
+  color: var(--crt-amber-color-text-secondary);
+  opacity: 0.8;
+}
+
+.crt-amber-theme .input_area:-ms-input-placeholder {
+  color: var(--crt-amber-color-text-secondary);
+  opacity: 0.8;
+}
+
+/* Fix login form styling in CRT amber theme */
+.crt-amber-theme .login_prompt input,
+.crt-amber-theme .login_prompt select,
+.crt-amber-theme .login_prompt button {
+  background-color: var(--color-bg-input) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border-medium) !important;
+  font-family: var(--font-crt) !important;
+  font-size: 14px !important;
+}
+
+/* Fix autocomplete styling in CRT amber theme */
+.crt-amber-theme .login_prompt input:-webkit-autofill,
+.crt-amber-theme .login_prompt input:-webkit-autofill:hover,
+.crt-amber-theme .login_prompt input:-webkit-autofill:focus,
+.crt-amber-theme .login_prompt input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--color-bg-input) inset !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+  background-color: var(--color-bg-input) !important;
+}
+
+.crt-amber-theme .login_prompt input:focus,
+.crt-amber-theme .login_prompt select:focus {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: -2px;
+}
+
+.crt-amber-theme .login_prompt button {
+  background-color: var(--color-button-primary);
+  color: var(--color-bg-base);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.crt-amber-theme .login_prompt button:hover {
+  opacity: 0.8;
+}
+
+.crt-amber-theme .login_prompt input::placeholder {
+  color: var(--crt-amber-color-text-secondary);
+  opacity: 0.7;
+}
+
+/* Fix form layout in CRT amber theme */
+.crt-amber-theme .login_prompt fieldset {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+}
+
+.crt-amber-theme .login_prompt .login_button {
+  align-self: center;
+  min-width: 80px;
+  text-align: center;
 }

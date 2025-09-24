@@ -22,6 +22,7 @@ import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
 import { PropertyEditor } from "./components/PropertyEditor";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { ThemeProvider } from "./components/ThemeProvider";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
@@ -567,11 +568,13 @@ function App() {
     const { showMessage } = useSystemMessage();
 
     return (
-        <AuthProvider showMessage={showMessage}>
-            <PresentationProvider>
-                <AppWrapper />
-            </PresentationProvider>
-        </AuthProvider>
+        <ThemeProvider>
+            <AuthProvider showMessage={showMessage}>
+                <PresentationProvider>
+                    <AppWrapper />
+                </PresentationProvider>
+            </AuthProvider>
+        </ThemeProvider>
     );
 }
 
