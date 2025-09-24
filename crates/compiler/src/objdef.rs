@@ -15,13 +15,13 @@ use crate::CompileOptions;
 use crate::ObjDefParseError::VerbCompileError;
 use crate::codegen::compile_tree;
 use crate::parse::moo::{MooParser, Rule};
-use crate::parse::unquote_str;
 use itertools::Itertools;
 use moor_common::model::{
     ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec,
     VerbFlag,
 };
 use moor_common::util::BitEnum;
+use moor_common::util::unquote_str;
 use moor_var::program::ProgramType;
 use moor_var::{
     AnonymousObjid, ErrorCode, List, NOTHING, Obj, Symbol, UuObjid, Var, VarType, v_bool, v_err,

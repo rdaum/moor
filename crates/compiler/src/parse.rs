@@ -375,7 +375,7 @@ impl TreeTransformer {
             }
             Rule::string => {
                 let string = pair.as_str();
-                let parsed = match unquote_str(string) {
+                let parsed = match moor_common::util::unquote_str(string) {
                     Ok(str) => str,
                     Err(e) => {
                         return Err(CompileError::StringLexError(
@@ -2007,105 +2007,6 @@ pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, 
     tree_transform.transform_statements(pairs)
 }
 
-// Lex an enhanced MOO string literal with proper escape sequences.
-// Supports standard escapes (\n, \t, \r, \0, \', \\, \"),
-// hex escapes (\xNN), and Unicode escapes (\uNNNN).
-pub fn unquote_str(s: &str) -> Result<String, String> {
-    fn parse_hex_escape(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<char, String> {
-        let mut hex_str = String::new();
-        for _ in 0..2 {
-            match chars.next() {
-                Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
-                Some(c) => {
-                    return Err(format!("Invalid hex escape: expected hex digit, got '{c}'"));
-                }
-                None => return Err("Incomplete hex escape: expected 2 hex digits".to_string()),
-            }
-        }
-        let hex_value =
-            u8::from_str_radix(&hex_str, 16).map_err(|_| "Invalid hex escape value".to_string())?;
-        Ok(hex_value as char)
-    }
-
-    fn parse_unicode_escape(
-        chars: &mut std::iter::Peekable<std::str::Chars>,
-    ) -> Result<char, String> {
-        let mut hex_str = String::new();
-        for _ in 0..4 {
-            match chars.next() {
-                Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
-                Some(c) => {
-                    return Err(format!(
-                        "Invalid unicode escape: expected hex digit, got '{c}'"
-                    ));
-                }
-                None => return Err("Incomplete unicode escape: expected 4 hex digits".to_string()),
-            }
-        }
-        let unicode_value = u32::from_str_radix(&hex_str, 16)
-            .map_err(|_| "Invalid unicode escape value".to_string())?;
-        char::from_u32(unicode_value).ok_or_else(|| "Invalid unicode code point".to_string())
-    }
-
-    let mut output = String::new();
-    let mut chars = s.chars().peekable();
-    let Some('"') = chars.next() else {
-        return Err("Expected \" at beginning of string".to_string());
-    };
-
-    while let Some(c) = chars.next() {
-        match c {
-            '\\' => match chars.peek() {
-                Some('"') => {
-                    // Check if this is the closing quote - if so, this is a backslash at the end
-                    chars.next(); // consume the quote
-                    if chars.peek().is_some() {
-                        // Not the end, there are more characters, so this is an escaped quote
-                        output.push('"');
-                        continue;
-                    } else {
-                        // This is the closing quote, backslash at end is ignored
-                        return Ok(output);
-                    }
-                }
-                _ => {
-                    match chars.next() {
-                        Some('\\') => output.push('\\'),
-                        Some('\'') => output.push('\''),
-                        Some('n') => output.push('\n'),
-                        Some('r') => output.push('\r'),
-                        Some('t') => output.push('\t'),
-                        Some('0') => output.push('\0'),
-                        Some('x') => {
-                            let hex_char = parse_hex_escape(&mut chars)?;
-                            output.push(hex_char);
-                        }
-                        Some('u') => {
-                            let unicode_char = parse_unicode_escape(&mut chars)?;
-                            output.push(unicode_char);
-                        }
-                        Some(c) => {
-                            // Backward compatibility: unknown escapes just pass through the character
-                            output.push(c);
-                        }
-                        None => {
-                            return Err("Unexpected end of string".to_string());
-                        }
-                    }
-                }
-            },
-            '"' => {
-                if chars.peek().is_some() {
-                    return Err("Unexpected \" in string".to_string());
-                }
-                return Ok(output);
-            }
-            c => output.push(c),
-        }
-    }
-    Err("Unexpected end of string".to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol};
@@ -2119,9 +2020,10 @@ mod tests {
         BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
         ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
     };
-    use crate::parse::{parse_program, unquote_str};
+    use crate::parse::parse_program;
     use crate::unparse::annotate_line_numbers;
     use moor_common::model::CompileError;
+    use moor_common::util::unquote_str;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
