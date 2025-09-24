@@ -2365,30 +2365,34 @@ impl TaskQ {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.kill_task);
 
-        // We need to do perms check first, which means checking both running and suspended tasks,
-        // and getting their permissions. And may as well remember whether it was in suspended or
-        // active at the same time.
-        let (perms, is_suspended) = match self.suspended.perms_check(victim_task_id, false) {
-            Some(perms) => (perms, true),
-            None => match self.active.get(&victim_task_id) {
-                Some(tc) => (tc.player, false),
-                None => {
-                    return v_err(E_INVARG);
+        // Check if task exists in suspended tasks first, which we can combine with the perms
+        // check.
+        let is_suspended =
+            if self
+                .suspended
+                .perms_check(victim_task_id, sender_permissions.who, false)
+            {
+                true
+            } else if self.active.contains_key(&victim_task_id) {
+                // For active tasks, check if sender has permission to kill them
+                let tc = self.active.get(&victim_task_id).unwrap();
+                if !sender_permissions
+                    .check_is_wizard()
+                    .expect("Could not check wizard status for kill request")
+                    && sender_permissions.who != tc.player
+                {
+                    return v_err(E_PERM);
                 }
-            },
-        };
+                false
+            } else {
+                return v_err(E_INVARG);
+            };
 
-        // We reject this outright if the sender permissions are not sufficient:
-        //   The either have to be the owner of the task (task.programmer == sender_permissions.task_perms)
-        //   Or they have to be a wizard.
-        // TODO: Verify kill task permissions is right
-        //   Will have to verify that it's enough that .player on task control can
-        //   be considered "owner" of the task, or there needs to be some more
-        //   elaborate consideration here?
-        if !sender_permissions
-            .check_is_wizard()
-            .expect("Could not check wizard status for kill request")
-            && sender_permissions.who != perms
+        // If not wizard and suspended task permission check failed, return permission error
+        if is_suspended
+            && !sender_permissions
+                .check_is_wizard()
+                .expect("Could not check wizard status for kill request")
         {
             return v_err(E_PERM);
         }
@@ -2438,18 +2442,23 @@ impl TaskQ {
             return v_err(E_INVARG);
         }
 
-        let Some(perms) = self.suspended.perms_check(queued_task_id, true) else {
-            error!(task = queued_task_id, "Task not found for resume request");
-            return v_err(E_INVARG);
-        };
-
-        // No permissions.
-        if !sender_permissions
-            .check_is_wizard()
-            .expect("Could not check wizard status for resume request")
-            && sender_permissions.who != perms
+        // Check permissions for resumption.
+        if !self
+            .suspended
+            .perms_check(queued_task_id, sender_permissions.who, true)
         {
-            return v_err(E_PERM);
+            // If failed, and not wizard, permission denied
+            if !sender_permissions
+                .check_is_wizard()
+                .expect("Could not check wizard status for resume request")
+            {
+                return v_err(E_PERM);
+            }
+            // Wizard can resume any task, but task must still exist
+            if !self.suspended.tasks.contains_key(&queued_task_id) {
+                error!(task = queued_task_id, "Task not found for resume request");
+                return v_err(E_INVARG);
+            }
         }
 
         let sr = self.suspended.remove_task(queued_task_id).unwrap();

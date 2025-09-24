@@ -600,14 +600,28 @@ impl SuspensionQ {
         tasks
     }
 
-    /// Check if the task is suspended, and if so, return its permissions.
-    /// If `filter_input` is true, filter out WaitingInput tasks.
-    pub(crate) fn perms_check(&self, task_id: TaskId, filter_input: bool) -> Option<Obj> {
-        let sr = self.tasks.get(&task_id)?;
-        if filter_input && let WakeCondition::Input(_) = sr.wake_condition {
-            return None;
+    /// Check if the given sender has permission to operate on the suspended task.
+    /// Uses LambdaMOO's dual permission model:
+    /// - I/O tasks (waiting for input): sender must match task.player
+    /// - Computational tasks: sender must match task.perms
+    ///   If `filter_input` is true, filter out Input-waiting tasks.
+    pub(crate) fn perms_check(&self, task_id: TaskId, sender: Obj, filter_input: bool) -> bool {
+        let Some(sr) = self.tasks.get(&task_id) else {
+            return false;
+        };
+
+        if filter_input && matches!(sr.wake_condition, WakeCondition::Input(_)) {
+            return false;
         }
-        Some(sr.task.perms)
+
+        // LambdaMOO dual model: I/O tasks use player, computational tasks use perms
+        let required_perm = if matches!(sr.wake_condition, WakeCondition::Input(_)) {
+            sr.task.player // Session owner for I/O
+        } else {
+            sr.task.perms // Programmer for computational
+        };
+
+        sender == required_perm
     }
 
     /// Remove all non-background tasks for the given player.
