@@ -329,7 +329,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         // Set Monaco theme to match client theme
         const savedTheme = localStorage.getItem("theme");
         const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const isDarkTheme = savedTheme ? savedTheme === "dark" : prefersDark;
+        const isDarkTheme = savedTheme
+            ? (savedTheme === "dark" || savedTheme === "crt" || savedTheme === "crt-amber")
+            : prefersDark;
 
         monaco.editor.setTheme(isDarkTheme ? "vs-dark" : "vs");
 
@@ -337,7 +339,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         const handleThemeChange = () => {
             const currentTheme = localStorage.getItem("theme");
             const currentPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-            const currentIsDarkTheme = currentTheme ? currentTheme === "dark" : currentPrefersDark;
+            const currentIsDarkTheme = currentTheme
+                ? (currentTheme === "dark" || currentTheme === "crt" || currentTheme === "crt-amber")
+                : currentPrefersDark;
             monaco.editor.setTheme(currentIsDarkTheme ? "vs-dark" : "vs");
         };
 
@@ -1111,7 +1115,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     options={{
                         minimap: { enabled: !isMobile },
                         fontSize: isMobile ? 16 : 12,
-                        fontFamily: "Monaco, Menlo, \"Ubuntu Mono\", monospace",
+                        fontFamily:
+                            "\"JetBrains Mono\", \"Fira Code\", \"Source Code Pro\", Consolas, \"Liberation Mono\", Monaco, Menlo, \"Courier New\", monospace",
                         automaticLayout: true,
                         colorDecorators: true,
                         dragAndDrop: false,
@@ -1120,7 +1125,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         wordWrap: isMobile ? "on" : "off",
                         lineNumbers: "on",
                         folding: !isMobile,
-                        renderWhitespace: isMobile ? "none" : "selection",
+                        renderWhitespace: "none", // Hide whitespace rendering completely
+                        renderControlCharacters: false, // Hide control characters
                         stickyScroll: { enabled: false }, // Disable sticky scroll
                         overviewRulerLanes: 0, // Disable overview ruler
                         hideCursorInOverviewRuler: true, // Hide cursor in overview

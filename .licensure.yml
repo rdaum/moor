@@ -79,12 +79,10 @@ excludes:
   - core
   - cowbell
   - book/*
-  - *.ttf
-  - *.otf
   - .envrc
   - node_modules/*
   - development-export/*
   - crates/daemon/debian/*
   - crates/telnet-host/debian/*
   - crates/web-host/debian/*
-  - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data|conf|nix|el)
+  - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data|conf|nix|el|ttf|otf)

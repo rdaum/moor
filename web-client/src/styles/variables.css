@@ -267,8 +267,40 @@
 /* Override font families for CRT theme - everything uses the retro terminal font */
 .crt-theme .text_narrative,
 .crt-theme .output_window,
-.crt-theme .welcome_box {
+.crt-theme .welcome_box,
+.crt-theme .input_area {
   font-size: 1.1em !important;
+}
+
+/* Verb editor overrides for CRT theme */
+.crt-theme .editor_container {
+  background-color: var(--crt-color-bg-primary) !important;
+  border-color: var(--crt-color-border-medium) !important;
+}
+
+.crt-theme .editor_container h3,
+.crt-theme .editor_container span {
+  font-family: var(--font-crt) !important;
+  color: var(--crt-color-text-primary) !important;
+}
+
+.crt-theme .verb_compile_errors {
+  background-color: var(--crt-color-bg-secondary) !important;
+  font-family: var(--font-crt) !important;
+}
+
+/* Monaco editor font override for CRT theme - use standard monospace */
+.crt-theme .monaco-editor,
+.crt-theme .monaco-editor .view-lines,
+.crt-theme .monaco-editor .monaco-editor-background,
+.crt-theme .monaco-editor .view-line,
+.crt-theme .monaco-editor .monaco-editor-background .view-line,
+.crt-theme .monaco-editor .view-lines .view-line span {
+  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, "Liberation Mono", Monaco, Menlo, "Courier New", monospace !important;
+}
+
+.crt-theme .welcome_box * {
+  font-family: var(--font-crt) !important;
 }
 
 .crt-theme .text_narrative,
@@ -465,8 +497,40 @@
 /* Override font families for CRT amber theme */
 .crt-amber-theme .text_narrative,
 .crt-amber-theme .output_window,
-.crt-amber-theme .welcome_box {
+.crt-amber-theme .welcome_box,
+.crt-amber-theme .input_area {
   font-size: 1.1em !important;
+}
+
+/* Verb editor overrides for CRT amber theme */
+.crt-amber-theme .editor_container {
+  background-color: var(--crt-amber-color-bg-primary) !important;
+  border-color: var(--crt-amber-color-border-medium) !important;
+}
+
+.crt-amber-theme .editor_container h3,
+.crt-amber-theme .editor_container span {
+  font-family: var(--font-crt) !important;
+  color: var(--crt-amber-color-text-primary) !important;
+}
+
+.crt-amber-theme .verb_compile_errors {
+  background-color: var(--crt-amber-color-bg-secondary) !important;
+  font-family: var(--font-crt) !important;
+}
+
+/* Monaco editor font override for CRT amber theme - use standard monospace */
+.crt-amber-theme .monaco-editor,
+.crt-amber-theme .monaco-editor .view-lines,
+.crt-amber-theme .monaco-editor .monaco-editor-background,
+.crt-amber-theme .monaco-editor .view-line,
+.crt-amber-theme .monaco-editor .monaco-editor-background .view-line,
+.crt-amber-theme .monaco-editor .view-lines .view-line span {
+  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, "Liberation Mono", Monaco, Menlo, "Courier New", monospace !important;
+}
+
+.crt-amber-theme .welcome_box * {
+  font-family: var(--font-crt) !important;
 }
 
 .crt-amber-theme .text_narrative,
