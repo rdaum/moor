@@ -16,7 +16,8 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_common::matching::{
-    ComplexMatchResult, complex_match_objects_keys_with_fuzzy, complex_match_strings_with_fuzzy,
+    ComplexMatchResult, complex_match_objects_keys_with_fuzzy_threshold,
+    complex_match_strings_with_fuzzy_threshold,
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, Variant};
@@ -909,8 +910,10 @@ fn handle_simple_match_result(result: ComplexMatchResult<Var>) -> Result<BfRet, 
     }
 }
 
-/// MOO: `any complex_match(str token, list targets [, list keys] [, bool fuzzy])`
+/// MOO: `any complex_match(str token, list targets [, list keys] [, num fuzzy_threshold])`
 /// Performs complex pattern matching with fuzzy matching support.
+/// fuzzy_threshold: 0.0 = no fuzzy, 0.5 = reasonable default, 1.0 = very permissive
+/// Also accepts boolean for backward compatibility (false = 0.0, true = 0.5)
 fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
@@ -921,16 +924,29 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let token = token.as_str();
 
-    // Parse arguments: token, targets, [keys], [fuzzy]
-    // 2 args: complex_match(token, targets) - fuzzy=true, no keys
-    // 3 args: complex_match(token, targets, keys) - fuzzy=true, keys provided (or false)
-    // 4 args: complex_match(token, targets, keys, fuzzy) - explicit fuzzy setting
+    // Parse arguments: token, targets, [keys], [fuzzy_threshold]
+    // 2 args: complex_match(token, targets) - fuzzy_threshold=0.5, no keys
+    // 3 args: complex_match(token, targets, keys) - fuzzy_threshold=0.5, keys provided (or fuzzy if not list)
+    // 4 args: complex_match(token, targets, keys, fuzzy_threshold) - explicit fuzzy setting
 
-    let use_keys = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
-    let use_fuzzy = if bf_args.args.len() == 4 {
-        bf_args.args[3].is_true()
+    let use_keys = bf_args.args.len() >= 3 && matches!(bf_args.args[2].variant(), Variant::List(_));
+    let fuzzy_threshold = if bf_args.args.len() >= 4 || (bf_args.args.len() == 3 && !use_keys) {
+        let fuzzy_arg = if bf_args.args.len() >= 4 {
+            &bf_args.args[3]
+        } else {
+            &bf_args.args[2] // 3-arg form where third arg is fuzzy, not keys
+        };
+
+        match fuzzy_arg.variant() {
+            Variant::Float(f) => *f,
+            Variant::Int(i) => *i as f64,
+            _ => {
+                // Backward compatibility: treat as boolean
+                if fuzzy_arg.is_true() { 0.5 } else { 0.0 }
+            }
+        }
     } else {
-        true // Default to fuzzy matching enabled
+        0.5 // Default to reasonable fuzzy matching
     };
 
     // Three/four argument form with keys: complex_match(token, objs, keys, [fuzzy])
@@ -944,8 +960,11 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let obj_vars: Vec<Var> = objs.iter().collect();
         let key_vars: Vec<Var> = keys.iter().collect();
 
-        return handle_simple_match_result(complex_match_objects_keys_with_fuzzy(
-            token, &obj_vars, &key_vars, use_fuzzy,
+        return handle_simple_match_result(complex_match_objects_keys_with_fuzzy_threshold(
+            token,
+            &obj_vars,
+            &key_vars,
+            fuzzy_threshold,
         ));
     }
 
@@ -962,10 +981,10 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .any(|v| matches!(v.variant(), Variant::Obj(_)));
 
     if !has_objects {
-        return handle_simple_match_result(complex_match_strings_with_fuzzy(
+        return handle_simple_match_result(complex_match_strings_with_fuzzy_threshold(
             token,
             &candidate_vars,
-            use_fuzzy,
+            fuzzy_threshold,
         ));
     }
 
@@ -990,7 +1009,7 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         objects.push(candidate.clone());
     }
 
-    match complex_match_strings_with_fuzzy(token, &object_names, use_fuzzy) {
+    match complex_match_strings_with_fuzzy_threshold(token, &object_names, fuzzy_threshold) {
         ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
         ComplexMatchResult::Single(result) => {
             // Find which object corresponds to the matched name and return the object

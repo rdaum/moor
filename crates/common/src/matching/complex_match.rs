@@ -136,7 +136,7 @@ pub fn parse_input_token(token: &str) -> (i64, String) {
 
 /// Perform complex matching on a list of strings, returning the matching strings
 pub fn complex_match_strings(token: &str, strings: &[Var]) -> ComplexMatchResult<Var> {
-    complex_match_strings_with_fuzzy(token, strings, true)
+    complex_match_strings_with_fuzzy_threshold(token, strings, 0.5)
 }
 
 /// Perform complex matching on a list of strings with optional fuzzy matching
@@ -144,6 +144,18 @@ pub fn complex_match_strings_with_fuzzy(
     token: &str,
     strings: &[Var],
     use_fuzzy: bool,
+) -> ComplexMatchResult<Var> {
+    let fuzzy_threshold = if use_fuzzy { 0.5 } else { 0.0 };
+    complex_match_strings_with_fuzzy_threshold(token, strings, fuzzy_threshold)
+}
+
+/// Perform complex matching on a list of strings with configurable fuzzy threshold
+///
+/// fuzzy_threshold: 0.0 = no fuzzy matching, 0.5 = reasonable default, 1.0 = very permissive
+pub fn complex_match_strings_with_fuzzy_threshold(
+    token: &str,
+    strings: &[Var],
+    fuzzy_threshold: f64,
 ) -> ComplexMatchResult<Var> {
     let (ordinal, subject) = parse_input_token(token);
 
@@ -182,9 +194,9 @@ pub fn complex_match_strings_with_fuzzy(
             contain_matches.push(string_var.clone());
         }
         // Fuzzy match using Damerau-Levenshtein distance
-        else if use_fuzzy {
+        else if fuzzy_threshold > 0.0 {
             let distance = damerau_levenshtein(&subject_lower, &string_lower);
-            let max_distance = if subject_lower.len() <= 3 { 1 } else { 2 };
+            let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
             if distance <= max_distance {
                 fuzzy_matches.push(string_var.clone());
             }
@@ -202,7 +214,7 @@ pub fn complex_match_strings_with_fuzzy(
         if ordinal <= contain_matches.len() as i64 {
             return ComplexMatchResult::Single(contain_matches[(ordinal - 1) as usize].clone());
         }
-        if use_fuzzy && ordinal <= fuzzy_matches.len() as i64 {
+        if fuzzy_threshold > 0.0 && ordinal <= fuzzy_matches.len() as i64 {
             return ComplexMatchResult::Single(fuzzy_matches[(ordinal - 1) as usize].clone());
         }
         return ComplexMatchResult::NoMatch;
@@ -230,7 +242,7 @@ pub fn complex_match_strings_with_fuzzy(
         };
     }
 
-    if use_fuzzy && !fuzzy_matches.is_empty() {
+    if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
         return match fuzzy_matches.len() {
             1 => ComplexMatchResult::Single(fuzzy_matches[0].clone()),
             _ => ComplexMatchResult::Multiple(fuzzy_matches),
@@ -246,7 +258,7 @@ pub fn complex_match_objects_keys(
     objects: &[Var],
     keys: &[Var],
 ) -> ComplexMatchResult<Var> {
-    complex_match_objects_keys_with_fuzzy(token, objects, keys, true)
+    complex_match_objects_keys_with_fuzzy_threshold(token, objects, keys, 0.5)
 }
 
 /// Perform complex matching with separate objects and keys lists with optional fuzzy matching
@@ -255,6 +267,19 @@ pub fn complex_match_objects_keys_with_fuzzy(
     objects: &[Var],
     keys: &[Var],
     use_fuzzy: bool,
+) -> ComplexMatchResult<Var> {
+    let fuzzy_threshold = if use_fuzzy { 0.5 } else { 0.0 };
+    complex_match_objects_keys_with_fuzzy_threshold(token, objects, keys, fuzzy_threshold)
+}
+
+/// Perform complex matching with separate objects and keys lists with configurable fuzzy threshold
+///
+/// fuzzy_threshold: 0.0 = no fuzzy matching, 0.5 = reasonable default, 1.0 = very permissive
+pub fn complex_match_objects_keys_with_fuzzy_threshold(
+    token: &str,
+    objects: &[Var],
+    keys: &[Var],
+    fuzzy_threshold: f64,
 ) -> ComplexMatchResult<Var> {
     let (ordinal, subject) = parse_input_token(token);
 
@@ -316,7 +341,7 @@ pub fn complex_match_objects_keys_with_fuzzy(
         }
 
         // If no exact/prefix/substring match found, try fuzzy matching
-        if use_fuzzy
+        if fuzzy_threshold > 0.0
             && !exact_matches.iter().any(|v| v == obj_val)
             && !start_matches.iter().any(|v| v == obj_val)
             && !contain_matches.iter().any(|v| v == obj_val)
@@ -324,7 +349,7 @@ pub fn complex_match_objects_keys_with_fuzzy(
             for key_str in &key_strings {
                 let key_lower = key_str.to_lowercase();
                 let distance = damerau_levenshtein(&subject_lower, &key_lower);
-                let max_distance = if subject_lower.len() <= 3 { 1 } else { 2 };
+                let max_distance = (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize;
                 if distance <= max_distance {
                     fuzzy_matches.push(obj_val.clone());
                     break;
@@ -344,7 +369,7 @@ pub fn complex_match_objects_keys_with_fuzzy(
         if ordinal <= contain_matches.len() as i64 {
             return ComplexMatchResult::Single(contain_matches[(ordinal - 1) as usize].clone());
         }
-        if use_fuzzy && ordinal <= fuzzy_matches.len() as i64 {
+        if fuzzy_threshold > 0.0 && ordinal <= fuzzy_matches.len() as i64 {
             return ComplexMatchResult::Single(fuzzy_matches[(ordinal - 1) as usize].clone());
         }
         return ComplexMatchResult::NoMatch;
@@ -372,7 +397,7 @@ pub fn complex_match_objects_keys_with_fuzzy(
         };
     }
 
-    if use_fuzzy && !fuzzy_matches.is_empty() {
+    if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
         return match fuzzy_matches.len() {
             1 => ComplexMatchResult::Single(fuzzy_matches[0].clone()),
             _ => ComplexMatchResult::Multiple(fuzzy_matches),
@@ -572,6 +597,13 @@ mod tests {
         let result = complex_match_strings_with_fuzzy("lammp", &strings, false);
         assert_eq!(result, ComplexMatchResult::NoMatch);
 
+        // Test new threshold function
+        let result = complex_match_strings_with_fuzzy_threshold("lammp", &strings, 0.5);
+        assert_eq!(result, ComplexMatchResult::Single(v_str("lamp")));
+
+        let result = complex_match_strings_with_fuzzy_threshold("lammp", &strings, 0.0);
+        assert_eq!(result, ComplexMatchResult::NoMatch);
+
         // Test objects/keys version
         let objects = vec![v_int(1), v_int(2)];
         let keys = vec![v_list(&[v_str("lamp")]), v_list(&[v_str("table")])];
@@ -582,6 +614,13 @@ mod tests {
 
         // With fuzzy disabled
         let result = complex_match_objects_keys_with_fuzzy("lammp", &objects, &keys, false);
+        assert_eq!(result, ComplexMatchResult::NoMatch);
+
+        // Test new threshold function
+        let result = complex_match_objects_keys_with_fuzzy_threshold("lammp", &objects, &keys, 0.5);
+        assert_eq!(result, ComplexMatchResult::Single(v_int(1)));
+
+        let result = complex_match_objects_keys_with_fuzzy_threshold("lammp", &objects, &keys, 0.0);
         assert_eq!(result, ComplexMatchResult::NoMatch);
     }
 }

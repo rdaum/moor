@@ -252,7 +252,7 @@ length({})          =>   0
 Performs sophisticated string matching with ordinal support and object auto-detection.
 
 ```
-str | obj complex_match(STR token, LIST targets [, LIST keys] [, ANY fuzzy])
+str | obj complex_match(STR token, LIST targets [, LIST keys] [, NUM fuzzy_threshold])
 ```
 
 The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "
@@ -268,9 +268,11 @@ second", "1st", "2nd", "twenty-first") and four-tier matching precedence:
 - `token` (STR): The search string to match against
 - `targets` (LIST): List of strings or objects to search through
 - `keys` (LIST, optional): List of key lists for object matching. Pass `false` to disable key-based matching.
-- `fuzzy` (ANY, optional): Controls fuzzy matching behavior:
-    - Any truthy value (default): Enable fuzzy matching for typo tolerance
-    - Any falsy value: Disable fuzzy matching (exact/prefix/substring only)
+- `fuzzy_threshold` (NUM, optional): Controls fuzzy matching sensitivity:
+    - `0.0`: Disable fuzzy matching (exact/prefix/substring only)
+    - `0.5`: Reasonable default (1-2 character differences allowed depending on word length)
+    - `1.0`: Very permissive fuzzy matching (allows more character differences)
+    - Boolean values supported for backward compatibility: `false` = `0.0`, `true` = `0.5`
 
 #### String matching (2-argument form)
 
@@ -305,7 +307,8 @@ objs = {#123, #456, #789};
 keys = {{"lamp", "light"}, {"bottle", "container"}, {"book", "tome"}};
 complex_match("lamp", objs, keys)        => #123
 complex_match("second b", objs, keys)    => #789  // matches "book"
-complex_match("lamp", objs, keys, false) => #123  // fuzzy disabled
+complex_match("lamp", objs, keys, 0.0)   => #123  // fuzzy disabled
+complex_match("lammp", objs, keys, 0.8)  => #123  // high fuzzy tolerance for typos
 ```
 
 To disable key-based matching and force object auto-detection:
@@ -351,7 +354,8 @@ complex_match("archwizard", players)                  => #2    // Case-insensiti
 
 // Disable keys, force object auto-detection
 complex_match("alice", players, false)                => #123  // Use object names
-complex_match("alice", players, false, false)         => #123  // No fuzzy matching
+complex_match("alice", players, false, 0.0)           => #123  // No fuzzy matching
+complex_match("alise", players, false, 0.3)           => #123  // Low fuzzy tolerance for typos
 
 // No matches
 complex_match("xyz", {"abc", "def"})                  => #-3
