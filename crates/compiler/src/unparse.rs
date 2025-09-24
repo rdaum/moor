@@ -407,7 +407,11 @@ impl<'a> Unparse<'a> {
                 buffer.push_str(") }");
                 Ok(buffer)
             }
-            Expr::Lambda { params, body, .. } => {
+            Expr::Lambda {
+                params,
+                body,
+                self_name: _,
+            } => {
                 // Lambda syntax: {param1, ?param2, @param3} => expr
                 let mut buffer = String::new();
                 buffer.push('{');
@@ -612,93 +616,78 @@ impl<'a> Unparse<'a> {
                 Ok(())
             }
             StmtNode::Expr(Expr::Assign { left, right }) => {
-                // Special case: if assigning a lambda with self_name, use fn named syntax
-                if let (
-                    Expr::Id(var),
-                    Expr::Lambda {
-                        params,
-                        body,
-                        self_name: Some(name),
-                    },
-                ) = (left.as_ref(), right.as_ref())
-                {
+                // Check for named function assignment: x = {params} => body with self_name
+                let Expr::Id(var) = left.as_ref() else {
+                    // Not a simple variable assignment - handle as regular assignment
+                    let left_frag = self.unparse_expr(left)?;
+                    let right_frag = self.unparse_expr(right)?;
+                    writeln!(writer, "{indent_str}{left_frag} = {right_frag};")?;
+                    return Ok(());
+                };
+
+                let Expr::Lambda {
+                    params,
+                    body,
+                    self_name: Some(name),
+                } = right.as_ref()
+                else {
+                    // Not a lambda with self_name - handle as regular assignment
                     let var_name = self.unparse_variable(var);
-                    let name_str = self.unparse_variable(name);
-                    if var_name == name_str {
-                        // This is a named function: fn name(params) ... endfn
+                    let right_frag = self.unparse_expr(right)?;
+                    writeln!(writer, "{indent_str}{var_name} = {right_frag};")?;
+                    return Ok(());
+                };
 
-                        // Build parameter string
-                        let param_strings: Vec<String> = params
-                            .iter()
-                            .map(|param| match param.kind {
-                                crate::ast::ScatterKind::Required => {
-                                    self.unparse_variable(&param.id).to_string()
-                                }
-                                crate::ast::ScatterKind::Optional => {
-                                    if let Some(ref default) = param.expr {
-                                        format!(
-                                            "?{} = {}",
-                                            self.unparse_variable(&param.id),
-                                            self.unparse_expr(default).unwrap()
-                                        )
-                                    } else {
-                                        format!("?{}", self.unparse_variable(&param.id))
-                                    }
-                                }
-                                crate::ast::ScatterKind::Rest => {
-                                    format!("@{}", self.unparse_variable(&param.id))
-                                }
-                            })
-                            .collect();
-                        let param_str = param_strings.join(", ");
+                let var_name = self.unparse_variable(var);
+                let name_str = self.unparse_variable(name);
 
-                        writeln!(writer, "{indent_str}fn {name_str}({param_str})")?;
-
-                        // Add body statements (with increased indentation)
-                        // If the body is a Scope, unparse its contents directly to avoid begin...end
-                        match &body.node {
-                            StmtNode::Scope {
-                                body: scope_body, ..
-                            } => self.unparse_stmts(scope_body, writer, indent + 1)?,
-                            _ => self.unparse_stmt(body, writer, indent + 1)?,
-                        }
-
-                        writeln!(writer, "{indent_str}endfn")?;
-                        return Ok(());
-                    }
+                if var_name != name_str {
+                    // Names don't match - handle as regular assignment
+                    let right_frag = self.unparse_expr(right)?;
+                    writeln!(writer, "{indent_str}{var_name} = {right_frag};")?;
+                    return Ok(());
                 }
 
-                // Regular assignment
-                let left_frag = match left.as_ref() {
-                    Expr::Id(id) => {
-                        let suffix = self.unparse_variable(id);
-                        suffix.to_string()
-                    }
-                    _ => self.unparse_expr(left)?,
-                };
-                let right_frag = self.unparse_expr(right)?;
-                writeln!(writer, "{indent_str}{left_frag} = {right_frag};")?;
-                Ok(())
+                // This is a named function: fn name(params) ... endfn
+                self.unparse_named_function(params, body, &name_str, writer, indent)
             }
             StmtNode::Expr(Expr::Decl { id, is_const, expr }) => {
-                let prefix = if *is_const { "const " } else { "let " };
+                // Check for named function declaration: let x = {params} => body with self_name
+                let Some(expr) = expr.as_ref() else {
+                    // No expression - just a declaration
+                    let prefix = if *is_const { "const " } else { "let " };
+                    let var_name = self.unparse_variable(id);
+                    writeln!(writer, "{indent_str}{prefix}{var_name};")?;
+                    return Ok(());
+                };
+
+                let Expr::Lambda {
+                    params,
+                    body,
+                    self_name: Some(name),
+                } = expr.as_ref()
+                else {
+                    // Not a lambda with self_name - handle as regular declaration
+                    let prefix = if *is_const { "const " } else { "let " };
+                    let var_name = self.unparse_variable(id);
+                    let expr_str = self.unparse_expr(expr)?;
+                    writeln!(writer, "{indent_str}{prefix}{var_name} = {expr_str};")?;
+                    return Ok(());
+                };
+
                 let var_name = self.unparse_variable(id);
-                match expr {
-                    Some(e) => {
-                        writeln!(
-                            writer,
-                            "{}{}{} = {};",
-                            indent_str,
-                            prefix,
-                            var_name,
-                            self.unparse_expr(e)?
-                        )?;
-                    }
-                    None => {
-                        writeln!(writer, "{indent_str}{prefix}{var_name};")?;
-                    }
+                let name_str = self.unparse_variable(name);
+
+                if var_name != name_str {
+                    // Names don't match - handle as regular declaration
+                    let prefix = if *is_const { "const " } else { "let " };
+                    let expr_str = self.unparse_expr(expr)?;
+                    writeln!(writer, "{indent_str}{prefix}{var_name} = {expr_str};")?;
+                    return Ok(());
                 }
-                Ok(())
+
+                // This is a named function: fn name(params) ... endfn
+                self.unparse_named_function(params, body, &name_str, writer, indent)
             }
             StmtNode::Expr(expr) => {
                 let expr_str = self.unparse_expr(expr)?;
@@ -739,6 +728,58 @@ impl<'a> Unparse<'a> {
             .unwrap()
             .identifier
             .to_symbol()
+    }
+
+    fn unparse_named_function<W: std::fmt::Write>(
+        &self,
+        params: &[crate::ast::ScatterItem],
+        body: &crate::ast::Stmt,
+        name: &Symbol,
+        writer: &mut W,
+        indent: usize,
+    ) -> Result<(), DecompileError> {
+        let indent_str = if self.indent_width > 0 {
+            " ".repeat(indent * self.indent_width)
+        } else {
+            String::new()
+        };
+
+        // Build parameter string
+        let param_strings: Vec<String> = params
+            .iter()
+            .map(|param| match param.kind {
+                crate::ast::ScatterKind::Required => self.unparse_variable(&param.id).to_string(),
+                crate::ast::ScatterKind::Optional => {
+                    if let Some(ref default) = param.expr {
+                        format!(
+                            "?{} = {}",
+                            self.unparse_variable(&param.id),
+                            self.unparse_expr(default).unwrap()
+                        )
+                    } else {
+                        format!("?{}", self.unparse_variable(&param.id))
+                    }
+                }
+                crate::ast::ScatterKind::Rest => {
+                    format!("@{}", self.unparse_variable(&param.id))
+                }
+            })
+            .collect();
+        let param_str = param_strings.join(", ");
+
+        writeln!(writer, "{indent_str}fn {name}({param_str})")?;
+
+        // Add body statements (with increased indentation)
+        // If the body is a Scope, unparse its contents directly to avoid begin...end
+        match &body.node {
+            StmtNode::Scope {
+                body: scope_body, ..
+            } => self.unparse_stmts(scope_body, writer, indent + 2)?,
+            _ => self.unparse_stmt(body, writer, indent + 2)?,
+        }
+
+        writeln!(writer, "{indent_str}endfn")?;
+        Ok(())
     }
 }
 
@@ -1612,6 +1653,18 @@ end"#; "complex scatter declaration with optional and rest")]
     fn test_lambda_unparse_complex() {
         let program = r#"return {x, ?y = 5, @rest} => x + y + length(rest);"#;
         let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_named_function_unparse() {
+        let program = r#"fn x(y)
+            return y * x(2);
+        endfn
+        return x(2);"#;
+        let stripped = unindent(program);
+
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
     }
