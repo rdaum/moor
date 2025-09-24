@@ -333,8 +333,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
             })?;
 
             if let Some(existing) = existing_attrs {
-                // Check parent conflict
-                if def.parent != NOTHING {
+                // Check parent conflict (always check if existing parent differs)
+                if existing.parent() != Some(def.parent) {
                     let (should_proceed, conflict) = self.check_conflict(
                         obj,
                         Entity::Parentage,
@@ -413,6 +413,16 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     // Update object flags to match objdef
                     self.loader
                         .update_object_flags(obj, def.flags)
+                        .map_err(|e| {
+                            ObjdefLoaderError::CouldNotSetObjectParent(
+                                path.to_string_lossy().to_string(),
+                                e,
+                            )
+                        })?;
+                } else {
+                    // In Skip mode, restore the original flags (since object was created with empty flags)
+                    self.loader
+                        .update_object_flags(obj, existing.flags())
                         .map_err(|e| {
                             ObjdefLoaderError::CouldNotSetObjectParent(
                                 path.to_string_lossy().to_string(),
@@ -512,9 +522,25 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     }
 
                     if should_proceed {
-                        // TODO: Ideally we need update_verb instead of add_verb for existing verbs
-                        // For now, add_verb may fail or create duplicate names
-                        verb_actions.push((*obj, v, path.clone()));
+                        // Use update_verb for existing verbs in Clobber mode
+                        self.loader
+                            .update_verb(
+                                obj,
+                                existing_uuid,
+                                &v.names,
+                                &v.owner,
+                                v.flags,
+                                v.argspec,
+                                v.program.clone(),
+                            )
+                            .map_err(|wse| {
+                                ObjdefLoaderError::CouldNotDefineVerb(
+                                    path.to_string_lossy().to_string(),
+                                    *obj,
+                                    v.names.clone(),
+                                    wse,
+                                )
+                            })?;
                     }
                 } else {
                     // Verb doesn't exist, add it
@@ -549,8 +575,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
         &mut self,
         options: &ObjDefLoaderOptions,
     ) -> Result<(), ObjdefLoaderError> {
-        // First phase: collect conflicts and determine actions
-        let mut property_actions = Vec::new();
+        // Track actions as either create or update
+        let mut create_actions = Vec::new();
+        let mut update_actions = Vec::new();
 
         for (obj, (path, def)) in &self.object_definitions {
             for pd in &def.property_definitions {
@@ -602,19 +629,18 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     should_proceed &= proceed_perms;
 
                     if should_proceed {
-                        // TODO: Ideally we need update_property instead of define_property for existing props
-                        // For now, define_property may fail for existing properties
-                        property_actions.push((*obj, pd, path.clone()));
+                        // Property exists and we should proceed (Clobber mode) - use update
+                        update_actions.push((*obj, pd, path.clone()));
                     }
                 } else {
                     // Property doesn't exist, define it
-                    property_actions.push((*obj, pd, path.clone()));
+                    create_actions.push((*obj, pd, path.clone()));
                 }
             }
         }
 
-        // Second phase: apply all the property actions
-        for (obj, prop_def, path) in property_actions {
+        // Apply create actions using define_property
+        for (obj, prop_def, path) in create_actions {
             self.loader
                 .define_property(
                     &obj,
@@ -622,6 +648,26 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     prop_def.name,
                     &prop_def.perms.owner(),
                     prop_def.perms.flags(),
+                    prop_def.value.clone(),
+                )
+                .map_err(|wse| {
+                    ObjdefLoaderError::CouldNotDefineProperty(
+                        path.to_string_lossy().to_string(),
+                        obj,
+                        (*prop_def.name.as_arc_string()).clone(),
+                        wse,
+                    )
+                })?;
+        }
+
+        // Apply update actions using set_property
+        for (obj, prop_def, path) in update_actions {
+            self.loader
+                .set_property(
+                    &obj,
+                    prop_def.name,
+                    Some(prop_def.perms.owner()),
+                    Some(prop_def.perms.flags()),
                     prop_def.value.clone(),
                 )
                 .map_err(|wse| {
@@ -867,119 +913,37 @@ impl<'a> ObjectDefinitionLoader<'a> {
             compiled_def.oid
         };
 
-        // Create the object (using target_object override if provided)
-        self.loader
-            .create_object(
-                Some(oid),
-                &ObjAttrs::new(
-                    NOTHING,
-                    NOTHING,
-                    NOTHING,
-                    compiled_def.flags,
-                    &compiled_def.name,
-                ),
-            )
-            .map_err(|wse| {
-                ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), oid, wse)
-            })?;
+        // Only create the object if it doesn't already exist
+        if !self
+            .loader
+            .object_exists(&oid)
+            .map_err(|wse| ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), oid, wse))?
+        {
+            self.loader
+                .create_object(
+                    Some(oid),
+                    &ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new(), // Start with default flags
+                        &compiled_def.name,
+                    ),
+                )
+                .map_err(|wse| {
+                    ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), oid, wse)
+                })?;
+        }
 
         // Store the definition for processing
         self.object_definitions
             .insert(oid, (PathBuf::from(&source_name), compiled_def));
 
-        // Apply attributes
-        if let Some((_, def)) = self.object_definitions.get(&oid) {
-            if def.parent != NOTHING {
-                self.loader
-                    .set_object_parent(&oid, &def.parent)
-                    .map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectParent(source_name.clone(), e)
-                    })?;
-            }
-            if def.location != NOTHING {
-                self.loader
-                    .set_object_location(&oid, &def.location)
-                    .map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectLocation(source_name.clone(), e)
-                    })?;
-            }
-            if def.owner != NOTHING {
-                self.loader
-                    .set_object_owner(&oid, &def.owner)
-                    .map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectOwner(source_name.clone(), e)
-                    })?;
-            }
-        }
-
-        // Define properties
-        if let Some((_, def)) = self.object_definitions.get(&oid) {
-            for pd in &def.property_definitions {
-                self.loader
-                    .define_property(
-                        &oid,
-                        &oid,
-                        pd.name,
-                        &pd.perms.owner(),
-                        pd.perms.flags(),
-                        pd.value.clone(),
-                    )
-                    .map_err(|wse| {
-                        ObjdefLoaderError::CouldNotDefineProperty(
-                            source_name.clone(),
-                            oid,
-                            (*pd.name.as_arc_string()).clone(),
-                            wse,
-                        )
-                    })?;
-            }
-        }
-
-        // Set property overrides
-        if let Some((_, def)) = self.object_definitions.get(&oid) {
-            for pv in &def.property_overrides {
-                let pu = &pv.perms_update;
-                self.loader
-                    .set_property(
-                        &oid,
-                        pv.name,
-                        pu.as_ref().map(|p| p.owner()),
-                        pu.as_ref().map(|p| p.flags()),
-                        pv.value.clone(),
-                    )
-                    .map_err(|wse| {
-                        ObjdefLoaderError::CouldNotOverrideProperty(
-                            source_name.clone(),
-                            oid,
-                            (*pv.name.as_arc_string()).clone(),
-                            wse,
-                        )
-                    })?;
-            }
-        }
-
-        // Define verbs
-        if let Some((_, def)) = self.object_definitions.get(&oid) {
-            for v in &def.verbs {
-                self.loader
-                    .add_verb(
-                        &oid,
-                        &v.names,
-                        &v.owner,
-                        v.flags,
-                        v.argspec,
-                        v.program.clone(),
-                    )
-                    .map_err(|wse| {
-                        ObjdefLoaderError::CouldNotDefineVerb(
-                            source_name.clone(),
-                            oid,
-                            v.names.clone(),
-                            wse,
-                        )
-                    })?;
-            }
-        }
+        // Use the conflict-aware methods instead of inline logic
+        self.apply_attributes(&options)?;
+        self.define_properties(&options)?;
+        self.set_properties(&options)?;
+        self.define_verbs(&options)?;
 
         let num_loaded_verbs = self
             .object_definitions

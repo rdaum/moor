@@ -99,6 +99,18 @@ pub trait LoaderInterface: Send {
         program: ProgramType,
     ) -> Result<(), WorldStateError>;
 
+    /// Update an existing verb
+    fn update_verb(
+        &mut self,
+        obj: &Obj,
+        uuid: Uuid,
+        names: &[Symbol],
+        owner: &Obj,
+        flags: BitEnum<VerbFlag>,
+        args: VerbArgsSpec,
+        program: ProgramType,
+    ) -> Result<(), WorldStateError>;
+
     /// Define a property on an object
     fn define_property(
         &mut self,

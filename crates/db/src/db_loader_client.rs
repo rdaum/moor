@@ -18,6 +18,7 @@ use moor_common::model::ObjAttrs;
 use moor_common::model::ObjSet;
 use moor_common::model::PropFlag;
 use moor_common::model::VerbArgsSpec;
+use moor_common::model::VerbAttrs;
 use moor_common::model::VerbDefs;
 use moor_common::model::VerbFlag;
 use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
@@ -75,6 +76,29 @@ impl LoaderInterface for DbWorldState {
     ) -> Result<(), WorldStateError> {
         self.get_tx_mut()
             .add_object_verb(obj, owner, names, program, flags, args)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn update_verb(
+        &mut self,
+        obj: &Obj,
+        uuid: Uuid,
+        names: &[Symbol],
+        owner: &Obj,
+        flags: BitEnum<VerbFlag>,
+        args: VerbArgsSpec,
+        program: ProgramType,
+    ) -> Result<(), WorldStateError> {
+        let verb_attrs = VerbAttrs {
+            definer: None, // Keep existing definer
+            owner: Some(*owner),
+            names: Some(names.to_vec()),
+            flags: Some(flags),
+            args_spec: Some(args),
+            program: Some(program),
+        };
+        self.get_tx_mut().update_verb(obj, uuid, verb_attrs)?;
         Ok(())
     }
 

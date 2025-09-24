@@ -15,6 +15,9 @@
 mod dump;
 mod load;
 
+#[cfg(test)]
+mod conflict_tests;
+
 use moor_common::model::WorldStateError;
 use moor_compiler::ObjDefParseError;
 use moor_var::{Obj, Symbol};
