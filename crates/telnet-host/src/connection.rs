@@ -957,6 +957,12 @@ impl TelnetConnection {
                 .await?
         } else {
             let line = line.trim().to_string();
+
+            // Silently ignore empty commands, like LambdaMOO does at parse_command level
+            if line.is_empty() {
+                return Ok(());
+            }
+
             self.rpc_client
                 .make_client_rpc_call(
                     self.client_id,
