@@ -79,6 +79,8 @@ excludes:
   - core
   - cowbell
   - book/*
+  - *.ttf
+  - *.otf
   - .envrc
   - node_modules/*
   - development-export/*
