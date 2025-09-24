@@ -30,14 +30,14 @@ One of MOO's powerful features is that objects can react intelligently when some
 - If accepted, the destination's `:enterfunc` verb runs - this handles what happens when something arrives
 
 **When something leaves a location:**
-- The source location's `:exitfunc` verb runs - this handles what happens when something departs
+- The source location's `:exitfunc` verb runs after the move is complete - this handles cleanup and notifications when something departs
 
 **Why this matters for builders:**
 
 These verbs let you create smart, responsive environments. For example:
 - A locked chest can reject items unless the player has the key (`accept` verb)
-- A room can announce when players enter ("Alice walks in from the north") (`enterfunc` verb)  
-- A magic portal can transport the player somewhere else when they leave (`exitfunc` verb)
+- A room can announce when players enter ("Alice walks in from the north") (`enterfunc` verb)
+- A room can update visitor counts and announce departures when players leave (`exitfunc` verb)
 - A scale can update its weight display when items are added or removed
 
 This system allows objects to have complex, realistic behaviors without requiring every command to know about every special case. The objects themselves handle their own logic for movement.
@@ -62,15 +62,11 @@ Here are some concrete examples of how builders use movement verbs to create int
 
 ```moo
 // On a room with a creaky door
-  if (typeof(object) == OBJ && valid(object) && object.player)
-    this:announce_all_but(object, object.name + " creaks through the ancient door.");
-  endif
+  this:announce_all_but(object, object.name + " creaks through the ancient door.");
 ```
 
 ```moo
-  if (typeof(object) == OBJ && valid(object) && object.player)
-    this:announce_all_but(object, object.name + " slips quietly into the shadows.");
-  endif
+  this:announce_all_but(object, object.name + " slips quietly into the shadows.");
 ```
 
 ### Weight and capacity limits with `accept`
@@ -86,16 +82,24 @@ Here are some concrete examples of how builders use movement verbs to create int
   return 1;
 ```
 
-### Special transportation with `exitfunc`
+### Cleanup and notifications with `exitfunc`
 
-On a magical teleporter pad...
+On a room that tracks visitor statistics...
 
 ```moo
-  if (typeof(object) == OBJ && valid(object) && object.player)
-    random_destination = this.destinations[random(length(this.destinations))];
-    object:tell("The world shimmers and you find yourself elsewhere!");
-    move(object, random_destination);
-  endif
+  this.visitors = this.visitors - 1;
+  this.last_departure = time();
+  this:announce_all_but(object, object.name + " departs, leaving " +
+                        tostr(this.visitors) + " visitors remaining.");
+```
+
+On a container that needs to update its display when items are removed...
+
+```moo
+  // Update weight display now that object has left
+  this:update_weight_display();
+  // Log the removal for security
+  this:log_access(object, "removed", time());
 ```
 
 These examples show how movement verbs let you create rich, interactive worlds where objects behave intelligently without requiring complex command parsing or special cases throughout your codebase.
