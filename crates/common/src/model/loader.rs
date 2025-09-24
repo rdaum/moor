@@ -100,6 +100,7 @@ pub trait LoaderInterface: Send {
     ) -> Result<(), WorldStateError>;
 
     /// Update an existing verb
+    #[allow(clippy::too_many_arguments)]
     fn update_verb(
         &mut self,
         obj: &Obj,
