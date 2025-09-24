@@ -37,12 +37,20 @@ Because the daemon and hosts communicate over ZeroMQ sockets, they need to authe
 unauthorized
 access. This is done using public/private key pairs, which must be shared between the daemon and hosts/workers.
 
-These keys are in the common `pem` format and can be created using the `openssl` command-line tool:
+These keys are in the common `pem` format and can be created using the `moor-daemon` binary:
+
+```bash
+moor-daemon --generate-keypair
+```
+
+This will create `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the current directory.
+
+Alternatively, you can create them manually using the `openssl` command-line tool:
 
 ```bash
 openssl genpkey -algorithm ed25519 -out moor-signing-key.pem
 openssl pkey -in moor-signing-key.pem -pubout -out moor-verifying-key.pem
-````
+```
 
 These files must then exist on the filesystem at the paths specified by the `--private_key` and `--public_key`
 command-line
