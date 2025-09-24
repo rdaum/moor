@@ -774,8 +774,8 @@ impl<'a> Unparse<'a> {
         match &body.node {
             StmtNode::Scope {
                 body: scope_body, ..
-            } => self.unparse_stmts(scope_body, writer, indent + 2)?,
-            _ => self.unparse_stmt(body, writer, indent + 2)?,
+            } => self.unparse_stmts(scope_body, writer, indent + 1)?,
+            _ => self.unparse_stmt(body, writer, indent + 1)?,
         }
 
         writeln!(writer, "{indent_str}endfn")?;
@@ -1660,7 +1660,7 @@ end"#; "complex scatter declaration with optional and rest")]
     #[test]
     fn test_named_function_unparse() {
         let program = r#"fn x(y)
-            return y * x(2);
+          return y * x(2);
         endfn
         return x(2);"#;
         let stripped = unindent(program);
