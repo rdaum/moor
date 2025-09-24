@@ -48,7 +48,8 @@ list listinsert(list list, value [, int index])
 
 `listinsert()` adds value before the existing element with the given index, if provided.
 
-If index is not provided, then `listinsert()` adds it at the beginning; this usage is discouraged, however, since the same intent can be more clearly expressed using the list-construction expression, as shown in the examples below.
+If index is not provided, then `listinsert()` adds it at the beginning; this usage is discouraged, however, since the
+same intent can be more clearly expressed using the list-construction expression, as shown in the examples below.
 
 ```
 x = {1, 2, 3};
@@ -143,7 +144,8 @@ Returns a copy of list with the given value removed.
 list setremove(list list, value)
 ```
 
-`setremove()` returns a list identical to list if value is not an element. If value appears more than once in list, only the first occurrence is removed in the returned copy.
+`setremove()` returns a list identical to list if value is not an element. If value appears more than once in list, only
+the first occurrence is removed in the returned copy.
 
 ```
 setremove({1, 2, 3}, 3)      =>   {1, 2}
@@ -201,7 +203,8 @@ list sort(LIST list [, LIST keys, INT natural sort order?, INT reverse])
 When sorting list by itself, you can use an empty list ({}) for keys to specify additional optional arguments.
 
 If natural sort order is true, strings containing multi-digit numbers will consider those numbers to be a single
-character. So, for instance, this means that 'x2' would come before 'x11' when sorted naturally because 2 is less than 11. This argument defaults to 0.
+character. So, for instance, this means that 'x2' would come before 'x11' when sorted naturally because 2 is less than
+11. This argument defaults to 0.
 
 If reverse is true, the sort order is reversed. This argument defaults to 0.
 
@@ -252,7 +255,8 @@ Performs sophisticated string matching with ordinal support and object auto-dete
 str | obj complex_match(STR token, LIST targets [, LIST keys] [, ANY fuzzy])
 ```
 
-The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "second", "1st", "2nd", "twenty-first") and four-tier matching precedence:
+The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "
+second", "1st", "2nd", "twenty-first") and four-tier matching precedence:
 
 1. **Exact matches** - Complete string equality (case-insensitive)
 2. **Prefix matches** - Strings that start with the search token
@@ -265,8 +269,8 @@ The `complex_match()` function provides advanced pattern matching with support f
 - `targets` (LIST): List of strings or objects to search through
 - `keys` (LIST, optional): List of key lists for object matching. Pass `false` to disable key-based matching.
 - `fuzzy` (ANY, optional): Controls fuzzy matching behavior:
-  - Any truthy value (default): Enable fuzzy matching for typo tolerance
-  - Any falsy value: Disable fuzzy matching (exact/prefix/substring only)
+    - Any truthy value (default): Enable fuzzy matching for typo tolerance
+    - Any falsy value: Disable fuzzy matching (exact/prefix/substring only)
 
 #### String matching (2-argument form)
 
@@ -283,9 +287,13 @@ complex_match("1st bar", {"foobar", "barfoo"})         => "foobar"
 When the targets list contains objects, `complex_match` automatically extracts their names:
 
 ```
-players = {#123, #456, #789};  // Objects with names "Alice", "Bob", "Charlie"
+players = {#123, #456, #789, #890};  // Objects with names "Alice", "Bob", "Charlie", "Alice"
 complex_match("alice", players)          => #123  // Case-insensitive name matching
-complex_match("second player", players)  => #456  // Ordinal selection by name
+complex_match("second alice", players)   => #890  // Ordinal selection by name
+
+// Same functionality with explicit keys
+complex_match("alice", {1, 2, 3, 4}, {"Alice", "Bob", "Charlie", "Alice"})        => 1
+complex_match("second alice", {1, 2, 3, 4}, {"Alice", "Bob", "Charlie", "Alice"}) => 4
 ```
 
 #### Object matching with keys (3-4 argument form)
@@ -349,4 +357,4 @@ complex_match("alice", players, false, false)         => #123  // No fuzzy match
 complex_match("xyz", {"abc", "def"})                  => #-3
 ```
 
-This function is particularly useful for implementing sophisticated object matching in MOO commands and user interfaces, especially with the new object auto-detection feature that automatically extracts object names for matching.
+This function is particularly useful for implementing sophisticated object matching in MOO commands.
