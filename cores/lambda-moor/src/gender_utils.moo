@@ -182,7 +182,7 @@ object GENDER_UTILS
       if (!i)
         return "";
       endif
-      cap = strcmp("a", key) > 0;
+      cap = strcmp("a", key) > 0 ? 1 | 0;
       prop = this.pronouns[toint(search[i - 1]) + 5 * cap];
     endif
     if (!valid(object))
