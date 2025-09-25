@@ -255,14 +255,15 @@ pub fn shutdown_tracing() {
 
         // Wait for the background thread to finish
         if let Ok(mut guard) = TRACING_THREAD.lock()
-            && let Some(thread_handle) = guard.take() {
-                tracing::info!("Shutting down tracing thread...");
-                if let Err(e) = thread_handle.join() {
-                    tracing::error!("Failed to join tracing thread: {:?}", e);
-                } else {
-                    tracing::info!("Tracing thread shutdown complete");
-                }
+            && let Some(thread_handle) = guard.take()
+        {
+            tracing::info!("Shutting down tracing thread...");
+            if let Err(e) = thread_handle.join() {
+                tracing::error!("Failed to join tracing thread: {:?}", e);
+            } else {
+                tracing::info!("Tracing thread shutdown complete");
             }
+        }
 
         // Clear the sender
         if let Ok(mut guard) = TRACING_SENDER.lock() {

@@ -829,28 +829,29 @@ impl TelnetConnection {
             ClientEvent::RequestInput(request_id) => {
                 // If hold_input is active and has buffered input, return it immediately
                 if let Some(ref mut buffer) = self.hold_input
-                    && let Some(input_line) = buffer.drain(..1).next() {
-                        debug!("Returning held input for read() call: {}", input_line);
+                    && let Some(input_line) = buffer.drain(..1).next()
+                {
+                    debug!("Returning held input for read() call: {}", input_line);
 
-                        // Send the buffered input as an input reply
-                        let Some(auth_token) = self.auth_token.clone() else {
-                            bail!("Received input request before auth token was set");
-                        };
+                    // Send the buffered input as an input reply
+                    let Some(auth_token) = self.auth_token.clone() else {
+                        bail!("Received input request before auth token was set");
+                    };
 
-                        self.rpc_client
-                            .make_client_rpc_call(
-                                self.client_id,
-                                HostClientToDaemonMessage::RequestedInput(
-                                    self.client_token.clone(),
-                                    auth_token,
-                                    request_id,
-                                    v_str(&input_line),
-                                ),
-                            )
-                            .await?;
+                    self.rpc_client
+                        .make_client_rpc_call(
+                            self.client_id,
+                            HostClientToDaemonMessage::RequestedInput(
+                                self.client_token.clone(),
+                                auth_token,
+                                request_id,
+                                v_str(&input_line),
+                            ),
+                        )
+                        .await?;
 
-                        return Ok(None);
-                    }
+                    return Ok(None);
+                }
 
                 // No buffered input available, wait for user input
                 return Ok(Some(request_id));

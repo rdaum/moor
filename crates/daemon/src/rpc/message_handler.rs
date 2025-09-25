@@ -593,11 +593,17 @@ impl RpcMessageHandler {
 
         // Send disconnect event to all client connections for this player
         let event = ClientEvent::Disconnect();
-        let _event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .expect("Unable to serialize disconnection event");
 
         for client_id in &all_client_ids {
-            // Remove the client connection
+            // First send the disconnect event to the client
+            if let Err(e) = self
+                .transport
+                .publish_client_event(*client_id, event.clone())
+            {
+                error!(error = ?e, client_id = ?client_id, "Unable to send disconnect event to client");
+            }
+
+            // Then remove the client connection
             if let Err(e) = self.connections.remove_client_connection(*client_id) {
                 error!(error = ?e, "Unable to remove client connection for disconnect");
             }

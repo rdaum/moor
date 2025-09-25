@@ -2395,9 +2395,10 @@ fn bf_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Search for the option by name (case-sensitive)
     for (key, value) in m.iter() {
         if let Some(key_str) = key.as_string()
-            && key_str == option_name {
-                return Ok(Ret(value.clone()));
-            }
+            && key_str == option_name
+        {
+            return Ok(Ret(value.clone()));
+        }
     }
     // Option not found
     Err(ErrValue(E_INVARG.msg(format!(

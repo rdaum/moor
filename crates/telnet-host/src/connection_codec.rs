@@ -164,9 +164,10 @@ impl ConnectionCodec {
 
         // Check line length limit
         if let Some(max_length) = self.max_length
-            && newline_index > max_length {
-                return Err(ConnectionCodecError::MaxLineLengthExceeded);
-            }
+            && newline_index > max_length
+        {
+            return Err(ConnectionCodecError::MaxLineLengthExceeded);
+        }
 
         // Extract and process the line
         let mut line = buf.split_to(newline_index + 1);

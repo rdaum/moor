@@ -227,10 +227,7 @@ impl Sequence for Str {
         let to = to as usize;
         if start >= char_len || to >= char_len {
             return Err(E_RANGE.with_msg(|| {
-                format!(
-                    "Range {}..{} out of bounds for string of length {}",
-                    from, to, char_len
-                )
+                format!("Range {from}..{to} out of bounds for string of length {char_len}")
             }));
         }
 
