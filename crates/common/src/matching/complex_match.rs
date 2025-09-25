@@ -89,8 +89,14 @@ pub fn parse_ordinal(word: &str) -> Result<i64, OrdinalParseError> {
         }
 
         // Try numeric ordinals: "1st", "2nd", "3rd", "4th", etc.
-        if token.len() > 2 {
-            let (num_part, suffix) = token.split_at(token.len() - 2);
+        if token.chars().count() > 2 {
+            let char_count = token.chars().count();
+            let split_pos = token
+                .char_indices()
+                .nth(char_count - 2)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let (num_part, suffix) = token.split_at(split_pos);
             if matches!(suffix, "st" | "nd" | "rd" | "th")
                 && let Ok(num) = num_part.parse::<i64>()
             {

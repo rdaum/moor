@@ -62,7 +62,7 @@ impl Sequence for Str {
     }
 
     fn len(&self) -> usize {
-        self.as_str().len()
+        self.as_str().chars().count()
     }
 
     fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
@@ -115,7 +115,7 @@ impl Sequence for Str {
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.as_str().len() {
+        if index >= self.len() {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of range for string of length {}",
@@ -130,7 +130,7 @@ impl Sequence for Str {
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        if index >= self.as_str().len() {
+        if index >= self.len() {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of range for string of length {}",
@@ -156,12 +156,17 @@ impl Sequence for Str {
             }
         };
 
-        if value.len() != 1 {
+        if value.as_str().chars().count() != 1 {
             return Err(E_INVARG.msg("String index set value must be a single character"));
         }
 
+        // Convert character index to byte indices
+        let mut chars = self.as_str().char_indices();
+        let (start_byte, _) = chars.nth(index).unwrap();
+        let end_byte = chars.next().map(|(i, _)| i).unwrap_or(self.as_str().len());
+
         let mut s = self.as_str().to_string();
-        s.replace_range(index..=index, value.as_str());
+        s.replace_range(start_byte..end_byte, value.as_str());
         Ok(Var::from_variant(Variant::Str(Str(Arc::new(s)))))
     }
 
@@ -194,8 +199,21 @@ impl Sequence for Str {
             }
         };
 
+        // Convert character index to byte index
+        let byte_index = if index == 0 {
+            0
+        } else if index >= self.len() {
+            self.as_str().len()
+        } else {
+            self.as_str()
+                .char_indices()
+                .nth(index)
+                .map(|(i, _)| i)
+                .unwrap_or(self.as_str().len())
+        };
+
         let mut new_copy = self.as_str().to_string();
-        new_copy.insert_str(index, value.as_str());
+        new_copy.insert_str(byte_index, value.as_str());
         Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
     }
 
@@ -204,20 +222,21 @@ impl Sequence for Str {
             return Ok(Var::mk_str(""));
         }
         let s = self.as_str();
+        let char_len = self.len();
         let start = max(from, 0) as usize;
         let to = to as usize;
-        if start >= s.len() || to >= s.len() {
+        if start >= char_len || to >= char_len {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Range {}..{} out of bounds for string of length {}",
-                    from,
-                    to,
-                    s.len()
+                    from, to, char_len
                 )
             }));
         }
-        let s = s.get(start..=to).unwrap();
-        Ok(Var::mk_str(s))
+
+        // Extract characters directly using iterator
+        let result: String = s.chars().skip(start).take(to - start + 1).collect();
+        Ok(Var::mk_str(&result))
     }
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
@@ -271,7 +290,7 @@ impl Sequence for Str {
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.as_str().len() {
+        if index >= self.len() {
             return Err(E_RANGE.with_msg(|| {
                 format!(
                     "Index {} out of range for string of length {}",
@@ -281,8 +300,13 @@ impl Sequence for Str {
             }));
         }
 
+        // Convert character index to byte indices
+        let mut chars = self.as_str().char_indices();
+        let (start_byte, _) = chars.nth(index).unwrap();
+        let end_byte = chars.next().map(|(i, _)| i).unwrap_or(self.as_str().len());
+
         let mut new_copy = self.as_str().to_string();
-        new_copy.remove(index);
+        new_copy.replace_range(start_byte..end_byte, "");
         Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
     }
 }

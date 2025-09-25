@@ -828,8 +828,8 @@ impl TelnetConnection {
             }
             ClientEvent::RequestInput(request_id) => {
                 // If hold_input is active and has buffered input, return it immediately
-                if let Some(ref mut buffer) = self.hold_input {
-                    if let Some(input_line) = buffer.drain(..1).next() {
+                if let Some(ref mut buffer) = self.hold_input
+                    && let Some(input_line) = buffer.drain(..1).next() {
                         debug!("Returning held input for read() call: {}", input_line);
 
                         // Send the buffered input as an input reply
@@ -851,7 +851,6 @@ impl TelnetConnection {
 
                         return Ok(None);
                     }
-                }
 
                 // No buffered input available, wait for user input
                 return Ok(Some(request_id));
