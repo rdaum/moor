@@ -12,6 +12,7 @@
 //
 
 import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
 import { OutputWindow } from "./OutputWindow";
 
@@ -80,8 +81,10 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
     // Handle sending messages
     const handleSendMessage = useCallback((message: string) => {
-        // Echo the input to the narrative
-        addMessage(message, "input_echo");
+        // Echo the input to the narrative if setting is enabled
+        if (getCommandEchoEnabled()) {
+            addMessage(message, "input_echo");
+        }
 
         // Send to server
         onSendMessage(message);

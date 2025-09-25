@@ -14,6 +14,7 @@
 // ! Settings panel with theme toggle and other options
 
 import React from "react";
+import { CommandEchoToggle } from "./CommandEchoToggle";
 import { ThemeToggle } from "./ThemeToggle";
 
 interface SettingsPanelProps {
@@ -46,6 +47,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose })
                     <div className="settings-section">
                         <h3>Appearance</h3>
                         <ThemeToggle />
+                    </div>
+
+                    <div className="settings-section">
+                        <h3>Interface</h3>
+                        <CommandEchoToggle />
                     </div>
 
                     <div className="settings-section">
