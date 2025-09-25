@@ -580,7 +580,6 @@ impl WorldState for DbWorldState {
             || pname == *F_SYM
             || pname == *PARENT_SYM
             || pname == *CHILDREN_SYM
-            || pname == *ALIASES_SYM
         {
             return Err(WorldStateError::PropertyPermissionDenied);
         }
