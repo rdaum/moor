@@ -21,13 +21,13 @@ import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
 import { PropertyEditor } from "./components/PropertyEditor";
-import { SettingsPanel } from "./components/SettingsPanel";
+import { ConnectionModePreference, SettingsPanel } from "./components/SettingsPanel";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
+import { ConnectionProvider, useConnectionContext } from "./context/ConnectionProvider";
 import { PresentationProvider, usePresentationContext } from "./context/PresentationContext";
-import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -45,6 +45,7 @@ function AppContent({
     onLinkClick,
     onVerbEditorReady,
     onPropertyEditorReady,
+    onSettingsToggle,
 }: {
     narrativeRef: React.RefObject<NarrativeRef>;
     narrativeCallbackRef: (node: NarrativeRef | null) => void;
@@ -67,6 +68,7 @@ function AppContent({
             uploadAction?: string,
         ) => void,
     ) => void;
+    onSettingsToggle?: () => void;
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
     const { welcomeMessage, contentType, isServerReady } = useWelcomeMessage();
@@ -74,7 +76,6 @@ function AppContent({
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
-    const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
     const [splitRatio, setSplitRatio] = useState(() => {
         // Load saved split ratio or default to 60% for room, 40% for editor
         const saved = localStorage.getItem("moor-split-ratio");
@@ -192,10 +193,17 @@ function AppContent({
         }
     }, [dismissPresentation, authState.player?.authToken]);
 
-    // WebSocket integration
-    const { wsState, connect: connectWS, sendMessage } = useWebSocketContext();
+    // Connection integration
+    const { sendMessage: sendMessageAsync, connect: connectToServer, isConnected: serverConnected, connectionStatus } =
+        useConnectionContext();
 
-    // Handle login and WebSocket connection
+    // Wrapper to convert async sendMessage to sync for components that expect boolean return
+    const sendMessage = useCallback((message: string) => {
+        sendMessageAsync(message);
+        return true; // Always return true for compatibility
+    }, [sendMessageAsync]);
+
+    // Handle login and connection
     const handleConnect = async (mode: "connect" | "create", username: string, password: string) => {
         setLoginMode(mode);
         await connect(mode, username, password);
@@ -227,9 +235,9 @@ function AppContent({
                             // Continue even if presentations fail to load
                         }
 
-                        // Connect WebSocket after history and presentations are loaded (if not already connected)
-                        if (!wsState.isConnected) {
-                            connectWS(loginMode);
+                        // Connect SSE after history and presentations are loaded (if not already connected)
+                        if (!serverConnected) {
+                            await connectToServer(loginMode);
                         }
                     })
                     .catch(async (_error) => {
@@ -242,9 +250,9 @@ function AppContent({
                             // Continue even if presentations fail to load
                         }
 
-                        // Connect WebSocket even if history fails (if not already connected)
-                        if (!wsState.isConnected) {
-                            connectWS(loginMode);
+                        // Connect SSE even if history fails (if not already connected)
+                        if (!serverConnected) {
+                            await connectToServer(loginMode);
                         }
                     });
             }, 100); // Wait 100ms for component to render
@@ -252,8 +260,8 @@ function AppContent({
     }, [
         authState.player?.authToken,
         historyLoaded,
-        wsState.isConnected,
-        connectWS,
+        serverConnected,
+        connectToServer,
         loginMode,
         setHistoryBoundaryNow,
         fetchInitialHistory,
@@ -264,16 +272,16 @@ function AppContent({
     // Track if we were previously connected to distinguish reconnection from initial connection
     const wasConnectedRef = useRef(false);
 
-    // Reset history loaded flag when WebSocket disconnects to ensure history is refetched on reconnection
+    // Reset history loaded flag when SSE disconnects to ensure history is refetched on reconnection
     // Only reset if we were previously connected (not during initial connection flow)
     useEffect(() => {
-        if (wsState.connectionStatus === "connected") {
+        if (connectionStatus === "connected") {
             wasConnectedRef.current = true;
-        } else if (wsState.connectionStatus === "disconnected" && wasConnectedRef.current && historyLoaded) {
+        } else if (connectionStatus === "disconnected" && wasConnectedRef.current && historyLoaded) {
             setHistoryLoaded(false);
             wasConnectedRef.current = false;
         }
-    }, [wsState.connectionStatus, historyLoaded]);
+    }, [connectionStatus, historyLoaded]);
 
     // Handle split divider dragging
     const [isDraggingSplit, setIsDraggingSplit] = useState(false);
@@ -343,6 +351,7 @@ function AppContent({
     }, [isDraggingSplit]);
 
     const isConnected = authState.player?.connected || false;
+    console.log("isConnected:", isConnected, "authState.player?.connected:", authState.player?.connected);
     const hasActiveEditor = editorSession || propertyEditorSession;
     const isSplitMode = isConnected && hasActiveEditor && (isMobile || forceSplitMode);
 
@@ -396,13 +405,7 @@ function AppContent({
             />
 
             {/* Top navigation bar */}
-            <TopNavBar onSettingsToggle={() => setIsSettingsOpen(true)} />
-
-            {/* Settings panel */}
-            <SettingsPanel
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-            />
+            <TopNavBar onSettingsToggle={onSettingsToggle || (() => {})} />
 
             {/* Main app layout with narrative interface */}
             {isConnected && (
@@ -584,6 +587,13 @@ function AppWrapper() {
     const { showMessage } = useSystemMessage();
     const narrativeRef = useRef<NarrativeRef>(null);
 
+    const [connectionModePreference, setConnectionModePreference] = useState<ConnectionModePreference>(() => {
+        const saved = localStorage.getItem("connectionModePreference");
+        return (saved as ConnectionModePreference) || "auto";
+    });
+
+    const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+
     // Store verb editor function from AppContent
     const showVerbEditorRef = useRef<
         ((title: string, objectCurie: string, verbName: string, content: string, uploadAction?: string) => void) | null
@@ -704,26 +714,42 @@ function AppWrapper() {
     }, [pendingMessages]);
 
     return (
-        <WebSocketProvider
-            player={authState.player}
-            showMessage={showMessage}
-            setPlayerConnected={setPlayerConnected}
-            handleNarrativeMessage={handleNarrativeMessage}
-            handlePresentMessage={handlePresentMessage}
-            handleUnpresentMessage={handleUnpresentMessage}
-        >
-            <AppContent
-                narrativeRef={narrativeRef}
-                narrativeCallbackRef={narrativeCallbackRef}
-                onLinkClick={handleLinkClick}
-                onVerbEditorReady={(fn) => {
-                    showVerbEditorRef.current = fn;
-                }}
-                onPropertyEditorReady={(fn) => {
-                    showPropertyEditorRef.current = fn;
+        <>
+            {/* Settings panel */}
+            <SettingsPanel
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                connectionMode={connectionModePreference}
+                onConnectionModeChange={(mode) => {
+                    setConnectionModePreference(mode);
+                    localStorage.setItem("connectionModePreference", mode);
+                    showMessage(`Connection mode set to ${mode}. Refresh page to apply.`, 4);
                 }}
             />
-        </WebSocketProvider>
+
+            <ConnectionProvider
+                player={authState.player}
+                onSystemMessage={showMessage}
+                onPlayerConnectedChange={setPlayerConnected}
+                onNarrativeMessage={handleNarrativeMessage}
+                onPresentMessage={handlePresentMessage}
+                onUnpresentMessage={handleUnpresentMessage}
+                forcedConnectionMode={connectionModePreference === "auto" ? undefined : connectionModePreference}
+            >
+                <AppContent
+                    narrativeRef={narrativeRef}
+                    narrativeCallbackRef={narrativeCallbackRef}
+                    onLinkClick={handleLinkClick}
+                    onVerbEditorReady={(fn) => {
+                        showVerbEditorRef.current = fn;
+                    }}
+                    onPropertyEditorReady={(fn) => {
+                        showPropertyEditorRef.current = fn;
+                    }}
+                    onSettingsToggle={() => setIsSettingsOpen(true)}
+                />
+            </ConnectionProvider>
+        </>
     );
 }
 

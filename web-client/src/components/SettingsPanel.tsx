@@ -16,12 +16,60 @@
 import React from "react";
 import { ThemeToggle } from "./ThemeToggle";
 
+export type ConnectionModePreference = "auto" | "sse" | "websocket";
+
+interface ConnectionModeToggleProps {
+    value: ConnectionModePreference;
+    onChange: (mode: ConnectionModePreference) => void;
+}
+
+const ConnectionModeToggle: React.FC<ConnectionModeToggleProps> = ({ value, onChange }) => {
+    return (
+        <div className="connection-mode-toggle" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <input
+                    type="radio"
+                    name="connection-mode"
+                    value="auto"
+                    checked={value === "auto"}
+                    onChange={() => onChange("auto")}
+                />
+                Auto-detect
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <input
+                    type="radio"
+                    name="connection-mode"
+                    value="sse"
+                    checked={value === "sse"}
+                    onChange={() => onChange("sse")}
+                />
+                Server-Sent Events
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <input
+                    type="radio"
+                    name="connection-mode"
+                    value="websocket"
+                    checked={value === "websocket"}
+                    onChange={() => onChange("websocket")}
+                />
+                WebSocket
+            </label>
+        </div>
+    );
+};
+
 interface SettingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    connectionMode: ConnectionModePreference;
+    onConnectionModeChange: (mode: ConnectionModePreference) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = (
+    { isOpen, onClose, connectionMode, onConnectionModeChange },
+) => {
     if (!isOpen) return null;
 
     return (
@@ -46,6 +94,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose })
                     <div className="settings-section">
                         <h3>Appearance</h3>
                         <ThemeToggle />
+                    </div>
+
+                    <div className="settings-section">
+                        <h3>Connection</h3>
+                        <div className="settings-item">
+                            <span>Connection Type</span>
+                            <ConnectionModeToggle
+                                value={connectionMode}
+                                onChange={onConnectionModeChange}
+                            />
+                        </div>
                     </div>
 
                     <div className="settings-section">

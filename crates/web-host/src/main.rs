@@ -214,8 +214,10 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             "/ws/attach/create/{token}",
             get(host::ws_create_attach_handler),
         )
+        .route("/sse/events", get(host::sse_events_handler))
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
+        .route("/command", post(host::command_handler))
         .route(
             "/system_property/{*path}",
             get(host::system_property_handler),

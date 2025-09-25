@@ -65,13 +65,27 @@ pub enum LoginType {
     Create,
 }
 
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Used for connection tracking, fields may be accessed in future
+pub struct ClientConnection {
+    pub client_id: Uuid,
+    pub client_token: ClientToken,
+    pub player: Obj,
+}
+
 #[derive(Clone)]
 pub struct WebHost {
-    zmq_context: tmq::Context,
+    pub(crate) zmq_context: tmq::Context,
     rpc_addr: String,
-    pubsub_addr: String,
+    pub(crate) pubsub_addr: String,
     pub(crate) handler_object: Obj,
     local_port: u16,
+    // Registry of active client connections by auth token
+    pub(crate) client_connections: Arc<RwLock<HashMap<AuthToken, ClientConnection>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -98,6 +112,7 @@ impl WebHost {
             pubsub_addr: narrative_addr,
             handler_object,
             local_port,
+            client_connections: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -130,7 +145,7 @@ impl WebHost {
         // Perform reverse DNS lookup for hostname
         let hostname = match resolve_hostname(peer_addr.ip()).await {
             Ok(hostname) => {
-                debug!("Resolved {} to hostname: {}", peer_addr.ip(), hostname);
+                // Hostname resolution logged at trace level only
                 hostname
             }
             Err(_) => {
@@ -162,7 +177,7 @@ impl WebHost {
                 client_token,
                 player,
             ))))) => {
-                info!("Connection authenticated, player: {}", player);
+                debug!("Connection authenticated, player: {}", player);
                 (client_token, player)
             }
             Ok(ReplyResult::ClientSuccess(DaemonToClientReply::AttachResult(None))) => {
@@ -317,23 +332,31 @@ pub(crate) async fn rpc_call(
     rpc_client: &mut RpcSendClient,
     request: HostClientToDaemonMessage,
 ) -> Result<DaemonToClientReply, StatusCode> {
+    // RPC call logging removed for noise reduction
     match rpc_client.make_client_rpc_call(client_id, request).await {
-        Ok(rpc_response) => match rpc_response {
-            ReplyResult::ClientSuccess(r) => Ok(r),
+        Ok(rpc_response) => {
+            // RPC response logging removed for noise reduction
+            match rpc_response {
+                ReplyResult::ClientSuccess(r) => Ok(r),
 
-            ReplyResult::Failure(RpcMessageError::PermissionDenied) => {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
+                ReplyResult::Failure(RpcMessageError::PermissionDenied) => {
+                    error!("RPC call failed: Permission denied");
+                    Err(StatusCode::FORBIDDEN)
+                }
+                ReplyResult::Failure(f) => {
+                    error!("RPC failure in RPC call retrieval: {:?}", f);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+                ReplyResult::HostSuccess(hs) => {
+                    error!("Unexpected response from RPC server: {:?}", hs);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
             }
-            ReplyResult::Failure(f) => {
-                error!("RPC failure in RPC call retrieval: {:?}", f);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-            ReplyResult::HostSuccess(hs) => {
-                error!("Unexpected response from RPC server: {:?}", hs);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+        Err(e) => {
+            error!("RPC call failed with transport error: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
@@ -438,6 +461,66 @@ pub async fn eval_handler(
         )
         .await
         .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+pub async fn command_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    command: Bytes,
+) -> Response {
+    // Authenticate using the same method as other endpoints
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let command = String::from_utf8_lossy(&command).trim().to_string();
+    debug!(
+        "Processing command: '{}' for client_id={}",
+        command, client_id
+    );
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        HostClientToDaemonMessage::Command(
+            client_token.clone(),
+            auth_token.clone(),
+            host.handler_object,
+            command,
+        ),
+    )
+    .await
+    {
+        Ok(DaemonToClientReply::TaskSubmitted(task_id)) => {
+            debug!("Command task submitted successfully: {}", task_id);
+            // Return success - the actual response comes through SSE events
+            Json(json!({"status": "submitted", "task_id": task_id})).into_response()
+        }
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => {
+            error!("RPC call failed with error: {:?}", status);
+            status.into_response()
+        }
+    };
+
+    // Detach from the RPC connection
+    let _ = rpc_client
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone(), false),
+        )
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    debug!("Command handler returning response");
 
     response
 }
