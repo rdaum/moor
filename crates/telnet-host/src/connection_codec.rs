@@ -96,6 +96,8 @@ pub struct ConnectionCodec {
     next_index: usize,
     max_length: Option<usize>,
     is_discarding: bool,
+    // Track CR state for proper CRLF handling like LambdaMOO
+    last_input_was_cr: bool,
 }
 
 impl ConnectionCodec {
@@ -106,6 +108,7 @@ impl ConnectionCodec {
             next_index: 0,
             max_length: None,
             is_discarding: false,
+            last_input_was_cr: false,
         }
     }
 
@@ -117,6 +120,7 @@ impl ConnectionCodec {
             next_index: 0,
             max_length: Some(max_length),
             is_discarding: false,
+            last_input_was_cr: false,
         }
     }
 
@@ -128,6 +132,7 @@ impl ConnectionCodec {
             next_index: 0,
             max_length: None,
             is_discarding: false,
+            last_input_was_cr: false,
         }
     }
 
@@ -144,47 +149,61 @@ impl ConnectionCodec {
         if mode == ConnectionMode::Binary {
             self.next_index = 0;
             self.is_discarding = false;
+            self.last_input_was_cr = false;
         }
     }
 
-    /// Decode a line from buffer (text mode logic adapted from LinesCodec)
+    /// Decode a line from buffer
     fn decode_line(&mut self, buf: &mut BytesMut) -> Result<Option<String>, ConnectionCodecError> {
+        // Handle special case: LF immediately following CR from previous buffer
+        if !buf.is_empty() && buf[0] == b'\n' && self.last_input_was_cr && self.next_index == 0 {
+            self.last_input_was_cr = false;
+            buf.advance(1);
+            // Reset next_index since we're at beginning of buffer
+            self.next_index = 0;
+        }
+
         let read_to = buf.len();
 
-        // Look for newline character
-        let Some(newline_offset) = buf[self.next_index..read_to]
-            .iter()
-            .position(|b| *b == b'\n')
-        else {
-            // No newline found, check length limits and exit
-            return self.handle_no_newline_found(buf, read_to);
-        };
+        // Look for line ending from where we left off
+        while self.next_index < read_to {
+            let byte = buf[self.next_index];
+            let is_cr = byte == b'\r';
+            let is_lf = byte == b'\n';
 
-        let newline_index = newline_offset + self.next_index;
+            // LambdaMOO logic: c == '\r' || (c == '\n' && !h->last_input_was_CR)
+            let should_complete_line = is_cr || (is_lf && !self.last_input_was_cr);
 
-        // Check line length limit
-        if let Some(max_length) = self.max_length
-            && newline_index > max_length
-        {
-            return Err(ConnectionCodecError::MaxLineLengthExceeded);
+            if should_complete_line {
+                // Check line length limit before extracting
+                if let Some(max_length) = self.max_length
+                    && self.next_index > max_length
+                {
+                    return Err(ConnectionCodecError::MaxLineLengthExceeded);
+                }
+
+                // Extract line content (without the line ending character)
+                let line_bytes = buf.split_to(self.next_index);
+                // Consume the line ending character
+                buf.advance(1);
+
+                // Reset state
+                self.next_index = 0;
+                self.is_discarding = false;
+                self.last_input_was_cr = is_cr;
+
+                // Convert to string and return
+                let line_str = std::str::from_utf8(&line_bytes)?.to_string();
+                return Ok(Some(line_str));
+            }
+
+            // Update state and continue
+            self.last_input_was_cr = is_cr;
+            self.next_index += 1;
         }
 
-        // Extract and process the line
-        let mut line = buf.split_to(newline_index + 1);
-        line.truncate(newline_index); // Remove the newline
-
-        // Remove trailing carriage return if present
-        if line.ends_with(b"\r") {
-            line.truncate(line.len() - 1);
-        }
-
-        // Reset parsing state
-        self.next_index = 0;
-        self.is_discarding = false;
-
-        // Convert to string and return
-        let line_str = std::str::from_utf8(&line)?.to_string();
-        Ok(Some(line_str))
+        // No line ending found, check length limits
+        self.handle_no_newline_found(buf, buf.len())
     }
 
     /// Handle the case where no newline was found
@@ -207,17 +226,26 @@ impl ConnectionCodec {
 
         // Over limit - handle discarding logic
         if self.is_discarding {
-            // Already discarding, continue until newline
-            let Some(newline_offset) = buf.iter().position(|b| *b == b'\n') else {
-                // No newline yet, discard all and wait
-                buf.advance(read_to);
-                return Ok(None);
-            };
+            // Already discarding, continue until we find a line ending
+            for (offset, &byte) in buf.iter().enumerate() {
+                let is_cr = byte == b'\r';
+                let is_lf = byte == b'\n';
+                let should_complete_line = is_cr || (is_lf && !self.last_input_was_cr);
 
-            // Found newline, discard up to it and reset
-            buf.advance(newline_offset + 1);
-            self.is_discarding = false;
-            self.next_index = 0;
+                if should_complete_line {
+                    // Found line ending, discard up to it and reset
+                    buf.advance(offset + 1);
+                    self.is_discarding = false;
+                    self.next_index = 0;
+                    self.last_input_was_cr = is_cr;
+                    return Ok(None);
+                }
+
+                self.last_input_was_cr = is_cr;
+            }
+
+            // No line ending yet, discard all and wait
+            buf.advance(read_to);
             return Ok(None);
         }
 
@@ -301,14 +329,14 @@ mod tests {
         let mut codec = ConnectionCodec::new();
         let mut buf = BytesMut::from("hello\nworld\r\n");
 
-        // First line
+        // First line (LF ending)
         let item = codec.decode(&mut buf).unwrap().unwrap();
         match item {
             ConnectionItem::Line(line) => assert_eq!(line, "hello"),
             _ => panic!("Expected line"),
         }
 
-        // Second line (with CRLF)
+        // Second line (CRLF ending - CR should trigger completion, LF should be ignored)
         let item = codec.decode(&mut buf).unwrap().unwrap();
         match item {
             ConnectionItem::Line(line) => assert_eq!(line, "world"),
@@ -317,6 +345,52 @@ mod tests {
 
         // No more data
         assert!(codec.decode(&mut buf).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_lambdamoo_cr_lf_handling() {
+        let mut codec = ConnectionCodec::new();
+
+        // Test standalone CR
+        let mut buf = BytesMut::from("line1\r");
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => assert_eq!(line, "line1"),
+            _ => panic!("Expected line"),
+        }
+
+        // Test LF after CR should be ignored, then parse next line
+        let mut buf = BytesMut::from("\nline2\n");
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => assert_eq!(line, "line2"),
+            _ => panic!("Expected line"),
+        }
+
+        // Test standalone LF (not after CR)
+        let mut buf = BytesMut::from("line3\n");
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => assert_eq!(line, "line3"),
+            _ => panic!("Expected line"),
+        }
+
+        // Test CRLF sequence
+        let mut buf = BytesMut::from("line4\r\nline5\n");
+
+        // CR should trigger line completion
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => assert_eq!(line, "line4"),
+            _ => panic!("Expected line"),
+        }
+
+        // LF after CR should be ignored, then next line should work normally
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => assert_eq!(line, "line5"),
+            _ => panic!("Expected line"),
+        }
     }
 
     #[test]
