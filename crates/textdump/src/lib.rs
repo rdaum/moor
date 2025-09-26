@@ -114,7 +114,7 @@ impl TextdumpVersion {
             let parts = s.split(", ").collect::<Vec<_>>();
             let version = parts.iter().find(|s| s.starts_with("Moor "))?;
             let version = version.trim_start_matches("Moor ");
-            // "Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true map_type=true", encoding: UTF8"
+            // "Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true", encoding: UTF8"
             let semver = version.split(' ').next()?;
             let semver = semver::Version::parse(semver).ok()?;
             let features = parts.iter().find(|s| s.starts_with("features: "))?;
@@ -125,7 +125,6 @@ impl TextdumpVersion {
             let features = CompileOptions {
                 flyweight_type: features.iter().any(|s| s == &"flyweight_type=true"),
                 lexical_scopes: features.iter().any(|s| s == &"lexical_scopes=true"),
-                map_type: features.iter().any(|s| s == &"map_type=true"),
                 ..Default::default()
             };
             let encoding = parts.iter().find(|s| s.starts_with("encoding: "))?;
@@ -146,8 +145,8 @@ impl TextdumpVersion {
             }
             TextdumpVersion::Moor(v, features, encoding) => {
                 let features = format!(
-                    "flyweight_type={} lexical_scopes={} map_type={}",
-                    features.flyweight_type, features.lexical_scopes, features.map_type
+                    "flyweight_type={} lexical_scopes={}",
+                    features.flyweight_type, features.lexical_scopes,
                 );
                 format!("Moor {v}, features: \"{features}\", encoding: {encoding:?}")
             }
@@ -248,7 +247,6 @@ mod tests {
             CompileOptions {
                 flyweight_type: true,
                 lexical_scopes: true,
-                map_type: true,
                 ..Default::default()
             },
             super::EncodingMode::UTF8,

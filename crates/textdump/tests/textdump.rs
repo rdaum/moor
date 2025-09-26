@@ -1024,7 +1024,7 @@ mod test {
         use std::io::Cursor;
 
         // Create a minimal textdump with just one anonymous object
-        let simple_textdump = r#"Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true map_type=true", encoding: UTF8
+        let simple_textdump = r#"Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true", encoding: UTF8
 1
 0
 0

@@ -52,7 +52,8 @@ export const CommandEchoToggle: React.FC = () => {
                 {echoEnabled ? "✅ On" : "❌ Off"}
             </span>
             <span id="echo-description" className="sr-only">
-                Controls whether your typed commands appear in the output window. Helpful for screen readers when disabled.
+                Controls whether your typed commands appear in the output window. Helpful for screen readers when
+                disabled.
             </span>
         </button>
     );

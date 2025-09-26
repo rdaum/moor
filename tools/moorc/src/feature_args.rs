@@ -38,12 +38,6 @@ pub struct FeatureArgs {
 
     #[arg(
         long,
-        help = "Enable the Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt"
-    )]
-    pub map_type: Option<bool>,
-
-    #[arg(
-        long,
         help = "Enable primitive-type verb dispatching. E.g. \"test\":reverse() becomes $string:reverse(\"test\")"
     )]
     pub type_dispatch: Option<bool>,
@@ -106,9 +100,6 @@ impl FeatureArgs {
         }
         if let Some(args) = self.lexical_scopes {
             config.lexical_scopes = args;
-        }
-        if let Some(args) = self.map_type {
-            config.map_type = args;
         }
         if let Some(args) = self.type_dispatch {
             config.type_dispatch = args;

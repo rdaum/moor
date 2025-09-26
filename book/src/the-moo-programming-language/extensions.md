@@ -67,8 +67,6 @@ The names of the type objects to the system objects `$string`, `$float`, `$integ
 
 `mooR` adds a dictionary or map type mostly equivalent to the one present in `stunt`/`toaststunt`.
 
-Enabled by default, can be disabled with command line option `--map-type=false`
-
 This is a set of immutable sorted key-value pairs with convenient syntax for creating and accessing them and
 can be used as an alternative to traditional MOO `alists` / "associative lists".
 

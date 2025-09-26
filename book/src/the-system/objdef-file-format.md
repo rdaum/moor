@@ -62,7 +62,7 @@ define ERROR_HANDLER = E_INVARG;
 - **Symbols**: `'symbol_name` (if symbols enabled)
 - **Errors**: `E_INVARG`, `E_PERM`
 - **Lists**: `{1, 2, 3}`, `{"a", "b", "c"}`
-- **Maps**: `["key" -> "value", "count" -> 42]` (if maps enabled)
+- **Maps**: `["key" -> "value", "count" -> 42]`
 
 ## Object Definitions
 

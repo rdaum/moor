@@ -119,9 +119,7 @@ The built-in function `output_delimiters()` returns the current values of the ou
 connection. In mooR, these values are stored as client attributes and synchronized between the `telnet-host` and
 `daemon` processes via RPC.
 
-mooR also provides a `connection_attributes()` builtin function that returns all client attributes for a connection as
-either a map (when map support is enabled) or an association list (when map support is disabled). The output delimiters
-are stored as the `line-output-prefix` and `line-output-suffix` attributes.
+mooR also provides a `connection_options()` builtin function that returns all client attributes for a connection. The output delimiters are stored as the `line-output-prefix` and `line-output-suffix` attributes.
 
 Each connection has its own output prefix and suffix values, which are not shared between connections, so users running
 multiple connections to the same MOO will have connection-specific delimiter settings.

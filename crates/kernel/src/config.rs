@@ -43,8 +43,6 @@ pub struct FeaturesConfig {
     /// Whether to support block-level lexical scoping, and the 'begin', 'let' and 'global'
     /// keywords.
     pub lexical_scopes: bool,
-    /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
-    pub map_type: bool,
     /// Whether to support primitive-type verb dispatching. E.g. "test":reverse() becomes
     ///   $string:reverse("test")
     pub type_dispatch: bool,
@@ -88,7 +86,6 @@ impl Default for FeaturesConfig {
             persistent_tasks: true,
             rich_notify: true,
             lexical_scopes: true,
-            map_type: true,
             bool_type: true,
             symbol_type: true,
             type_dispatch: true,
@@ -108,7 +105,6 @@ impl FeaturesConfig {
     pub fn compile_options(&self) -> CompileOptions {
         CompileOptions {
             lexical_scopes: self.lexical_scopes,
-            map_type: self.map_type,
             flyweight_type: self.flyweight_type,
             list_comprehensions: self.list_comprehensions,
             bool_type: self.bool_type,
@@ -121,7 +117,6 @@ impl FeaturesConfig {
     /// Returns true if the configuration is backwards compatible with LambdaMOO 1.8 features
     pub fn is_lambdamoo_compatible(&self) -> bool {
         !self.lexical_scopes
-            && !self.map_type
             && !self.type_dispatch
             && !self.flyweight_type
             && !self.rich_notify

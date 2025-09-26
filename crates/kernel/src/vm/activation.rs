@@ -76,14 +76,14 @@ fn lambda_scatter_assign(
                 // Only set sentinel for parameters at or after the first one needing defaults
                 for (idx, label) in scatter_args.labels.iter().enumerate() {
                     if idx >= first_idx
-                        && let ScatterLabel::Optional(id, _) = label {
-                            let name_idx = id.0 as usize;
-                            if name_idx < environment.len() && !assigned_params.contains(&name_idx)
-                            {
-                                // Set to 0 as sentinel - lambda program will check this and evaluate default
-                                environment[name_idx] = Some(v_int(0));
-                            }
+                        && let ScatterLabel::Optional(id, _) = label
+                    {
+                        let name_idx = id.0 as usize;
+                        if name_idx < environment.len() && !assigned_params.contains(&name_idx) {
+                            // Set to 0 as sentinel - lambda program will check this and evaluate default
+                            environment[name_idx] = Some(v_int(0));
                         }
+                    }
                 }
             }
             Ok(())

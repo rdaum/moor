@@ -104,7 +104,6 @@ These options enable or disable various MOO language features:
 |---------------------|-----------------------------|---------|----------------------------------------------------------------------------------|
 | Rich notify         | `--rich-notify`             | `true`  | Allow notify() to send arbitrary MOO values to players                           |
 | Lexical scopes      | `--lexical-scopes`          | `true`  | Enable block-level lexical scoping with begin/end syntax and let/global keywords |
-| Map type            | `--map-type`                | `true`  | Enable Map datatype compatible with Stunt/ToastStunt                             |
 | Type dispatch       | `--type-dispatch`           | `true`  | Enable primitive-type verb dispatching (e.g., "test":reverse())                  |
 | Flyweight type      | `--flyweight-type`          | `true`  | Enable flyweight types (lightweight object delegates)                            |
 | Boolean type        | `--bool-type`               | `true`  | Enable boolean true/false literals                                               |
@@ -145,7 +144,6 @@ features_config:
   persistent_tasks: true
   rich_notify: true
   lexical_scopes: true
-  map_type: true
   bool_type: true
   symbol_type: true
   type_dispatch: true
@@ -174,7 +172,6 @@ features_config:
   persistent_tasks: true
   rich_notify: false
   lexical_scopes: false
-  map_type: false
   bool_type: false
   symbol_type: false
   type_dispatch: false

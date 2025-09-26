@@ -603,9 +603,8 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         true
     };
 
-    let map_support = bf_args.config.map_type;
     let result = match perform_pcre_match(
-        map_support,
+        true,
         case_matters,
         pattern.as_str(),
         subject.as_str(),

@@ -110,7 +110,6 @@ pub fn textdump_load(
 /// The other way around is fine.
 pub fn is_textdump_compatible(a: &CompileOptions, other: &CompileOptions) -> bool {
     (!other.lexical_scopes || a.lexical_scopes)
-        && (!other.map_type || a.map_type)
         && (!other.bool_type || a.bool_type)
         && (!other.flyweight_type || a.flyweight_type)
         && (!other.symbol_type || a.symbol_type)

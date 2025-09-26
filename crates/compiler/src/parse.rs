@@ -234,8 +234,6 @@ define_operators! {
 pub struct CompileOptions {
     /// Whether we allow lexical scope blocks. begin/end blocks and 'let' and 'global' statements
     pub lexical_scopes: bool,
-    /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
-    pub map_type: bool,
     /// Whether to support the flyweight type (a delegate object with slots and contents)
     pub flyweight_type: bool, // TODO: future options:
     //      - symbol types
@@ -257,7 +255,6 @@ impl Default for CompileOptions {
     fn default() -> Self {
         Self {
             lexical_scopes: true,
-            map_type: true,
             flyweight_type: true,
             list_comprehensions: true,
             bool_type: true,
@@ -624,13 +621,6 @@ impl TreeTransformer {
                         }
                     }
                     Rule::map => {
-                        if !self.options.map_type {
-                            return Err(CompileError::DisabledFeature(
-                                self.compile_context(&primary),
-                                "Maps".to_string(),
-                            ));
-                        }
-
                         let inner = primary.into_inner();
                         // Parse each key, value as a separate expression which we will pair-up later.
                         let mut elements = vec![];
@@ -3472,21 +3462,6 @@ mod tests {
             program,
             CompileOptions {
                 lexical_scopes: false,
-                ..CompileOptions::default()
-            },
-        );
-        assert!(matches!(parse, Err(CompileError::DisabledFeature(_, _))));
-    }
-
-    #[test]
-    fn test_no_map() {
-        let program = r#"
-        [ 1 -> 2, 3 -> 4 ];
-        "#;
-        let parse = parse_program(
-            program,
-            CompileOptions {
-                map_type: false,
                 ..CompileOptions::default()
             },
         );
