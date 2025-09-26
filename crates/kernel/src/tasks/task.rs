@@ -945,12 +945,13 @@ impl Task {
             argstr: parsed_command.argstr.clone(),
             caller: v_obj(*player),
         };
+        let verb_owner = verbdef.owner();
         self.vm_host.start_call_command_verb(
             self.task_id,
             (program, verbdef),
             verb_call,
             parsed_command,
-            &self.perms,
+            &verb_owner,
         );
         Ok(())
     }
