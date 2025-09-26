@@ -641,7 +641,8 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
     {
         let mut output_buf = BufWriter::new(&mut output);
         let mut writer = EmitterConfig::new()
-            .perform_indent(true)
+            .line_separator("")
+            .perform_indent(false)
             .write_document_declaration(false)
             .create_writer(&mut output_buf);
 
