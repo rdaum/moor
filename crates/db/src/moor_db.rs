@@ -52,6 +52,7 @@ define_relations! {
     object_propdefs => Obj, PropDefs,
     object_propvalues => ObjAndUUIDHolder, Var,
     object_propflags => ObjAndUUIDHolder, PropPerms,
+    object_last_move => Obj, Var,
     anonymous_object_metadata => Obj, AnonymousObjectMetadata,
 }
 

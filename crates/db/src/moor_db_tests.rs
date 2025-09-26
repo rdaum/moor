@@ -28,8 +28,8 @@ mod tests {
     use moor_var::Symbol;
     use moor_var::program::ProgramType;
     use moor_var::program::program::Program;
+    use moor_var::{Associative, Variant, v_int, v_str};
     use moor_var::{NOTHING, SYSTEM_OBJECT};
-    use moor_var::{v_int, v_str};
     use std::sync::Arc;
 
     fn test_db() -> Arc<MoorDB> {
@@ -392,6 +392,99 @@ mod tests {
             tx.get_object_contents(&c).unwrap(),
             ObjSet::from_items(&[b])
         );
+    }
+
+    #[test]
+    pub fn test_last_move_property() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            )
+            .unwrap();
+
+        let _location1 = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "loc1"),
+            )
+            .unwrap();
+
+        // Initially, object should have empty last_move map
+        let last_move = tx.get_last_move(&obj).unwrap();
+        assert!(matches!(last_move.variant(), Variant::Map(_)));
+        if let Variant::Map(map) = last_move.variant() {
+            assert!(map.is_empty());
+        }
+
+        // Move object to location1 - this should trigger last_move update
+        tx.set_last_move(&obj, NOTHING).unwrap();
+
+        // Check that last_move is updated
+        let last_move = tx.get_last_move(&obj).unwrap();
+        assert!(matches!(last_move.variant(), Variant::Map(_)));
+
+        assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+
+        // Test persistence across transactions
+        let tx = db.start_transaction();
+        let last_move = tx.get_last_move(&obj).unwrap();
+        assert!(matches!(last_move.variant(), Variant::Map(_)));
+    }
+
+    #[test]
+    pub fn test_last_move_worldstate_property() {
+        use crate::db_worldstate::DbWorldState;
+        use moor_common::model::WorldState;
+
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        let obj = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            )
+            .unwrap();
+
+        let location = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "location"),
+            )
+            .unwrap();
+
+        // Wrap transaction in WorldState interface
+        let mut ws = DbWorldState { tx };
+
+        // Initially, last_move should be empty map
+        let last_move = ws
+            .retrieve_property(&SYSTEM_OBJECT, &obj, Symbol::mk("last_move"))
+            .unwrap();
+        assert!(matches!(last_move.variant(), Variant::Map(_)));
+
+        // Move the object
+        ws.move_object(&SYSTEM_OBJECT, &obj, &location).unwrap();
+
+        // Check last_move property via WorldState interface
+        let last_move = ws
+            .retrieve_property(&SYSTEM_OBJECT, &obj, Symbol::mk("last_move"))
+            .unwrap();
+        assert!(matches!(last_move.variant(), Variant::Map(_)));
+
+        // Commit and test in new transaction
+        let result = Box::new(ws).commit().unwrap();
+        assert!(matches!(result, CommitResult::Success { .. }));
+
+        let tx = db.start_transaction();
+        let ws = DbWorldState { tx };
+        let last_move = ws
+            .retrieve_property(&SYSTEM_OBJECT, &obj, Symbol::mk("last_move"))
+            .unwrap();
+        assert!(matches!(last_move.variant(), Variant::Map(_)));
     }
 
     #[test]

@@ -50,6 +50,7 @@ lazy_static! {
     static ref W_SYM: Symbol = Symbol::mk("w");
     static ref F_SYM: Symbol = Symbol::mk("f");
     static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
+    static ref LAST_MOVE_SYM: Symbol = Symbol::mk("last_move");
     static ref WORLD_STATE_PERF: WorldStatePerf = WorldStatePerf::new();
 }
 
@@ -110,6 +111,10 @@ impl DbWorldState {
             return Err(WorldStateError::ObjectPermissionDenied);
         }
         Ok(())
+    }
+
+    fn get_last_move_property(&self, obj: &Obj) -> Result<Var, WorldStateError> {
+        self.get_tx().get_last_move(obj)
     }
 
     fn check_chparent_property_conflict(
@@ -274,7 +279,16 @@ impl WorldState for DbWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
 
-        self.get_tx_mut().set_object_location(obj, new_loc)
+        // Get the old location before moving
+        let old_loc = self.get_tx().get_object_location(obj)?;
+
+        // Set the new location
+        self.get_tx_mut().set_object_location(obj, new_loc)?;
+
+        // Update last_move property with timestamp and source location
+        self.get_tx_mut().set_last_move(obj, old_loc)?;
+
+        Ok(())
     }
 
     fn contents_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
@@ -355,6 +369,8 @@ impl WorldState for DbWorldState {
                 .contains(ObjFlag::Fertile)
                 .then(|| v_bool_int(true))
                 .unwrap_or(v_bool_int(false)));
+        } else if pname == *LAST_MOVE_SYM {
+            return self.get_last_move_property(obj);
         }
 
         let (_, value, propperms, _) = self.get_tx().resolve_property(obj, pname)?;

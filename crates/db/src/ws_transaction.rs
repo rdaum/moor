@@ -23,7 +23,7 @@ use moor_common::model::{
 };
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::program::ProgramType;
-use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
+use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_empty_map, v_map, v_none};
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::time::{Duration, Instant};
@@ -1365,6 +1365,34 @@ impl WorldStateTransaction {
 }
 
 impl WorldStateTransaction {
+    pub fn get_last_move(&self, obj: &Obj) -> Result<Var, WorldStateError> {
+        let r = self.object_last_move.get(obj).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error getting last_move: {e:?}"))
+        })?;
+        Ok(r.unwrap_or_else(v_empty_map))
+    }
+
+    pub fn set_last_move(&mut self, obj: &Obj, old_location: Obj) -> Result<(), WorldStateError> {
+        // Create the last_move map with timestamp and source
+        let time_key = Symbol::mk("time");
+        let source_key = Symbol::mk("source");
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let last_move_map = v_map(&[
+            (Var::from(time_key.to_string()), Var::from(timestamp)),
+            (Var::from(source_key.to_string()), Var::from(old_location)),
+        ]);
+
+        upsert(&mut self.object_last_move, *obj, last_move_map).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting last_move: {e:?}"))
+        })?;
+        self.has_mutations = true;
+        Ok(())
+    }
+
     /// Increment the given sequence, return the new value.
     pub fn increment_sequence(&self, seq: usize) -> i64 {
         self.sequences[seq].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
