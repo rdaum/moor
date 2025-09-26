@@ -68,16 +68,22 @@ fn lambda_scatter_assign(
     match result.result {
         Err(e) => Err(e),
         Ok(()) => {
-            // For lambdas, optional parameters that weren't provided should be set to 0 (false)
-            // This is different from VM execution where jump-to-default logic is used
-            if result.needs_defaults {
-                for label in scatter_args.labels.iter() {
-                    if let ScatterLabel::Optional(id, _) = label {
-                        let name_idx = id.0 as usize;
-                        if name_idx < environment.len() && !assigned_params.contains(&name_idx) {
-                            environment[name_idx] = Some(v_int(0)); // MOO false value
+            // For lambdas with defaults, the lambda program should start with code that checks
+            // each optional parameter and evaluates its default if the parameter is v_int(0).
+            // We set unassigned optionals to v_int(0) as a sentinel value.
+            if result.needs_defaults && result.first_default_index.is_some() {
+                let first_idx = result.first_default_index.unwrap();
+                // Only set sentinel for parameters at or after the first one needing defaults
+                for (idx, label) in scatter_args.labels.iter().enumerate() {
+                    if idx >= first_idx
+                        && let ScatterLabel::Optional(id, _) = label {
+                            let name_idx = id.0 as usize;
+                            if name_idx < environment.len() && !assigned_params.contains(&name_idx)
+                            {
+                                // Set to 0 as sentinel - lambda program will check this and evaluate default
+                                environment[name_idx] = Some(v_int(0));
+                            }
                         }
-                    }
                 }
             }
             Ok(())

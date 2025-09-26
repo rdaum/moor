@@ -12,6 +12,7 @@
 //
 
 use moor_compiler::ScatterLabel;
+use moor_var::program::labels::Label;
 use moor_var::program::opcode::ScatterArgs;
 use moor_var::{E_ARGS, Error, Var, v_list};
 
@@ -22,6 +23,10 @@ pub struct ScatterResult {
     pub result: Result<(), Error>,
     /// Whether to execute default value assignment for optional parameters
     pub needs_defaults: bool,
+    /// The jump label of the first optional parameter that needs its default (for VM execution)
+    pub first_default_label: Option<Label>,
+    /// The index of the first parameter that needs its default (for lambda execution)
+    pub first_default_index: Option<usize>,
 }
 
 /// Core scatter assignment logic that can be used by both Op::Scatter and lambda parameter binding.
@@ -59,6 +64,8 @@ where
         return ScatterResult {
             result: Err(E_ARGS.into()),
             needs_defaults: false,
+            first_default_label: None,
+            first_default_index: None,
         };
     }
 
@@ -71,10 +78,12 @@ where
     };
 
     let mut needs_defaults = false;
+    let mut first_default_label = None;
+    let mut first_default_index = None;
     let mut args_iter = args.iter();
 
     // Assign parameters - this logic is very similar but handles defaults differently
-    for label in table.labels.iter() {
+    for (idx, label) in table.labels.iter().enumerate() {
         match label {
             ScatterLabel::Rest(id) => {
                 // Collect remaining arguments into a list
@@ -95,6 +104,8 @@ where
                     return ScatterResult {
                         result: Err(E_ARGS.into()),
                         needs_defaults: false,
+                        first_default_label: None,
+                        first_default_index: None,
                     };
                 }
             }
@@ -107,14 +118,17 @@ where
                         return ScatterResult {
                             result: Err(E_ARGS.into()),
                             needs_defaults: false,
+                            first_default_label: None,
+                            first_default_index: None,
                         };
                     }
                 } else {
                     // No argument provided for this optional parameter
-                    // For VM execution, this triggers jump-to-defaults logic
-                    // For lambdas, the caller should handle default assignment
-                    if jump_to.is_some() {
+                    // Track the first optional that needs defaults
+                    if first_default_label.is_none() && first_default_index.is_none() {
                         needs_defaults = true;
+                        first_default_label = *jump_to;
+                        first_default_index = Some(idx);
                     }
                     // Note: We don't set the variable here - the caller handles defaults
                 }
@@ -125,6 +139,8 @@ where
     ScatterResult {
         result: Ok(()),
         needs_defaults,
+        first_default_label,
+        first_default_index,
     }
 }
 
@@ -159,6 +175,8 @@ mod tests {
 
         assert!(result.result.is_ok());
         assert!(!result.needs_defaults);
+        assert!(result.first_default_label.is_none());
+        assert!(result.first_default_index.is_none());
         assert_eq!(assignments.get(&Name(0, 0, 0)), Some(&v_int(42)));
         assert_eq!(assignments.get(&Name(1, 0, 0)), Some(&v_str("hello")));
     }
@@ -179,6 +197,8 @@ mod tests {
 
         assert!(result.result.is_ok());
         assert!(result.needs_defaults); // Need to handle default for optional param
+        assert!(result.first_default_label.is_some());
+        assert_eq!(result.first_default_index, Some(1));
         assert_eq!(assignments.get(&Name(0, 0, 0)), Some(&v_str("Alice")));
         // Name(1,0,0) should NOT be in assignments - defaults handled by caller
         assert!(!assignments.contains_key(&Name(1, 0, 0)));

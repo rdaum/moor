@@ -18,7 +18,7 @@ use crate::vm::scatter_assign::scatter_assign;
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
-use moor_compiler::{Op, ScatterLabel, to_literal};
+use moor_compiler::{Op, to_literal};
 use moor_var::program::names::Name;
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_bool, v_error,
@@ -1017,7 +1017,6 @@ pub fn moo_frame_execute(
                 };
 
                 // Use the shared scatter assignment logic
-                let mut jump_where = None;
                 let result = scatter_assign(
                     table,
                     &rhs_values.iter().collect::<Vec<_>>(),
@@ -1032,25 +1031,9 @@ pub fn moo_frame_execute(
                         return ExecutionResult::PushError(e);
                     }
                     Ok(()) => {
-                        // Handle default value assignment for optional parameters
-                        if result.needs_defaults {
-                            // Find the first optional parameter that needs defaults
-                            for label in table.labels.iter() {
-                                if let ScatterLabel::Optional(_, jump_to) = label
-                                    && jump_where.is_none()
-                                    && jump_to.is_some()
-                                {
-                                    jump_where = *jump_to;
-                                    break;
-                                }
-                            }
-                        }
-
-                        // Jump to appropriate location
-                        match jump_where {
-                            None => f.jump(&table.done),
-                            Some(jump_where) => f.jump(&jump_where),
-                        }
+                        // Jump to appropriate location based on whether defaults are needed
+                        let jump_label = result.first_default_label.unwrap_or(table.done);
+                        f.jump(&jump_label);
                     }
                 }
             }

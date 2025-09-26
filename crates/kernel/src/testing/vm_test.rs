@@ -2389,6 +2389,51 @@ mod tests {
     }
 
     #[test]
+    fn test_scatter_multiple_optionals_regression() {
+        // Regression test for scatter assignment with multiple optional parameters
+        // Bug: When there are multiple optionals and not all values are provided,
+        // the defaults are being incorrectly applied to parameters that DO have values
+
+        // Test case 1: Two values provided for {a, ?b = {"1"}, ?c = 0}
+        // The bug incorrectly gives b its default {"1"} instead of the provided "b"
+        let program1 = r#"
+            args = {"a", "b"};
+            {a, ?b = {"1"}, ?c = 0} = args;
+            return {a, b, c};
+        "#;
+        let state1 = world_with_test_program(program1);
+        let session1 = Arc::new(NoopClientSession::new());
+        let result1 = call_verb(
+            state1,
+            session1,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Should be {"a", "b", 0} but bug gives {"a", {"1"}, 0}
+        assert_eq!(result1, Ok(v_list(&[v_str("a"), v_str("b"), v_int(0)])));
+
+        // Test case 2: Three values provided, should fill both optionals correctly
+        // This case works correctly
+        let program2 = r#"
+            args = {"a", "b", "c"};
+            {a, ?b = {"1"}, ?c = 0} = args;
+            return {a, b, c};
+        "#;
+        let state2 = world_with_test_program(program2);
+        let session2 = Arc::new(NoopClientSession::new());
+        let result2 = call_verb(
+            state2,
+            session2,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // This works correctly: {"a", "b", "c"}
+        assert_eq!(result2, Ok(v_list(&[v_str("a"), v_str("b"), v_str("c")])));
+    }
+
+    #[test]
     fn test_nested_loop_unlabeled_continue() {
         // Test that unlabeled continue works in nested loops (should continue inner loop)
         let program = r#"
@@ -2454,6 +2499,313 @@ mod tests {
         // Expected: for x=1: {1,5}; for x=2: {2,5}
         // The 999 markers should be skipped due to continue x
         let expected = v_list(&[v_int(1), v_int(5), v_int(2), v_int(5)]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_scatter_multiple_optionals_comprehensive() {
+        // Test with 3 optionals: {a, ?b = "default_b", ?c = "default_c", ?d = "default_d"}
+
+        // Case 1: All values provided
+        let program = r#"
+            {a, ?b = "default_b", ?c = "default_c", ?d = "default_d"} = {"A", "B", "C", "D"};
+            return {a, b, c, d};
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_str("A"), v_str("B"), v_str("C"), v_str("D")]);
+        assert_eq!(result, Ok(expected));
+
+        // Case 2: Missing last optional (d)
+        let program = r#"
+            {a, ?b = "default_b", ?c = "default_c", ?d = "default_d"} = {"A", "B", "C"};
+            return {a, b, c, d};
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_str("A"), v_str("B"), v_str("C"), v_str("default_d")]);
+        assert_eq!(result, Ok(expected));
+
+        // Case 3: Missing last two optionals (c, d)
+        let program = r#"
+            {a, ?b = "default_b", ?c = "default_c", ?d = "default_d"} = {"A", "B"};
+            return {a, b, c, d};
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("B"),
+            v_str("default_c"),
+            v_str("default_d"),
+        ]);
+        assert_eq!(result, Ok(expected));
+
+        // Case 4: Missing all optionals (only required 'a' provided)
+        let program = r#"
+            {a, ?b = "default_b", ?c = "default_c", ?d = "default_d"} = {"A"};
+            return {a, b, c, d};
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("default_b"),
+            v_str("default_c"),
+            v_str("default_d"),
+        ]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_scatter_five_optionals_edge_cases() {
+        // Test with 5 optionals to really stress test the system
+
+        // Case 1: Provide first 3, missing last 2
+        let program = r#"
+            {a, ?b = 1, ?c = 2, ?d = 3, ?e = 4, ?f = 5} = {"A", "B", "C", "D"};
+            return {a, b, c, d, e, f};
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("B"),
+            v_str("C"),
+            v_str("D"),
+            v_int(4),
+            v_int(5),
+        ]);
+        assert_eq!(result, Ok(expected));
+
+        // Case 2: Provide only required + first optional, missing last 4
+        let program = r#"
+            {a, ?b = 1, ?c = 2, ?d = 3, ?e = 4, ?f = 5} = {"A", "B"};
+            return {a, b, c, d, e, f};
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("B"),
+            v_int(2),
+            v_int(3),
+            v_int(4),
+            v_int(5),
+        ]);
+        assert_eq!(result, Ok(expected));
+
+        // Case 3: Provide only required, missing all 5 optionals
+        let program = r#"
+            {a, ?b = 1, ?c = 2, ?d = 3, ?e = 4, ?f = 5} = {"A"};
+            return {a, b, c, d, e, f};
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_str("A"), v_int(1), v_int(2), v_int(3), v_int(4), v_int(5)]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_scatter_mixed_required_optionals() {
+        // Test with multiple required parameters and optionals
+
+        // Case: Two required, three optionals, provide all required + 1 optional
+        let program = r#"
+            {a, b, ?c = "C", ?d = "D", ?e = "E"} = {"A", "B", "provided_c"};
+            return {a, b, c, d, e};
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("B"),
+            v_str("provided_c"),
+            v_str("D"),
+            v_str("E"),
+        ]);
+        assert_eq!(result, Ok(expected));
+
+        // Case: Two required, three optionals, provide all required + 2 optionals
+        let program = r#"
+            {a, b, ?c = "C", ?d = "D", ?e = "E"} = {"A", "B", "provided_c", "provided_d"};
+            return {a, b, c, d, e};
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("B"),
+            v_str("provided_c"),
+            v_str("provided_d"),
+            v_str("E"),
+        ]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_lambda_scatter_multiple_optionals_regression() {
+        // Test lambda scatter with multiple optionals - this should expose bugs in lambda_scatter_assign
+        // Test case 1: Missing third value (middle optional)
+        let program = r#"
+            f = {a, ?b = "default_b", ?c = "default_c"} => {a, b, c};
+            return f("A", "B");
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // With two args provided, 'c' should get its default
+        let expected = v_list(&[v_str("A"), v_str("B"), v_str("default_c")]);
+        assert_eq!(result, Ok(expected));
+
+        // Test case 2: All values provided
+        let program = r#"
+            f = {a, ?b = "default_b", ?c = "default_c"} => {a, b, c};
+            return f("A", "B", "C");
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_str("A"), v_str("B"), v_str("C")]);
+        assert_eq!(result, Ok(expected));
+
+        // Test case 3: Missing second value - THIS IS THE BUG CASE
+        // If lambda_scatter_assign is broken, this will fail
+        let program = r#"
+            f = {a, ?b = "default_b", ?c = "default_c"} => {a, b, c};
+            return f("A");
+        "#;
+        let state = world_with_test_program(program);
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // With only one arg, both optionals should get defaults
+        let expected = v_list(&[v_str("A"), v_str("default_b"), v_str("default_c")]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_lambda_scatter_five_optionals() {
+        // Stress test with 5 optionals in lambda
+        let program = r#"
+            func = {a, ?b = 1, ?c = 2, ?d = 3, ?e = 4, ?g = 5} => {a, b, c, d, e, g};
+            return func("A", "B", "C");
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // First 3 get provided values, last 3 get defaults
+        let expected = v_list(&[
+            v_str("A"),
+            v_str("B"),
+            v_str("C"),
+            v_int(3),
+            v_int(4),
+            v_int(5),
+        ]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_lambda_scatter_with_complex_defaults() {
+        // Test that lambda default expressions work correctly
+        let program = r#"
+            f = {a, ?b = {1, 2}, ?c = #5} => {a, b, c};
+            return f("A");
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Both optionals should get their complex defaults
+        let expected = v_list(&[
+            v_str("A"),
+            v_list(&[v_int(1), v_int(2)]),
+            v_obj(Obj::mk_id(5)),
+        ]);
         assert_eq!(result, Ok(expected));
     }
 }

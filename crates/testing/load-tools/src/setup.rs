@@ -424,7 +424,7 @@ pub async fn listen_responses(
             }
         }
         let seconds_since_start = start_time.elapsed().as_secs();
-        if seconds_since_start % 5 == 0 {
+        if seconds_since_start.is_multiple_of(5) {
             let tasks = event_listen_task_results.lock().await;
             info!(
                 "Event listener running for {} seconds with {} tasks",

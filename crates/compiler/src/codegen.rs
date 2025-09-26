@@ -1242,9 +1242,8 @@ impl CodegenState {
                 ScatterKind::Required => ScatterLabel::Required(self.find_name(&param.id)),
                 ScatterKind::Optional => ScatterLabel::Optional(
                     self.find_name(&param.id),
-                    // For lambdas, always create a jump label for optional parameters
-                    // to ensure that default value assignment is triggered during execution
-                    Some(self.make_jump_label(None)),
+                    // For lambdas, we don't use jump labels - defaults are handled explicitly
+                    None,
                 ),
                 ScatterKind::Rest => ScatterLabel::Rest(self.find_name(&param.id)),
             })
@@ -1282,6 +1281,42 @@ impl CodegenState {
         self.fork_vectors = vec![];
         self.line_number_spans = vec![];
         self.fork_line_number_spans = vec![];
+
+        // Generate code to check optional parameters and evaluate defaults if needed
+        // This is done at the start of the lambda body, not through scatter jump labels
+        for (param, label) in params.iter().zip(labels.iter()) {
+            if let ScatterKind::Optional = param.kind
+                && let Some(default_expr) = &param.expr {
+                    // Extract the already-resolved parameter name from the scatter label
+                    let param_name = match label {
+                        ScatterLabel::Optional(name, _) => *name,
+                        _ => panic!("Expected Optional label for optional parameter"),
+                    };
+
+                    // Check if this parameter is unset (equals 0)
+                    self.emit(Op::Push(param_name));
+                    self.push_stack(1);
+
+                    // Check if it equals 0 (the sentinel value for "needs default")
+                    self.emit(Op::ImmInt(0));
+                    self.push_stack(1);
+                    self.emit(Op::Eq);
+                    self.pop_stack(1);
+
+                    // If equal to 0, evaluate and assign the default
+                    let skip_default = self.make_jump_label(None);
+                    self.emit(Op::IfQues(skip_default));
+                    self.pop_stack(1);
+
+                    // Evaluate the default expression and store it
+                    self.generate_expr(default_expr)?;
+                    self.emit(Op::Put(param_name));
+                    self.emit(Op::Pop);
+                    self.pop_stack(1);
+
+                    self.commit_jump_label(skip_default);
+                }
+        }
 
         // Compile lambda body as a statement
         self.generate_stmt(body)?;
