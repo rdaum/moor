@@ -166,7 +166,7 @@ object LOCK_UTILS
     if (op == "!")
       return !this:eval_key(key[2], who);
     elseif (op == "?")
-      return (key[2]):is_unlocked_for(who);
+      return key[2]:is_unlocked_for(who);
     elseif (op == "&&")
       return this:eval_key(key[2], who) && this:eval_key(key[3], who);
     elseif (op == "||")
@@ -259,7 +259,7 @@ object LOCK_UTILS
     if (op == "!")
       return !this:eval_key(key[2], who);
     elseif (op == "?")
-      return (key[2]):is_unlocked_for(who);
+      return key[2]:is_unlocked_for(who);
     elseif (op == "&&")
       return this:eval_key(key[2], who) && this:eval_key(key[3], who);
     elseif (op == "||")

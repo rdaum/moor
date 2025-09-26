@@ -72,7 +72,7 @@ object OBJECT_UTILS
     if (prop in $code_utils.builtin_props)
       return valid(object);
     else
-      return !!property_info(object, prop);
+      return !(!property_info(object, prop));
     endif
   endverb
 
@@ -200,7 +200,7 @@ object OBJECT_UTILS
   verb all_contents (this none this) owner: HACKER flags: "rxd"
     "all_contents(object)";
     "Return a list of all objects contained (at some level) by object.";
-    for y in (res = (args[1]).contents)
+    for y in (res = args[1].contents)
       y.contents && (res = {@res, @this:all_contents(y)});
     endfor
     return res;
@@ -364,7 +364,7 @@ object OBJECT_UTILS
   verb "has_any_verb has_any_property" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     ":has_any_verb(object) / :has_any_property(object)";
     " -- does `object' have any verbs/properties?";
-    return !!`verb == "has_any_verb" ? verbs(args[1]) | properties(args[1]) ! E_INVARG => 0';
+    return !(!`verb == "has_any_verb" ? verbs(args[1]) | properties(args[1]) ! E_INVARG => 0');
   endverb
 
   verb "has_readable_prop*erty hrp" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"

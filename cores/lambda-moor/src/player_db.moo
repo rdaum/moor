@@ -75,7 +75,7 @@ object PLAYER_DB
         endif
         for a in (p.aliases)
           this:suspend_restart(p);
-          if (index(a, " ") || index(a, "	"))
+          if (index(a, " ") || index(a, "\t"))
             "don't bother, space or tab";
           elseif (typeof(ao = this:find_exact(a)) == ERR)
             player:tell(a, ":  ", ao);
@@ -102,7 +102,7 @@ object PLAYER_DB
         nlist = this.(p)[3];
         olist = this.(p)[4];
         for i in [1..length(nlist)]
-          if (valid(olist[i]) && (is_player(olist[i]) && nlist[i] in (olist[i]).aliases))
+          if (valid(olist[i]) && (is_player(olist[i]) && nlist[i] in olist[i].aliases))
           else
             player:tell(".", p[2..$], " <- ", nlist[i], " ", olist[i]);
           endif
@@ -128,7 +128,7 @@ object PLAYER_DB
       return 0;
     elseif (target in $wiz_utils.rename_restricted)
       return 0;
-    elseif (!name || index(name, " ") || index(name, "\\") || index(name, "\"") || index(name, "	"))
+    elseif (!name || index(name, " ") || index(name, "\\") || index(name, "\"") || index(name, "\t"))
       return 0;
     elseif (index("*#()", name[1]))
       return 0;
@@ -169,9 +169,9 @@ object PLAYER_DB
     si = index(name, " ");
     qi = index(name, "\"");
     bi = index(name, "\\");
-    ti = index(name, "	");
+    ti = index(name, "\t");
     if (si || qi || bi || ti)
-      return tostr("You may not use a name containing ", $string_utils:english_list({@si ? {"spaces"} | {}, @qi ? {"quotation marks"} | {}, @bi ? {"backslashes"} | {}, @ti ? {"tabs"} | {}}, "ERROR", " or "), ".  Try \"", strsub(strsub(strsub(strsub(name, " ", "_"), "\"", "'"), "\\", "/"), "	", "___"), "\" instead.");
+      return tostr("You may not use a name containing ", $string_utils:english_list({@si ? {"spaces"} | {}, @qi ? {"quotation marks"} | {}, @bi ? {"backslashes"} | {}, @ti ? {"tabs"} | {}}, "ERROR", " or "), ".  Try \"", strsub(strsub(strsub(strsub(name, " ", "_"), "\"", "'"), "\\", "/"), "\t", "___"), "\" instead.");
     elseif (name == "")
       return tostr("You may not use a blank name.");
     elseif (i = index("*#()", name[1]))

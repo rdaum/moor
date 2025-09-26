@@ -158,6 +158,6 @@ object EXIT
     if (!$string_utils:index_delimited(msg, title))
       msg = tostr(title, " ", msg);
     endif
-    (args[1]):announce_all_but({what}, msg);
+    args[1]:announce_all_but({what}, msg);
   endverb
 endobject

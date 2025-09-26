@@ -552,7 +552,7 @@ object PLAYER
     {record, trust, mistrust} = args;
     s = {this, "???", this};
     for w in (record)
-      if (!valid(s[3]) || (s[3]).wizard || s[3] in trust && !(s[3] in mistrust) || s[1] == this)
+      if (!valid(s[3]) || s[3].wizard || s[3] in trust && !(s[3] in mistrust) || s[1] == this)
         s = w;
       else
         return s;
@@ -585,8 +585,8 @@ object PLAYER
           msg = msg[1..msg_width];
         endif
         s = this:whodunnit(q[1], trust, mistrust);
-        text = valid(s[1]) ? (s[1]).name | "** NONE **";
-        this:notify(tostr($string_utils:left(tostr(length(text) > 13 ? text[1..13] | text, " (", s[1], ")"), 20), $string_utils:left(s[2], 15), $string_utils:left(tostr(length((s[3]).name) > 13 ? (s[3]).name[1..13] | (s[3]).name, " (", s[3], ")"), 20), msg));
+        text = valid(s[1]) ? s[1].name | "** NONE **";
+        this:notify(tostr($string_utils:left(tostr(length(text) > 13 ? text[1..13] | text, " (", s[1], ")"), 20), $string_utils:left(s[2], 15), $string_utils:left(tostr(length(s[3].name) > 13 ? (s[3].name)[1..13] | s[3].name, " (", s[3], ")"), 20), msg));
       endfor
       this:notify("*** finished ***");
     else
@@ -916,7 +916,7 @@ object PLAYER
     else
       who = $command_utils:player_match_result($string_utils:match_player(args), args);
       if (length(who) <= 1)
-        if (!(who[1]))
+        if (!who[1])
           player:notify("Where is who?");
         endif
         return;
@@ -1137,7 +1137,7 @@ object PLAYER
         if (typeof(a) != STR)
           return E_INVARG;
         endif
-        if (!(index(a, " ") || index(a, "	")) && !($player_db:available(a, this) in {this, 1}))
+        if (!(index(a, " ") || index(a, "\t")) && !($player_db:available(a, this) in {this, 1}))
           aliases = setremove(aliases, a);
         endif
       endfor
@@ -1149,7 +1149,7 @@ object PLAYER
         endif
       endfor
       for a in (aliases)
-        if (!(index(a, " ") || index(a, "	")))
+        if (!(index(a, " ") || index(a, "\t")))
           $player_db:insert(a, this);
         endif
       endfor

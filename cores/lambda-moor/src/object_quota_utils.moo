@@ -17,7 +17,7 @@ object OBJECT_QUOTA_UTILS
     if (!caller_perms().wizard)
       return E_PERM;
     else
-      (args[1]).ownership_quota = $wiz_utils.default_player_quota;
+      args[1].ownership_quota = $wiz_utils.default_player_quota;
     endif
   endverb
 
@@ -54,7 +54,7 @@ object OBJECT_QUOTA_UTILS
 
   verb creation_permitted (this none this) owner: HACKER flags: "rxd"
     $recycler:check_quota_scam(args[1]);
-    return (args[1]).ownership_quota > 0;
+    return args[1].ownership_quota > 0;
   endverb
 
   verb "verb_addition_permitted property_addition_permitted" (this none this) owner: HACKER flags: "rxd"
@@ -82,7 +82,7 @@ object OBJECT_QUOTA_UTILS
 
   verb "get_quota quota_remaining" (this none this) owner: HACKER flags: "rxd"
     if ($perm_utils:controls(caller_perms(), args[1]) || caller == this)
-      return (args[1]).ownership_quota;
+      return args[1].ownership_quota;
     else
       return E_PERM;
     endif
@@ -129,6 +129,6 @@ object OBJECT_QUOTA_UTILS
 
   verb can_touch (this none this) owner: HACKER flags: "rxd"
     "Is args[1] permitted to examine args[2]'s quota information?";
-    return (args[1]).wizard;
+    return args[1].wizard;
   endverb
 endobject

@@ -140,7 +140,7 @@ object NOTE_EDITOR
     if (typeof(spec = args[1]) == OBJ)
       text = spec:text();
     else
-      text = `(spec[1]).((spec[2])) ! ANY';
+      text = `spec[1].((spec[2])) ! ANY';
     endif
     if ((tt = typeof(text)) in {ERR, STR} || (tt == LIST && (!text || typeof(text[1]) == STR)))
       return text;
@@ -159,10 +159,10 @@ object NOTE_EDITOR
     if (typeof(spec = args[1]) == OBJ)
       return spec:set_text(args[2]);
     elseif ($object_utils:has_callable_verb(spec[1], "set_" + spec[2]))
-      attempt = (spec[1]):(("set_" + spec[2]))(args[2]);
+      attempt = spec[1]:(("set_" + spec[2]))(args[2]);
     endif
     if (typeof(attempt) == ERR)
-      return `(spec[1]).((spec[2])) = args[2] ! ANY';
+      return `spec[1].((spec[2])) = args[2] ! ANY';
     else
       return attempt;
     endif
@@ -229,7 +229,7 @@ object NOTE_EDITOR
   verb local_editing_info (this none this) owner: HACKER flags: "rxd"
     {what, text} = args;
     cmd = typeof(text) == STR ? "@set-note-string" | "@set-note-text";
-    name = typeof(what) == OBJ ? what.name | tostr((what[1]).name, ".", what[2]);
+    name = typeof(what) == OBJ ? what.name | tostr(what[1].name, ".", what[2]);
     note = typeof(what) == OBJ ? what | tostr(what[1], ".", what[2]);
     return {name, text, tostr(cmd, " ", note)};
   endverb

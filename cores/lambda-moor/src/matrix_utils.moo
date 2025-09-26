@@ -113,7 +113,7 @@ object MATRIX_UTILS
         endfor
         if (lcurr > lresult)
           for m in [lresult + 1..lcurr]
-            results = {@results, -(args[n][m])};
+            results = {@results, -args[n][m]};
             $command_utils:suspend_if_needed(0);
           endfor
         endif
@@ -569,7 +569,7 @@ object MATRIX_UTILS
     endif
     good = bad = 0;
     for n in [1..length(m)]
-      if (!(m[n][n]))
+      if (!m[n][n])
         bad = 1;
       else
         good = 1;

@@ -133,7 +133,7 @@ object MAIL_EDITOR
       this.subjects[who] = subj;
       this.replytos[who] = replyto || {};
       this:load(who, msg);
-      (this.active[who]):tell("Composing ", this:working_on(who));
+      this.active[who]:tell("Composing ", this:working_on(who));
       p = this.active[who];
       "if (p:mail_option(\"enter\") && !args[5])";
       "Changed from above so that @reply can take advantage of @mailoption +enter. Ho_Yan 11/9/94";
@@ -491,7 +491,7 @@ object MAIL_EDITOR
       if ((t = typeof(e = outcomes[r])) == OBJ)
         added = setadd(added, recips[r]);
       else
-        player:tell(verb, " ", (recips[r]).name, " to ", iobj.name, ":  ", e);
+        player:tell(verb, " ", recips[r].name, " to ", iobj.name, ":  ", e);
       endif
     endfor
     if (added)
@@ -516,7 +516,7 @@ object MAIL_EDITOR
     removed = {};
     for r in [1..length(recips)]
       if (typeof(e = outcomes[r]) == ERR)
-        player:tell(verb, " ", (recips[r]).name, " from ", iobj.name, ":  ", e == E_INVARG ? "Not on list." | e);
+        player:tell(verb, " ", recips[r].name, " from ", iobj.name, ":  ", e == E_INVARG ? "Not on list." | e);
       else
         removed = setadd(removed, recips[r]);
       endif

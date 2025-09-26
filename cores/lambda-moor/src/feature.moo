@@ -75,7 +75,7 @@ object FEATURE
   endverb
 
   verb examine_commands_ok (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
-    return this in (args[1]).features;
+    return this in args[1].features;
   endverb
 
   verb set_feature_ok (this none this) owner: HACKER flags: "rxd"
@@ -94,7 +94,7 @@ object FEATURE
       hidden = setadd(hidden, {$thing, verb_info($thing, "drop")[3], {"this", "none", "none"}});
       hidden = setadd(hidden, {$thing, verb_info($thing, "give")[3], {"this", "at/to", "any"}});
     endif
-    if (this.location != (args[1]).location)
+    if (this.location != args[1].location)
       hidden = setadd(hidden, {$thing, verb_info($thing, "get")[3], {"this", "none", "none"}});
     endif
     return hidden;

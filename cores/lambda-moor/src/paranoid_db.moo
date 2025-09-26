@@ -73,7 +73,7 @@ object PARANOID_DB
       lines = this.(l);
       "Icky G7 code copied straight out of $player:tell.";
       if ((len = length(this.(d) = {@data, newdata})) * 2 > lines * 3)
-        this.(d) = this.(d)[len - lines + 1..len];
+        this.(d) = (this.(d))[len - lines + 1..len];
       endif
     else
       return E_PERM;
@@ -167,6 +167,6 @@ object PARANOID_DB
 
   verb is_paranoid (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     "Some people make their .paranoid !r.  Wizardly verb to retrieve value.";
-    return `(args[1]).paranoid ! ANY';
+    return `args[1].paranoid ! ANY';
   endverb
 endobject

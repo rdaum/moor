@@ -676,7 +676,7 @@ object BUILDER
         "iobjstr = \"\\\"\" + iobjstr + \"\\\"\";";
       else
         val = $string_utils:to_value(iobjstr);
-        if (!(val[1]))
+        if (!val[1])
           player:tell("Could not parse: ", iobjstr);
           return;
         elseif (!$object_utils:has_property(dobj, prop))
@@ -812,7 +812,7 @@ object BUILDER
         for x in (what.owned_objects)
           if (!$object_utils:has_property(x, "object_size"))
             nunmeasured = nunmeasured + 1;
-          elseif (!(x.object_size[1]))
+          elseif (!x.object_size[1])
             player:tell("Measured ", $string_utils:nn(x), ":  ", size = $byte_quota_utils:object_bytes(x), " bytes.");
             total = total + size;
           endif

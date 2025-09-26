@@ -242,7 +242,7 @@ object WIZ_UTILS
       else
         player:notify(tostr(victim.name, " was already a child of ", parent(victim).name, " (", parent(victim), ")"));
       endif
-      if (!($mail_agent:send_message(mailfrom, {$new_prog_log, victim}, tostr("@programmer ", victim.name, " (", victim, ")"), tostr("I just gave ", victim.name, " a programmer bit."))[1]))
+      if (!$mail_agent:send_message(mailfrom, {$new_prog_log, victim}, tostr("@programmer ", victim.name, " (", victim, ")"), tostr("I just gave ", victim.name, " a programmer bit."))[1])
         $mail_agent:send_message(mailfrom, {$new_prog_log}, tostr("@programmer ", victim.name, " (", victim, ")"), tostr("I just gave ", victim.name, " a programmer bit."));
       endif
       return 1;
@@ -920,7 +920,7 @@ object WIZ_UTILS
     if (others = $registration_db:find_exact(email))
       player:notify(email + " is the registered address of the following characters:");
       for x in (others)
-        player:notify(tostr(valid(x[1]) ? (x[1]).name | "<recycled>", valid(x[1]) && !is_player(x[1]) ? " {nonplayer}" | "", " (", x[1], ") ", length(x) > 1 ? "[" + tostr(@x[2..$]) + "]" | ""));
+        player:notify(tostr(valid(x[1]) ? x[1].name | "<recycled>", valid(x[1]) && !is_player(x[1]) ? " {nonplayer}" | "", " (", x[1], ") ", length(x) > 1 ? "[" + tostr(@x[2..$]) + "]" | ""));
       endfor
       if (!reason)
         reason = "Already registered.";

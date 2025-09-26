@@ -421,7 +421,7 @@ object PROG
     elseif (dobjstr == "all wizards" && player.wizard)
       tasks = {};
       for t in (queued_tasks())
-        if (valid(t[5]) && (t[5]).wizard)
+        if (valid(t[5]) && t[5].wizard)
           tasks = {@tasks, t};
         endif
         $command_utils:suspend_if_needed(1);
@@ -574,7 +574,7 @@ object PROG
       endfor
     elseif (colon || vrb || whatstr)
       for task in (queued_tasks)
-        if (whatstr == "" || (valid(task[6]) && index((task[6]).name, whatstr) == 1) || (valid(task[9]) && index((task[9]).name, whatstr) == 1) || task[9] == what || task[6] == what && (vrb == "" || index(" " + strsub(task[7], "*", ""), " " + vrb) == 1))
+        if (whatstr == "" || (valid(task[6]) && index(task[6].name, whatstr) == 1) || (valid(task[9]) && index(task[9].name, whatstr) == 1) || task[9] == what || task[6] == what && (vrb == "" || index(" " + strsub(task[7], "*", ""), " " + vrb) == 1))
           `kill_task(task[1]) ! ANY';
           killed = killed + 1;
           if (!quiet)
@@ -668,7 +668,7 @@ object PROG
     code = `verb_code(@from) ! ANY';
     owner = `verb_info(@from)[1] ! ANY';
     if (typeof(code) == ERR)
-      player:notify(tostr("Couldn't retrieve code from ", (from[1]).name, " (", from[1], "):", from[2], " => ", code));
+      player:notify(tostr("Couldn't retrieve code from ", from[1].name, " (", from[1], "):", from[2], " => ", code));
       return;
     endif
     if (owner != player)
@@ -987,7 +987,7 @@ object PROG
         if (inf == E_PERM)
           line = line + "   ** unreadable **";
         else
-          line = $string_utils:left(tostr(line, (inf[1]).name, " (", inf[1], ") "), 53) + ((i = inf[2] in {"x", "xd", "d", "rd"}) ? {" x", " xd", "  d", "r d"}[i] | inf[2]);
+          line = $string_utils:left(tostr(line, inf[1].name, " (", inf[1], ") "), 53) + ((i = inf[2] in {"x", "xd", "d", "rd"}) ? {" x", " xd", "  d", "r d"}[i] | inf[2]);
           vargs = `verb_args(where, short) ! ANY';
           if (vargs != blankargs)
             if (this:display_option("shortprep") && !(vargs[2] in {"any", "none"}))
@@ -1022,7 +1022,7 @@ object PROG
         if (inf == E_PERM)
           this:notify(pname + "   ** unreadable **");
         else
-          oname = (inf[1]).name;
+          oname = inf[1].name;
           truncate_owner_names && (length(oname) > 12 && (oname = oname[1..12]));
           `inf[2][1] != "r" ! E_RANGE => 1' && ((inf[2])[1..0] = " ");
           `inf[2][2] != "w" ! E_RANGE => 1' && ((inf[2])[2..1] = " ");
@@ -1072,7 +1072,7 @@ object PROG
     elseif (!(e = $no_one:eval_d(iobjstr = argstr[$string_utils:word_start(argstr)[(prepstr in args) + 1][1]..$])))
       player:notify(tostr(e));
       return;
-    elseif (!(e[1]))
+    elseif (!e[1])
       player:notify_lines(e[2]);
       return;
     elseif (!(typeof(dblist = e[2]) in {OBJ, LIST}))
@@ -1102,7 +1102,7 @@ object PROG
     if (prepstr == "in")
       pattern = dobjstr;
       objlist = player:eval_cmd_string(iobjstr, 0);
-      if (!(objlist[1]))
+      if (!objlist[1])
         player:notify(tostr("Had trouble reading `", iobjstr, "':  "));
         player:notify_lines(@objlist[2]);
         return;
@@ -1185,7 +1185,7 @@ object PROG
     if (is_player(this) && $perm_utils:controls(caller_perms(), this))
       program = args[1];
       value = $no_one:eval_d(";ticks = ticks_left();" + program + ";return ticks - ticks_left() - 2;");
-      if (!(value[1]))
+      if (!value[1])
         return E_INVARG;
       elseif (typeof(value[2]) == ERR)
         return value[2];
@@ -1676,7 +1676,7 @@ object PROG
     elseif (dobjstr == "all wizards" && player.wizard)
       tasks = {};
       for t in (queued_tasks())
-        if (valid(t[5]) && (t[5]).wizard)
+        if (valid(t[5]) && t[5].wizard)
           tasks = {@tasks, t};
         endif
         $command_utils:suspend_if_needed(1);
