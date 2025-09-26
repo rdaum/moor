@@ -121,7 +121,11 @@ fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<Ve
     };
     match verbspec_result {
         Ok(vs) => Ok(vs),
-        Err(WorldStateError::VerbNotFound(_, _)) => Err(BfErr::Code(E_VERBNF)),
+        Err(WorldStateError::VerbNotFound(_, _)) => {
+            Err(BfErr::ErrValue(E_VERBNF.with_msg(|| {
+                format!("Verb ({}) Not Found", to_literal(&verbspec))
+            })))
+        }
         Err(e) => {
             error!("get_verbdef: unexpected error: {:?}", e);
             Err(BfErr::Code(E_INVIND))
