@@ -1227,7 +1227,7 @@ object FRAND_CLASS
           count = count + 1;
         endif
       endfor
-      if (!(this.refused_actions[i]))
+      if (!this.refused_actions[i])
         this.refused_origins = listdelete(this.refused_origins, i);
         this.refused_actions = listdelete(this.refused_actions, i);
         this.refused_until = listdelete(this.refused_until, i);

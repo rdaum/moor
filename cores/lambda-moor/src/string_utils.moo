@@ -7,7 +7,7 @@ object STRING_UTILS
   property alphabet (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "abcdefghijklmnopqrstuvwxyz";
   property ascii (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
   property digits (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "0123456789";
-  property tab (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "	";
+  property tab (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "\t";
   property use_article_a (owner: HACKER, flags: "r") = {"unit", "unix", "one", "once", "utility"};
   property use_article_an (owner: HACKER, flags: "r") = {};
 
@@ -1280,7 +1280,7 @@ object STRING_UTILS
     y = y[2..$];
     as = y == {} ? "" | c[length(vrb) + 2..$];
     n = 1;
-    while (!((gp = $code_utils:get_prep(@y[n..$]))[1]) && n < length(y))
+    while (!(gp = $code_utils:get_prep(@y[n..$]))[1] && n < length(y))
       n = n + 1;
     endwhile
     "....";
@@ -1566,7 +1566,7 @@ object STRING_UTILS
     titles = $list_utils:map_verb(args[1], "title");
     if (verb[length(verb)] == "c")
       if (titles)
-        titles[1] = (args[1][1]):titlec();
+        titles[1] = args[1][1]:titlec();
       elseif (length(args) > 1)
         args[2] = $string_utils:capitalize(args[2]);
       else

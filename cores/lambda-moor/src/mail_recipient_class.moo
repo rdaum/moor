@@ -44,7 +44,7 @@ object MAIL_RECIPIENT_CLASS
     endif
     if (this:mail_option("netmail"))
       msg = args[1];
-      message = {"Forwarded: " + msg[4], "Original-date: " + ctime(msg[1]), "Original-From: " + msg[2], "Original-To: " + msg[3], "Reply-To: " + $string_utils:substitute((args[2]).name, {{"@", "%"}}) + "@" + $network.moo_name + ".moo.mud.org"};
+      message = {"Forwarded: " + msg[4], "Original-date: " + ctime(msg[1]), "Original-From: " + msg[2], "Original-To: " + msg[3], "Reply-To: " + $string_utils:substitute(args[2].name, {{"@", "%"}}) + "@" + $network.moo_name + ".moo.mud.org"};
       for x in (msg[5..$])
         message = {@message, @$generic_editor:fill_string(x, this:linelen())};
       endfor
@@ -157,7 +157,7 @@ object MAIL_RECIPIENT_CLASS
         "Whoops, this got trashed---fix it up!";
         this.current_message = {0, time(), @this.current_message};
       endif
-      return this.current_message[1..2];
+      return (this.current_message)[1..2];
     elseif (a = $list_utils:assoc(args[1], this.current_message))
       return a[2..3];
     else
@@ -178,7 +178,7 @@ object MAIL_RECIPIENT_CLASS
       if (number != E_NONE)
         this.current_message[1] = number;
       endif
-      return this.current_message[1..2];
+      return (this.current_message)[1..2];
     elseif (i = $list_utils:iassoc(recip, cm))
       if (force)
         "`force' is assumed to come from `@unread'";
@@ -406,7 +406,7 @@ object MAIL_RECIPIENT_CLASS
     if (typeof(h = folder:renumber(cur)) == ERR)
       player:notify(tostr(h));
     else
-      if (!(h[1]))
+      if (!h[1])
         player:notify(tostr("No messages on ", fname, "."));
       else
         player:notify(tostr("Messages on ", fname, " renumbered 1-", h[1], "."));
@@ -476,7 +476,7 @@ object MAIL_RECIPIENT_CLASS
         player:notify_lines({tostr("Usage:  ", verb, " [message-# [on <recipient>]] [flags...]"), "where flags include any of:", "  all        reply to everyone", "  sender     reply to sender only", "  include    include the original message in your reply", "  noinclude  don't include the original in your reply"});
       else
         this:set_current_folder(p[1]);
-        $mail_editor:invoke(2, verb, (p[1]):messages_in_seq(p[2])[1][2], @flags_replytos);
+        $mail_editor:invoke(2, verb, p[1]:messages_in_seq(p[2])[1][2], @flags_replytos);
       endif
     endif
   endverb
@@ -592,7 +592,7 @@ object MAIL_RECIPIENT_CLASS
     endif
     fname = {@args, 0}[1];
     if (!fname)
-      ml = $list_utils:slice(this.current_message[3..$]);
+      ml = $list_utils:slice((this.current_message)[3..$]);
       all_mlists = {@$mail_agent.contents, @this.mail_lists};
       if (length(all_mlists) > 50 && !$command_utils:yes_or_no(tostr("There are ", length(all_mlists), " mailing lists.  Are you sure you want the whole list?")))
         return player:tell("OK, aborting.");
@@ -715,7 +715,7 @@ object MAIL_RECIPIENT_CLASS
             nmsgs = (m = this.messages) && m[length(m)][2][1] > n[3] ? $maxint | 0;
           else
             try
-              nmsgs = (n[1]).last_msg_date > n[3] ? $maxint | 0;
+              nmsgs = n[1].last_msg_date > n[3] ? $maxint | 0;
             except (E_PERM, E_PROPNF)
               player:notify(tostr("Bogus recipient ", rcpt, " removed from .current_message."));
               this.current_message = setremove(this.current_message, n);
@@ -723,7 +723,7 @@ object MAIL_RECIPIENT_CLASS
             endtry
           endif
         else
-          nmsgs = (n[1]):length_date_gt(n[3]);
+          nmsgs = n[1]:length_date_gt(n[3]);
         endif
         if (nmsgs || all)
           which = {@which, {n[1], nmsgs}};
@@ -1170,8 +1170,8 @@ object MAIL_RECIPIENT_CLASS
     cm[1..2] = {{this, @cm[1..2]}};
     for n in (cm)
       if ($mail_agent:is_recipient(n[1]))
-        if (new = (n[1]):length_date_gt(n[3]))
-          next = (n[1]):length_all_msgs() - new + 1;
+        if (new = n[1]:length_date_gt(n[3]))
+          next = n[1]:length_all_msgs() - new + 1;
           this:set_current_folder(folder = n[1]);
           this._mail_task = task_id();
           cur = folder:display_seq_full({next, next + 1}, tostr("Message %d", " on ", $mail_agent:name(folder), ":"));
@@ -1255,7 +1255,7 @@ object MAIL_RECIPIENT_CLASS
       player:notify(tostr("Can't include message on a ", verb));
     else
       this:set_current_folder(p[1]);
-      if (to_subj = $mail_editor:parse_msg_headers((p[1]):messages_in_seq(p[2])[1][2], flags_replytos[1]))
+      if (to_subj = $mail_editor:parse_msg_headers(p[1]:messages_in_seq(p[2])[1][2], flags_replytos[1]))
         player:notify(tostr("To:       ", $mail_agent:name_list(@to_subj[1])));
         if (to_subj[2])
           player:notify(tostr("Subject:  ", to_subj[2]));
@@ -1270,7 +1270,7 @@ object MAIL_RECIPIENT_CLASS
           player:notify(tostr(message));
         elseif (message[1] == "@edit")
           $mail_editor:invoke(1, verb, to_subj[1], @hdrs, message[2]);
-        elseif (!(message[2]))
+        elseif (!message[2])
           player:notify("Blank message not sent.");
         else
           result = $mail_agent:send_message(this, to_subj[1], hdrs, message[2]);
@@ -1546,7 +1546,7 @@ object MAIL_RECIPIENT_CLASS
     for position in ($list_utils:reverse($list_utils:range(allmsgs)))
       time = time() + 60;
       ok = position == allmsgs ? ok | who:parse_message_seq(seq, who:current_message());
-      if (typeof(ok) == STR || !(ok[1]))
+      if (typeof(ok) == STR || !ok[1])
         break;
       elseif (time() > time)
         player:notify("Due to a mysterious time delay (probably incredible lag), your @unsend command has been aborted. Try again later.");

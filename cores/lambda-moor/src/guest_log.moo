@@ -13,7 +13,7 @@ object GUEST_LOG
     ":enter(who,islogin,time,site)";
     "adds an entry to the connection log for a given guest (caller).";
     if ($object_utils:isa(caller, $guest))
-      $guest_log.connections = {{caller, @args}, @$guest_log.connections[1..min($guest_log.max_entries, $)]};
+      $guest_log.connections = {{caller, @args}, @($guest_log.connections)[1..min($guest_log.max_entries, $)]};
     else
       return E_PERM;
     endif
@@ -33,7 +33,7 @@ object GUEST_LOG
       current = {};
       listing = {};
       last = 0;
-      for c in ($guest_log.connections[1..howmany])
+      for c in (($guest_log.connections)[1..howmany])
         if (which && !(c[1] in which))
         elseif (c[2])
           "...login...";
@@ -61,8 +61,8 @@ object GUEST_LOG
       player:notify(su:left(su:left(su:left("-----", 20) + "---------", 36) + "-------------", 52) + "----");
       for l in (listing)
         on = l[3] ? (ct = ctime(l[3]))[1..3] + ct[9..19] | "earlier";
-        off = l[4] > 0 ? (ct = ctime(l[4]))[1..3] + ct[9..19] | "  " + $string_utils:from_seconds(-(l[4]));
-        player:notify(su:left(su:left(su:right(tostr(strsub((l[1]).name, "uest", "."), " (", l[1], ")  "), -20) + on, 36) + off, 52) + l[2]);
+        off = l[4] > 0 ? (ct = ctime(l[4]))[1..3] + ct[9..19] | "  " + $string_utils:from_seconds(-l[4]);
+        player:notify(su:left(su:left(su:right(tostr(strsub(l[1].name, "uest", "."), " (", l[1], ")  "), -20) + on, 36) + off, 52) + l[2]);
         $command_utils:suspend_if_needed(2);
       endfor
     endif

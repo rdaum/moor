@@ -620,7 +620,7 @@ object ROOM
   endverb
 
   verb examine_commands_ok (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
-    return this == (args[1]).location;
+    return this == args[1].location;
   endverb
 
   verb examine_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"

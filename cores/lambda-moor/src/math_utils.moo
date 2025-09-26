@@ -870,7 +870,7 @@ object MATH_UTILS
     bl1 = this:BLFromInt(args[1]);
     blOut = {};
     for i in [1..32]
-      blOut = {@blOut, !(bl1[i])};
+      blOut = {@blOut, !bl1[i]};
     endfor
     return this:IntFromBL(blOut);
   endverb

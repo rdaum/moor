@@ -335,7 +335,7 @@ object BIGLIST
     if ((p = home:_get(tree[1]))[1])
       ik = this:_listfind_nth(p[2], n - 1);
       this:_set_nth(home, p[2][ik[1]], ik[2] + 1, value);
-      if (!(ik[2]))
+      if (!ik[2])
         p[2][ik[1]][3] = home:_ord(value);
         home:_put(tree[1], @p);
       endif
@@ -446,7 +446,7 @@ object BIGLIST
         S = max(llen - 1, (mlen + 1) / 2);
         home:_put(ltree[1], height, mkids[1..S]);
         home:_put(rtree[1], height, mkids[S + 1..$]);
-        xfer = -(lkids[llen][2]);
+        xfer = -lkids[llen][2];
         for k in (mkids[llen..S])
           xfer = xfer + k[2];
         endfor

@@ -110,7 +110,7 @@ object REGISTRATION_DB
     set_task_perms(caller_perms());
     result = {};
     for x in (args[1])
-      name = valid(x[1]) && is_player(x[1]) ? (x[1]).name | "<recycled>";
+      name = valid(x[1]) && is_player(x[1]) ? x[1].name | "<recycled>";
       email = valid(x[1]) && is_player(x[1]) ? $wiz_utils:get_email_address(x[1]) | "<???>";
       result = {@result, tostr("  ", name, " (", x[1], ") current email: ", email, length(x) > 1 ? " [" + x[2] + "]" | "")};
     endfor
@@ -183,7 +183,7 @@ object REGISTRATION_DB
       player:tell("Prune task is ", this.prune_task, ".  Stacktrace:");
       for x in (task_stack(this.prune_task, 1))
         if (valid(x[4]))
-          player:tell(x[4], ":", x[2], " [", x[1], "]  ", (x[3]).name, "  (", x[6], ")");
+          player:tell(x[4], ":", x[2], " [", x[1], "]  ", x[3].name, "  (", x[6], ")");
         endif
       endfor
     else

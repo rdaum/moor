@@ -215,7 +215,7 @@ object HOUSEKEEPER
     endif
     if (i = what in this.clean)
       if (!this:controls(i, who) && valid(this.destination[i]))
-        return tostr($recycler:valid(tr = this.requestors[i]) ? tr.name | "Someone", " already asked that ", what.name, " be kept at ", (this.destination[i]).name, "!");
+        return tostr($recycler:valid(tr = this.requestors[i]) ? tr.name | "Someone", " already asked that ", what.name, " be kept at ", this.destination[i].name, "!");
       endif
       this.requestors[i] = who;
       this.destination[i] = where;
@@ -334,14 +334,14 @@ object HOUSEKEEPER
       return E_PERM;
     else
       set_task_perms(player = args[3]);
-      return (args[1]):moveto(args[2]);
+      return args[1]:moveto(args[2]);
     endif
   endverb
 
   verb ejectit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     "this:ejectit(object,room): Eject args[1] from args[2].  Callable only by housekeeper's quarters verbs.";
     if (caller == this)
-      (args[2]):eject(args[1]);
+      args[2]:eject(args[1]);
     endif
   endverb
 

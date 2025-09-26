@@ -96,19 +96,19 @@ object GOPHER
     "host/port/tag are what you send to the gopher server to get that line";
     "label is <type>/human readable entry";
     {string} = args;
-    tab = index(string, "	");
+    tab = index(string, "\t");
     label = string[1..tab - 1];
     string = string[tab + 1..$];
-    tab = index(string, "	");
+    tab = index(string, "\t");
     tag = string[1..tab - 1];
     string = string[tab + 1..$];
-    tab = index(string, "	");
+    tab = index(string, "\t");
     host = string[1..tab - 1];
     if (host[$] == ".")
       host = host[1..$ - 1];
     endif
     string = string[tab + 1..$];
-    tab = index(string, "	");
+    tab = index(string, "\t");
     port = toint(tab ? string[1..tab - 1] | string);
     return {host, port, tag, label};
     "ignore extra material after port, if any";
@@ -192,7 +192,7 @@ object GOPHER
         label = label[2..$];
         if (type == "menu")
         elseif (type == "search")
-          label = "<" + (parse[3])[rindex(parse[3], "	") + 1..$] + "> " + label;
+          label = "<" + (parse[3])[rindex(parse[3], "\t") + 1..$] + "> " + label;
         else
           label = type + ": " + label;
         endif
@@ -264,11 +264,11 @@ object GOPHER
   verb unparse (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     "unparse(host, port, tag, label) => string";
     {host, port, tag, label} = args;
-    if (tab = index(tag, "	"))
+    if (tab = index(tag, "\t"))
       "remove search terms from search nodes";
       tag = tag[1..tab - 1];
     endif
-    return tostr(label, "	", tag, "	", host, "	", port);
+    return tostr(label, "\t", tag, "\t", host, "\t", port);
   endverb
 
   verb interpret_error (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"

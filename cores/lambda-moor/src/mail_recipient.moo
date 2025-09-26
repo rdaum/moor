@@ -122,7 +122,7 @@ object MAIL_RECIPIENT
   endverb
 
   verb mail_notify (this none this) owner: HACKER flags: "rxd"
-    if (args && !this:is_usable_by(args[1]) && !(args[1]).wizard)
+    if (args && !this:is_usable_by(args[1]) && !args[1].wizard)
       return this:moderator_notify(@args);
     else
       return this.(verb);
@@ -130,7 +130,7 @@ object MAIL_RECIPIENT
   endverb
 
   verb mail_forward (this none this) owner: HACKER flags: "rxd"
-    if (args && !this:is_usable_by(args[1]) && !(args[1]).wizard)
+    if (args && !this:is_usable_by(args[1]) && !args[1].wizard)
       return this:moderator_forward(@args);
     elseif (typeof(mf = this.(verb)) == STR)
       return $string_utils:pronoun_sub(mf, @args);
@@ -268,12 +268,12 @@ object MAIL_RECIPIENT
 
   verb ok (this none this) owner: HACKER flags: "rxd"
     ":ok(caller,callerperms) => true iff caller can do read operations";
-    return args[1] in {this, $mail_agent} || ((args[2]).wizard || this:is_readable_by(args[2]));
+    return args[1] in {this, $mail_agent} || (args[2].wizard || this:is_readable_by(args[2]));
   endverb
 
   verb ok_write (this none this) owner: HACKER flags: "rxd"
     ":ok_write(caller,callerperms) => true iff caller can do write operations";
-    return args[1] in {this, $mail_agent} || ((args[2]).wizard || this:is_writable_by(args[2]));
+    return args[1] in {this, $mail_agent} || (args[2].wizard || this:is_writable_by(args[2]));
   endverb
 
   verb "parse_message_seq from_msg_seq %from_msg_seq to_msg_seq %to_msg_seq subject_msg_seq body_msg_seq kept_msg_seq unkept_msg_seq display_seq_headers display_seq_full messages_in_seq list_rmm new_message_num length_num_le length_date_le length_all_msgs exists_num_eq msg_seq_to_msg_num_list msg_seq_to_msg_num_string" (this none this) owner: HACKER flags: "rxd"
@@ -635,7 +635,7 @@ object MAIL_RECIPIENT
 
   verb ok_annotate (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     ":ok_annotate(caller,callerperms) => true iff caller can do annotations";
-    return args[1] in {this, $mail_agent} || ((args[2]).wizard || this:is_annotatable_by(args[2]));
+    return args[1] in {this, $mail_agent} || (args[2].wizard || this:is_annotatable_by(args[2]));
   endverb
 
   verb annotate_message_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"

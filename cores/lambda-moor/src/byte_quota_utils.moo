@@ -98,8 +98,8 @@ object BYTE_QUOTA_UTILS
     if (!caller_perms().wizard)
       return E_PERM;
     else
-      (args[1]).size_quota = this.default_quota;
-      (args[1]).ownership_quota = this.large_negative_number;
+      args[1].size_quota = this.default_quota;
+      args[1].ownership_quota = this.large_negative_number;
     endif
   endverb
 
@@ -149,7 +149,7 @@ object BYTE_QUOTA_UTILS
     if (caller != this && !caller_perms().wizard)
       return E_PERM;
     else
-      (args[1]).ownership_quota = 1;
+      args[1].ownership_quota = 1;
     endif
   endverb
 
@@ -157,7 +157,7 @@ object BYTE_QUOTA_UTILS
     if (caller != this && !caller_perms().wizard)
       return E_PERM;
     else
-      (args[1]).ownership_quota = this.large_negative_number;
+      args[1].ownership_quota = this.large_negative_number;
     endif
   endverb
 
@@ -257,7 +257,7 @@ object BYTE_QUOTA_UTILS
   endverb
 
   verb get_quota (this none this) owner: HACKER flags: "rxd"
-    return (args[1]).size_quota[1];
+    return args[1].size_quota[1];
   endverb
 
   verb charge_quota (this none this) owner: HACKER flags: "rxd"
@@ -303,7 +303,7 @@ object BYTE_QUOTA_UTILS
     "Set args[1]'s quota to args[2]";
     if (caller_perms().wizard || caller == this || this:can_touch(caller_perms()))
       "Size_quota[1] is the total quota permitted.";
-      return (args[1]).size_quota[1] = args[2];
+      return args[1].size_quota[1] = args[2];
     else
       return E_PERM;
     endif
@@ -528,7 +528,7 @@ object BYTE_QUOTA_UTILS
   endverb
 
   verb can_touch (this none this) owner: HACKER flags: "rxd"
-    return (args[1]).wizard;
+    return args[1].wizard;
   endverb
 
   verb do_breakdown (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
@@ -750,6 +750,6 @@ object BYTE_QUOTA_UTILS
   verb property_exists (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     "this:property_exists(object, property)";
     " => does the specified property exist?";
-    return !!`property_info(@args) ! ANY';
+    return !(!`property_info(@args) ! ANY');
   endverb
 endobject

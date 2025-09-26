@@ -102,7 +102,7 @@ object LIST_EDITOR
         player:tell("Line ", start, ":  ", debris);
         return;
       endif
-      if (!(debris[1]))
+      if (!debris[1])
         debris = listdelete(debris, 1);
       endif
       newlines = {};
@@ -182,7 +182,7 @@ object LIST_EDITOR
       return E_PERM;
     endif
     set_task_perms(player);
-    return (args[1]).((args[2]));
+    return args[1].((args[2]));
   endverb
 
   verb set_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
@@ -207,7 +207,7 @@ object LIST_EDITOR
     line = su:triml(args[2]);
     indent = length(args[2]) - length(line);
     if (line[1] == "@")
-      if (!((splicee = $no_one:eval("{" + line[2..length(line)] + "}"))[1]))
+      if (!(splicee = $no_one:eval("{" + line[2..length(line)] + "}"))[1])
         return "Can't eval what's after the @.";
       endif
       newlines = this:explode_list(indent + 1, splicee[2]);
@@ -226,7 +226,7 @@ object LIST_EDITOR
       else
         return args;
       endif
-    elseif (!((v = $no_one:eval(line))[1]))
+    elseif (!(v = $no_one:eval(line))[1])
       return "Can't eval this line.";
     else
       newlines = {@this:explode_list(indent + 2, v[2]), su:space(indent) + "}"};
@@ -304,12 +304,12 @@ object LIST_EDITOR
         elseif (char == "\"")
           curstr = line[2..length(line)];
         elseif (char == "@")
-          if (!((v = $no_one:eval("{" + line[2..length(line)] + "}"))[1]))
+          if (!(v = $no_one:eval("{" + line[2..length(line)] + "}"))[1])
             return {i, "Can't eval what's after the @"};
           endif
           curlist = {@curlist, @v[2]};
         else
-          if (!((v = $no_one:eval(line))[1]))
+          if (!(v = $no_one:eval(line))[1])
             return {i, "Can't eval this line"};
           endif
           curlist = {@curlist, v[2]};

@@ -29,7 +29,7 @@ object WIZ
     endif
     set_task_perms(player);
     args = setremove(args, "to");
-    if (length(args) != 2 || !(args[2]))
+    if (length(args) != 2 || !args[2])
       player:notify(tostr("Usage:  ", verb, " <object-or-property-or-verb> <owner>"));
       return;
     endif
@@ -120,7 +120,7 @@ object WIZ
     endif
     if (verb == "@transfer")
       objlist = player:eval_cmd_string(dobjstr, 0);
-      if (!(objlist[1]))
+      if (!objlist[1])
         player:notify(tostr("Had trouble reading `", dobjstr, "': "));
         player:notify_lines(@objlist[2]);
         return;
@@ -308,7 +308,7 @@ object WIZ
         info = verb_info(o, j);
         if (i = info[1] in owners_original)
           info[1] = owners_incore[i];
-        elseif (valid(info[1]) && (info[1]).wizard)
+        elseif (valid(info[1]) && info[1].wizard)
           info[1] = player;
         else
           info[1] = $hacker;
@@ -326,7 +326,7 @@ object WIZ
         info = property_info(o, p);
         if (i = info[1] in owners_original)
           info[1] = owners_incore[i];
-        elseif (valid(info[1]) && (info[1]).wizard)
+        elseif (valid(info[1]) && info[1].wizard)
           info[1] = player;
         else
           info[1] = $hacker;
@@ -444,9 +444,9 @@ object WIZ
     player:notify(tostr("*** Recycling from #", end, " ..."));
     suspend(0);
     fork (0)
-    try
+      try
         this:mcd_2(core_variant, saved, saved_props, skipped_parents);
-    finally
+      finally
         if (!queued_tasks() && `this.__mcd__save ! E_PROPNF => 0')
           "...use raw notify since we have no idea what will be b0rken";
           notify(player, "Core database extraction failed.");
@@ -1135,7 +1135,7 @@ object WIZ
     endif
     target = fw[1];
     if (fw[2] && (parse = this:parse_templist_duration(fw[2]))[1])
-      if (typeof(parse[3]) == ERR || !(parse[3]))
+      if (typeof(parse[3]) == ERR || !parse[3])
         player:notify(tostr("Could not parse the duration for @", which, "ing site \"", target, "\""));
         return;
       endif
@@ -1168,7 +1168,7 @@ object WIZ
       return;
     endif
     entrylist = setremove(entrylist, target);
-    if (!((result = this:check_site_entries(undo, which, target, is_literal, entrylist))[1]))
+    if (!(result = this:check_site_entries(undo, which, target, is_literal, entrylist))[1])
       return;
     endif
     rm = result[2];
@@ -1199,7 +1199,7 @@ object WIZ
     if (en = $list_utils:assoc(target, tempentrylist))
       tempentrylist = setremove(tempentrylist, en);
     endif
-    if (!((result = this:check_site_entries(undo, which, target, is_literal, $list_utils:slice(tempentrylist)))[1]))
+    if (!(result = this:check_site_entries(undo, which, target, is_literal, $list_utils:slice(tempentrylist)))[1])
       return;
     endif
     rmtemp = result[2];
@@ -1414,7 +1414,7 @@ object WIZ
     endif
     fw = $string_utils:first_word(argstr);
     if (fw[2] && (parse = this:parse_templist_duration(fw[2]))[1])
-      if (typeof(parse[3]) == ERR || !(parse[3]))
+      if (typeof(parse[3]) == ERR || !parse[3])
         player:notify(tostr("Could not parse the duration for restricting programming for ", fw[1], "."));
         return;
       endif

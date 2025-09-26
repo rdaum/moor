@@ -503,7 +503,7 @@ object LOGIN
     ":blacklisted(hostname) => is hostname on the .blacklist";
     ":graylisted(hostname)  => is hostname on the .graylist";
     ":redlisted(hostname)   => is hostname on the .redlist";
-    sitelist = this.(this:listname(verb));
+    sitelist = this.((this:listname(verb)));
     if (!caller_perms().wizard)
       return E_PERM;
     elseif ((hostname = args[1]) in sitelist[1] || hostname in sitelist[2])
@@ -615,7 +615,7 @@ object LOGIN
       return E_PERM;
     endif
     lag = time() - this.last_lag_sample - 15;
-    this.lag_samples = {lag, @this.lag_samples[1..3]};
+    this.lag_samples = {lag, @(this.lag_samples)[1..3]};
     "Now compute the current lag and store it in a property, instead of computing it in :current_lag, which is called a hundred times a second.";
     thislag = max(0, time() - this.last_lag_sample - this.lag_sample_interval);
     if (thislag > 60 * 60)
@@ -815,7 +815,7 @@ object LOGIN
     "Called by #0:server_started when the server restarts.";
     if (caller_perms().wizard)
       this.lag_samples = {0, 0, 0, 0, 0};
-      this.downtimes = {{time(), this.last_lag_sample}, @this.downtimes[1..min($, 100)]};
+      this.downtimes = {{time(), this.last_lag_sample}, @(this.downtimes)[1..min($, 100)]};
       this.intercepted_players = this.intercepted_actions = {};
       this.checkpoint_in_progress = 0;
     endif

@@ -270,7 +270,7 @@ object BIG_MAIL_RECIPIENT
     len = 0;
     getmsg = this.summary_uses_body ? "_message_text" | "_message_hdr";
     going = this.messages_going;
-    if (going && (!(going[1]) || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == INT))
       kept = {@going[1], $maxint};
       going = going[2];
     else
@@ -311,7 +311,7 @@ object BIG_MAIL_RECIPIENT
     "OLD: {{n,msgs},{n,msgs},...}";
     "NEW: {kept_seq, {{n,msgs},{n,msgs},...}}";
     going = this.messages_going;
-    if (going && (!(going[1]) || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == INT))
       kept = going[1];
       going = going[2];
     else
@@ -334,7 +334,7 @@ object BIG_MAIL_RECIPIENT
     endif
     len = 0;
     going = this.messages_going;
-    if (going && (!(going[1]) || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == INT))
       going = going[2];
     endif
     for s in (going)

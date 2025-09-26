@@ -202,7 +202,7 @@ object MAIL_AGENT
             for r in (listdelete(b, 1))
               mnums = {@mnums, (rn = r in actual_rcpts) && results[rn]};
             endfor
-            (b[1]):notify_mail(from, listdelete(b, 1), mnums);
+            b[1]:notify_mail(from, listdelete(b, 1), mnums);
           endif
         endfor
       endfork
@@ -307,7 +307,7 @@ object MAIL_AGENT
     if (valid(o = $string_utils:literal_object(string)) && $mail_recipient in $object_utils:ancestors(o))
       return o;
     elseif (rp = this:reserved_pattern(string))
-      return (rp[2]):match_mail_recipient(string);
+      return rp[2]:match_mail_recipient(string);
     else
       if (valid(who = {@args, player}[2]) && typeof(use = `who.mail_lists ! E_PROPNF, E_PERM') == LIST)
         use = {@this.contents, @use};
@@ -446,7 +446,7 @@ object MAIL_AGENT
     "This is the standard routine for parsing address lists that appear in From:, To: and Reply-To: lines";
     objects = {};
     string = args[1];
-    while (m = match(string, "(#[0-9A-F\-]+)"))
+    while (m = match(string, "(#[0-9A-F-]+)"))
       {s, e} = m[1..2];
       if (#0 != (o = toobj(string[s + 1..e - 1])))
         objects = {@objects, o};
@@ -541,7 +541,7 @@ object MAIL_AGENT
     "there are two possible formats here:";
     "OLD: {{n,msgs},{n,msgs},...}";
     "NEW: {kept_seq, {{n,msgs},{n,msgs},...}}";
-    if (going && (!(going[1]) || typeof(going[1][2]) == INT))
+    if (going && (!going[1] || typeof(going[1][2]) == INT))
       kept = going[1];
       going = going[2];
     else
@@ -567,7 +567,7 @@ object MAIL_AGENT
     "... both return the number of messages in .messages_going.";
     set_task_perms(caller_perms());
     cmg = caller.messages_going;
-    if (cmg && (!(cmg[1]) || typeof(cmg[1][2]) == INT))
+    if (cmg && (!cmg[1] || typeof(cmg[1][2]) == INT))
       kept = cmg[1];
       cmg = cmg[2];
     else
@@ -666,7 +666,7 @@ object MAIL_AGENT
       c = player:ctime(args[1]);
       date = c[5..11] + c[21..25];
     else
-      date = player:ctime(args[1])[5..16];
+      date = (player:ctime(args[1]))[5..16];
     endif
     from = args[2];
     if (args[4] != " ")
@@ -901,7 +901,7 @@ object MAIL_AGENT
     set_task_perms(caller_perms());
     new = (msgs = caller.messages) ? msgs[$][1] + 1 | 1;
     if (rmsgs = caller.messages_going)
-      if (!(rmsgs[1]) || typeof(rmsgs[1][2]) == INT)
+      if (!rmsgs[1] || typeof(rmsgs[1][2]) == INT)
         rmsgs = rmsgs[2];
       endif
       lbrm = rmsgs[$][2];
@@ -1143,7 +1143,7 @@ object MAIL_AGENT
     if (typeof(msgs = args[1]) != LIST)
       return caller.messages[msgs];
     elseif (length(msgs) == 2)
-      return caller.messages[msgs[1]..msgs[2] - 1];
+      return (caller.messages)[msgs[1]..msgs[2] - 1];
     else
       return $seq_utils:extract(msgs, caller.messages);
     endif

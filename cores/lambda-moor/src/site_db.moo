@@ -216,7 +216,7 @@ object SITE_DB
       player:tell("Prune task is ", this.prune_task, ".  Stacktrace:");
       for x in (task_stack(this.prune_task, 1))
         if (valid(x[4]))
-          player:tell(x[4], ":", x[2], " [", x[1], "]  ", (x[3]).name, "  (", x[6], ")");
+          player:tell(x[4], ":", x[2], " [", x[1], "]  ", x[3].name, "  (", x[6], ")");
         endif
       endfor
     else

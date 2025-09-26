@@ -67,7 +67,7 @@ object NEW_PROG_LOG
           c = player:ctime(ldate);
           date = c[5..11] + c[21..25];
         else
-          date = player:ctime(ldate)[5..16];
+          date = (player:ctime(ldate))[5..16];
         endif
         hdr = tostr(ctime(ldate)[5..16], "   ", $string_utils:left(tostr(x[2][4], " (", x[2][3], ")"), 30), valid(w = x[2][2]) ? w.name | "??", " (", x[2][2], ")");
       endif

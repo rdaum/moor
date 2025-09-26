@@ -87,6 +87,7 @@ object CODE_UTILS
     E_INVARG,
     E_QUOTA,
     E_FLOAT
+  
   };
   property error_names (owner: HACKER, flags: "rc") = {
     "E_NONE",
@@ -239,7 +240,7 @@ object CODE_UTILS
       "For UUID format, call built-in toobj directly - it should handle UUID parsing";
       return toobj(s);
     endif
-    "Try integer pattern";  
+    "Try integer pattern";
     pcre_result = pcre_match(s, "^#[-+]?[0-9]+$");
     if (pcre_result)
       return toobj(s);
@@ -303,7 +304,7 @@ object CODE_UTILS
       if (!valid(vals[i]))
         val = "*** NONE ***";
       else
-        val = (vals[i]).name + " (" + tostr(vals[i]) + ")";
+        val = vals[i].name + " (" + tostr(vals[i]) + ")";
       endif
       player:notify(tostr(names[i], ":      "[1..12 - length(names[i])], val));
     endfor
@@ -549,7 +550,7 @@ object CODE_UTILS
     elseif (nargs < 2 || args[2] in {"none", "any"})
       verbargs = args[1..min(3, nargs)];
       rest = args[4..nargs];
-    elseif (!((gp = $code_utils:get_prep(@args[2..nargs]))[1]))
+    elseif (!(gp = $code_utils:get_prep(@args[2..nargs]))[1])
       return tostr("\"", args[2], "\" is not a valid preposition.");
     else
       verbargs = {ds, @gp[1..min(2, nargs = length(gp))]};
@@ -1114,7 +1115,7 @@ object CODE_UTILS
     for lst in ({@idles, @offs})
       $command_utils:suspend_if_needed(0);
       p = lst[3];
-      namestr = tostr(p.name[1..min(max_name, $)], " (", p, ")");
+      namestr = tostr((p.name)[1..min(max_name, $)], " (", p, ")");
       name_width = max(length(namestr), name_width);
       names = {@names, namestr};
       if (typeof(wlm = `p.location:who_location_msg(p) ! ANY') != STR)
@@ -1148,8 +1149,8 @@ object CODE_UTILS
         endif
         l = {names[i], su:from_seconds(lst[2]), su:from_seconds(lst[1]), locations[i]};
       else
-        lct = (offs[i - ilen][3]).last_connect_time;
-        ldt = (offs[i - ilen][3]).last_disconnect_time;
+        lct = offs[i - ilen][3].last_connect_time;
+        ldt = offs[i - ilen][3].last_disconnect_time;
         ctime = `caller:ctime(ldt) ! ANY => 0' || ctime(ldt);
         l = {names[i], lct <= time() ? ctime | "Never", "", locations[i]};
         if (i == ilen + 1 && idles)
@@ -1379,7 +1380,7 @@ object CODE_UTILS
     widths = {numwidth, verbwidth, numwidth, numwidth, numwidth};
     top = l = between = "";
     for x in [1..5]
-      top = top + between + su:left({"This", "Verb", "Permissions", "VerbLocation", "Player"}[x], -(widths[x]));
+      top = top + between + su:left({"This", "Verb", "Permissions", "VerbLocation", "Player"}[x], -widths[x]);
       l = l + between + su:space(widths[x], "-");
       between = " ";
     endfor
@@ -1390,7 +1391,7 @@ object CODE_UTILS
       for bit in [1..5]
         $command_utils:suspend_if_needed(3);
         "bit == 2 below for verb: append line number.";
-        output = {@output, su:left(typeof(word = line[bit]) == STR ? bit == 2 ? tostr(word, "(", `line[6] ! ANY => 0', ")") | word | tostr(word, "(", valid(word) ? lu:shortest({word.name, @word.aliases}) | (word == $nothing ? "invalid" | (word == $ambiguous_match ? "ambiguous match" | "Error")), ")"), -(widths[bit])), " "};
+        output = {@output, su:left(typeof(word = line[bit]) == STR ? bit == 2 ? tostr(word, "(", `line[6] ! ANY => 0', ")") | word | tostr(word, "(", valid(word) ? lu:shortest({word.name, @word.aliases}) | (word == $nothing ? "invalid" | (word == $ambiguous_match ? "ambiguous match" | "Error")), ")"), -widths[bit]), " "};
       endfor
       text = listappend(text, su:trimr(tostr(@output)));
     endfor

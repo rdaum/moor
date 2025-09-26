@@ -22,6 +22,6 @@ object GARBAGE
   endverb
 
   verb do_examine (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
-    (args[1]):notify(tostr(this, " is a garbage object, ready for reuse."));
+    args[1]:notify(tostr(this, " is a garbage object, ready for reuse."));
   endverb
 endobject

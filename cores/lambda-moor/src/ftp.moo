@@ -80,7 +80,7 @@ object FTP
   endverb
 
   verb controls (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
-    return (args[1]).wizard || {@$list_utils:assoc(args[2], this.connections), 0, 0}[2] == args[1];
+    return args[1].wizard || {@$list_utils:assoc(args[2], this.connections), 0, 0}[2] == args[1];
   endverb
 
   verb get_messages (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
@@ -155,7 +155,7 @@ object FTP
   endverb
 
   verb trusted (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
-    return (args[1]).wizard || (typeof(this.trusted) == LIST ? args[1] in this.trusted | this.trusted);
+    return args[1].wizard || (typeof(this.trusted) == LIST ? args[1] in this.trusted | this.trusted);
   endverb
 
   verb listen (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"

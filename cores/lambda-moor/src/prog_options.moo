@@ -42,7 +42,7 @@ object PROG_OPTIONS
 
   verb actual (this none this) owner: HACKER flags: "rxd"
     if (i = args[1] in {"list_numbers"})
-      return {{{"list_no_numbers"}[i], !(args[2])}};
+      return {{{"list_no_numbers"}[i], !args[2]}};
     else
       return {args};
     endif

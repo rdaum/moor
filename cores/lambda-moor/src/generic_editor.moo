@@ -215,7 +215,7 @@ object GENERIC_EDITOR
       player:tell_lines((text = this.texts[who])[from = range[1]..to = range[2]]);
       player:tell("---Line", to > from ? "s" | "", " deleted.  Insertion point is before line ", from, ".");
       this.texts[who] = {@text[1..from - 1], @text[to + 1..$]};
-      if (!(this.changes[who]))
+      if (!this.changes[who])
         this.changes[who] = 1;
         this.times[who] = time();
       endif
@@ -300,7 +300,7 @@ object GENERIC_EDITOR
         this.texts[who] = newtext;
         this.inserting[who] = ins;
       endif
-      if (!(this.changes[who]))
+      if (!this.changes[who])
         this.changes[who] = 1;
         this.times[who] = time();
       endif
@@ -377,7 +377,7 @@ object GENERIC_EDITOR
   endverb
 
   verb abort (none none none) owner: #96 flags: "rd"
-    if (!(this.changes[who = player in this.active]))
+    if (!this.changes[who = player in this.active])
       player:tell("No changes to throw away.  Editor cleared.");
     else
       player:tell("Throwing away session for ", this:working_on(who), ".");
@@ -447,7 +447,7 @@ object GENERIC_EDITOR
   endverb
 
   verb set_changed (this none this) owner: #96 flags: "rxd"
-    return this:ok(who = args[1]) && ((unchanged = !(args[2])) || (this.times[who] = time()) && (this.changes[who] = !unchanged));
+    return this:ok(who = args[1]) && ((unchanged = !args[2]) || (this.times[who] = time()) && (this.changes[who] = !unchanged));
   endverb
 
   verb origin (this none this) owner: #96 flags: "rxd"
@@ -463,7 +463,7 @@ object GENERIC_EDITOR
   endverb
 
   verb set_readable (this none this) owner: #96 flags: "rxd"
-    return this:ok(who = args[1]) && (this.readable[who] = !!(args[2]));
+    return this:ok(who = args[1]) && (this.readable[who] = !(!args[2]));
   endverb
 
   verb text (this none this) owner: #96 flags: "rxd"
@@ -521,7 +521,7 @@ object GENERIC_EDITOR
     if (typeof(args[1]) != INT)
       args = {player in this.active, @args};
     endif
-    {who, lines, ?quiet = (this.active[who]):edit_option("quiet_insert")} = args;
+    {who, lines, ?quiet = this.active[who]:edit_option("quiet_insert")} = args;
     if (!(fuckup = this:ok(who)))
       return fuckup;
     elseif (typeof(text = this.texts[who]) != LIST)
@@ -535,7 +535,7 @@ object GENERIC_EDITOR
       this.texts[who] = {@text[1..insert - 1], @lines, @text[insert..$]};
       this.inserting[who] = insert + length(lines);
       if (lines)
-        if (!(this.changes[who]))
+        if (!this.changes[who])
           this.changes[who] = 1;
           this.times[who] = time();
         endif
@@ -568,7 +568,7 @@ object GENERIC_EDITOR
       return E_NONE;
     else
       this.texts[who][append] = text[append] + string;
-      if (!(this.changes[who]))
+      if (!this.changes[who])
         this.changes[who] = 1;
         this.times[who] = time();
       endif
@@ -603,7 +603,7 @@ object GENERIC_EDITOR
       if ((insert = this.inserting[who]) > from)
         this.inserting[who] = insert <= to ? from + 1 | insert - to + from;
       endif
-      if (!(this.changes[who]))
+      if (!this.changes[who])
         this.changes[who] = 1;
         this.times[who] = time();
       endif
@@ -1420,7 +1420,7 @@ object GENERIC_EDITOR
         player:tell("No changes in line", from == to ? tostr(" ", from) | tostr("s ", from, "-", to), ".");
       else
         this.texts[who] = {@text[1..from - 1], @munged, @text[to + 1..$]};
-        if (!(this.changes[who]))
+        if (!this.changes[who])
           this.changes[who] = 1;
           this.times[who] = time();
         endif

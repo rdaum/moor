@@ -702,7 +702,7 @@ object CONVERT_UTILS
       if (pair[2] > 0)
         top = tostr(top, " ", pair[1], pair[2] > 1 ? pair[2] | "");
       elseif (pair[2] < 0)
-        bottom = tostr(bottom, " ", pair[1], pair[2] < -1 ? -(pair[2]) | "");
+        bottom = tostr(bottom, " ", pair[1], pair[2] < -1 ? -pair[2] | "");
       endif
     endfor
     if (bottom)
