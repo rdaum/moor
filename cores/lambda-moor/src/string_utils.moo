@@ -1246,8 +1246,10 @@ object STRING_UTILS
     thing = args[1];
     if (!thing)
       return "missing value";
-    elseif (match(thing, "^#?[-+]?[0-9]+ *$"))
-      return thing[1] == "#" ? toobj(thing) | toint(thing);
+    elseif ($code_utils:match_objid(thing))
+      return toobj(thing);
+    elseif (match(thing, "^[-+]?[0-9]+ *$"))
+      return toint(thing);
     elseif (match(thing, "^[-+]?%([0-9]+%.[0-9]*%|[0-9]*%.[0-9]+%)%(e[-+]?[0-9]+%)? *$"))
       "matches 2. .2 3.2 3.2e3 .2e-3 3.e3";
       return `tofloat(thing) ! E_INVARG => tostr("Bad floating point value: ", thing)';

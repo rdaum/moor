@@ -254,7 +254,7 @@ object CODE_UTILS
     "Uses pcre_match for reliable pattern matching";
     s = args[1];
     "Try UUID pattern first (more specific)";
-    pcre_result = pcre_match(s, "^(#[0-9A-Fa-f]{6}-[0-9A-Fa-f]{10})$");
+    pcre_result = pcre_match(s, "^(#[0-9A-Fa-f]{6}-[0-9A-Fa-f]{10}) *$");
     if (pcre_result)
       "Convert pcre_match result to match() format";
       match_text = pcre_result[1]["0"]["match"];
@@ -263,7 +263,7 @@ object CODE_UTILS
       return {match_start, match_end, {{0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, s};
     endif
     "Try integer pattern with pcre_match";
-    pcre_result = pcre_match(s, "^(#[-+]?[0-9]+)$");
+    pcre_result = pcre_match(s, "^(#[-+]?[0-9]+) *$");
     if (pcre_result)
       "Convert pcre_match result to match() format";
       match_text = pcre_result[1]["0"]["match"];
