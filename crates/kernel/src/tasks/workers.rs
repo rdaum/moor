@@ -40,7 +40,7 @@ pub enum WorkerResponse {
     },
     Response {
         request_id: Uuid,
-        response: Vec<Var>,
+        response: Var,
     },
     /// Response containing worker information.
     WorkersInfo {

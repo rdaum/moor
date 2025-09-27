@@ -120,7 +120,7 @@ async fn perform_http_request(
     _perms: Obj,
     arguments: Vec<Var>,
     timeout: Option<std::time::Duration>,
-) -> Result<Vec<Var>, WorkerError> {
+) -> Result<Var, WorkerError> {
     if arguments.len() < 2 {
         return Err(WorkerError::RequestError(
             "At least two arguments are required".to_string(),
@@ -298,5 +298,5 @@ async fn perform_http_request(
 
     let body = v_str(body.as_str());
 
-    Ok(vec![status_code, headers, body])
+    Ok(v_list(&[status_code, headers, body]))
 }

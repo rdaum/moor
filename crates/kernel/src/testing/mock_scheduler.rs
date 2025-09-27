@@ -264,7 +264,7 @@ impl MockScheduler {
         self.pending_worker_requests.lock().unwrap().push(request);
     }
 
-    pub fn simulate_worker_response(&self, request_id: Uuid, response: Vec<Var>) {
+    pub fn simulate_worker_response(&self, request_id: Uuid, response: Var) {
         let worker_response = WorkerResponse::Response {
             request_id,
             response,
@@ -710,7 +710,7 @@ mod tests {
         let worker_receiver = scheduler.take_worker_receiver().unwrap();
 
         let request_id = Uuid::new_v4();
-        let expected_response = vec![v_str("worker computation result")];
+        let expected_response = v_str("worker computation result");
 
         // Simulate worker responding to a request
         scheduler.simulate_worker_response(request_id, expected_response.clone());

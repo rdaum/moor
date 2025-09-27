@@ -64,7 +64,7 @@ use moor_textdump::{TextdumpWriter, make_textdump};
 use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, v_bool_int, v_error};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
-use moor_var::{SYSTEM_OBJECT, v_list};
+use moor_var::SYSTEM_OBJECT;
 use std::collections::HashMap;
 
 /// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
@@ -1440,7 +1440,7 @@ impl Scheduler {
             WorkerResponse::Response {
                 request_id,
                 response,
-            } => (request_id, v_list(&response)),
+            } => (request_id, response),
             WorkerResponse::WorkersInfo {
                 request_id: _,
                 workers_info: _,

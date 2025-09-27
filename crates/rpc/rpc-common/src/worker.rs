@@ -54,7 +54,7 @@ pub enum WorkerToDaemonMessage {
     /// Detach this worker from the daemon.
     DetachWorker(WorkerToken),
     /// Return the results of a daemon initiated request.
-    RequestResult(WorkerToken, #[bincode(with_serde)] Uuid, Vec<Var>),
+    RequestResult(WorkerToken, #[bincode(with_serde)] Uuid, Var),
     /// Return an error from a daemon initiated request.
     RequestError(WorkerToken, #[bincode(with_serde)] Uuid, WorkerError),
 }

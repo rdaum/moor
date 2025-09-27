@@ -47,7 +47,7 @@ where
         + Send
         + Sync
         + 'static,
-    Fut: Future<Output = Result<Vec<Var>, WorkerError>> + Send + 'static + Sync,
+    Fut: Future<Output = Result<Var, WorkerError>> + Send + 'static + Sync,
 {
     let zmq_ctx = tmq::Context::new();
 
@@ -109,7 +109,7 @@ async fn process<ProcessFunc, Fut>(
         + Send
         + Sync
         + 'static,
-    Fut: Future<Output = Result<Vec<Var>, WorkerError>> + Send + 'static + Sync,
+    Fut: Future<Output = Result<Var, WorkerError>> + Send + 'static + Sync,
 {
     let rpc_request_sock = request(&zmq_ctx)
         .set_rcvtimeo(100)
