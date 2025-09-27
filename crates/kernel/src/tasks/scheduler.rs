@@ -61,10 +61,10 @@ use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object, dump_object};
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
+use moor_var::SYSTEM_OBJECT;
 use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, v_bool_int, v_error};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
-use moor_var::SYSTEM_OBJECT;
 use std::collections::HashMap;
 
 /// If a task is retried more than N number of times (due to commit conflict) we choose to abort.

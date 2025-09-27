@@ -315,11 +315,18 @@ pub fn moo_frame_execute(
                 let end_val = f.pop();
                 let start_val = f.pop();
 
-                // Validate range values are integers or objects
-                if !start_val.is_scalar() || !end_val.is_scalar() {
-                    return ExecutionResult::RaiseError(
-                        E_TYPE.msg("invalid range type in for loop"),
-                    );
+                // Validate range values are integers, floats, or objects
+                let valid_types = matches!(
+                    (start_val.variant(), end_val.variant()),
+                    (Variant::Int(_), Variant::Int(_))
+                        | (Variant::Float(_), Variant::Float(_))
+                        | (Variant::Obj(_), Variant::Obj(_))
+                );
+
+                if !valid_types {
+                    return ExecutionResult::RaiseError(E_TYPE.msg(
+                        "for-range requires matching types (both INT, both FLOAT, or both OBJ)",
+                    ));
                 }
 
                 // If start > end, jump to end immediately (empty range)
@@ -361,8 +368,46 @@ pub fn moo_frame_execute(
                 let current_val = current_value.clone();
                 let loop_var = *loop_variable;
 
-                // Increment for next iteration
-                *current_value = current_val.add(&v_int(1)).unwrap();
+                // Increment for next iteration with type-specific logic and overflow protection
+                let next_value = match current_val.variant() {
+                    Variant::Int(i) => {
+                        // Check for integer overflow
+                        if *i == i64::MAX {
+                            // Decrement end_value instead to avoid overflow
+                            *end_value = match end_value.variant() {
+                                Variant::Int(e) if *e > i64::MIN => v_int(e - 1),
+                                _ => end_value.clone(),
+                            };
+                            current_val.clone()
+                        } else {
+                            v_int(i + 1)
+                        }
+                    }
+                    Variant::Float(f_val) => v_float(f_val + 1.0),
+                    Variant::Obj(o) => {
+                        // Check for object ID overflow (32-bit signed)
+                        let obj_id = o.id().0;
+                        if obj_id == i32::MAX {
+                            // Decrement end_value instead to avoid overflow
+                            *end_value = match end_value.variant() {
+                                Variant::Obj(e) if e.id().0 > i32::MIN => {
+                                    v_obj(Obj::mk_id(e.id().0 - 1))
+                                }
+                                _ => end_value.clone(),
+                            };
+                            current_val.clone()
+                        } else {
+                            v_obj(Obj::mk_id(obj_id + 1))
+                        }
+                    }
+                    _ => {
+                        // This shouldn't happen due to validation in BeginForRange
+                        return ExecutionResult::RaiseError(
+                            E_TYPE.msg("invalid type in for-range iteration"),
+                        );
+                    }
+                };
+                *current_value = next_value;
 
                 f.set_variable(&loop_var, current_val);
             }

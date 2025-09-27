@@ -2389,6 +2389,70 @@ mod tests {
     }
 
     #[test]
+    fn test_for_range_with_objects() {
+        // Test object range iteration
+        let program = r#"x = {}; for o in [#1..#5]; x = {@x, o}; endfor; return x;"#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should return {#1, #2, #3, #4, #5}
+        assert_eq!(
+            result,
+            Ok(v_list(&[
+                v_obj(Obj::mk_id(1)),
+                v_obj(Obj::mk_id(2)),
+                v_obj(Obj::mk_id(3)),
+                v_obj(Obj::mk_id(4)),
+                v_obj(Obj::mk_id(5))
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_for_range_with_floats() {
+        // Test for-range loops with floats
+        let program = r#"x = {}; for f in [1.0..3.0]; x = {@x, f}; endfor; return x;"#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Should return {1.0, 2.0, 3.0}
+        assert_eq!(
+            result,
+            Ok(v_list(&[v_float(1.0), v_float(2.0), v_float(3.0)]))
+        );
+    }
+
+    #[test]
+    fn test_for_range_type_mismatch() {
+        // Test that mixing types in for-range is an error
+        let program = r#"for x in [1..#5]; return x; endfor"#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        // Should throw E_TYPE exception
+        assert!(matches!(result, Err(e) if e.error == E_TYPE));
+    }
+
+    #[test]
     fn test_scatter_multiple_optionals_regression() {
         // Regression test for scatter assignment with multiple optional parameters
         // Bug: When there are multiple optionals and not all values are provided,
