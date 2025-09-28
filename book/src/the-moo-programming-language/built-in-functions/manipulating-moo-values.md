@@ -80,10 +80,10 @@ int toint(value)
 Converts the given MOO value into an integer and returns that integer.
 
 Floating-point numbers are rounded toward zero, truncating their fractional parts. Object numbers are converted into the
-equivalent integers. Strings are parsed as the decimal encoding of a real number which is then converted to an integer.
-Errors are converted into integers obeying the same ordering (with respect to `<=` as the errors themselves. `toint()`
-raises `E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number,
-then `toint()` returns 0.
+equivalent integers. Strings are trimmed and parsed as the decimal encoding of a real number which is then converted to
+an integer. Errors are converted into integers obeying the same ordering (with respect to `<=` as the errors themselves.
+`toint()` raises `E_TYPE` if value is a list. If value is a string but the string does not contain a
+syntactically-correct number, then `toint()` returns 0.
 
 ```
 toint(34.7)        =>   34
@@ -120,10 +120,10 @@ float tofloat(value)
 
 Converts the given MOO value into a floating-point number and returns that number.
 
-Integers and object numbers are converted into the corresponding integral floating-point numbers. Strings are parsed as
-the decimal encoding of a real number which is then represented as closely as possible as a floating-point number.
-Errors are first converted to integers as in `toint()` and then converted as integers are. `tofloat()` raises `E_TYPE`
-if value is a list. If value is a string but the string does not contain a syntactically-correct number, then
+Integers and object numbers are converted into the corresponding integral floating-point numbers. Strings are trimmed
+and parsed as the decimal encoding of a real number which is then represented as closely as possible as a floating-point
+number. Errors are first converted to integers as in `toint()` and then converted as integers are. `tofloat()` raises
+`E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number, then
 `tofloat()` returns 0.
 
 ```
@@ -178,13 +178,3 @@ str value_hmac(value, STR key [, STR algo [, binary]])
 Returns the same string as string_hmac(toliteral(value), key)
 
 See the description of string_hmac() for details.
-
-
-
-
-
-
-
-
-
-

@@ -135,7 +135,7 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
         }
         Variant::Str(s) => {
-            let i = s.as_str().parse::<f64>();
+            let i = s.as_str().trim().parse::<f64>();
             match i {
                 Ok(i) => Ok(Ret(v_int(i as i64))),
                 Err(_) => Ok(Ret(v_int(0))),
@@ -192,7 +192,7 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
         }
         Variant::Str(s) => {
-            let i = s.as_str().parse::<i32>();
+            let i = s.as_str().trim().parse::<i32>();
             match i {
                 Ok(i) => Ok(Ret(v_objid(i))),
                 Err(_) => Ok(Ret(v_objid(0))),
@@ -217,7 +217,7 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
         Variant::Float(f) => Ok(Ret(v_float(*f))),
         Variant::Str(s) => {
-            let f = s.as_str().parse::<f64>();
+            let f = s.as_str().trim().parse::<f64>();
             match f {
                 Ok(f) => Ok(Ret(v_float(f))),
                 Err(_) => Ok(Ret(v_float(0.0))),
