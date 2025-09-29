@@ -649,13 +649,13 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
         Some(msg.to_string())
     } else {
-        None
+        err.msg.as_deref().cloned()
     };
 
     let value = if bf_args.args.len() > 2 {
         Some(bf_args.args[2].clone())
     } else {
-        None
+        err.value.as_deref().cloned()
     };
 
     Err(BfErr::Raise(Error::new(err.err_type, msg, value)))
