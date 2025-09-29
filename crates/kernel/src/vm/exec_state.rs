@@ -51,6 +51,8 @@ pub(crate) struct VMExecState {
     pub(crate) start_time: Option<SystemTime>,
     /// The amount of time the task is allowed to run.
     pub(crate) maximum_time: Option<Duration>,
+    /// Pending error to raise when execution resumes
+    pub(crate) pending_raise_error: Option<moor_var::Error>,
 
     unsync: PhantomUnsync,
 }
@@ -65,6 +67,7 @@ impl VMExecState {
             max_ticks,
             tick_slice: 0,
             maximum_time: None,
+            pending_raise_error: None,
             unsync: Default::default(),
         }
     }

@@ -61,11 +61,20 @@ use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object, dump_object};
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::SYSTEM_OBJECT;
-use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, v_bool_int, v_error};
+use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, v_bool_int};
+use moor_var::{Error, SYSTEM_OBJECT};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use std::collections::HashMap;
+
+/// Action to take when resuming a suspended task
+#[derive(Debug, Clone)]
+pub enum ResumeAction {
+    /// Resume with a return value (normal case)
+    Return(Var),
+    /// Resume and immediately raise an error
+    Raise(Error),
+}
 
 /// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
 // TODO: we could also look into some exponential-ish backoff
@@ -245,7 +254,7 @@ impl Scheduler {
                     let task_id = sr.task.task_id;
                     if let Err(e) = self.task_q.resume_task_thread(
                         sr.task,
-                        v_int(0),
+                        ResumeAction::Return(v_int(0)),
                         sr.session,
                         sr.result_sender,
                         &self.task_control_sender,
@@ -582,7 +591,7 @@ impl Scheduler {
                 // Wake and bake.
                 let response = task_q.resume_task_thread(
                     sr.task,
-                    input,
+                    ResumeAction::Return(input),
                     sr.session,
                     sr.result_sender,
                     &self.task_control_sender,
@@ -1261,11 +1270,7 @@ impl Scheduler {
         }
     }
 
-    fn handle_switch_player(
-        &mut self,
-        task_id: TaskId,
-        new_player: Obj,
-    ) -> Result<(), moor_var::Error> {
+    fn handle_switch_player(&mut self, task_id: TaskId, new_player: Obj) -> Result<(), Error> {
         // Get the current task to access its session
         let Some(task) = self.task_q.active.get_mut(&task_id) else {
             return Err(E_INVARG.with_msg(|| "Task not found for switch_player".to_string()));
@@ -1295,7 +1300,7 @@ impl Scheduler {
         Ok(())
     }
 
-    fn handle_dump_object(&self, obj: Obj) -> Result<Vec<String>, moor_var::Error> {
+    fn handle_dump_object(&self, obj: Obj) -> Result<Vec<String>, Error> {
         // Create a snapshot to avoid blocking ongoing operations
         let snapshot = self.database.create_snapshot().map_err(|e| {
             E_INVARG.with_msg(|| format!("Failed to create database snapshot: {e:?}"))
@@ -1317,7 +1322,7 @@ impl Scheduler {
         &self,
         object_definition: String,
         options: moor_objdef::ObjDefLoaderOptions,
-    ) -> Result<moor_objdef::ObjDefLoaderResults, moor_var::Error> {
+    ) -> Result<moor_objdef::ObjDefLoaderResults, Error> {
         // Get a loader client from the database
         let loader_client = self
             .database
@@ -1398,7 +1403,7 @@ impl Scheduler {
         if let Some(sr) = self.task_q.suspended.remove_task(task_id) {
             if let Err(e) = self.task_q.resume_task_thread(
                 sr.task,
-                v_int(0),
+                ResumeAction::Return(v_int(0)),
                 sr.session,
                 sr.result_sender,
                 &self.task_control_sender,
@@ -1414,33 +1419,24 @@ impl Scheduler {
     }
 
     fn handle_worker_response(&mut self, worker_response: WorkerResponse) {
-        let (request_id, response_value) = match worker_response {
+        let (request_id, resume_action) = match worker_response {
             WorkerResponse::Error { request_id, error } => {
+                let err_msg = error.to_string();
                 let err = match error {
-                    WorkerError::PermissionDenied(e) => E_PERM.with_msg(|| e),
-                    WorkerError::NoWorkerAvailable(e) => E_TYPE.with_msg(|| e.to_string()),
-                    WorkerError::InvalidRequest(e) => {
-                        E_INVARG.with_msg(|| format!("Invalid request: {e}"))
-                    }
-                    WorkerError::InternalError(e) => {
-                        E_EXEC.with_msg(|| format!("Internal error: {e}"))
-                    }
-                    WorkerError::RequestTimedOut(e) => {
-                        E_QUOTA.with_msg(|| format!("Request timed out: {e}"))
-                    }
-                    WorkerError::RequestError(e) => {
-                        E_INVARG.with_msg(|| format!("Request error: {e}"))
-                    }
-                    WorkerError::WorkerDetached(e) => {
-                        E_EXEC.with_msg(|| format!("Worker detached: {e}"))
-                    }
+                    WorkerError::PermissionDenied(_) => E_PERM.msg(err_msg),
+                    WorkerError::NoWorkerAvailable(_) => E_TYPE.msg(err_msg),
+                    WorkerError::InvalidRequest(_) => E_INVARG.msg(err_msg),
+                    WorkerError::InternalError(_) => E_EXEC.msg(err_msg),
+                    WorkerError::RequestTimedOut(_) => E_QUOTA.msg(err_msg),
+                    WorkerError::RequestError(_) => E_INVARG.msg(err_msg),
+                    WorkerError::WorkerDetached(_) => E_EXEC.msg(err_msg),
                 };
-                (request_id, v_error(err))
+                (request_id, ResumeAction::Raise(err))
             }
             WorkerResponse::Response {
                 request_id,
                 response,
-            } => (request_id, response),
+            } => (request_id, ResumeAction::Return(response)),
             WorkerResponse::WorkersInfo {
                 request_id: _,
                 workers_info: _,
@@ -1463,7 +1459,7 @@ impl Scheduler {
 
         if let Err(e) = self.task_q.resume_task_thread(
             sr.task,
-            response_value,
+            resume_action,
             sr.session,
             sr.result_sender,
             &self.task_control_sender,
@@ -2187,7 +2183,7 @@ impl TaskQ {
     fn resume_task_thread(
         &mut self,
         mut task: Box<Task>,
-        resume_val: Var,
+        resume_action: ResumeAction,
         session: Arc<dyn Session>,
         result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
@@ -2228,7 +2224,17 @@ impl TaskQ {
         };
 
         self.active.insert(task_id, task_control);
-        task.vm_host.resume_execution(resume_val);
+
+        // Handle the resume action: either return a value or raise an error
+        match resume_action {
+            ResumeAction::Return(value) => {
+                task.vm_host.resume_execution(value);
+            }
+            ResumeAction::Raise(error) => {
+                task.vm_host.resume_with_error(error);
+            }
+        }
+
         let control_sender = control_sender.clone();
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         self.thread_pool.spawn(move || {
@@ -2466,7 +2472,7 @@ impl TaskQ {
         if self
             .resume_task_thread(
                 sr.task,
-                return_value,
+                ResumeAction::Return(return_value),
                 sr.session,
                 sr.result_sender,
                 control_sender,

@@ -290,8 +290,14 @@ impl VmHost {
         // Grant the loop its next tick slice.
         self.vm_exec_state.tick_slice = self.max_ticks - self.vm_exec_state.tick_count;
 
-        // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
-        let mut result = self.run_interpreter(&exec_params, session);
+        // Check if we have a pending error to raise (from worker error handling)
+        let mut result = if let Some(pending_error) = self.vm_exec_state.pending_raise_error.take()
+        {
+            self.vm_exec_state.raise_error(pending_error)
+        } else {
+            // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
+            self.run_interpreter(&exec_params, session)
+        };
         while self.is_running() {
             match result {
                 ExecutionResult::More => return ContinueOk,
@@ -495,6 +501,27 @@ impl VmHost {
         }
 
         debug!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
+    }
+
+    /// Resume execution by raising an error (for worker error conditions)
+    pub fn resume_with_error(&mut self, error: moor_var::Error) {
+        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.tick_count = 0;
+        self.running = true;
+
+        // Emit task resume trace event
+        #[cfg(feature = "trace_events")]
+        emit_trace_event(TraceEventType::TaskResume {
+            task_id: self.vm_exec_state.task_id,
+        });
+
+        // Set pending error to be raised when execution starts
+        self.vm_exec_state.pending_raise_error = Some(error);
+
+        debug!(
+            task_id = self.vm_exec_state.task_id,
+            "Resuming VMHost with error"
+        );
     }
 
     /// Get a copy of the current VM state, for later restoration.
