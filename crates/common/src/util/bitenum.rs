@@ -12,8 +12,10 @@
 //
 
 use binary_layout::LayoutAs;
-use std::marker::PhantomData;
-use std::ops::{BitOr, BitOrAssign};
+use std::{
+    marker::PhantomData,
+    ops::{BitOr, BitOrAssign},
+};
 
 use moor_var::encode::{DecodingError, EncodingError};
 

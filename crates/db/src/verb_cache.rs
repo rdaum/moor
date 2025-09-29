@@ -14,9 +14,11 @@
 use ahash::AHasher;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
-use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    hash::BuildHasherDefault,
+    sync::{Arc, Mutex},
+};
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u64.
 /// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()

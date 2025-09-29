@@ -380,8 +380,10 @@ fn add_metadata_events(trace_file: &mut TraceFile, start_time: u64) {
 /// Get the current OS thread ID as a u64
 #[cfg(feature = "trace_events")]
 fn current_thread_id() -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
 
     // Get the current thread ID and hash it to a u64
     let thread_id = std::thread::current().id();
@@ -1282,8 +1284,10 @@ macro_rules! trace_task_suspend_with_delay {
     ($task_id:expr, $delay:expr) => {
         #[cfg(feature = "trace_events")]
         {
-            use $crate::tracing_events::{TraceEventType, emit_trace_event};
-            use $crate::vm::TaskSuspend;
+            use $crate::{
+                tracing_events::{TraceEventType, emit_trace_event},
+                vm::TaskSuspend,
+            };
             let reason = match $delay {
                 TaskSuspend::Commit => "Commit".to_string(),
                 TaskSuspend::Timed(d) => format!("Timed({:?})", d),

@@ -13,8 +13,7 @@
 
 //! Builtin functions for flyweight manipulation and introspection.
 
-use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_PERM, E_TYPE, Sequence, v_flyweight, v_map, v_sym};
 

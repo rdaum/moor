@@ -13,25 +13,20 @@
 
 //! VM testing utilities for executing verbs, eval, and forks in test environments
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use moor_common::model::WorldState;
 use moor_compiler::Program;
-use moor_var::{List, SYSTEM_OBJECT};
-use moor_var::{Obj, Var};
-use moor_var::{Symbol, v_obj};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
 
-use crate::config::FeaturesConfig;
-use crate::task_context::TaskGuard;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::vm::VMHostResponse;
-use crate::vm::VerbCall;
-use crate::vm::builtins::BuiltinRegistry;
-use crate::vm::vm_host::VmHost;
+use crate::{
+    config::FeaturesConfig,
+    task_context::TaskGuard,
+    tasks::task_scheduler_client::TaskSchedulerClient,
+    vm::{VMHostResponse, VerbCall, builtins::BuiltinRegistry, vm_host::VmHost},
+};
 
-use moor_common::tasks::Exception;
-use moor_common::tasks::Session;
+use moor_common::tasks::{Exception, Session};
 
 pub type ExecResult = Result<Var, Exception>;
 

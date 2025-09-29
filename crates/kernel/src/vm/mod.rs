@@ -17,11 +17,12 @@ use bincode::{Decode, Encode};
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
-use moor_var::program::names::Name;
-use moor_var::{List, Obj, Symbol, Var};
+use moor_var::{List, Obj, Symbol, Var, program::names::Name};
 
-use crate::vm::activation::{Activation, Frame};
-use crate::vm::moo_frame::{MooStackFrame, ScopeType};
+use crate::vm::{
+    activation::{Activation, Frame},
+    moo_frame::{MooStackFrame, ScopeType},
+};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 

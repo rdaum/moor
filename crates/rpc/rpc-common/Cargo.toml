@@ -21,7 +21,8 @@ clap.workspace = true
 clap_derive.workspace = true
 
 # Serialization & Data Formats
-bincode.workspace = true
+byteview.workspace = true
+planus.workspace = true
 serde.workspace = true
 
 # Authentication & Security

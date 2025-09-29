@@ -13,9 +13,11 @@
 
 use crate::{BenchmarkResult, TableFormatter, add_session_result};
 use minstant;
-use std::hint::black_box;
-use std::io::{self, Write};
-use std::time::Duration;
+use std::{
+    hint::black_box,
+    io::{self, Write},
+    time::Duration,
+};
 
 #[cfg(target_os = "linux")]
 use perf_event::{Builder, events::Hardware};

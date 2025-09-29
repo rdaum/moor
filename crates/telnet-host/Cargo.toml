@@ -46,6 +46,7 @@ clap_derive.workspace = true
 figment.workspace = true
 
 # Serialization & Data Formats
+planus.workspace = true
 serde.workspace = true
 
 # Networking & Communication

@@ -13,14 +13,18 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::tx_management::indexes::{HashRelationIndex, RelationIndex};
-use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
-use crate::tx_management::{Canonical, Error, Provider, Timestamp, Tx};
+use crate::tx_management::{
+    Canonical, Error, Provider, Timestamp, Tx,
+    indexes::{HashRelationIndex, RelationIndex},
+    relation_tx::{OpType, RelationTransaction, WorkingSet},
+};
 use minstant::Instant;
 use moor_var::Symbol;
-use std::hash::Hash;
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
-use std::time::Duration;
+use std::{
+    hash::Hash,
+    sync::{Arc, RwLock, RwLockWriteGuard},
+    time::Duration,
+};
 use tracing::warn;
 
 /// Represents the current "canonical" state of a relation.
@@ -323,8 +327,10 @@ mod tests {
     use super::*;
 
     use crate::tx_management::Tx;
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestDomain(u64);

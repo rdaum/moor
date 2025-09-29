@@ -15,16 +15,17 @@
 //! Provides RAII-based transaction management with automatic cleanup.
 //! Contains WorldState, TaskSchedulerClient, task_id, player objid, and Session.
 
-use std::cell::RefCell;
-use std::sync::Arc;
+use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "trace_events")]
 use std::collections::hash_map::DefaultHasher;
 #[cfg(feature = "trace_events")]
 use std::hash::{Hash, Hasher};
 
-use moor_common::model::{CommitResult, WorldState, WorldStateError};
-use moor_common::tasks::{Session, TaskId};
+use moor_common::{
+    model::{CommitResult, WorldState, WorldStateError},
+    tasks::{Session, TaskId},
+};
 use moor_var::Obj;
 
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;

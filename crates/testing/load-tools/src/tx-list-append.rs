@@ -28,24 +28,22 @@ use crate::setup::{
 use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use futures::{StreamExt, stream::FuturesUnordered};
 use moor_common::model::ObjectRef;
 use moor_var::{List, Obj, Sequence, Symbol, Var, v_int, v_list};
-use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_async_client::start_host_session;
-use rpc_common::DaemonToClientReply::TaskSubmitted;
-use rpc_common::client_args::RpcClientArgs;
-use rpc_common::make_host_token;
+use planus::ReadAsRoot;
+use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
 use rpc_common::{
-    AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult, load_keypair,
+    AuthToken, ClientToken, HostType, client_args::RpcClientArgs, flatbuffers_generated::moor_rpc,
+    load_keypair, make_host_token, mk_invoke_verb_msg,
 };
 use setup::ExecutionContext;
-use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::PathBuf,
+    sync::{Arc, atomic::AtomicBool},
+    time::{Duration, Instant},
+};
 use tmq::request;
 use tokio::sync::{Mutex, Notify};
 
@@ -276,42 +274,62 @@ async fn workload(
         // Are we doing a read or a write workload?
         let is_read = rand::random::<bool>();
 
-        let response = rpc_client
-            .make_client_rpc_call(
-                client_id,
-                HostClientToDaemonMessage::InvokeVerb(
-                    client_token.clone(),
-                    auth_token.clone(),
-                    ObjectRef::Id(connection_oid),
-                    if is_read {
-                        Symbol::mk("read_workload")
-                    } else {
-                        Symbol::mk("write_workload")
-                    },
-                    vec![v_list(&prop_keys)],
-                ),
-            )
+        let verb_name = if is_read {
+            Symbol::mk("read_workload")
+        } else {
+            Symbol::mk("write_workload")
+        };
+
+        let args_list = v_list(&prop_keys);
+        let invoke_msg = mk_invoke_verb_msg(
+            &client_token,
+            &auth_token,
+            &ObjectRef::Id(connection_oid),
+            &verb_name,
+            vec![&args_list],
+        )
+        .expect("Failed to create invoke_verb message");
+
+        let reply_bytes = rpc_client
+            .make_client_rpc_call(client_id, invoke_msg)
             .await
             .expect("Unable to send call request to RPC server");
 
-        let task_id = match response {
-            ReplyResult::HostSuccess(hs) => {
-                panic!("Unexpected host message: {hs:?}");
+        let reply =
+            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+
+        let task_id = match reply.result().expect("Failed to get reply result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Failed to get daemon reply");
+                match daemon_reply
+                    .reply()
+                    .expect("Failed to get daemon reply union")
+                {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        task_submitted.task_id().expect("Failed to get task_id")
+                    }
+                    other => panic!("Unexpected client result in call: {other:?}"),
+                }
             }
-            ReplyResult::ClientSuccess(TaskSubmitted(submitted_task_id)) => submitted_task_id,
-            ReplyResult::ClientSuccess(e) => {
-                panic!("Unexpected client result in call: {e:?}");
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error = failure.error().expect("Failed to get error");
+                let error_msg = error
+                    .message()
+                    .expect("Failed to get error message")
+                    .unwrap_or("Unknown error");
+                panic!("RPC failure in call: {error_msg}");
             }
-            ReplyResult::Failure(e) => {
-                panic!("RPC failure in call: {e}");
-            }
+            other => panic!("Unexpected reply result: {other:?}"),
         };
 
-        let result =
-            wait_for_task_completion(task_id, task_results.clone(), Duration::from_secs(5))
-                .await
-                .expect("Failed to get task completion")
-                .expect("Task results not found");
+        let result = wait_for_task_completion(
+            task_id as usize,
+            task_results.clone(),
+            Duration::from_secs(5),
+        )
+        .await
+        .expect("Failed to get task completion")
+        .expect("Task results not found");
 
         // For our workload this should be a list, and if it isn't there's something messed up!
         let Some(result) = result.as_list() else {

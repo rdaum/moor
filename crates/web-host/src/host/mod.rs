@@ -17,20 +17,15 @@ mod verbs;
 pub mod web_host;
 mod ws_connection;
 
-pub use auth::connect_auth_handler;
-pub use auth::create_auth_handler;
+pub use auth::{connect_auth_handler, create_auth_handler};
 use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str};
-pub use props::properties_handler;
-pub use props::property_retrieval_handler;
+pub use props::{properties_handler, property_retrieval_handler};
 use serde::Serialize;
 use serde_derive::Deserialize;
 use serde_json::{Number, json};
-pub use verbs::verb_program_handler;
-pub use verbs::verb_retrieval_handler;
-pub use verbs::verbs_handler;
-pub use web_host::WebHost;
+pub use verbs::{verb_program_handler, verb_retrieval_handler, verbs_handler};
 pub use web_host::{
-    dismiss_presentation_handler, eval_handler, history_handler, invoke_verb_handler,
+    WebHost, dismiss_presentation_handler, eval_handler, history_handler, invoke_verb_handler,
     presentations_handler, resolve_objref_handler, system_property_handler,
     ws_connect_attach_handler, ws_create_attach_handler,
 };

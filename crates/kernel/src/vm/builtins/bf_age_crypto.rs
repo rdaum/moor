@@ -13,8 +13,7 @@
 
 //! Builtin functions for Age encryption (modern file encryption).
 
-use std::io::Write;
-use std::str::FromStr;
+use std::{io::Write, str::FromStr};
 
 use age::{
     Decryptor, Encryptor, Recipient as AgeRecipient,
@@ -26,12 +25,11 @@ use ssh_key::public::PublicKey;
 use std::io::Read;
 use tracing::{error, warn};
 
-use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::{
+    BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err,
+};
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, Sequence};
-use moor_var::{E_INVARG, E_TYPE, Variant};
-use moor_var::{v_list, v_string};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_list, v_string};
 
 /// MOO: `list age_generate_keypair()`
 /// Generates a new X25519 keypair for age encryption. Programmer-only function.

@@ -12,19 +12,15 @@
 //
 
 use flume::Sender;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use uuid::Uuid;
 
 use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_compiler::{Program, compile};
 use moor_var::{List, Obj, Symbol, Var};
 
-use crate::config::FeaturesConfig;
-use crate::tasks::TaskHandle;
-use moor_common::tasks::SchedulerError;
-use moor_common::tasks::SchedulerError::CompilationError;
-use moor_common::tasks::Session;
+use crate::{config::FeaturesConfig, tasks::TaskHandle};
+use moor_common::tasks::{SchedulerError, SchedulerError::CompilationError, Session};
 
 /// Garbage collection statistics
 #[derive(Debug, Clone)]

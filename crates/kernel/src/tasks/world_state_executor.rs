@@ -11,21 +11,26 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::matching::ObjectNameMatcher;
-use moor_common::matching::complex_object_matcher::ComplexObjectNameMatcher;
-use moor_common::matching::ws_match_env::WsMatchEnv;
-use moor_common::model::{
-    CommitResult, HasUuid, ObjectRef, ValSet, VerbAttrs, WorldState, WorldStateError,
+use moor_common::{
+    matching::{
+        ObjectNameMatcher, complex_object_matcher::ComplexObjectNameMatcher,
+        ws_match_env::WsMatchEnv,
+    },
+    model::{CommitResult, HasUuid, ObjectRef, ValSet, VerbAttrs, WorldState, WorldStateError},
+    tasks::{
+        CommandError, SchedulerError,
+        SchedulerError::{CommandExecutionError, VerbProgramFailed},
+        VerbProgramError,
+    },
 };
-use moor_common::tasks::SchedulerError::{CommandExecutionError, VerbProgramFailed};
-use moor_common::tasks::{CommandError, SchedulerError, VerbProgramError};
 use moor_compiler::{compile, program_to_tree, unparse};
-use moor_var::program::ProgramType;
-use moor_var::{E_INVIND, Obj, SYSTEM_OBJECT, v_err, v_obj};
+use moor_var::{E_INVIND, Obj, SYSTEM_OBJECT, program::ProgramType, v_err, v_obj};
 use std::sync::Arc;
 
-use crate::config::Config;
-use crate::tasks::world_state_action::{WorldStateAction, WorldStateResult};
+use crate::{
+    config::Config,
+    tasks::world_state_action::{WorldStateAction, WorldStateResult},
+};
 
 /// Executes WorldStateActions within a transaction.
 /// Takes ownership of a transaction and executes actions within it.

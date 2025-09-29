@@ -16,19 +16,22 @@
 use crate::listen::Listeners;
 use clap::Parser;
 use clap_derive::Parser;
-use figment::Figment;
-use figment::providers::{Format, Serialized, Yaml};
+use figment::{
+    Figment,
+    providers::{Format, Serialized, Yaml},
+};
 use moor_var::SYSTEM_OBJECT;
 use rpc_async_client::{process_hosts_events, start_host_session};
-use rpc_common::client_args::RpcClientArgs;
-use rpc_common::make_host_token;
-use rpc_common::{HostType, load_keypair};
+use rpc_common::{HostType, client_args::RpcClientArgs, load_keypair, make_host_token};
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use tokio::select;
-use tokio::signal::unix::{SignalKind, signal};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, atomic::AtomicBool},
+};
+use tokio::{
+    select,
+    signal::unix::{SignalKind, signal},
+};
 use tracing::{error, info};
 
 mod connection;

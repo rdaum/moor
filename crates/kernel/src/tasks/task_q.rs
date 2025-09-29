@@ -12,27 +12,31 @@
 //
 
 use ahash::AHasher;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use flume::{Receiver, Sender};
-use hierarchical_hash_wheel_timer::wheels::TimerEntryWithDelay;
-use hierarchical_hash_wheel_timer::wheels::quad_wheel::{PruneDecision, QuadWheelWithOverflow};
+use hierarchical_hash_wheel_timer::wheels::{
+    TimerEntryWithDelay,
+    quad_wheel::{PruneDecision, QuadWheelWithOverflow},
+};
 use minstant::Instant;
 use rayon::ThreadPool;
-use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    hash::BuildHasherDefault,
+    sync::{Arc, atomic::AtomicBool},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_var::Obj;
 
-use crate::tasks::task::Task;
-use crate::vm::extract_anonymous_refs_from_vm_exec_state;
+use crate::{tasks::task::Task, vm::extract_anonymous_refs_from_vm_exec_state};
 
 /// Timer entry for the hash wheel timer
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,8 +51,7 @@ impl TimerEntryWithDelay for TimerEntry {
     }
 }
 use crate::tasks::{TaskDescription, TaskResult, TaskStart, TasksDb};
-use moor_common::tasks::{NoopClientSession, Session, SessionFactory};
-use moor_common::tasks::{SchedulerError, TaskId};
+use moor_common::tasks::{NoopClientSession, SchedulerError, Session, SessionFactory, TaskId};
 
 /// The internal state of the task queue.
 pub struct TaskQ {

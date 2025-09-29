@@ -14,8 +14,7 @@
 use crate::model::ValSet;
 use bincode::{Decode, Encode};
 use itertools::Itertools;
-use moor_var::AsByteBuffer;
-use moor_var::{BincodeAsByteBufferExt, Symbol};
+use moor_var::{AsByteBuffer, BincodeAsByteBufferExt, Symbol};
 use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
 

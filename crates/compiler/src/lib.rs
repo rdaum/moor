@@ -28,18 +28,22 @@ mod var_scope;
 #[cfg(test)]
 mod tests;
 
-pub use crate::codegen::compile;
-pub use crate::decompile::program_to_tree;
-pub use crate::objdef::{
-    ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition,
-    compile_object_definitions,
+pub use crate::{
+    codegen::compile,
+    decompile::program_to_tree,
+    objdef::{
+        ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef,
+        ObjectDefinition, compile_object_definitions,
+    },
+    parse::CompileOptions,
+    unparse::{to_literal, to_literal_objsub, unparse},
 };
-pub use crate::parse::CompileOptions;
-pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
 pub use moor_common::builtins::{
     ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
 };
-pub use moor_var::program::labels::{JumpLabel, Label, Offset};
-pub use moor_var::program::opcode::{Op, ScatterLabel};
-pub use moor_var::program::program::{EMPTY_PROGRAM, Program};
+pub use moor_var::program::{
+    labels::{JumpLabel, Label, Offset},
+    opcode::{Op, ScatterLabel},
+    program::{EMPTY_PROGRAM, Program},
+};
 pub use var_scope::VarScope;

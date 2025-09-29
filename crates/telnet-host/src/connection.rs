@@ -11,32 +11,39 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::{HashMap, VecDeque};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant, SystemTime};
+use std::{
+    collections::{HashMap, VecDeque},
+    net::SocketAddr,
+    sync::{Arc, atomic::AtomicBool},
+    time::{Duration, Instant, SystemTime},
+};
 
 use crate::connection_codec::{ConnectionCodec, ConnectionFrame, ConnectionItem};
-use eyre::Context;
-use eyre::bail;
-use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{SinkExt, StreamExt};
-use moor_common::model::{CompileError, ObjectRef};
-use moor_common::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
-use moor_common::util::parse_into_words;
-use moor_var::{Obj, Symbol, Var, Variant, v_str};
-use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
-use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::{
-    AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, ConnectType, HostType, ReplyResult,
-    RpcMessageError, VerbProgramResponse,
+use eyre::{Context, bail};
+use futures_util::{
+    SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
-use rpc_common::{DaemonToClientReply, HostClientToDaemonMessage};
+use moor_common::{
+    model::{CompileError, ObjectRef},
+    tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError},
+    util::parse_into_words,
+};
+use moor_var::{Obj, Symbol, Var, Variant, v_str};
+use planus::ReadAsRoot;
+use rpc_async_client::{
+    pubsub_client::{broadcast_recv, events_recv},
+    rpc_client::RpcSendClient,
+};
+use rpc_common::{
+    AuthToken, ClientToken, extract_obj, extract_symbol, extract_var,
+    flatbuffers_generated::moor_rpc, mk_client_pong_msg, mk_command_msg, mk_detach_msg,
+    mk_login_command_msg, mk_out_of_band_msg, mk_program_msg, mk_requested_input_msg,
+    mk_set_client_attribute_msg,
+};
 use termimad::MadSkin;
 use tmq::subscribe::Subscribe;
-use tokio::net::TcpStream;
-use tokio::select;
+use tokio::{net::TcpStream, select};
 use tokio_util::codec::Framed;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -206,7 +213,6 @@ impl TelnetConnection {
         match option_str.as_str() {
             "binary" => {
                 let binary_mode = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
-
                 debug!("Setting binary mode to {}", binary_mode);
                 self.is_binary_mode = binary_mode;
 
@@ -225,19 +231,16 @@ impl TelnetConnection {
             }
             "hold-input" => {
                 let hold = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
-
                 debug!("Setting hold-input to {}", hold);
                 self.hold_input = if hold { Some(Vec::new()) } else { None };
             }
             "disable-oob" => {
                 let disable = value.as_ref().map(|v| v.is_true()).unwrap_or(false);
-
                 debug!("Setting disable-oob to {}", disable);
                 self.disable_oob = disable;
             }
             "client-echo" => {
                 let echo_on = value.as_ref().map(|v| v.is_true()).unwrap_or(true);
-
                 debug!("Setting client-echo to {}", echo_on);
                 self.send_telnet_echo_command(echo_on).await?;
             }
@@ -246,7 +249,6 @@ impl TelnetConnection {
                     .as_ref()
                     .and_then(|v| v.as_string())
                     .unwrap_or(DEFAULT_FLUSH_COMMAND);
-
                 debug!("Setting flush-command to '{}'", flush_cmd);
                 self.flush_command = flush_cmd.to_string();
             }
@@ -276,52 +278,41 @@ impl TelnetConnection {
     }
 
     async fn update_connection_attribute(&mut self, key: Symbol, value: Option<Var>) {
-        if let Some(auth_token) = &self.auth_token {
+        if let Some(auth_token) = &self.auth_token
+            && let Some(set_attr_msg) =
+                mk_set_client_attribute_msg(&self.client_token, auth_token, &key, value.as_ref())
+        {
             let _ = self
                 .rpc_client
-                .make_client_rpc_call(
-                    self.client_id,
-                    HostClientToDaemonMessage::SetClientAttribute(
-                        self.client_token.clone(),
-                        auth_token.clone(),
-                        key,
-                        value,
-                    ),
-                )
+                .make_client_rpc_call(self.client_id, set_attr_msg)
                 .await;
         }
     }
     pub(crate) async fn run(&mut self) -> Result<(), eyre::Error> {
         // Provoke welcome message, which is a login command with no arguments, and we
         // don't care about the reply at this point.
+        let login_msg =
+            mk_login_command_msg(&self.client_token, &self.handler_object, vec![], false);
         self.rpc_client
-            .make_client_rpc_call(
-                self.client_id,
-                HostClientToDaemonMessage::LoginCommand {
-                    client_token: self.client_token.clone(),
-                    handler_object: self.handler_object,
-                    connect_args: vec![],
-                    do_attach: false,
-                },
-            )
+            .make_client_rpc_call(self.client_id, login_msg)
             .await
             .expect("Unable to send login request to RPC server");
 
-        let Ok((auth_token, player, connect_type)) = self.authorization_phase().await else {
-            bail!("Unable to authorize connection");
+        let (auth_token, player, connect_type) = match self.authorization_phase().await {
+            Ok(result) => result,
+            Err(e) => bail!("Unable to authorize connection: {}", e),
         };
+        debug!("Authorized player: {:?}", player);
 
         self.auth_token = Some(auth_token);
 
         let connect_message = match connect_type {
-            ConnectType::Connected => "*** Connected ***",
-            ConnectType::Reconnected => "*** Reconnected ***",
-            ConnectType::Created => "*** Created ***",
+            moor_rpc::ConnectType::Connected => "*** Connected ***",
+            moor_rpc::ConnectType::Reconnected => "*** Reconnected ***",
+            moor_rpc::ConnectType::Created => "*** Created ***",
         };
         self.send_line(connect_message).await?;
         self.flush().await?;
-
-        debug!(?player, client_id = ?self.client_id, connection_obj = ?self.connection_object, "Entering command dispatch loop");
 
         // Now that we're authenticated, send all current connection attributes to daemon
         for (key, value) in self.connection_attributes.clone() {
@@ -333,11 +324,9 @@ impl TelnetConnection {
         };
 
         // Let the server know this client is gone.
+        let detach_msg = mk_detach_msg(&self.client_token, true);
         self.rpc_client
-            .make_client_rpc_call(
-                self.client_id,
-                HostClientToDaemonMessage::Detach(self.client_token.clone(), true),
-            )
+            .make_client_rpc_call(self.client_id, detach_msg)
             .await?;
 
         Ok(())
@@ -390,57 +379,88 @@ impl TelnetConnection {
         Ok(())
     }
 
-    async fn authorization_phase(&mut self) -> Result<(AuthToken, Obj, ConnectType), eyre::Error> {
-        debug!(client_id = ?self.client_id, "Entering auth loop");
-
+    async fn authorization_phase(
+        &mut self,
+    ) -> Result<(AuthToken, Obj, moor_rpc::ConnectType), eyre::Error> {
         loop {
             select! {
-                Ok(event) = broadcast_recv(&mut self.broadcast_sub) => {
-                    trace!(?event, "broadcast_event");
-                    match event {
-                        ClientsBroadcastEvent::PingPong(_server_time) => {
-                            let _ = &mut self.rpc_client.make_client_rpc_call(self.client_id,
-                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_object, HostType::TCP, self.peer_addr)).await?;
+                Ok(event_msg) = broadcast_recv(&mut self.broadcast_sub) => {
+                    let event = event_msg.event()?;
+                    trace!("broadcast_event");
+
+                    match event.event().map_err(|e| eyre::eyre!("Missing event: {}", e))? {
+                        moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(_server_time) => {
+                            let timestamp = SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_nanos() as u64;
+                            let pong_msg = mk_client_pong_msg(
+                                &self.client_token,
+                                timestamp,
+                                &self.connection_object,
+                                moor_rpc::HostType::Tcp,
+                                self.peer_addr.to_string(),
+                            );
+                            let _ = &mut self.rpc_client.make_client_rpc_call(self.client_id, pong_msg).await?;
                         }
                     }
                 }
-                Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
-                    trace!(?event, "narrative_event");
-                    match event {
-                        ClientEvent::SystemMessage(_author, msg) => {
+                Ok(event_msg) = events_recv(self.client_id, &mut self.narrative_sub) => {
+                    let event = event_msg.event()?;
+                    trace!("narrative_event");
+                    match event.event().map_err(|e| eyre::eyre!("Missing event: {}", e))? {
+                        moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
+                            let msg = sys_msg.message().map_err(|e| eyre::eyre!("Missing message: {}", e))?.to_string();
                             self.send_line(&msg).await.with_context(|| "Unable to send message to client")?;
                         }
-                        ClientEvent::Narrative(_author, event) => {
-                            self.output(event.event()).await?;
+                        moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative) => {
+                            let event_ref = narrative.event().map_err(|e| eyre::eyre!("Missing event: {}", e))?;
+                            let narrative_event = rpc_common::narrative_event_from_ref(event_ref)
+                                .map_err(|e| eyre::eyre!("Failed to convert narrative event: {}", e))?;
+                            self.output(narrative_event.event()).await?;
                         }
-                        ClientEvent::RequestInput(_request_id) => {
+                        moor_rpc::ClientEventUnionRef::RequestInputEvent(_request_id) => {
                             bail!("RequestInput before login");
                         }
-                        ClientEvent::Disconnect() => {
+                        moor_rpc::ClientEventUnionRef::DisconnectEvent(_) => {
                             self.write.close().await?;
                             bail!("Disconnect before login");
                         }
-                        ClientEvent::TaskError(_ti, te) => {
-                            self.handle_task_error(te).await?;
+                        moor_rpc::ClientEventUnionRef::TaskErrorEvent(task_err) => {
+                            let err_ref = task_err.error().map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                            let scheduler_error = rpc_common::scheduler_error_from_ref(err_ref)
+                                .map_err(|e| eyre::eyre!("Failed to convert scheduler error: {}", e))?;
+                            self.handle_task_error(scheduler_error).await?;
                         }
-                        ClientEvent::TaskSuccess(_ti, result) => {
-                            trace!(?result, "TaskSuccess")
+                        moor_rpc::ClientEventUnionRef::TaskSuccessEvent(_task_success) => {
+                            trace!("TaskSuccess")
                             // We don't need to do anything with successes.
                         }
-                              ClientEvent::PlayerSwitched { new_player, new_auth_token } => {
+                        moor_rpc::ClientEventUnionRef::PlayerSwitchedEvent(switch) => {
+                            let new_player = extract_obj(&switch, "new_player", |s| s.new_player())
+                                .map_err(|e| eyre::eyre!("{}", e))?;
+
+                            let new_auth_token_ref = switch.new_auth_token().map_err(|e| eyre::eyre!("Missing new_auth_token: {}", e))?;
+                            let new_auth_token = AuthToken(new_auth_token_ref.token().map_err(|e| eyre::eyre!("Missing token: {}", e))?.to_string());
+
                             info!("Switching player from {:?} to {} during authorization for client {}", self.player_object, new_player, self.client_id);
                             self.player_object = Some(new_player);
                             self.auth_token = Some(new_auth_token);
                             info!("Player switched successfully to {} during authorization for client {}", new_player, self.client_id);
                         }
-                        ClientEvent::SetConnectionOption { connection_obj, option_name, value } => {
-                            debug!("Received SetConnectionOption: connection_obj={}, option_name={}, value={:?}, our_connection={}",
-                                   connection_obj, option_name, value, self.connection_object);
+                        moor_rpc::ClientEventUnionRef::SetConnectionOptionEvent(set_opt) => {
+                            let connection_obj = extract_obj(&set_opt, "connection_obj", |s| s.connection_obj())
+                                .map_err(|e| eyre::eyre!("{}", e))?;
+
+                            let option_name = extract_symbol(&set_opt, "option_name", |s| s.option_name())
+                                .map_err(|e| eyre::eyre!("{}", e))?;
+
+                            let value = extract_var(&set_opt, "value", |s| s.value())
+                                .map_err(|e| eyre::eyre!("{}", e))?;
+
                             // Only handle if this event is for our connection
                             if connection_obj == self.connection_object {
                                 self.handle_connection_option(option_name, Some(value)).await?;
-                            } else {
-                                debug!("Ignoring SetConnectionOption for different connection");
                             }
                         }
                     }
@@ -459,20 +479,34 @@ impl TelnetConnection {
                         }
                     };
                     let words = parse_into_words(&line);
-                    let response = &mut self.rpc_client.make_client_rpc_call(
+                    let login_msg = mk_login_command_msg(&self.client_token, &self.handler_object, words, true);
+                    let response_bytes = self.rpc_client.make_client_rpc_call(
                         self.client_id,
-                        HostClientToDaemonMessage::LoginCommand {
-                            client_token: self.client_token.clone(),
-                            handler_object: self.handler_object,
-                            connect_args: words,
-                            do_attach: true,
-                        },
+                        login_msg,
                     ).await?;
-                    if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(
-                        Some((auth_token, connect_type, player)))) = response {
-                        info!(?player, client_id = ?self.client_id, "Login successful");
-                        self.player_object = Some(*player);
-                        return Ok((auth_token.clone(), *player, *connect_type))
+
+                    let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&response_bytes)
+                        .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+
+                    if let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) = reply_ref.result().map_err(|e| eyre::eyre!("Missing result: {}", e))? {
+                        let daemon_reply = client_success.reply().map_err(|e| eyre::eyre!("Missing reply: {}", e))?;
+                        if let moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) = daemon_reply.reply().map_err(|e| eyre::eyre!("Missing reply union: {}", e))?
+                            && login_result.success().map_err(|e| eyre::eyre!("Missing success: {}", e))? {
+                                let auth_token_ref = login_result.auth_token().map_err(|e| eyre::eyre!("Missing auth_token: {}", e))?
+                                    .ok_or_else(|| eyre::eyre!("Auth token is None"))?;
+                                let auth_token = AuthToken(auth_token_ref.token().map_err(|e| eyre::eyre!("Missing token: {}", e))?.to_string());
+
+                                let connect_type = login_result.connect_type().map_err(|e| eyre::eyre!("Missing connect_type: {}", e))?;
+
+                                let player_opt = login_result.player().map_err(|e| eyre::eyre!("Missing player: {}", e))?
+                                    .ok_or_else(|| eyre::eyre!("Player is None"))?;
+                                let player = rpc_common::obj_from_ref(player_opt)
+                                    .map_err(|e| eyre::eyre!("{}", e))?;
+
+                                info!(?player, client_id = ?self.client_id, "Login successful");
+                                self.player_object = Some(player);
+                                return Ok((auth_token, player, connect_type))
+                            }
                     }
                 }
             }
@@ -557,18 +591,30 @@ impl TelnetConnection {
                         }
                     }
                 }
-                Ok(event) = broadcast_recv(&mut self.broadcast_sub) => {
-                    match event {
-                        ClientsBroadcastEvent::PingPong(_server_time) => {
-                            let _ = self.rpc_client.make_client_rpc_call(self.client_id,
-                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(),
-                                    self.handler_object, HostType::WebSocket, self.peer_addr)).await.expect("Unable to send pong to RPC server");
+                Ok(event_msg) = broadcast_recv(&mut self.broadcast_sub) => {
+                    let event = event_msg.event()?;
+                    match event.event().map_err(|e| eyre::eyre!("Missing event: {}", e))? {
+                        moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(_server_time) => {
+                            let timestamp = SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_nanos() as u64;
+                            let pong_msg = mk_client_pong_msg(
+                                &self.client_token,
+                                timestamp,
+                                &self.handler_object,
+                                moor_rpc::HostType::WebSocket,
+                                self.peer_addr.to_string(),
+                            );
+                            let _ = self.rpc_client.make_client_rpc_call(self.client_id, pong_msg).await.expect("Unable to send pong to RPC server");
 
                         }
                     }
                 }
-                Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
-                    if let Some(input_request) = self.handle_narrative_event(event).await? {
+                Ok(event_msg) = events_recv(self.client_id, &mut self.narrative_sub) => {
+                    let event = event_msg.event()?;
+                    let event_union = event.event().map_err(|e| eyre::eyre!("Missing event: {}", e))?;
+                    if let Some(input_request) = self.handle_narrative_event(event_union).await? {
                         expecting_input.push_back(input_request);
                     }
                 }
@@ -598,52 +644,111 @@ impl TelnetConnection {
                 let code = std::mem::take(program_input);
                 let target = ObjectRef::Match(target.clone());
                 let verb = Symbol::mk(verb);
-                match self
+                let program_msg =
+                    mk_program_msg(&self.client_token, &auth_token, &target, &verb, code);
+                let response_bytes = self
                     .rpc_client
-                    .make_client_rpc_call(
-                        self.client_id,
-                        HostClientToDaemonMessage::Program(
-                            self.client_token.clone(),
-                            auth_token,
-                            target,
-                            verb,
-                            code,
-                        ),
-                    )
-                    .await?
+                    .make_client_rpc_call(self.client_id, program_msg)
+                    .await?;
+
+                let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&response_bytes)
+                    .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+
+                match reply_ref
+                    .result()
+                    .map_err(|e| eyre::eyre!("Missing result: {}", e))?
                 {
-                    ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(resp)) => {
-                        match resp {
-                            VerbProgramResponse::Success(o, verb) => {
-                                self.send_line(&format!(
-                                    "0 error(s).\nVerb {verb} programmed on object {o}"
-                                ))
-                                .await?;
+                    moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                        let daemon_reply = client_success
+                            .reply()
+                            .map_err(|e| eyre::eyre!("Missing reply: {}", e))?;
+                        match daemon_reply
+                            .reply()
+                            .map_err(|e| eyre::eyre!("Missing reply union: {}", e))?
+                        {
+                            moor_rpc::DaemonToClientReplyUnionRef::VerbProgramResponseReply(
+                                prog_resp_reply,
+                            ) => {
+                                let prog_resp = prog_resp_reply
+                                    .response()
+                                    .map_err(|e| eyre::eyre!("Missing response: {}", e))?;
+                                match prog_resp
+                                    .response()
+                                    .map_err(|e| eyre::eyre!("Missing response union: {}", e))?
+                                {
+                                    moor_rpc::VerbProgramResponseUnionRef::VerbProgramSuccess(
+                                        success,
+                                    ) => {
+                                        let o = extract_obj(&success, "obj", |s| s.obj())
+                                            .map_err(|e| eyre::eyre!("{}", e))?;
+
+                                        let verb = success
+                                            .verb_name()
+                                            .map_err(|e| eyre::eyre!("Missing verb_name: {}", e))?
+                                            .to_string();
+
+                                        self.send_line(&format!(
+                                            "0 error(s).\nVerb {verb} programmed on object {o}"
+                                        ))
+                                        .await?;
+                                    }
+                                    moor_rpc::VerbProgramResponseUnionRef::VerbProgramFailure(
+                                        failure,
+                                    ) => {
+                                        let error_ref = failure
+                                            .error()
+                                            .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                                        match error_ref.error().map_err(|e| eyre::eyre!("Missing error union: {}", e))? {
+                                            moor_rpc::VerbProgramErrorUnionRef::VerbCompilationError(comp_err) => {
+                                                let compile_error = rpc_common::compilation_error_from_ref(
+                                                    comp_err.error().map_err(|e| eyre::eyre!("Missing error: {}", e))?
+                                                ).map_err(|e| eyre::eyre!("Failed to convert compilation error: {}", e))?;
+                                                let error_str = describe_compile_error(compile_error);
+                                                self.send_line(&format!("Compilation error: {}", error_str)).await?;
+                                            }
+                                            moor_rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => {
+                                                self.send_line("That object does not have that verb.")
+                                                    .await?;
+                                            }
+                                            _ => {
+                                                error!("Unhandled verb program error");
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            VerbProgramResponse::Failure(VerbProgramError::CompilationError(e)) => {
-                                let desc = describe_compile_error(e);
-                                self.send_line(&desc).await?;
-                            }
-                            VerbProgramResponse::Failure(VerbProgramError::NoVerbToProgram) => {
-                                self.send_line("That object does not have that verb.")
-                                    .await?;
-                            }
-                            VerbProgramResponse::Failure(e) => {
-                                error!("Unhandled verb program error: {:?}", e);
+                            _ => {
+                                bail!("Unexpected RPC success");
                             }
                         }
                     }
-                    ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
-                        self.handle_task_error(e).await?;
+                    moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                        let error_ref = failure
+                            .error()
+                            .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                        let error_code = error_ref
+                            .error_code()
+                            .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                        match error_code {
+                            moor_rpc::RpcMessageErrorCode::TaskError => {
+                                let scheduler_err_ref = error_ref
+                                    .scheduler_error()
+                                    .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
+                                    .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
+                                let scheduler_error =
+                                    rpc_common::scheduler_error_from_ref(scheduler_err_ref)
+                                        .map_err(|e| {
+                                            eyre::eyre!("Failed to decode scheduler error: {}", e)
+                                        })?;
+                                self.handle_task_error(scheduler_error).await?;
+                            }
+                            _ => {
+                                bail!("Unhandled RPC error");
+                            }
+                        }
                     }
-                    ReplyResult::Failure(e) => {
-                        bail!("Unhandled RPC error: {:?}", e);
-                    }
-                    ReplyResult::ClientSuccess(s) => {
-                        bail!("Unexpected RPC success: {:?}", s);
-                    }
-                    ReplyResult::HostSuccess(hs) => {
-                        bail!("Unexpected host success: {:?}", hs);
+                    _ => {
+                        bail!("Unexpected response type");
                     }
                 }
                 return Ok(LineMode::Input);
@@ -734,18 +839,18 @@ impl TelnetConnection {
                 // Notify daemon of prefix change
                 if let Some(auth_token) = &self.auth_token {
                     let prefix_value = self.output_prefix.as_ref().map(|s| v_str(s));
-                    let _ = self
-                        .rpc_client
-                        .make_client_rpc_call(
-                            self.client_id,
-                            HostClientToDaemonMessage::SetClientAttribute(
-                                self.client_token.clone(),
-                                auth_token.clone(),
-                                Symbol::mk("line-output-prefix"),
-                                prefix_value,
-                            ),
-                        )
-                        .await;
+                    let key = Symbol::mk("line-output-prefix");
+                    if let Some(set_attr_msg) = mk_set_client_attribute_msg(
+                        &self.client_token,
+                        auth_token,
+                        &key,
+                        prefix_value.as_ref(),
+                    ) {
+                        let _ = self
+                            .rpc_client
+                            .make_client_rpc_call(self.client_id, set_attr_msg)
+                            .await;
+                    }
                 }
                 Ok(true)
             }
@@ -767,18 +872,18 @@ impl TelnetConnection {
                 // Notify daemon of suffix change
                 if let Some(auth_token) = &self.auth_token {
                     let suffix_value = self.output_suffix.as_ref().map(|s| v_str(s));
-                    let _ = self
-                        .rpc_client
-                        .make_client_rpc_call(
-                            self.client_id,
-                            HostClientToDaemonMessage::SetClientAttribute(
-                                self.client_token.clone(),
-                                auth_token.clone(),
-                                Symbol::mk("line-output-suffix"),
-                                suffix_value,
-                            ),
-                        )
-                        .await;
+                    let key = Symbol::mk("line-output-suffix");
+                    if let Some(set_attr_msg) = mk_set_client_attribute_msg(
+                        &self.client_token,
+                        auth_token,
+                        &key,
+                        suffix_value.as_ref(),
+                    ) {
+                        let _ = self
+                            .rpc_client
+                            .make_client_rpc_call(self.client_id, set_attr_msg)
+                            .await;
+                    }
                 }
                 Ok(true)
             }
@@ -788,17 +893,33 @@ impl TelnetConnection {
 
     async fn handle_narrative_event(
         &mut self,
-        event: ClientEvent,
+        event_ref: moor_rpc::ClientEventUnionRef<'_>,
     ) -> Result<Option<Uuid>, eyre::Error> {
-        trace!(?event, "narrative_event");
-        match event {
-            ClientEvent::SystemMessage(_, msg) => {
+        match event_ref {
+            moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
+                let msg = sys_msg
+                    .message()
+                    .map_err(|e| {
+                        error!("Failed to get message from SystemMessageEvent: {}", e);
+                        eyre::eyre!("Missing message: {}", e)
+                    })?
+                    .to_string();
                 self.send_line(&msg)
                     .await
                     .expect("Unable to send message to client");
+                Ok(None)
             }
-            ClientEvent::Narrative(_author, event) => {
-                let msg = event.event();
+            moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative) => {
+                let event_ref = narrative.event().map_err(|e| {
+                    error!("Failed to get event from NarrativeEventMessage: {}", e);
+                    eyre::eyre!("Missing event: {}", e)
+                })?;
+                let narrative_event =
+                    rpc_common::narrative_event_from_ref(event_ref).map_err(|e| {
+                        error!("Failed to convert narrative event: {}", e);
+                        eyre::eyre!("Failed to convert narrative event: {}", e)
+                    })?;
+                let msg = narrative_event.event();
                 match &msg {
                     Event::Notify {
                         value: msg,
@@ -825,38 +946,45 @@ impl TelnetConnection {
                         warn!("Unhandled event in telnet client: {:?}", msg);
                     }
                 }
+                Ok(None)
             }
-            ClientEvent::RequestInput(request_id) => {
+            moor_rpc::ClientEventUnionRef::RequestInputEvent(request_input) => {
+                let request_id_ref = request_input
+                    .request_id()
+                    .map_err(|e| eyre::eyre!("Missing request_id: {}", e))?;
+                let request_id_data = request_id_ref
+                    .data()
+                    .map_err(|e| eyre::eyre!("Missing request_id data: {}", e))?;
+                let request_id = Uuid::from_slice(request_id_data)
+                    .map_err(|e| eyre::eyre!("Invalid request UUID: {}", e))?;
                 // If hold_input is active and has buffered input, return it immediately
                 if let Some(ref mut buffer) = self.hold_input
                     && let Some(input_line) = buffer.drain(..1).next()
                 {
-                    debug!("Returning held input for read() call: {}", input_line);
-
                     // Send the buffered input as an input reply
                     let Some(auth_token) = self.auth_token.clone() else {
                         bail!("Received input request before auth token was set");
                     };
 
-                    self.rpc_client
-                        .make_client_rpc_call(
-                            self.client_id,
-                            HostClientToDaemonMessage::RequestedInput(
-                                self.client_token.clone(),
-                                auth_token,
-                                request_id,
-                                v_str(&input_line),
-                            ),
-                        )
-                        .await?;
+                    let input_var = v_str(&input_line);
+                    if let Some(input_msg) = mk_requested_input_msg(
+                        &self.client_token,
+                        &auth_token,
+                        request_id,
+                        &input_var,
+                    ) {
+                        self.rpc_client
+                            .make_client_rpc_call(self.client_id, input_msg)
+                            .await?;
+                    }
 
                     return Ok(None);
                 }
 
                 // No buffered input available, wait for user input
-                return Ok(Some(request_id));
+                Ok(Some(request_id))
             }
-            ClientEvent::Disconnect() => {
+            moor_rpc::ClientEventUnionRef::DisconnectEvent(_) => {
                 self.pending_task = None;
                 self.send_line("** Disconnected **")
                     .await
@@ -868,8 +996,14 @@ impl TelnetConnection {
                     .close()
                     .await
                     .expect("Unable to close connection");
+                Ok(None)
             }
-            ClientEvent::TaskError(ti, te) => {
+            moor_rpc::ClientEventUnionRef::TaskErrorEvent(task_err) => {
+                let ti = task_err.task_id().map_err(|e| {
+                    error!("Failed to get task_id from TaskErrorEvent: {}", e);
+                    eyre::eyre!("Missing task_id: {}", e)
+                })? as usize;
+
                 if let Some(pending_event) = self.pending_task.take()
                     && pending_event.task_id != ti
                 {
@@ -877,6 +1011,16 @@ impl TelnetConnection {
                         "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
                     );
                 }
+
+                let err_ref = task_err.error().map_err(|e| {
+                    error!("Failed to get error from TaskErrorEvent: {}", e);
+                    eyre::eyre!("Missing error: {}", e)
+                })?;
+                let te = rpc_common::scheduler_error_from_ref(err_ref).map_err(|e| {
+                    error!("Failed to convert scheduler error: {}", e);
+                    eyre::eyre!("Failed to convert scheduler error: {}", e)
+                })?;
+
                 self.handle_task_error(te)
                     .await
                     .expect("Unable to handle task error");
@@ -884,8 +1028,14 @@ impl TelnetConnection {
                 self.send_output_suffix()
                     .await
                     .expect("Unable to send output suffix");
+                Ok(None)
             }
-            ClientEvent::TaskSuccess(ti, _s) => {
+            moor_rpc::ClientEventUnionRef::TaskSuccessEvent(task_success) => {
+                let ti = task_success
+                    .task_id()
+                    .map_err(|e| eyre::eyre!("Missing task_id: {}", e))?
+                    as usize;
+
                 if let Some(pending_event) = self.pending_task.take()
                     && pending_event.task_id != ti
                 {
@@ -897,11 +1047,22 @@ impl TelnetConnection {
                 self.send_output_suffix()
                     .await
                     .expect("Unable to send output suffix");
+                Ok(None)
             }
-            ClientEvent::PlayerSwitched {
-                new_player,
-                new_auth_token,
-            } => {
+            moor_rpc::ClientEventUnionRef::PlayerSwitchedEvent(switch) => {
+                let new_player = extract_obj(&switch, "new_player", |s| s.new_player())
+                    .map_err(|e| eyre::eyre!("{}", e))?;
+
+                let new_auth_token_ref = switch
+                    .new_auth_token()
+                    .map_err(|e| eyre::eyre!("Missing new_auth_token: {}", e))?;
+                let new_auth_token = AuthToken(
+                    new_auth_token_ref
+                        .token()
+                        .map_err(|e| eyre::eyre!("Missing token: {}", e))?
+                        .to_string(),
+                );
+
                 info!(
                     "Switching player from {} to {} for client {}",
                     self.connection_object, new_player, self.client_id
@@ -912,27 +1073,26 @@ impl TelnetConnection {
                     "Player switched successfully to {} for client {}",
                     new_player, self.client_id
                 );
+                Ok(None)
             }
-            ClientEvent::SetConnectionOption {
-                connection_obj,
-                option_name,
-                value,
-            } => {
-                debug!(
-                    "Received SetConnectionOption: connection_obj={}, option_name={}, value={:?}, our_connection={}",
-                    connection_obj, option_name, value, self.connection_object
-                );
+            moor_rpc::ClientEventUnionRef::SetConnectionOptionEvent(set_opt) => {
+                let connection_obj =
+                    extract_obj(&set_opt, "connection_obj", |s| s.connection_obj())
+                        .map_err(|e| eyre::eyre!("{}", e))?;
+
+                let option_name = extract_symbol(&set_opt, "option_name", |s| s.option_name())
+                    .map_err(|e| eyre::eyre!("{}", e))?;
+
+                let value = extract_var(&set_opt, "value", |s| s.value())
+                    .map_err(|e| eyre::eyre!("{}", e))?;
                 // Only handle if this event is for our connection
                 if connection_obj == self.connection_object {
                     self.handle_connection_option(option_name, Some(value))
                         .await?;
-                } else {
-                    debug!("Ignoring SetConnectionOption for different connection");
                 }
+                Ok(None)
             }
         }
-
-        Ok(None)
     }
 
     async fn process_command_line(&mut self, line: String) -> Result<(), eyre::Error> {
@@ -944,16 +1104,14 @@ impl TelnetConnection {
         self.send_output_prefix().await?;
 
         let result = if line.starts_with(OUT_OF_BAND_PREFIX) && !self.disable_oob {
+            let oob_msg = mk_out_of_band_msg(
+                &self.client_token,
+                &auth_token,
+                &self.handler_object,
+                line.clone(),
+            );
             self.rpc_client
-                .make_client_rpc_call(
-                    self.client_id,
-                    HostClientToDaemonMessage::OutOfBand(
-                        self.client_token.clone(),
-                        auth_token.clone(),
-                        self.handler_object,
-                        line,
-                    ),
-                )
+                .make_client_rpc_call(self.client_id, oob_msg)
                 .await?
         } else {
             let line = line.trim().to_string();
@@ -963,43 +1121,80 @@ impl TelnetConnection {
                 return Ok(());
             }
 
+            let command_msg = mk_command_msg(
+                &self.client_token,
+                &auth_token,
+                &self.handler_object,
+                line.clone(),
+            );
             self.rpc_client
-                .make_client_rpc_call(
-                    self.client_id,
-                    HostClientToDaemonMessage::Command(
-                        self.client_token.clone(),
-                        auth_token.clone(),
-                        self.handler_object,
-                        line,
-                    ),
-                )
+                .make_client_rpc_call(self.client_id, command_msg)
                 .await?
         };
-        match result {
-            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(ti)) => {
-                self.pending_task = Some(PendingTask {
-                    task_id: ti,
-                    start_time: Instant::now(),
-                });
+
+        let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&result)
+            .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+
+        match reply_ref
+            .result()
+            .map_err(|e| eyre::eyre!("Missing result: {}", e))?
+        {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success
+                    .reply()
+                    .map_err(|e| eyre::eyre!("Missing reply: {}", e))?;
+                match daemon_reply
+                    .reply()
+                    .map_err(|e| eyre::eyre!("Missing reply union: {}", e))?
+                {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        let ti = task_submitted
+                            .task_id()
+                            .map_err(|e| eyre::eyre!("Missing task_id: {}", e))?
+                            as usize;
+
+                        self.pending_task = Some(PendingTask {
+                            task_id: ti,
+                            start_time: Instant::now(),
+                        });
+                    }
+                    moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                        bail!("Received input thanks unprovoked, out of order")
+                    }
+                    _ => {
+                        bail!("Unexpected RPC success");
+                    }
+                }
             }
-            ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
-                bail!("Received input thanks unprovoked, out of order")
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error_ref = failure
+                    .error()
+                    .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                let error_code = error_ref
+                    .error_code()
+                    .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                match error_code {
+                    moor_rpc::RpcMessageErrorCode::TaskError => {
+                        let scheduler_err_ref = error_ref
+                            .scheduler_error()
+                            .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
+                            .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
+                        let e = rpc_common::scheduler_error_from_ref(scheduler_err_ref)
+                            .map_err(|e| eyre::eyre!("Failed to decode scheduler error: {}", e))?;
+
+                        self.handle_task_error(e)
+                            .await
+                            .with_context(|| "Unable to handle task error")?;
+                        // Send suffix after task error
+                        self.send_output_suffix().await?;
+                    }
+                    _ => {
+                        bail!("Unhandled RPC error");
+                    }
+                }
             }
-            ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
-                self.handle_task_error(e)
-                    .await
-                    .with_context(|| "Unable to handle task error")?;
-                // Send suffix after task error
-                self.send_output_suffix().await?;
-            }
-            ReplyResult::Failure(e) => {
-                bail!("Unhandled RPC error: {:?}", e);
-            }
-            ReplyResult::ClientSuccess(s) => {
-                bail!("Unexpected RPC success: {:?}", s);
-            }
-            ReplyResult::HostSuccess(hs) => {
-                bail!("Unexpected host success: {:?}", hs);
+            _ => {
+                bail!("Unexpected response type");
             }
         }
         Ok(())
@@ -1018,41 +1213,79 @@ impl TelnetConnection {
             bail!("Received input reply before auth token was set");
         };
 
-        match self
+        let Some(input_msg) = mk_requested_input_msg(
+            &self.client_token,
+            &auth_token,
+            *input_request_id,
+            &input_data,
+        ) else {
+            bail!("Failed to serialize input var");
+        };
+        let result = self
             .rpc_client
-            .make_client_rpc_call(
-                self.client_id,
-                HostClientToDaemonMessage::RequestedInput(
-                    self.client_token.clone(),
-                    auth_token,
-                    *input_request_id,
-                    input_data,
-                ),
-            )
+            .make_client_rpc_call(self.client_id, input_msg)
             .await
-            .expect("Unable to send input to RPC server")
+            .expect("Unable to send input to RPC server");
+
+        let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&result)
+            .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+
+        match reply_ref
+            .result()
+            .map_err(|e| eyre::eyre!("Missing result: {}", e))?
         {
-            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(task_id)) => {
-                self.pending_task = Some(PendingTask {
-                    task_id,
-                    start_time: Instant::now(),
-                });
-                bail!("Got TaskSubmitted when expecting input-thanks")
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success
+                    .reply()
+                    .map_err(|e| eyre::eyre!("Missing reply: {}", e))?;
+                match daemon_reply
+                    .reply()
+                    .map_err(|e| eyre::eyre!("Missing reply union: {}", e))?
+                {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        let task_id = task_submitted
+                            .task_id()
+                            .map_err(|e| eyre::eyre!("Missing task_id: {}", e))?
+                            as usize;
+
+                        self.pending_task = Some(PendingTask {
+                            task_id,
+                            start_time: Instant::now(),
+                        });
+                        bail!("Got TaskSubmitted when expecting input-thanks")
+                    }
+                    moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                        expecting_input.pop_front();
+                    }
+                    _ => {
+                        bail!("Unexpected RPC success");
+                    }
+                }
             }
-            ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
-                expecting_input.pop_front();
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error_ref = failure
+                    .error()
+                    .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                let error_code = error_ref
+                    .error_code()
+                    .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                match error_code {
+                    moor_rpc::RpcMessageErrorCode::TaskError => {
+                        let scheduler_err_ref = error_ref
+                            .scheduler_error()
+                            .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
+                            .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
+                        let e = rpc_common::scheduler_error_from_ref(scheduler_err_ref)
+                            .map_err(|e| eyre::eyre!("Failed to decode scheduler error: {}", e))?;
+                        self.handle_task_error(e).await?;
+                    }
+                    _ => {
+                        bail!("Unhandled RPC error");
+                    }
+                }
             }
-            ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
-                self.handle_task_error(e).await?;
-            }
-            ReplyResult::Failure(e) => {
-                bail!("Unhandled RPC error: {:?}", e);
-            }
-            ReplyResult::ClientSuccess(s) => {
-                bail!("Unexpected RPC success: {:?}", s);
-            }
-            ReplyResult::HostSuccess(hs) => {
-                bail!("Unexpected host success: {:?}", hs);
+            _ => {
+                bail!("Unexpected response type");
             }
         }
         Ok(())

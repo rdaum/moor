@@ -11,26 +11,31 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::BUILTINS;
-use crate::ast::Expr::ComprehendRange;
-use crate::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-    StmtNode, UnaryOp,
+use crate::{
+    BUILTINS,
+    ast::{
+        Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, Expr::ComprehendRange,
+        ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
+    },
+    decompile::DecompileError::{BuiltinNotFound, MalformedProgram},
+    parse::Parse,
+    var_scope::VarScope,
 };
-use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
-use crate::parse::Parse;
-use crate::var_scope::VarScope;
 use moor_common::builtins::BuiltinId;
-use moor_var::program::DeclType;
-use moor_var::program::labels::{JumpLabel, Label, Offset};
-use moor_var::program::names::{Name, Variable};
-use moor_var::program::opcode::{
-    ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend,
-    ScatterLabel,
+use moor_var::{
+    Symbol, Var, Variant,
+    program::{
+        DeclType,
+        labels::{JumpLabel, Label, Offset},
+        names::{Name, Variable},
+        opcode::{
+            ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op,
+            RangeComprehend, ScatterLabel,
+        },
+        program::Program,
+    },
+    v_float, v_int, v_none, v_obj, v_str,
 };
-use moor_var::program::program::Program;
-use moor_var::{Symbol, Var, v_int, v_none, v_obj, v_str};
-use moor_var::{Variant, v_float};
 use std::collections::{HashSet, VecDeque};
 
 #[derive(Debug, thiserror::Error)]
@@ -1312,13 +1317,14 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::CompileOptions;
-    use crate::ast::assert_trees_match_recursive;
-    use crate::codegen::compile;
-    use crate::decompile::program_to_tree;
-    use crate::parse::Parse;
-    use crate::parse::parse_program;
-    use crate::unparse::annotate_line_numbers;
+    use crate::{
+        CompileOptions,
+        ast::assert_trees_match_recursive,
+        codegen::compile,
+        decompile::program_to_tree,
+        parse::{Parse, parse_program},
+        unparse::annotate_line_numbers,
+    };
     use test_case::test_case;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse) {

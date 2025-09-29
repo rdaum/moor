@@ -15,32 +15,25 @@
 mod tests {
     use std::sync::Arc;
 
-    use moor_common::model::PropFlag;
-    use moor_common::model::VerbArgsSpec;
-    use moor_common::model::VerbFlag;
-    use moor_common::model::{ObjectKind, WorldState, WorldStateSource};
-    use moor_common::util::BitEnum;
+    use moor_common::{
+        model::{ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource},
+        util::BitEnum,
+    };
     use moor_var::{
         List, Obj, Var, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_obj, v_objid,
         v_str,
     };
 
-    use moor_var::NOTHING;
-    use moor_var::SYSTEM_OBJECT;
-    use moor_var::*;
+    use moor_var::{NOTHING, SYSTEM_OBJECT, *};
 
-    use crate::testing::vm_test_utils::call_verb;
-    use crate::vm::builtins::BuiltinRegistry;
+    use crate::{testing::vm_test_utils::call_verb, vm::builtins::BuiltinRegistry};
     use moor_common::tasks::NoopClientSession;
-    use moor_compiler::Op;
-    use moor_compiler::Op::*;
-    use moor_compiler::Program;
-    use moor_compiler::compile;
-    use moor_compiler::{CompileOptions, Names};
+    use moor_compiler::{CompileOptions, Names, Op, Op::*, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
-    use moor_var::Symbol;
-    use moor_var::program::ProgramType;
-    use moor_var::program::program::PrgInner;
+    use moor_var::{
+        Symbol,
+        program::{ProgramType, program::PrgInner},
+    };
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {

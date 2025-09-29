@@ -18,7 +18,7 @@ moor-var = { path = "../../var" }
 rpc-common = { path = "../rpc-common" }
 
 # Serialization & Data Formats
-bincode.workspace = true
+planus.workspace = true
 
 # Networking & Communication
 tmq.workspace = true

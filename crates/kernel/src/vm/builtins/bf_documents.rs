@@ -13,9 +13,10 @@
 
 //! Document format builtins: XML and JSON parsing/generation functions
 
-use crate::task_context::with_current_transaction;
-use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::{
+    task_context::with_current_transaction,
+    vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err},
+};
 use moor_compiler::offset_for_builtin;
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, Flyweight, List, Map, SYSTEM_OBJECT,
@@ -24,8 +25,7 @@ use moor_var::{
 use serde_json::{self, Value as JsonValue};
 use std::io::{BufReader, BufWriter};
 use tracing::error;
-use xml::EmitterConfig;
-use xml::reader::XmlEvent;
+use xml::{EmitterConfig, reader::XmlEvent};
 
 /// MOO: `any xml_parse(str xml_string [, int result_type] [, map tag_map])`
 /// Parses XML string into various data structures.

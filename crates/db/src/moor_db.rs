@@ -11,35 +11,40 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::DatabaseConfig;
-use crate::db_worldstate::db_counters;
-use crate::fjall_provider::FjallProvider;
-use crate::prop_cache::PropResolutionCache;
-use crate::tx_management::{
-    Canonical, CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
+use crate::{
+    AnonymousObjectMetadata, CommitSet, ObjAndUUIDHolder, StringHolder,
+    config::DatabaseConfig,
+    db_worldstate::db_counters,
+    fjall_provider::FjallProvider,
+    prop_cache::PropResolutionCache,
+    tx_management::{
+        Canonical, CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
+    },
+    verb_cache::{AncestryCache, VerbResolutionCache},
 };
-use crate::verb_cache::{AncestryCache, VerbResolutionCache};
-use crate::{AnonymousObjectMetadata, CommitSet, ObjAndUUIDHolder, StringHolder};
 use arc_swap::ArcSwap;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use flume::Sender;
 use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
-use moor_common::model::{CommitResult, ObjFlag, PropDefs, PropPerms, VerbDefs};
-use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::program::ProgramType;
-use moor_var::{Obj, Symbol, Var};
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicI64};
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use moor_common::{
+    model::{CommitResult, ObjFlag, PropDefs, PropPerms, VerbDefs},
+    util::{BitEnum, PerfTimerGuard},
+};
+use moor_var::{Obj, Symbol, Var, program::ProgramType};
+use std::{
+    path::Path,
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicBool, AtomicI64},
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
 use tempfile::TempDir;
 use tracing::{error, warn};
 
-use crate::relation_defs::define_relations;
-use crate::snapshot_loader::SnapshotLoader;
-use crate::utils::CachePadded;
+use crate::{relation_defs::define_relations, snapshot_loader::SnapshotLoader, utils::CachePadded};
 
 define_relations! {
     object_location == Obj, Obj,

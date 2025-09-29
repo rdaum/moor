@@ -16,31 +16,28 @@
 use strum::EnumCount;
 use tracing::{error, warn};
 
-use crate::task_context::{with_current_transaction, with_current_transaction_mut};
-use crate::vm::builtins::BfRet::{Ret, RetNil};
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
-use moor_common::model::WorldStateError;
-use moor_common::model::{ArgSpec, VerbArgsSpec};
-use moor_common::model::{HasUuid, Named};
-use moor_common::model::{ObjFlag, verb_perms_string};
-use moor_common::model::{VerbAttrs, VerbFlag};
-use moor_common::model::{VerbDef, parse_preposition_spec, preposition_to_string};
-use moor_common::util::BitEnum;
-use moor_compiler::Program;
-use moor_compiler::offset_for_builtin;
-use moor_compiler::program_to_tree;
-use moor_compiler::unparse;
-use moor_compiler::{compile, to_literal};
-use moor_var::Obj;
-use moor_var::Sequence;
-use moor_var::Symbol;
-use moor_var::Variant;
-use moor_var::program::ProgramType;
-use moor_var::program::names::GlobalName;
-use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_var::{Error, v_list_iter};
-use moor_var::{List, v_bool};
-use moor_var::{Var, v_empty_list, v_list, v_obj, v_str, v_string};
+use crate::{
+    task_context::{with_current_transaction, with_current_transaction_mut},
+    vm::builtins::{
+        BfCallState, BfErr, BfRet,
+        BfRet::{Ret, RetNil},
+        BuiltinFunction, world_state_bf_err,
+    },
+};
+use moor_common::{
+    model::{
+        ArgSpec, HasUuid, Named, ObjFlag, VerbArgsSpec, VerbAttrs, VerbDef, VerbFlag,
+        WorldStateError, parse_preposition_spec, preposition_to_string, verb_perms_string,
+    },
+    util::BitEnum,
+};
+use moor_compiler::{Program, compile, offset_for_builtin, program_to_tree, to_literal, unparse};
+use moor_var::{
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, Obj, Sequence, Symbol, Var,
+    Variant,
+    program::{ProgramType, names::GlobalName},
+    v_bool, v_empty_list, v_list, v_list_iter, v_obj, v_str, v_string,
+};
 
 /// MOO: `list verb_info(obj object, str|int verb_desc)`
 /// Returns information about a verb as `{owner, perms, names}`.

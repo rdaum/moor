@@ -11,21 +11,25 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Error;
-use crate::Sequence;
-use crate::Var;
-use crate::error::ErrorCode::{E_RANGE, E_TYPE};
-use crate::v_list_iter;
-use crate::variant::Variant;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use crate::{
+    Error, Sequence, Var,
+    error::ErrorCode::{E_RANGE, E_TYPE},
+    v_list_iter,
+    variant::Variant,
+};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use num_traits::ToPrimitive;
-use std::cmp::{max, min};
-use std::fmt::{Debug, Formatter};
-use std::hash::Hash;
-use std::ops::Index;
+use std::{
+    cmp::{max, min},
+    fmt::{Debug, Formatter},
+    hash::Hash,
+    ops::Index,
+};
 
 #[derive(Clone)]
 pub struct List(Box<im::Vector<Var>>);
@@ -384,12 +388,13 @@ impl std::iter::FromIterator<Var> for List {
 
 #[cfg(test)]
 mod tests {
-    use crate::Error;
-    use crate::error::ErrorCode::{E_RANGE, E_TYPE};
-    use crate::v_bool_int;
-    use crate::var::{Var, v_empty_list, v_int, v_list, v_str};
-    use crate::variant::Variant;
-    use crate::{IndexMode, Sequence};
+    use crate::{
+        Error, IndexMode, Sequence,
+        error::ErrorCode::{E_RANGE, E_TYPE},
+        v_bool_int,
+        var::{Var, v_empty_list, v_int, v_list, v_str},
+        variant::Variant,
+    };
 
     #[test]
     fn test_list_pack_unpack_index() {

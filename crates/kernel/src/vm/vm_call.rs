@@ -11,33 +11,38 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::FeaturesConfig;
-use crate::task_context::with_current_transaction_mut;
-use crate::vm::Fork;
-use crate::vm::VerbCall;
-use crate::vm::activation::{Activation, Frame};
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters};
-use crate::vm::exec_state::VMExecState;
-use crate::vm::vm_host::ExecutionResult;
-use crate::vm::vm_unwind::FinallyReason;
+use crate::{
+    config::FeaturesConfig,
+    task_context::with_current_transaction_mut,
+    vm::{
+        Fork, VerbCall,
+        activation::{Activation, Frame},
+        builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters},
+        exec_state::VMExecState,
+        vm_host::ExecutionResult,
+        vm_unwind::FinallyReason,
+    },
+};
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_begin, trace_builtin_end, trace_verb_begin};
 
 use lazy_static::lazy_static;
 use minstant::Instant;
-use moor_common::matching::ParsedCommand;
-use moor_common::model::VerbDef;
-use moor_common::model::WorldStateError;
-use moor_common::tasks::Session;
+use moor_common::{
+    matching::ParsedCommand,
+    model::{VerbDef, WorldStateError},
+    tasks::Session,
+};
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
-use moor_var::VarType::TYPE_NONE;
-use moor_var::program::ProgramType;
-use moor_var::program::names::GlobalName;
-use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
-use moor_var::{List, Obj};
-use moor_var::{NOTHING, Var, v_empty_str, v_int, v_obj, v_string};
+use moor_var::{
+    E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol,
+    Var,
+    VarType::TYPE_NONE,
+    Variant,
+    program::{ProgramType, names::GlobalName},
+    v_empty_str, v_int, v_obj, v_string,
+};
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list_proto");

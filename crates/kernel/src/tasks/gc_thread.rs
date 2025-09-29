@@ -13,20 +13,17 @@
 
 //! Concurrent GC mark phase thread spawned by scheduler
 
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::thread;
-use std::time::Instant;
+use std::{collections::HashSet, sync::Arc, thread, time::Instant};
 
 use flume::{self, Sender};
 use moor_var::Obj;
 use tracing::info;
 
-use crate::config::Config;
-use crate::tasks::sched_counters;
-use crate::tasks::scheduler_client::SchedulerClientMsg;
-use moor_common::tasks::SchedulerError;
-use moor_common::util::PerfTimerGuard;
+use crate::{
+    config::Config,
+    tasks::{sched_counters, scheduler_client::SchedulerClientMsg},
+};
+use moor_common::{tasks::SchedulerError, util::PerfTimerGuard};
 
 /// Spawn a thread to perform concurrent GC mark phase
 pub fn spawn_gc_mark_phase(

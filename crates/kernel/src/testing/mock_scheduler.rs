@@ -13,9 +13,11 @@
 
 //! Mock scheduler with declarative scenarios for testing daemon components
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, SystemTime};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, SystemTime},
+};
 use uuid::Uuid;
 
 use flume::{Receiver, Sender};
@@ -27,9 +29,11 @@ use moor_common::model::ObjectRef;
 #[cfg(test)]
 use moor_var::Symbol;
 
-use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
-use crate::tasks::workers::{WorkerRequest, WorkerResponse};
-use crate::tasks::{TaskHandle, TaskResult};
+use crate::tasks::{
+    TaskHandle, TaskResult,
+    scheduler_client::{SchedulerClient, SchedulerClientMsg},
+    workers::{WorkerRequest, WorkerResponse},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MockScenario {
@@ -502,8 +506,7 @@ impl MockScheduler {
 mod tests {
     use super::*;
     use moor_common::tasks::Session;
-    use std::thread;
-    use std::time::Duration;
+    use std::{thread, time::Duration};
 
     // Simple test session implementation
     struct TestSession;

@@ -11,17 +11,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Error;
-use crate::Sequence;
-use crate::error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE};
-use crate::var::Var;
-use crate::variant::Variant;
+use crate::{
+    Error, Sequence,
+    error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
+    var::Var,
+    variant::Variant,
+};
 use bincode::{Decode, Encode};
 use num_traits::ToPrimitive;
-use std::cmp::max;
-use std::fmt::{Display, Formatter};
-use std::hash::Hash;
-use std::sync::Arc;
+use std::{
+    cmp::max,
+    fmt::{Display, Formatter},
+    hash::Hash,
+    sync::Arc,
+};
 
 #[derive(Clone, Encode, Decode)]
 pub struct Str(Arc<String>);
@@ -357,11 +360,13 @@ impl From<String> for Str {
 
 #[cfg(test)]
 mod tests {
-    use crate::IndexMode;
-    use crate::error::ErrorCode::E_RANGE;
-    use crate::v_bool_int;
-    use crate::var::{Var, v_int, v_str};
-    use crate::variant::Variant;
+    use crate::{
+        IndexMode,
+        error::ErrorCode::E_RANGE,
+        v_bool_int,
+        var::{Var, v_int, v_str},
+        variant::Variant,
+    };
 
     #[test]
     fn test_str_pack_unpack() {

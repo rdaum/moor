@@ -11,32 +11,28 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use pretty_assertions::assert_eq;
 use semver::Version;
 use uuid::Uuid;
 
-use moor_common::model::CommitResult;
-use moor_common::model::Named;
-use moor_common::model::VerbArgsSpec;
-use moor_common::model::VerbFlag;
-use moor_common::model::WorldStateSource;
-use moor_common::tasks::NoopClientSession;
-use moor_common::tasks::Session;
-use moor_compiler::Program;
-use moor_compiler::{CompileOptions, compile};
+use moor_common::{
+    model::{CommitResult, Named, VerbArgsSpec, VerbFlag, WorldStateSource},
+    tasks::{NoopClientSession, Session},
+};
+use moor_compiler::{CompileOptions, Program, compile};
 use moor_db::{Database, DatabaseConfig, TxDB};
-use moor_kernel::testing::vm_test_utils;
-use moor_kernel::testing::vm_test_utils::ExecResult;
-use moor_kernel::vm::builtins::BuiltinRegistry;
+use moor_kernel::{
+    testing::{vm_test_utils, vm_test_utils::ExecResult},
+    vm::builtins::BuiltinRegistry,
+};
 use moor_moot::test_db_path;
 use moor_textdump::textdump_load;
-use moor_var::SYSTEM_OBJECT;
-use moor_var::Symbol;
-use moor_var::program::ProgramType;
-use moor_var::{List, Obj};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType};
 
 #[allow(dead_code)]
 pub fn testsuite_dir() -> PathBuf {

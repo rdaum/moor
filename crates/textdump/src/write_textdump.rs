@@ -17,14 +17,14 @@ use crate::{
     Object, Propval, Textdump, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS, VF_DOBJSHIFT,
     VF_IOBJSHIFT, Verb, Verbdef,
 };
-use moor_common::model::VerbFlag;
-use moor_common::model::loader::SnapshotInterface;
-use moor_common::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
-use moor_common::model::{HasUuid, Named};
-use moor_common::util::BitEnum;
-use moor_var::NOTHING;
-use moor_var::program::ProgramType;
-use moor_var::v_none;
+use moor_common::{
+    model::{
+        ArgSpec, HasUuid, Named, PrepSpec, ValSet, VerbArgsSpec, VerbFlag,
+        loader::SnapshotInterface,
+    },
+    util::BitEnum,
+};
+use moor_var::{NOTHING, program::ProgramType, v_none};
 
 /// Convert verbargs spec to flags & preps accordingly
 fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {

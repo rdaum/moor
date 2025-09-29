@@ -15,20 +15,23 @@ use bincode::{Decode, Encode};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::model::Vid;
-use crate::model::r#match::{PrepSpec, VerbArgsSpec};
-use crate::model::objects::ObjFlag;
-use crate::model::objset::ObjSet;
-use crate::model::propdef::{PropDef, PropDefs};
-use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::verbdef::{VerbDef, VerbDefs};
-use crate::model::verbs::{VerbAttrs, VerbFlag};
-use crate::model::{CommitResult, ObjectRef, PropPerms};
-use crate::util::{BitEnum, PerfCounter};
-use moor_var::Var;
-use moor_var::program::ProgramType;
-use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Symbol};
-use moor_var::{Error, Obj};
+use crate::{
+    model::{
+        CommitResult, ObjectRef, PropPerms, Vid,
+        r#match::{PrepSpec, VerbArgsSpec},
+        objects::ObjFlag,
+        objset::ObjSet,
+        propdef::{PropDef, PropDefs},
+        props::{PropAttrs, PropFlag},
+        verbdef::{VerbDef, VerbDefs},
+        verbs::{VerbAttrs, VerbFlag},
+    },
+    util::{BitEnum, PerfCounter},
+};
+use moor_var::{
+    E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Error, Obj, Symbol, Var,
+    program::ProgramType,
+};
 
 /// Specifies the way the object ID should be allocated when creating a new object.
 #[derive(Debug, Clone, Eq, PartialEq, Decode, Encode)]

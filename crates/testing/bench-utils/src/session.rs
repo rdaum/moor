@@ -14,10 +14,12 @@
 use crate::TableFormatter;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// Collected benchmark result for session summary and JSON export
 #[derive(Clone, Debug, Serialize, Deserialize)]

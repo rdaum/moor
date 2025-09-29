@@ -11,19 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Associative;
-use crate::error::ErrorCode;
-use crate::error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE};
-use crate::list::List;
-use crate::variant::Variant;
-use crate::{BincodeAsByteBufferExt, Symbol};
-use crate::{Error, Obj, VarType};
-use crate::{Flyweight, IndexMode, Sequence, TypeClass, map};
+use crate::{
+    Associative, BincodeAsByteBufferExt, Error, Flyweight, IndexMode, Obj, Sequence, Symbol,
+    TypeClass, VarType,
+    error::{
+        ErrorCode,
+        ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
+    },
+    list::List,
+    map,
+    variant::Variant,
+};
 use bincode::{Decode, Encode};
-use std::cmp::{Ordering, min};
-use std::fmt::{Debug, Formatter};
-use std::hash::Hash;
-use std::sync::Arc;
+use std::{
+    cmp::{Ordering, min},
+    fmt::{Debug, Formatter},
+    hash::Hash,
+    sync::Arc,
+};
 
 #[derive(Clone, Encode, Decode)]
 pub struct Var(Variant);
@@ -895,8 +900,7 @@ impl Hash for Var {
 
 #[cfg(test)]
 mod tests {
-    use crate::var::Var;
-    use crate::variant::Variant;
+    use crate::{var::Var, variant::Variant};
 
     #[test]
     fn test_int_pack_unpack() {

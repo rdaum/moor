@@ -14,8 +14,10 @@
 use crate::model::defset::{Defs, HasUuid, Named};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
-use moor_var::encode::{DecodingError, EncodingError};
-use moor_var::{AsByteBuffer, Obj, Symbol};
+use moor_var::{
+    AsByteBuffer, Obj, Symbol,
+    encode::{DecodingError, EncodingError},
+};
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 

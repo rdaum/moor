@@ -16,12 +16,11 @@
 #[cfg_attr(coverage_nightly, coverage(off))]
 use moor_moot::{MootOptions, telnet::ManagedChild, test_db_path};
 use serial_test::serial;
-use std::net::TcpListener;
-use std::sync::OnceLock;
 use std::{
+    net::TcpListener,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use uuid::Uuid;
 

@@ -140,9 +140,11 @@ mod tests {
     use moor_common::model::WorldStateError;
     use moor_db::{Error, Provider, Relation, Timestamp, Tx};
     use moor_var::Symbol;
-    use std::collections::HashMap;
-    use std::path::Path;
-    use std::sync::{Arc, Mutex};
+    use std::{
+        collections::HashMap,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
 
     #[test]
     fn test_parse_edn() {

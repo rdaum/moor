@@ -13,17 +13,15 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::CompileOptions;
-    use crate::codegen::compile;
+    use crate::{CompileOptions, codegen::compile};
     use moor_common::builtins::BUILTINS;
-    use moor_var::SYSTEM_OBJECT;
-    use moor_var::Symbol;
-    use moor_var::program::labels::{Label, Offset};
-    use moor_var::program::opcode::Op::*;
-    use moor_var::program::opcode::{
-        ForRangeOperand, ForSequenceOperand, ScatterArgs, ScatterLabel,
+    use moor_var::{
+        E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj, SYSTEM_OBJECT, Symbol, UuObjid,
+        program::{
+            labels::{Label, Offset},
+            opcode::{ForRangeOperand, ForSequenceOperand, Op::*, ScatterArgs, ScatterLabel},
+        },
     };
-    use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj, UuObjid};
 
     #[test]
     fn test_simple_add_expr() {

@@ -11,9 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::enc::write::Writer;
-use bincode::error::EncodeError;
-use bincode::{Decode, Encode};
+use bincode::{Decode, Encode, enc::write::Writer, error::EncodeError};
 use byteview::ByteView;
 use lazy_static::lazy_static;
 

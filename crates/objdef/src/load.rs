@@ -12,15 +12,17 @@
 //
 
 use crate::ObjdefLoaderError;
-use moor_common::model::loader::LoaderInterface;
-use moor_common::model::{ObjAttrs, ObjFlag, PropDef, PropFlag, ValSet, VerbDef};
-use moor_common::util::BitEnum;
+use moor_common::{
+    model::{ObjAttrs, ObjFlag, PropDef, PropFlag, ValSet, VerbDef, loader::LoaderInterface},
+    util::BitEnum,
+};
 use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_object_definitions};
-use moor_var::program::ProgramType;
-use moor_var::{NOTHING, Obj, Symbol, Var};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
+use moor_var::{NOTHING, Obj, Symbol, Var, program::ProgramType};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 use tracing::info;
 
 pub struct ObjectDefinitionLoader<'a> {
@@ -989,8 +991,7 @@ mod tests {
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str};
-    use std::path::Path;
-    use std::sync::Arc;
+    use std::{path::Path, sync::Arc};
 
     fn test_db(path: &Path) -> Arc<TxDB> {
         Arc::new(TxDB::open(Some(path), DatabaseConfig::default()).0)

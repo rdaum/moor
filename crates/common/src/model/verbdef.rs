@@ -11,15 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::model::defset::{Defs, HasUuid, Named};
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::verbs::VerbFlag;
-use crate::util::BitEnum;
-use crate::util::verbcasecmp;
+use crate::{
+    model::{
+        defset::{Defs, HasUuid, Named},
+        r#match::VerbArgsSpec,
+        verbs::VerbFlag,
+    },
+    util::{BitEnum, verbcasecmp},
+};
 use bincode::{Decode, Encode};
-use moor_var::BincodeAsByteBufferExt;
-use moor_var::Obj;
-use moor_var::Symbol;
+use moor_var::{BincodeAsByteBufferExt, Obj, Symbol};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -122,8 +123,7 @@ pub type VerbDefs = Defs<VerbDef>;
 
 #[cfg(test)]
 mod tests {
-    use crate::model::verbs::VerbFlag;
-    use crate::util::BitEnum;
+    use crate::{model::verbs::VerbFlag, util::BitEnum};
 
     #[test]
     fn test_bitflags() {

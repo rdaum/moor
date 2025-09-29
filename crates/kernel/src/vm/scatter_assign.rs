@@ -12,9 +12,11 @@
 //
 
 use moor_compiler::ScatterLabel;
-use moor_var::program::labels::Label;
-use moor_var::program::opcode::ScatterArgs;
-use moor_var::{E_ARGS, Error, Var, v_list};
+use moor_var::{
+    E_ARGS, Error, Var,
+    program::{labels::Label, opcode::ScatterArgs},
+    v_list,
+};
 
 /// Core scatter assignment logic shared between regular Op::Scatter and lambda parameter binding.
 /// Returns a result indicating whether default value assignment needs to occur for optional parameters.
@@ -147,8 +149,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_var::program::names::Name;
-    use moor_var::{v_int, v_str};
+    use moor_var::{program::names::Name, v_int, v_str};
     use std::collections::HashMap;
 
     // Create a test ScatterArgs - we'll use unsafe to create the Label since it's private

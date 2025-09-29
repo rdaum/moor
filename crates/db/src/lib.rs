@@ -14,12 +14,9 @@
 //
 
 use byteview::ByteView;
-use moor_common::model::{CommitResult, WorldStateSource};
-use moor_common::model::{WorldState, WorldStateError};
+use moor_common::model::{CommitResult, WorldState, WorldStateError, WorldStateSource};
 use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj, Var};
-use std::cmp::Ordering;
-use std::path::Path;
-use std::sync::Arc;
+use std::{cmp::Ordering, path::Path, sync::Arc};
 
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
@@ -43,8 +40,10 @@ mod moor_db_tests;
 mod relation_defs;
 mod ws_transaction;
 
-use crate::db_worldstate::DbWorldState;
-use crate::moor_db::{Caches, MoorDB, WorkingSets};
+use crate::{
+    db_worldstate::DbWorldState,
+    moor_db::{Caches, MoorDB, WorkingSets},
+};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod gc;
@@ -57,8 +56,9 @@ pub mod verb_cache;
 pub use db_worldstate::db_counters;
 use fast_counter::ConcurrentCounter;
 pub use gc::{GCError, GCInterface};
-pub use tx_management::Provider;
-pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
+pub use tx_management::{
+    Error, Provider, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
+};
 
 // Re-export sequence constants for use in VM
 pub use moor_db::SEQUENCE_MAX_OBJECT;
@@ -622,8 +622,10 @@ impl CacheStats {
 mod tests {
     use crate::ObjAndUUIDHolder;
     use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
-    use std::collections::BTreeSet;
-    use std::hash::{Hash, Hasher};
+    use std::{
+        collections::BTreeSet,
+        hash::{Hash, Hasher},
+    };
     use uuid::Uuid;
 
     #[test]

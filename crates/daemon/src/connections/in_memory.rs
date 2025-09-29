@@ -11,9 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use eyre::{Error, bail};
 use moor_common::tasks::SessionError;
@@ -21,13 +23,11 @@ use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
 use uuid::Uuid;
 
-use crate::connections::persistence::{
-    ClientMappingChanges, ConnectionRegistryPersistence, PlayerConnectionChanges,
+use crate::connections::{
+    ConnectionRecord, ConnectionsRecords,
+    persistence::{ClientMappingChanges, ConnectionRegistryPersistence, PlayerConnectionChanges},
+    registry::{CONNECTION_TIMEOUT_DURATION, ConnectionRegistry, NewConnectionParams},
 };
-use crate::connections::registry::{
-    CONNECTION_TIMEOUT_DURATION, ConnectionRegistry, NewConnectionParams,
-};
-use crate::connections::{ConnectionRecord, ConnectionsRecords};
 
 /// Pure in-memory implementation of connections database with optional persistence
 pub struct ConnectionRegistryMemory<P: ConnectionRegistryPersistence> {
@@ -735,12 +735,18 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connections::FIRST_CONNECTION_ID;
-    use crate::connections::persistence::{InitialConnectionRegistryState, NullPersistence};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Barrier};
-    use std::thread;
-    use std::time::Duration;
+    use crate::connections::{
+        FIRST_CONNECTION_ID,
+        persistence::{InitialConnectionRegistryState, NullPersistence},
+    };
+    use std::{
+        sync::{
+            Arc, Barrier,
+            atomic::{AtomicUsize, Ordering},
+        },
+        thread,
+        time::Duration,
+    };
     use uuid::Uuid;
 
     #[test]
@@ -784,8 +790,10 @@ mod tests {
 
     #[test]
     fn test_persistence_batching() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
 
         // Mock persistence that counts calls
         struct CountingPersistence {
@@ -1176,8 +1184,10 @@ mod tests {
 
     #[test]
     fn test_persistence_under_concurrency() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
 
         struct ConcurrentCountingPersistence {
             client_calls: Arc<AtomicUsize>,

@@ -23,24 +23,22 @@ use crate::setup::{
 };
 use clap::Parser;
 use clap_derive::Parser;
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use futures::{StreamExt, stream::FuturesUnordered};
 use moor_common::model::ObjectRef;
 use moor_var::{Obj, Symbol, Var, v_int};
-use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_async_client::start_host_session;
-use rpc_common::DaemonToClientReply::TaskSubmitted;
-use rpc_common::client_args::RpcClientArgs;
-use rpc_common::make_host_token;
+use planus::ReadAsRoot;
+use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
 use rpc_common::{
-    AuthToken, ClientToken, DaemonToHostReply, HostClientToDaemonMessage, HostToDaemonMessage,
-    HostToken, HostType, ReplyResult, load_keypair,
+    AuthToken, ClientToken, HostToken, HostType, client_args::RpcClientArgs,
+    flatbuffers_generated::moor_rpc, load_keypair, make_host_token, mk_invoke_verb_msg,
+    mk_request_performance_counters_msg,
 };
-use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::PathBuf,
+    sync::{Arc, atomic::AtomicBool},
+    time::{Duration, Instant},
+};
 use tmq::request;
 use tokio::sync::{Mutex, Notify};
 use tracing::info;
@@ -168,38 +166,56 @@ async fn continuous_workload(
     let mut request_count = 0;
 
     while Instant::now() < stop_time {
-        let response = rpc_client
-            .make_client_rpc_call(
-                client_id,
-                HostClientToDaemonMessage::InvokeVerb(
-                    client_token.clone(),
-                    auth_token.clone(),
-                    ObjectRef::Id(connection_oid),
-                    Symbol::mk("invoke_load_test"),
-                    vec![v_int(args.num_verb_iterations as i64)],
-                ),
-            )
+        let num_iterations = v_int(args.num_verb_iterations as i64);
+        let invoke_msg = mk_invoke_verb_msg(
+            &client_token,
+            &auth_token,
+            &ObjectRef::Id(connection_oid),
+            &Symbol::mk("invoke_load_test"),
+            vec![&num_iterations],
+        )
+        .expect("Failed to create invoke_verb message");
+
+        let reply_bytes = rpc_client
+            .make_client_rpc_call(client_id, invoke_msg)
             .await
             .expect("Unable to send call request to RPC server");
 
-        let task_id = match response {
-            ReplyResult::HostSuccess(hs) => {
-                panic!("Unexpected host message: {hs:?}");
+        let reply =
+            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+
+        let task_id = match reply.result().expect("Failed to get reply result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Failed to get daemon reply");
+                match daemon_reply
+                    .reply()
+                    .expect("Failed to get daemon reply union")
+                {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        task_submitted.task_id().expect("Failed to get task_id")
+                    }
+                    other => panic!("Unexpected client result in call: {other:?}"),
+                }
             }
-            ReplyResult::ClientSuccess(TaskSubmitted(submitted_task_id)) => submitted_task_id,
-            ReplyResult::ClientSuccess(e) => {
-                panic!("Unexpected client result in call: {e:?}");
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error = failure.error().expect("Failed to get error");
+                let error_msg = error
+                    .message()
+                    .expect("Failed to get error message")
+                    .unwrap_or("Unknown error");
+                panic!("RPC failure in call: {error_msg}");
             }
-            ReplyResult::Failure(e) => {
-                panic!("RPC failure in call: {e}");
-            }
+            other => panic!("Unexpected reply result: {other:?}"),
         };
 
-        let results =
-            wait_for_task_completion(task_id, task_results.clone(), Duration::from_secs(10))
-                .await
-                .expect("Failed to get task completion")
-                .expect("Task results not found");
+        let results = wait_for_task_completion(
+            task_id as usize,
+            task_results.clone(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("Failed to get task completion")
+        .expect("Task results not found");
 
         let Some(result) = results.as_integer() else {
             panic!("Unexpected task result: {results:?}");
@@ -234,38 +250,56 @@ async fn workload(
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);
     let start_time = Instant::now();
     for _ in 0..args.num_verb_invocations {
-        let response = rpc_client
-            .make_client_rpc_call(
-                client_id,
-                HostClientToDaemonMessage::InvokeVerb(
-                    client_token.clone(),
-                    auth_token.clone(),
-                    ObjectRef::Id(connection_oid),
-                    Symbol::mk("invoke_load_test"),
-                    vec![v_int(args.num_verb_iterations as i64)],
-                ),
-            )
+        let num_iterations = v_int(args.num_verb_iterations as i64);
+        let invoke_msg = mk_invoke_verb_msg(
+            &client_token,
+            &auth_token,
+            &ObjectRef::Id(connection_oid),
+            &Symbol::mk("invoke_load_test"),
+            vec![&num_iterations],
+        )
+        .expect("Failed to create invoke_verb message");
+
+        let reply_bytes = rpc_client
+            .make_client_rpc_call(client_id, invoke_msg)
             .await
             .expect("Unable to send call request to RPC server");
 
-        let task_id = match response {
-            ReplyResult::HostSuccess(hs) => {
-                panic!("Unexpected host message: {hs:?}");
+        let reply =
+            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+
+        let task_id = match reply.result().expect("Failed to get reply result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Failed to get daemon reply");
+                match daemon_reply
+                    .reply()
+                    .expect("Failed to get daemon reply union")
+                {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        task_submitted.task_id().expect("Failed to get task_id")
+                    }
+                    other => panic!("Unexpected client result in call: {other:?}"),
+                }
             }
-            ReplyResult::ClientSuccess(TaskSubmitted(submitted_task_id)) => submitted_task_id,
-            ReplyResult::ClientSuccess(e) => {
-                panic!("Unexpected client result in call: {e:?}");
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error = failure.error().expect("Failed to get error");
+                let error_msg = error
+                    .message()
+                    .expect("Failed to get error message")
+                    .unwrap_or("Unknown error");
+                panic!("RPC failure in call: {error_msg}");
             }
-            ReplyResult::Failure(e) => {
-                panic!("RPC failure in call: {e}");
-            }
+            other => panic!("Unexpected reply result: {other:?}"),
         };
 
-        let results =
-            wait_for_task_completion(task_id, task_results.clone(), Duration::from_secs(10))
-                .await
-                .expect("Failed to get task completion")
-                .expect("Task results not found");
+        let results = wait_for_task_completion(
+            task_id as usize,
+            task_results.clone(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("Failed to get task completion")
+        .expect("Task results not found");
 
         let Some(result) = results.as_integer() else {
             panic!("Unexpected task result: {results:?}");
@@ -289,22 +323,44 @@ async fn request_counters(
         .connect(rpc_address.as_str())
         .expect("Unable to bind RPC server for connection");
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);
-    let response = rpc_client
-        .make_host_rpc_call(host_token, HostToDaemonMessage::RequestPerformanceCounters)
+
+    let request_msg = mk_request_performance_counters_msg();
+    let reply_bytes = rpc_client
+        .make_host_rpc_call(host_token, request_msg)
         .await
         .expect("Unable to send call request to RPC server");
-    let ReplyResult::HostSuccess(DaemonToHostReply::PerfCounters(_, counters)) = response else {
-        panic!("Unexpected response from daemon: {response:?}");
+
+    let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)?;
+
+    let counters = match reply.result()? {
+        moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
+            let daemon_reply = host_success.reply()?;
+            match daemon_reply.reply()? {
+                moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostPerfCounters(perf_counters) => {
+                    perf_counters.counters()?
+                }
+                other => panic!("Unexpected daemon reply: {other:?}"),
+            }
+        }
+        other => panic!("Unexpected response from daemon: {other:?}"),
     };
 
     // Build a map of maps for the counters.
     let mut counters_map = HashMap::new();
-    for (category, counter_list) in counters {
+    for category in counters {
+        let category = category?;
+        let category_symbol = Symbol::mk(category.category()?.value()?);
         let mut category_map = HashMap::new();
-        for (counter_name, count, total) in counter_list {
+
+        for counter in category.counters()? {
+            let counter = counter?;
+            let counter_name = Symbol::mk(counter.name()?.value()?);
+            let count = counter.count()? as isize;
+            let total = counter.total_cumulative_ns()? as isize;
             category_map.insert(counter_name, (count, total));
         }
-        counters_map.insert(category, category_map);
+
+        counters_map.insert(category_symbol, category_map);
     }
 
     Ok(counters_map)

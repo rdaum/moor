@@ -11,16 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::ast;
-use crate::ast::{Expr, Stmt, StmtNode};
-use crate::decompile::DecompileError;
-use crate::parse::Parse;
-use crate::parse::{PrecedenceLevel, expr_precedence_level};
+use crate::{
+    ast,
+    ast::{Expr, Stmt, StmtNode},
+    decompile::DecompileError,
+    parse::{Parse, PrecedenceLevel, expr_precedence_level},
+};
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
-use moor_var::program::names::Variable;
-use moor_var::program::opcode::ScatterLabel;
-use moor_var::{Obj, Sequence, Symbol, Var, Variant};
+use moor_var::{
+    Obj, Sequence, Symbol, Var, Variant,
+    program::{names::Variable, opcode::ScatterLabel},
+};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
@@ -1342,8 +1344,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CompileOptions;
-    use crate::ast::assert_trees_match_recursive;
+    use crate::{CompileOptions, ast::assert_trees_match_recursive};
 
     use pretty_assertions::assert_eq;
     use test_case::test_case;

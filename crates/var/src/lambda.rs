@@ -11,9 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Var;
-use crate::program::opcode::ScatterArgs;
-use crate::program::program::Program;
+use crate::{
+    Var,
+    program::{opcode::ScatterArgs, program::Program},
+};
 use bincode::{Decode, Encode};
 use std::sync::Arc;
 

@@ -11,13 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Symbol;
-use crate::var::Var;
+use crate::{Symbol, var::Var};
 use ErrorCode::*;
 use bincode::{Decode, Encode};
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
-use std::ops::Deref;
+use std::{
+    fmt::{Debug, Display, Formatter},
+    hash::{Hash, Hasher},
+    ops::Deref,
+};
 
 #[derive(Clone, Eq, Ord, PartialOrd, Encode, Decode)]
 pub struct Error {

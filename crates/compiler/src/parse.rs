@@ -14,35 +14,39 @@
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
 use std::cell::RefCell;
-use std::rc::Rc;
-use std::str::FromStr;
+use std::{rc::Rc, str::FromStr};
 
 use itertools::Itertools;
-use moor_var::{ErrorCode, SYSTEM_OBJECT, Var, VarType};
-use moor_var::{Symbol, v_none};
+use moor_var::{ErrorCode, SYSTEM_OBJECT, Symbol, Var, VarType, v_none};
 pub use pest::Parser as PestParser;
-use pest::error::LineColLocation;
-use pest::iterators::{Pair, Pairs};
-use pest::pratt_parser::{Assoc, Op, PrattParser};
+use pest::{
+    error::LineColLocation,
+    iterators::{Pair, Pairs},
+    pratt_parser::{Assoc, Op, PrattParser},
+};
 
 use moor_common::builtins::BUILTINS;
-use moor_var::{AnonymousObjid, Obj, UuObjid};
-use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
+use moor_var::{AnonymousObjid, Obj, UuObjid, v_binary, v_float, v_int, v_obj, v_str, v_string};
 
-use crate::ast::Arg::{Normal, Splice};
-use crate::ast::StmtNode::Scope;
-use crate::ast::{
-    Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
-    ScatterKind, Stmt, StmtNode, UnaryOp,
+use crate::{
+    ast::{
+        Arg,
+        Arg::{Normal, Splice},
+        BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
+        ScatterKind, Stmt, StmtNode,
+        StmtNode::Scope,
+        UnaryOp,
+    },
+    parse::moo::{MooParser, Rule},
+    unparse::annotate_line_numbers,
+    var_scope::VarScope,
 };
-use crate::parse::moo::{MooParser, Rule};
-use crate::unparse::annotate_line_numbers;
-use crate::var_scope::VarScope;
 use base64::{Engine, engine::general_purpose};
-use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
-use moor_common::model::{CompileContext, CompileError};
-use moor_var::program::DeclType;
-use moor_var::program::names::Names;
+use moor_common::model::{
+    CompileContext, CompileError,
+    CompileError::{DuplicateVariable, UnknownTypeConstant},
+};
+use moor_var::program::{DeclType, names::Names};
 
 pub mod moo {
     #[derive(Parser)]
@@ -1999,21 +2003,25 @@ pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, 
 
 #[cfg(test)]
 mod tests {
-    use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol};
-    use moor_var::{Var, v_binary, v_float, v_int, v_objid, v_str};
-
-    use crate::CompileOptions;
-    use crate::ast::Arg::{Normal, Splice};
-    use crate::ast::BinaryOp::Add;
-    use crate::ast::Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb};
-    use crate::ast::{
-        BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
-        ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
+    use moor_var::{
+        E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol, Var, v_binary, v_float, v_int, v_objid,
+        v_str,
     };
-    use crate::parse::parse_program;
-    use crate::unparse::annotate_line_numbers;
-    use moor_common::model::CompileError;
-    use moor_common::util::unquote_str;
+
+    use crate::{
+        CompileOptions,
+        ast::{
+            Arg::{Normal, Splice},
+            BinaryOp,
+            BinaryOp::Add,
+            CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr,
+            Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb},
+            ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
+        },
+        parse::parse_program,
+        unparse::annotate_line_numbers,
+    };
+    use moor_common::{model::CompileError, util::unquote_str};
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()

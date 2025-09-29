@@ -21,8 +21,7 @@ mod conflict_tests;
 use moor_common::model::WorldStateError;
 use moor_compiler::ObjDefParseError;
 use moor_var::{Obj, Symbol};
-use std::io;
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 pub use dump::{collect_object, collect_object_definitions, dump_object, dump_object_definitions};
 pub use load::{

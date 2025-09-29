@@ -18,8 +18,7 @@ use crate::util::BitEnum;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use enum_primitive_derive::Primitive;
-use moor_var::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
-use moor_var::{Obj, Symbol};
+use moor_var::{AsByteBuffer, DecodingError, EncodingError, NOTHING, Obj, Symbol};
 use serde::{Deserialize, Serialize};
 
 /// A reference to an object in the system, used in external interface (RPC, etc.) to refer to

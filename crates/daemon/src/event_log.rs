@@ -11,11 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+    sync::{Arc, Mutex},
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use uuid::Uuid;
 
 use bincode::{Decode, Encode};
@@ -1511,8 +1513,7 @@ mod tests {
 
     #[test]
     fn test_concurrent_access() {
-        use std::sync::Arc;
-        use std::thread;
+        use std::{sync::Arc, thread};
 
         let log = Arc::new(EventLog::new());
         let mut handles = vec![];

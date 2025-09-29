@@ -15,8 +15,10 @@ use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use strum::FromRepr;
 
-use crate::matching::{Preposition, find_preposition};
-use crate::model::PrepSpec::Other;
+use crate::{
+    matching::{Preposition, find_preposition},
+    model::PrepSpec::Other,
+};
 use moor_var::encode::{DecodingError, EncodingError};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd, Encode, Decode)]

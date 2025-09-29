@@ -31,14 +31,17 @@
 //!
 //! `< delegate, [ slot -> value, ... ], contents >`
 
-use crate::error::ErrorCode::E_TYPE;
-use crate::{Error, List, Obj, Sequence, Symbol, Var, Variant};
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
-use std::fmt::{Debug, Formatter};
-use std::hash::Hash;
+use crate::{Error, List, Obj, Sequence, Symbol, Var, Variant, error::ErrorCode::E_TYPE};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
+use std::{
+    fmt::{Debug, Formatter},
+    hash::Hash,
+};
 
 #[derive(Clone, Encode, Decode, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Flyweight(Box<Inner>);

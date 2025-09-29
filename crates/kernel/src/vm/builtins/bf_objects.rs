@@ -16,26 +16,33 @@
 use lazy_static::lazy_static;
 use tracing::{debug, error, trace};
 
-use moor_common::model::Named;
-use moor_common::model::WorldStateError;
-use moor_common::model::{ObjFlag, ObjectKind, ValSet, obj_flags_string, prop_flags_string};
-use moor_common::util::BitEnum;
+use moor_common::{
+    model::{
+        Named, ObjFlag, ObjectKind, ValSet, WorldStateError, obj_flags_string, prop_flags_string,
+    },
+    util::BitEnum,
+};
 use moor_compiler::offset_for_builtin;
 use moor_objdef::{ConflictEntity, ConflictMode, Entity, ObjDefLoaderOptions};
-use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_str, v_sym};
-use moor_var::{List, Variant, v_bool};
-use moor_var::{NOTHING, v_list_iter};
-use moor_var::{Obj, v_int, v_obj};
-use moor_var::{Sequence, Symbol, v_list};
-use moor_var::{Var, v_empty_map};
-
-use crate::task_context::{
-    current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
+use moor_var::{
+    E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, List, NOTHING, Obj, Sequence, Symbol, Var, Variant,
+    v_arc_string, v_bool, v_empty_map, v_int, v_list, v_list_iter, v_obj, v_str, v_sym,
 };
-use crate::vm::builtins::BfRet::{Ret, RetNil, VmInstr};
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
-use crate::vm::vm_host::ExecutionResult::DispatchVerb;
-use crate::vm::{VerbCall, VerbExecutionRequest};
+
+use crate::{
+    task_context::{
+        current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
+    },
+    vm::{
+        VerbCall, VerbExecutionRequest,
+        builtins::{
+            BfCallState, BfErr, BfRet,
+            BfRet::{Ret, RetNil, VmInstr},
+            BuiltinFunction, world_state_bf_err,
+        },
+        vm_host::ExecutionResult::DispatchVerb,
+    },
+};
 
 lazy_static! {
     static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");

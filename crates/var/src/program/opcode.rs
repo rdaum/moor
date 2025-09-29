@@ -11,9 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::program::labels::{Label, Offset};
-use crate::program::names::Name;
-use crate::{ErrorCode, Obj, Symbol, VarType};
+use crate::{
+    ErrorCode, Obj, Symbol, VarType,
+    program::{
+        labels::{Label, Offset},
+        names::Name,
+    },
+};
 use bincode::{Decode, Encode};
 
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
@@ -230,9 +234,11 @@ pub struct ScatterArgs {
 
 #[cfg(test)]
 mod tests {
-    use crate::program::labels::{Label, Offset};
-    use crate::program::names::Name;
-    use crate::program::opcode::Op;
+    use crate::program::{
+        labels::{Label, Offset},
+        names::Name,
+        opcode::Op,
+    };
 
     #[test]
     fn size_opcode() {

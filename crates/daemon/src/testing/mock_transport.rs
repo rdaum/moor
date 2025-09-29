@@ -20,44 +20,37 @@ use crate::rpc::{MessageHandler, Transport};
 use moor_common::tasks::NarrativeEvent;
 use moor_kernel::SchedulerClient;
 use moor_var::Obj;
-use rpc_common::{
-    ClientEvent, ClientsBroadcastEvent, DaemonToClientReply, DaemonToHostReply, HostBroadcastEvent,
-    HostClientToDaemonMessage, HostToDaemonMessage, HostToken, RpcMessageError,
-};
+use planus::ReadAsRoot;
+use rpc_common::{HostToken, RpcMessageError, flatbuffers_generated::moor_rpc};
+
+/// Type alias for captured host reply tuples
+type HostReply = (
+    HostToken,
+    Vec<u8>,
+    Result<moor_rpc::DaemonToHostReply, RpcMessageError>,
+);
+
+/// Type alias for captured client reply tuples
+type ClientReply = (
+    Uuid,
+    Vec<u8>,
+    Result<moor_rpc::DaemonToClientReply, RpcMessageError>,
+);
 
 /// Mock transport that captures events for testing instead of sending over ZMQ
 pub struct MockTransport {
     /// Captured narrative events
     pub narrative_events: Arc<Mutex<Vec<(Obj, NarrativeEvent)>>>,
     /// Captured host broadcast events
-    pub host_events: Arc<Mutex<Vec<HostBroadcastEvent>>>,
+    pub host_events: Arc<Mutex<Vec<moor_rpc::HostBroadcastEvent>>>,
     /// Captured client events
-    pub client_events: Arc<Mutex<Vec<(Uuid, ClientEvent)>>>,
+    pub client_events: Arc<Mutex<Vec<(Uuid, moor_rpc::ClientEvent)>>>,
     /// Captured client broadcast events
-    pub client_broadcast_events: Arc<Mutex<Vec<ClientsBroadcastEvent>>>,
-    /// Captured host replies
-    // I like complex types, I will not lie.
-    #[allow(clippy::type_complexity)]
-    pub host_replies: Arc<
-        Mutex<
-            Vec<(
-                HostToken,
-                HostToDaemonMessage,
-                Result<DaemonToHostReply, RpcMessageError>,
-            )>,
-        >,
-    >,
-    /// Captured client replies
-    #[allow(clippy::type_complexity)]
-    pub client_replies: Arc<
-        Mutex<
-            Vec<(
-                Uuid,
-                HostClientToDaemonMessage,
-                Result<DaemonToClientReply, RpcMessageError>,
-            )>,
-        >,
-    >,
+    pub client_broadcast_events: Arc<Mutex<Vec<moor_rpc::ClientsBroadcastEvent>>>,
+    /// Captured host replies (message bytes and reply bytes)
+    pub host_replies: Arc<Mutex<Vec<HostReply>>>,
+    /// Captured client replies (message bytes and reply bytes)
+    pub client_replies: Arc<Mutex<Vec<ClientReply>>>,
 }
 
 impl MockTransport {
@@ -77,13 +70,21 @@ impl MockTransport {
         &self,
         message_handler: &dyn MessageHandler,
         host_token: HostToken,
-        message: HostToDaemonMessage,
-    ) -> Result<DaemonToHostReply, RpcMessageError> {
-        let result = message_handler.handle_host_message(host_token.clone(), message.clone());
+        message: moor_rpc::HostToDaemonMessage,
+    ) -> Result<moor_rpc::DaemonToHostReply, RpcMessageError> {
+        // Serialize to bytes then parse as Ref for handler
+        let message_bytes = planus::Builder::new().finish(&message, None).to_vec();
+
+        let message_ref =
+            moor_rpc::HostToDaemonMessageRef::read_as_root(&message_bytes).map_err(|e| {
+                RpcMessageError::InvalidRequest(format!("Failed to parse message: {}", e))
+            })?;
+
+        let result = message_handler.handle_host_message(host_token.clone(), message_ref);
 
         // Capture the reply for verification
         let mut replies = self.host_replies.lock().unwrap();
-        replies.push((host_token, message, result.clone()));
+        replies.push((host_token, message_bytes, result.clone()));
 
         result
     }
@@ -94,14 +95,22 @@ impl MockTransport {
         message_handler: &dyn MessageHandler,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        message: HostClientToDaemonMessage,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        message: moor_rpc::HostClientToDaemonMessage,
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
+        // Serialize to bytes then parse as Ref for handler
+        let message_bytes = planus::Builder::new().finish(&message, None).to_vec();
+
+        let message_ref = moor_rpc::HostClientToDaemonMessageRef::read_as_root(&message_bytes)
+            .map_err(|e| {
+                RpcMessageError::InvalidRequest(format!("Failed to parse message: {}", e))
+            })?;
+
         let result =
-            message_handler.handle_client_message(scheduler_client, client_id, message.clone());
+            message_handler.handle_client_message(scheduler_client, client_id, message_ref);
 
         // Capture the reply for verification
         let mut replies = self.client_replies.lock().unwrap();
-        replies.push((client_id, message, result.clone()));
+        replies.push((client_id, message_bytes, result.clone()));
 
         result
     }
@@ -112,17 +121,17 @@ impl MockTransport {
     }
 
     /// Get captured host events
-    pub fn get_host_events(&self) -> Vec<HostBroadcastEvent> {
+    pub fn get_host_events(&self) -> Vec<moor_rpc::HostBroadcastEvent> {
         self.host_events.lock().unwrap().clone()
     }
 
     /// Get captured client events
-    pub fn get_client_events(&self) -> Vec<(Uuid, ClientEvent)> {
+    pub fn get_client_events(&self) -> Vec<(Uuid, moor_rpc::ClientEvent)> {
         self.client_events.lock().unwrap().clone()
     }
 
     /// Get captured client broadcast events
-    pub fn get_client_broadcast_events(&self) -> Vec<ClientsBroadcastEvent> {
+    pub fn get_client_broadcast_events(&self) -> Vec<moor_rpc::ClientsBroadcastEvent> {
         self.client_broadcast_events.lock().unwrap().clone()
     }
 
@@ -177,29 +186,19 @@ impl MockTransport {
     }
 
     /// Get captured host replies
-    pub fn get_host_replies(
-        &self,
-    ) -> Vec<(
-        HostToken,
-        HostToDaemonMessage,
-        Result<DaemonToHostReply, RpcMessageError>,
-    )> {
+    pub fn get_host_replies(&self) -> Vec<HostReply> {
         self.host_replies.lock().unwrap().clone()
     }
 
     /// Get captured client replies
-    pub fn get_client_replies(
-        &self,
-    ) -> Vec<(
-        Uuid,
-        HostClientToDaemonMessage,
-        Result<DaemonToClientReply, RpcMessageError>,
-    )> {
+    pub fn get_client_replies(&self) -> Vec<ClientReply> {
         self.client_replies.lock().unwrap().clone()
     }
 
     /// Get the last host reply
-    pub fn get_last_host_reply(&self) -> Option<Result<DaemonToHostReply, RpcMessageError>> {
+    pub fn get_last_host_reply(
+        &self,
+    ) -> Option<Result<moor_rpc::DaemonToHostReply, RpcMessageError>> {
         self.host_replies
             .lock()
             .unwrap()
@@ -208,7 +207,9 @@ impl MockTransport {
     }
 
     /// Get the last client reply
-    pub fn get_last_client_reply(&self) -> Option<Result<DaemonToClientReply, RpcMessageError>> {
+    pub fn get_last_client_reply(
+        &self,
+    ) -> Option<Result<moor_rpc::DaemonToClientReply, RpcMessageError>> {
         self.client_replies
             .lock()
             .unwrap()
@@ -224,7 +225,7 @@ impl MockTransport {
     }
 
     /// Manually capture a client event (for testing scenarios)
-    pub fn capture_client_event(&self, client_id: Uuid, event: ClientEvent) {
+    pub fn capture_client_event(&self, client_id: Uuid, event: moor_rpc::ClientEvent) {
         self.client_events.lock().unwrap().push((client_id, event));
     }
 
@@ -234,12 +235,12 @@ impl MockTransport {
     }
 
     /// Convenience method to send a host event (for testing)
-    pub fn send_host_event(&self, event: HostBroadcastEvent) {
+    pub fn send_host_event(&self, event: moor_rpc::HostBroadcastEvent) {
         self.host_events.lock().unwrap().push(event);
     }
 
     /// Convenience method to send a client broadcast event (for testing)
-    pub fn send_client_broadcast_event(&self, event: ClientsBroadcastEvent) {
+    pub fn send_client_broadcast_event(&self, event: moor_rpc::ClientsBroadcastEvent) {
         self.client_broadcast_events.lock().unwrap().push(event);
     }
 
@@ -339,19 +340,26 @@ impl Transport for MockTransport {
         Ok(())
     }
 
-    fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error> {
+    fn broadcast_host_event(&self, event: moor_rpc::HostBroadcastEvent) -> Result<(), eyre::Error> {
         let mut captured = self.host_events.lock().unwrap();
         captured.push(event);
         Ok(())
     }
 
-    fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error> {
+    fn publish_client_event(
+        &self,
+        client_id: Uuid,
+        event: moor_rpc::ClientEvent,
+    ) -> Result<(), eyre::Error> {
         let mut captured = self.client_events.lock().unwrap();
         captured.push((client_id, event));
         Ok(())
     }
 
-    fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error> {
+    fn broadcast_client_event(
+        &self,
+        event: moor_rpc::ClientsBroadcastEvent,
+    ) -> Result<(), eyre::Error> {
         let mut captured = self.client_broadcast_events.lock().unwrap();
         captured.push(event);
         Ok(())

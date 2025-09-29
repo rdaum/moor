@@ -11,23 +11,26 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::connection::TelnetConnection;
-use crate::connection_codec::ConnectionCodec;
+use crate::{connection::TelnetConnection, connection_codec::ConnectionCodec};
 use eyre::bail;
 use futures_util::StreamExt;
 use hickory_resolver::TokioResolver;
 use moor_var::{Obj, Symbol};
-use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_async_client::{ListenersClient, ListenersMessage};
-use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
-use rpc_common::{CLIENT_BROADCAST_TOPIC, DaemonToClientReply, ReplyResult};
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use rpc_async_client::{ListenersClient, ListenersMessage, rpc_client::RpcSendClient};
+use rpc_common::{
+    CLIENT_BROADCAST_TOPIC, extract_obj, flatbuffers_generated::moor_rpc,
+    mk_connection_establish_msg,
+};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    sync::{Arc, atomic::AtomicBool},
+};
 use tmq::{request, subscribe};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::select;
+use tokio::{
+    net::{TcpListener, TcpStream},
+    select,
+};
 use tokio_util::codec::Framed;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -217,7 +220,6 @@ impl Listener {
 
             // And let the RPC server know we're here, and it should start sending events on the
             // narrative subscription.
-            debug!(rpc_address, "Setting up telnet connection for negotiation");
             let mut rpc_client = RpcSendClient::new(rpc_request_sock);
 
             // Initialize basic connection attributes for telnet
@@ -233,51 +235,107 @@ impl Listener {
             // Perform reverse DNS lookup for hostname
             let hostname = {
                 match resolve_hostname(peer_addr.ip()).await {
-                    Ok(hostname) => {
-                        debug!("Resolved {} to hostname: {}", peer_addr.ip(), hostname);
-                        hostname
-                    }
-                    Err(_) => {
-                        debug!("Failed to resolve {}, using IP address", peer_addr.ip());
-                        peer_addr.to_string()
-                    }
+                    Ok(hostname) => hostname,
+                    Err(_) => peer_addr.to_string(),
                 }
             };
 
             // Now establish the connection with all negotiated attributes
+            let acceptable_types_fb: Vec<moor_rpc::Symbol> = vec![
+                moor_rpc::Symbol {
+                    value: "text_djot".to_string(),
+                },
+                moor_rpc::Symbol {
+                    value: "text_markdown".to_string(),
+                },
+                moor_rpc::Symbol {
+                    value: "text_plain".to_string(),
+                },
+            ];
+
+            let connection_attrs_fb: Vec<moor_rpc::ConnectionAttribute> = connection_attributes
+                .iter()
+                .map(|(k, v)| moor_rpc::ConnectionAttribute {
+                    key: Box::new(moor_rpc::Symbol {
+                        value: k.as_string(),
+                    }),
+                    value: Box::new(moor_rpc::VarBytes {
+                        data: rpc_common::var_to_flatbuffer_bytes(v).unwrap_or_default(),
+                    }),
+                })
+                .collect();
+
+            let conn_establish_msg = mk_connection_establish_msg(
+                hostname.clone(),
+                listener_port,
+                peer_addr.port(),
+                Some(acceptable_types_fb),
+                Some(connection_attrs_fb),
+            );
+
             let (client_token, connection_oid) = match rpc_client
-                .make_client_rpc_call(
-                    client_id,
-                    ConnectionEstablish {
-                        peer_addr: hostname,
-                        local_port: listener_port,
-                        remote_port: peer_addr.port(),
-                        acceptable_content_types: Some(vec![
-                            Symbol::mk("text_djot"),
-                            Symbol::mk("text_markdown"),
-                            Symbol::mk("text_plain"),
-                        ]),
-                        connection_attributes: Some(connection_attributes.clone()),
-                    },
-                )
+                .make_client_rpc_call(client_id, conn_establish_msg)
                 .await
             {
-                Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(
-                    token,
-                    objid,
-                ))) => {
-                    info!(
-                        "Connection established with {} attributes, connection ID: {}",
-                        connection_attributes.len(),
-                        objid
-                    );
-                    (token, objid)
-                }
-                Ok(ReplyResult::Failure(f)) => {
-                    bail!("RPC failure in connection establishment: {}", f);
-                }
-                Ok(_) => {
-                    bail!("Unexpected response from RPC server");
+                Ok(bytes) => {
+                    use planus::ReadAsRoot;
+                    let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&bytes)
+                        .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+
+                    match reply_ref
+                        .result()
+                        .map_err(|e| eyre::eyre!("Missing result: {}", e))?
+                    {
+                        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                            let daemon_reply = client_success
+                                .reply()
+                                .map_err(|e| eyre::eyre!("Missing reply: {}", e))?;
+                            match daemon_reply
+                                .reply()
+                                .map_err(|e| eyre::eyre!("Missing reply union: {}", e))?
+                            {
+                                moor_rpc::DaemonToClientReplyUnionRef::NewConnection(new_conn) => {
+                                    let token_ref = new_conn
+                                        .client_token()
+                                        .map_err(|e| eyre::eyre!("Missing client_token: {}", e))?;
+                                    let token = rpc_common::ClientToken(
+                                        token_ref
+                                            .token()
+                                            .map_err(|e| eyre::eyre!("Missing token: {}", e))?
+                                            .to_string(),
+                                    );
+
+                                    let objid = extract_obj(&new_conn, "connection_obj", |n| {
+                                        n.connection_obj()
+                                    })
+                                    .map_err(|e| eyre::eyre!("{}", e))?;
+
+                                    info!(
+                                        "Connection established with {} attributes, connection ID: {}",
+                                        connection_attributes.len(),
+                                        objid
+                                    );
+                                    (token, objid)
+                                }
+                                _ => {
+                                    bail!("Unexpected response from RPC server");
+                                }
+                            }
+                        }
+                        moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                            let error_ref = failure
+                                .error()
+                                .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                            let error_msg = error_ref
+                                .message()
+                                .unwrap_or(Some("Unknown error"))
+                                .unwrap_or("Unknown error");
+                            bail!("RPC failure in connection establishment: {}", error_msg);
+                        }
+                        _ => {
+                            bail!("Unexpected response type");
+                        }
+                    }
                 }
                 Err(e) => {
                     bail!("Unable to establish connection: {}", e);

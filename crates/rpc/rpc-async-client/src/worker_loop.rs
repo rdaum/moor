@@ -11,15 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::pubsub_client::workers_events_recv;
-use crate::{WorkerRpcSendClient, attach_worker};
+use crate::{
+    WorkerRpcSendClient, attach_worker,
+    pubsub_client::{WorkerMessage, workers_events_recv},
+};
 use moor_common::tasks::WorkerError;
 use moor_var::{Obj, Symbol, Var};
-use rpc_common::{
-    DaemonToWorkerMessage, WORKER_BROADCAST_TOPIC, WorkerToDaemonMessage, WorkerToken,
+use rpc_common::{WORKER_BROADCAST_TOPIC, WorkerToken};
+use std::{
+    future::Future,
+    sync::{Arc, atomic::AtomicBool},
 };
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use thiserror::Error;
 use tmq::{TmqError, request};
 use tracing::info;
@@ -81,7 +83,7 @@ where
         let ctx = zmq_ctx.clone();
         let worker_token = worker_token.clone();
         let perform_p = perform.clone();
-        tokio::spawn(process(
+        tokio::spawn(process_fb(
             event,
             ctx,
             worker_response_rpc_addr.to_string(),
@@ -95,8 +97,8 @@ where
     Ok(())
 }
 
-async fn process<ProcessFunc, Fut>(
-    event: DaemonToWorkerMessage,
+async fn process_fb<ProcessFunc, Fut>(
+    event: WorkerMessage,
     zmq_ctx: tmq::Context,
     rpc_address: String,
     my_id: Uuid,
@@ -118,28 +120,135 @@ async fn process<ProcessFunc, Fut>(
         .expect("Unable to bind RPC server for connection");
     let mut rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
 
-    match event {
-        DaemonToWorkerMessage::PingWorkers => {
+    // Work directly with flatbuffer references to avoid copying
+    let message_union = match event.message() {
+        Ok(msg) => msg,
+        Err(e) => {
+            info!("Failed to parse worker message: {}", e);
+            return;
+        }
+    };
+
+    match message_union {
+        rpc_common::flatbuffers_generated::moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => {
             rpc_client
-                .make_worker_rpc_call(
-                    &worker_token,
-                    my_id,
-                    WorkerToDaemonMessage::Pong(worker_token.clone(), worker_type),
-                )
+                .make_worker_rpc_call_fb_pong(&worker_token, my_id, worker_type)
                 .await
                 .expect("Unable to send pong to daemon");
         }
-        DaemonToWorkerMessage::WorkerRequest {
-            worker_id,
-            token,
-            id: request_id,
-            perms,
-            request,
-            timeout,
-        } => {
+        rpc_common::flatbuffers_generated::moor_rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
+            // Extract data directly from flatbuffer references - only copying the minimal data we need
+            let worker_id_data = match req.worker_id().and_then(|id| id.data()) {
+                Ok(data) => data,
+                Err(e) => {
+                    info!("Failed to get worker_id: {}", e);
+                    return;
+                }
+            };
+            let worker_id = match Uuid::from_slice(worker_id_data) {
+                Ok(id) => id,
+                Err(e) => {
+                    info!("Invalid worker UUID: {}", e);
+                    return;
+                }
+            };
+
             if worker_id != my_id {
                 return;
             }
+
+            let request_id_data = match req.id().and_then(|id| id.data()) {
+                Ok(data) => data,
+                Err(e) => {
+                    info!("Failed to get request_id: {}", e);
+                    return;
+                }
+            };
+            let request_id = match Uuid::from_slice(request_id_data) {
+                Ok(id) => id,
+                Err(e) => {
+                    info!("Invalid request UUID: {}", e);
+                    return;
+                }
+            };
+
+            let token_str = match req.token().and_then(|t| t.token()) {
+                Ok(token) => token,
+                Err(e) => {
+                    info!("Failed to get token: {}", e);
+                    return;
+                }
+            };
+            let token = WorkerToken(token_str.to_owned());
+
+            let perms_ref = match req.perms() {
+                Ok(perms) => perms,
+                Err(e) => {
+                    info!("Failed to get perms: {}", e);
+                    return;
+                }
+            };
+            let perms_obj = match rpc_common::flatbuffers_generated::moor_rpc::Obj::try_from(perms_ref) {
+                Ok(obj) => obj,
+                Err(e) => {
+                    info!("Failed to convert perms ref: {}", e);
+                    return;
+                }
+            };
+            let perms = match rpc_common::obj_from_flatbuffer_struct(&perms_obj)
+            {
+                Ok(obj) => obj,
+                Err(e) => {
+                    info!("Failed to decode perms: {}", e);
+                    return;
+                }
+            };
+
+            let request_vec = match req.request() {
+                Ok(req) => req,
+                Err(e) => {
+                    info!("Failed to get request: {}", e);
+                    return;
+                }
+            };
+            let request = match request_vec
+                .iter()
+                .map(|var_bytes_result| {
+                    let var_bytes = var_bytes_result.map_err(|e| {
+                        rpc_common::RpcError::CouldNotDecode(format!(
+                            "Failed to get var_bytes: {e}"
+                        ))
+                    })?;
+                    let data = var_bytes.data().map_err(|e| {
+                        rpc_common::RpcError::CouldNotDecode(format!(
+                            "Failed to get var_bytes data: {e}"
+                        ))
+                    })?;
+                    rpc_common::var_from_flatbuffer_bytes(data).map_err(|e| {
+                        rpc_common::RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
+                    })
+                })
+                .collect::<Result<Vec<_>, rpc_common::RpcError>>()
+            {
+                Ok(req) => req,
+                Err(e) => {
+                    info!("Failed to decode request: {}", e);
+                    return;
+                }
+            };
+
+            let timeout_ms = match req.timeout_ms() {
+                Ok(ms) => ms,
+                Err(e) => {
+                    info!("Failed to get timeout_ms: {}", e);
+                    return;
+                }
+            };
+            let timeout = if timeout_ms == 0 {
+                None
+            } else {
+                Some(std::time::Duration::from_millis(timeout_ms))
+            };
 
             // Make an outbound HTTP request w/ request, pass timeout if needed
             let result = perform(
@@ -154,36 +263,29 @@ async fn process<ProcessFunc, Fut>(
             match result {
                 Ok(r) => {
                     rpc_client
-                        .make_worker_rpc_call(
-                            &worker_token,
-                            my_id,
-                            WorkerToDaemonMessage::RequestResult(
-                                worker_token.clone(),
-                                request_id,
-                                r,
-                            ),
-                        )
+                        .make_worker_rpc_call_fb_result(&worker_token, my_id, request_id, r)
                         .await
                         .expect("Unable to send response to daemon");
                 }
                 Err(e) => {
                     info!("Error performing request: {}", e);
                     rpc_client
-                        .make_worker_rpc_call(
-                            &worker_token,
-                            my_id,
-                            WorkerToDaemonMessage::RequestError(
-                                worker_token.clone(),
-                                request_id,
-                                e,
-                            ),
-                        )
+                        .make_worker_rpc_call_fb_error(&worker_token, my_id, request_id, e)
                         .await
                         .expect("Unable to send error response to daemon");
                 }
             }
         }
-        DaemonToWorkerMessage::PleaseDie(token, _) => {
+        rpc_common::flatbuffers_generated::moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
+            let token_str = match die.token().and_then(|t| t.token()) {
+                Ok(token) => token,
+                Err(e) => {
+                    info!("Failed to get token: {}", e);
+                    return;
+                }
+            };
+            let token = WorkerToken(token_str.to_owned());
+
             if token == worker_token {
                 info!("Received please die from daemon");
                 kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);

@@ -11,12 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::model::{CompileError, WorldStateError};
-use crate::tasks::TaskId;
+use crate::{
+    model::{CompileError, WorldStateError},
+    tasks::TaskId,
+};
 use bincode::{Decode, Encode};
 use moor_var::{Error, Symbol, Var};
-use std::fmt::Display;
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 use strum::Display;
 use thiserror::Error;
 

@@ -11,10 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Error;
-use crate::error::ErrorCode::{E_INVARG, E_TYPE};
-use crate::var::{Var, v_err, v_error, v_float, v_int};
-use crate::variant::Variant;
+use crate::{
+    Error,
+    error::ErrorCode::{E_INVARG, E_TYPE},
+    var::{Var, v_err, v_error, v_float, v_int},
+    variant::Variant,
+};
 use num_traits::ToPrimitive;
 use paste::paste;
 use std::ops::{Div, Mul, Neg, Sub};
@@ -214,9 +216,17 @@ impl Var {
 
 #[cfg(test)]
 mod tests {
-    use crate::Error;
-    use crate::error::ErrorCode::{E_RANGE, E_TYPE};
-    use crate::var::{v_err, v_float, v_int, v_list, v_objid, v_str};
+    use crate::{
+        Error,
+        error::ErrorCode::{E_RANGE, E_TYPE},
+        var::{v_err, v_float, v_int, v_list, v_objid, v_str},
+    };
+
+    #[test]
+    fn test_truthy() {
+        assert!(v_int(1).is_true());
+        assert!(!v_int(0).is_true());
+    }
 
     #[test]
     fn test_add() {

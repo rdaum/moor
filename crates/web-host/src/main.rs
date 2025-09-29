@@ -16,27 +16,32 @@ mod host;
 use crate::host::WebHost;
 use std::collections::HashMap;
 
-use axum::Router;
-use axum::routing::{get, post};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use clap::Parser;
 use clap_derive::Parser;
 
-use figment::Figment;
-use figment::providers::{Format, Serialized, Yaml};
+use figment::{
+    Figment,
+    providers::{Format, Serialized, Yaml},
+};
 use moor_var::{Obj, SYSTEM_OBJECT};
 use rpc_async_client::{
     ListenersClient, ListenersMessage, process_hosts_events, start_host_session,
 };
-use rpc_common::client_args::RpcClientArgs;
-use rpc_common::make_host_token;
-use rpc_common::{HostType, load_keypair};
+use rpc_common::{HostType, client_args::RpcClientArgs, load_keypair, make_host_token};
 use serde_derive::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use tokio::net::TcpListener;
-use tokio::select;
-use tokio::signal::unix::{SignalKind, signal};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, atomic::AtomicBool},
+};
+use tokio::{
+    net::TcpListener,
+    select,
+    signal::unix::{SignalKind, signal},
+};
 use tracing::{error, info, warn};
 
 #[derive(Parser, Debug, Serialize, Deserialize)]

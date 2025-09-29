@@ -28,6 +28,9 @@ mod hosts;
 pub mod message_handler;
 #[cfg(not(test))]
 mod message_handler;
+mod message_handler_auth;
+mod message_handler_history;
+mod message_handler_tasks;
 mod server;
 mod session;
 pub mod transport;

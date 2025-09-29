@@ -23,16 +23,19 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::Error;
-use crate::Sequence;
-use crate::error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE};
-use crate::var::Var;
-use crate::variant::Variant;
+use crate::{
+    Error, Sequence,
+    error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
+    var::Var,
+    variant::Variant,
+};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
-use std::cmp::max;
-use std::fmt::{Display, Formatter};
-use std::hash::Hash;
+use std::{
+    cmp::max,
+    fmt::{Display, Formatter},
+    hash::Hash,
+};
 
 /// A binary blob type that wraps `byteview::ByteView` for efficient handling of binary data.
 #[derive(Clone)]

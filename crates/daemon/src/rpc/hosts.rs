@@ -13,9 +13,7 @@
 
 use moor_var::Obj;
 use rpc_common::{HostToken, HostType};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::time::SystemTime;
+use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 use tracing::warn;
 
 /// Manages the set of known hosts and the listeners they have registered.

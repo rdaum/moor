@@ -13,8 +13,10 @@
 
 //! SystemControl handle for the scheduler - minimal interface for system operations
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use moor_common::tasks::SystemControl;
 use moor_var::Obj;

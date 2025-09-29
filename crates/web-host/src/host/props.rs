@@ -12,13 +12,18 @@
 //
 
 use crate::host::{WebHost, auth, var_as_json, web_host};
-use axum::Json;
-use axum::extract::{ConnectInfo, Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::{
+    Json,
+    extract::{ConnectInfo, Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+};
 use moor_common::model::ObjectRef;
 use moor_var::Symbol;
-use rpc_common::{DaemonToClientReply, EntityType, HostClientToDaemonMessage, PropInfo};
+use planus::ReadAsRoot;
+use rpc_common::{
+    flatbuffers_generated::moor_rpc, mk_detach_msg, mk_properties_msg, mk_retrieve_msg,
+};
 use serde::Deserialize;
 use serde_json::json;
 use std::net::SocketAddr;
@@ -42,54 +47,95 @@ pub async fn properties_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Some(object) = ObjectRef::parse_curie(&object) else {
+    let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
 
     let inherited = query.inherited.unwrap_or(false);
 
-    let response = match web_host::rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Properties(
-            client_token.clone(),
-            auth_token.clone(),
-            object,
-            inherited,
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::Properties(properties)) => Json(
-            properties
-                .iter()
-                .map(|prop| {
-                    json!({
-                        "definer": prop.definer.as_u64(),
-                        "location": prop.location.as_u64(),
-                        "name": prop.name.to_string(),
-                        "owner": prop.owner.as_u64(),
-                        "r": prop.r,
-                        "w": prop.w,
-                        "chown": prop.chown,
-                    })
-                })
-                .collect::<Vec<serde_json::Value>>(),
-        )
-        .into_response(),
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    let props_msg = mk_properties_msg(&client_token, &auth_token, &object_ref, inherited);
+
+    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, props_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::PropertiesReply(properties) => {
+                    let props_vec = properties.properties().expect("Missing properties");
+                    Json(
+                        props_vec
+                            .iter()
+                            .map(|prop_result| {
+                                let prop = prop_result.expect("Failed to get property");
+                                let definer_ref = prop.definer().expect("Missing definer");
+                                let definer_struct = moor_rpc::Obj::try_from(definer_ref)
+                                    .expect("Failed to convert definer");
+                                let definer =
+                                    rpc_common::obj_from_flatbuffer_struct(&definer_struct)
+                                        .expect("Failed to decode definer");
+
+                                let location_ref = prop.location().expect("Missing location");
+                                let location_struct = moor_rpc::Obj::try_from(location_ref)
+                                    .expect("Failed to convert location");
+                                let location =
+                                    rpc_common::obj_from_flatbuffer_struct(&location_struct)
+                                        .expect("Failed to decode location");
+
+                                let name_ref = prop.name().expect("Missing name");
+                                let name_struct = moor_rpc::Symbol::try_from(name_ref)
+                                    .expect("Failed to convert name");
+                                let name = rpc_common::symbol_from_flatbuffer_struct(&name_struct);
+
+                                let owner_ref = prop.owner().expect("Missing owner");
+                                let owner_struct = moor_rpc::Obj::try_from(owner_ref)
+                                    .expect("Failed to convert owner");
+                                let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
+                                    .expect("Failed to decode owner");
+
+                                json!({
+                                    "definer": definer.as_u64(),
+                                    "location": location.as_u64(),
+                                    "name": name.to_string(),
+                                    "owner": owner.as_u64(),
+                                    "r": prop.r().expect("Missing r"),
+                                    "w": prop.w().expect("Missing w"),
+                                    "chown": prop.chown().expect("Missing chown"),
+                                })
+                            })
+                            .collect::<Vec<serde_json::Value>>(),
+                    )
+                    .into_response()
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -108,63 +154,99 @@ pub async fn property_retrieval_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Some(object) = ObjectRef::parse_curie(&object) else {
+    let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
 
     let prop_name = Symbol::mk(&prop_name);
 
-    let response = match web_host::rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Retrieve(
-            client_token.clone(),
-            auth_token.clone(),
-            object,
-            EntityType::Property,
-            prop_name,
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::PropertyValue(
-            PropInfo {
-                definer,
-                location,
-                name,
-                owner,
-                r,
-                w,
-                chown,
-            },
-            value,
-        )) => {
-            debug!("Property value: {:?}", value);
-            Json(json!({
-                "definer": definer.as_u64(),
-                "name": name.to_string(),
-                "location": location.as_u64(),
-                "owner": owner.as_u64(),
-                "r": r,
-                "w": w,
-                "chown": chown,
-                "value": var_as_json(&value)
-            }))
-            .into_response()
+    let retrieve_msg = mk_retrieve_msg(
+        &client_token,
+        &auth_token,
+        &object_ref,
+        moor_rpc::EntityType::Property,
+        &prop_name,
+    );
+
+    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, retrieve_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::PropertyValue(prop_value) => {
+                    let prop = prop_value.prop_info().expect("Missing prop_info");
+
+                    let definer_ref = prop.definer().expect("Missing definer");
+                    let definer_struct =
+                        moor_rpc::Obj::try_from(definer_ref).expect("Failed to convert definer");
+                    let definer = rpc_common::obj_from_flatbuffer_struct(&definer_struct)
+                        .expect("Failed to decode definer");
+
+                    let location_ref = prop.location().expect("Missing location");
+                    let location_struct =
+                        moor_rpc::Obj::try_from(location_ref).expect("Failed to convert location");
+                    let location = rpc_common::obj_from_flatbuffer_struct(&location_struct)
+                        .expect("Failed to decode location");
+
+                    let name_ref = prop.name().expect("Missing name");
+                    let name_struct =
+                        moor_rpc::Symbol::try_from(name_ref).expect("Failed to convert name");
+                    let name = rpc_common::symbol_from_flatbuffer_struct(&name_struct);
+
+                    let owner_ref = prop.owner().expect("Missing owner");
+                    let owner_struct =
+                        moor_rpc::Obj::try_from(owner_ref).expect("Failed to convert owner");
+                    let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
+                        .expect("Failed to decode owner");
+
+                    let value_ref = prop_value.value().expect("Missing value");
+                    let value_bytes = value_ref.data().expect("Missing value data");
+                    let value = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                        .expect("Failed to decode value");
+
+                    debug!("Property value: {:?}", value);
+                    Json(json!({
+                        "definer": definer.as_u64(),
+                        "name": name.to_string(),
+                        "location": location.as_u64(),
+                        "owner": owner.as_u64(),
+                        "r": prop.r().expect("Missing r"),
+                        "w": prop.w().expect("Missing w"),
+                        "chown": prop.chown().expect("Missing chown"),
+                        "value": var_as_json(&value)
+                    }))
+                    .into_response()
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 

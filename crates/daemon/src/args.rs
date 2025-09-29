@@ -15,14 +15,15 @@ use crate::feature_args::FeatureArgs;
 use clap::builder::ValueHint;
 use clap_derive::{Parser, ValueEnum};
 use eyre::eyre;
-use figment::Figment;
-use figment::providers::{Format as ProviderFormat, Serialized, Yaml};
+use figment::{
+    Figment,
+    providers::{Format as ProviderFormat, Serialized, Yaml},
+};
 use moor_db::DatabaseConfig;
 use moor_kernel::config::{Config, ImportExportConfig, ImportExportFormat, RuntimeConfig};
 use moor_textdump::EncodingMode;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 #[allow(dead_code)]
 #[derive(Parser, Debug, Serialize, Deserialize)] // requires `derive` feature

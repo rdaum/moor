@@ -15,32 +15,37 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::config::FeaturesConfig;
-use crate::task_context::with_current_transaction;
-use crate::vm::activation::{BfFrame, Frame};
-use crate::vm::builtins::bf_age_crypto::register_bf_age_crypto;
-use crate::vm::builtins::bf_documents::register_bf_documents;
-use crate::vm::builtins::bf_flyweights::register_bf_flyweights;
-use crate::vm::builtins::bf_list_sets::register_bf_list_sets;
-use crate::vm::builtins::bf_maps::register_bf_maps;
-use crate::vm::builtins::bf_num::register_bf_num;
-use crate::vm::builtins::bf_objects::register_bf_objects;
-use crate::vm::builtins::bf_properties::register_bf_properties;
-use crate::vm::builtins::bf_server::{bf_noop, register_bf_server};
-use crate::vm::builtins::bf_strings::register_bf_strings;
-use crate::vm::builtins::bf_values::register_bf_values;
-use crate::vm::builtins::bf_verbs::register_bf_verbs;
-use crate::vm::exec_state::VMExecState;
-use crate::vm::vm_host::ExecutionResult;
-use moor_common::model::Perms;
-use moor_common::model::WorldStateError;
-use moor_common::util::PerfCounter;
+use crate::{
+    config::FeaturesConfig,
+    task_context::with_current_transaction,
+    vm::{
+        activation::{BfFrame, Frame},
+        builtins::{
+            bf_age_crypto::register_bf_age_crypto,
+            bf_documents::register_bf_documents,
+            bf_flyweights::register_bf_flyweights,
+            bf_list_sets::register_bf_list_sets,
+            bf_maps::register_bf_maps,
+            bf_num::register_bf_num,
+            bf_objects::register_bf_objects,
+            bf_properties::register_bf_properties,
+            bf_server::{bf_noop, register_bf_server},
+            bf_strings::register_bf_strings,
+            bf_values::register_bf_values,
+            bf_verbs::register_bf_verbs,
+        },
+        exec_state::VMExecState,
+        vm_host::ExecutionResult,
+    },
+};
+use moor_common::{
+    model::{Perms, WorldStateError},
+    util::PerfCounter,
+};
 use moor_compiler::{BUILTINS, BuiltinId};
-use moor_var::Var;
-use moor_var::{E_TYPE, Map, Sequence, Variant, v_map};
-use moor_var::{Error, List};
-use moor_var::{ErrorCode, Symbol};
-use moor_var::{Obj, v_bool_int};
+use moor_var::{
+    E_TYPE, Error, ErrorCode, List, Map, Obj, Sequence, Symbol, Var, Variant, v_bool_int, v_map,
+};
 
 mod bf_age_crypto;
 mod bf_documents;

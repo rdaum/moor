@@ -16,27 +16,25 @@ mod feature_args;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod testrun;
 
-use crate::feature_args::FeatureArgs;
-use crate::testrun::run_test;
+use crate::{feature_args::FeatureArgs, testrun::run_test};
 use clap::Parser;
 use clap_derive::Parser;
-use moor_common::build;
-use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
-use moor_common::tasks::SchedulerError;
-use moor_common::tasks::{NoopSystemControl, SessionFactory};
+use moor_common::{
+    build,
+    model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource},
+    tasks::{NoopSystemControl, SchedulerError, SessionFactory},
+};
 use moor_db::{Database, DatabaseConfig, TxDB};
-use moor_kernel::SchedulerClient;
-use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig};
-use moor_kernel::tasks::scheduler::Scheduler;
-use moor_kernel::tasks::{NoopTasksDb, TaskResult};
+use moor_kernel::{
+    SchedulerClient,
+    config::{Config, FeaturesConfig, ImportExportConfig},
+    tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
+};
 use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
 use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
-use std::fs::File;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{fs::File, path::PathBuf, sync::Arc, time::Duration};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Parser, Debug)] // requires `derive` feature

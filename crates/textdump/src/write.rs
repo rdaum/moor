@@ -12,14 +12,13 @@
 //
 
 use moor_compiler::{program_to_tree, unparse};
-use moor_var::{ErrorCode, Obj, Sequence};
-use moor_var::{Lambda, Var, VarType, Variant};
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::io;
+use moor_var::{ErrorCode, Lambda, Obj, Sequence, Var, VarType, Variant};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io,
+};
 
-use crate::read::TYPE_CLEAR;
-use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
+use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef, read::TYPE_CLEAR};
 use moor_var::Associative;
 
 // Textdump-specific type constant for anonymous objects (matching ToastStunt)

@@ -11,14 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 use uuid::Uuid;
 
-use crate::connections::fjall_persistence::FjallPersistence;
-use crate::connections::in_memory::ConnectionRegistryMemory;
-use crate::connections::persistence::NullPersistence;
+use crate::connections::{
+    fjall_persistence::FjallPersistence, in_memory::ConnectionRegistryMemory,
+    persistence::NullPersistence,
+};
 use eyre::Report as Error;
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
@@ -150,8 +153,7 @@ impl ConnectionRegistryFactory {
 
 #[cfg(test)]
 mod tests {
-    use crate::connections::NewConnectionParams;
-    use crate::connections::registry::ConnectionRegistryFactory;
+    use crate::connections::{NewConnectionParams, registry::ConnectionRegistryFactory};
     use uuid::Uuid;
 
     #[test]

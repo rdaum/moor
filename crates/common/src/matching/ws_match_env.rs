@@ -11,9 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::model::ObjSet;
-use crate::model::WorldState;
-use crate::model::WorldStateError;
+use crate::model::{ObjSet, WorldState, WorldStateError};
 use moor_var::Obj;
 
 use crate::matching::MatchEnvironment;

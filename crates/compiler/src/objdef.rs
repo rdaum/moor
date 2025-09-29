@@ -11,25 +11,30 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::CompileOptions;
-use crate::ObjDefParseError::VerbCompileError;
-use crate::codegen::compile_tree;
-use crate::parse::moo::{MooParser, Rule};
+use crate::{
+    CompileOptions,
+    ObjDefParseError::VerbCompileError,
+    codegen::compile_tree,
+    parse::moo::{MooParser, Rule},
+};
 use itertools::Itertools;
-use moor_common::model::{
-    ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec,
-    VerbFlag,
+use moor_common::{
+    model::{
+        ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms,
+        VerbArgsSpec, VerbFlag,
+    },
+    util::{BitEnum, unquote_str},
 };
-use moor_common::util::BitEnum;
-use moor_common::util::unquote_str;
-use moor_var::program::ProgramType;
 use moor_var::{
-    AnonymousObjid, ErrorCode, List, NOTHING, Obj, Symbol, UuObjid, Var, VarType, v_bool, v_err,
-    v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str, v_sym,
+    AnonymousObjid, ErrorCode, List, NOTHING, Obj, Symbol, UuObjid, Var, VarType,
+    program::ProgramType, v_bool, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str,
+    v_sym,
 };
-use pest::Parser;
-use pest::error::LineColLocation;
-use pest::iterators::{Pair, Pairs};
+use pest::{
+    Parser,
+    error::LineColLocation,
+    iterators::{Pair, Pairs},
+};
 use std::collections::HashMap;
 
 pub struct ObjFileContext(HashMap<Symbol, Var>);
@@ -190,9 +195,11 @@ fn parse_objdef_lambda_params(
     _context: &mut ObjFileContext,
     params_pair: Pair<Rule>,
 ) -> Result<moor_var::program::opcode::ScatterArgs, ObjDefParseError> {
-    use moor_var::program::labels::Label;
-    use moor_var::program::names::Name;
-    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
+    use moor_var::program::{
+        labels::Label,
+        names::Name,
+        opcode::{ScatterArgs, ScatterLabel},
+    };
 
     let mut labels = vec![];
 

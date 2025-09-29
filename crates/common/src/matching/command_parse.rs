@@ -11,15 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::marker::PhantomData;
-use std::string::ToString;
+use std::{marker::PhantomData, string::ToString};
 
-use crate::matching::{
-    CommandParser, ObjectNameMatcher, ParseCommandError, ParsedCommand,
-    find_preposition_for_command,
+use crate::{
+    matching::{
+        CommandParser, ObjectNameMatcher, ParseCommandError, ParsedCommand,
+        find_preposition_for_command,
+    },
+    model::PrepSpec,
+    util,
 };
-use crate::model::PrepSpec;
-use crate::util;
 use moor_var::{Var, v_str};
 
 /// The default command parser implementation based on the one in LambdaMOO 1.8.
@@ -152,17 +153,17 @@ fn seek_preposition(words: &[String]) -> (Option<(usize, String)>, PrepSpec) {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::WorldStateError;
-    use crate::util::parse_into_words;
-    use moor_var::v_str;
-    use moor_var::{FAILED_MATCH, Obj};
+    use crate::{model::WorldStateError, util::parse_into_words};
+    use moor_var::{FAILED_MATCH, Obj, v_str};
 
     use super::*;
-    use crate::matching::match_env::DefaultObjectNameMatcher;
-    use crate::matching::mock_matching_env::{
-        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
+    use crate::matching::{
+        ObjectNameMatcher, Preposition,
+        match_env::DefaultObjectNameMatcher,
+        mock_matching_env::{
+            MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
+        },
     };
-    use crate::matching::{ObjectNameMatcher, Preposition};
 
     #[test]
     fn test_parse_into_words_simple() {

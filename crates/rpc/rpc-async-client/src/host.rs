@@ -11,36 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::ListenersClient;
-use crate::pubsub_client::hosts_events_recv;
-use crate::rpc_client::RpcSendClient;
+use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcSendClient};
 use rpc_common::{
-    DaemonToHostReply, HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostToDaemonMessage, HostToken,
-    HostType, ReplyResult, RpcError,
+    HOST_BROADCAST_TOPIC, HostToken, HostType, RpcError, flatbuffers_generated::moor_rpc,
 };
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::SystemTime;
+use std::{
+    net::SocketAddr,
+    sync::{Arc, atomic::AtomicBool},
+    time::SystemTime,
+};
 use tmq::request;
 use tracing::{error, info, warn};
 
 pub async fn send_host_to_daemon_msg(
     rpc_client: &mut RpcSendClient,
     host_token: &HostToken,
-    msg: HostToDaemonMessage,
-) -> Result<DaemonToHostReply, RpcError> {
-    match rpc_client.make_host_rpc_call(host_token, msg).await {
-        Ok(ReplyResult::HostSuccess(msg)) => Ok(msg),
-        Ok(ReplyResult::Failure(f)) => Err(RpcError::CouldNotSend(f.to_string())),
-        Ok(m) => Err(RpcError::UnexpectedReply(format!(
-            "Unexpected reply from daemon: {m:?}"
-        ))),
-        Err(e) => {
-            error!("Error communicating with daemon: {}", e);
-            Err(RpcError::CouldNotSend(e.to_string()))
-        }
-    }
+    msg: moor_rpc::HostToDaemonMessage,
+) -> Result<Vec<u8>, RpcError> {
+    rpc_client.make_host_rpc_call(host_token, msg).await
 }
 
 /// Start the host session with the daemon, and return the RPC client to use for further
@@ -66,37 +54,100 @@ pub async fn start_host_session(
         let mut rpc_client = RpcSendClient::new(rpc_request_sock);
 
         info!("Registering host with daemon via {}...", rpc_address);
-        let host_hello = HostToDaemonMessage::RegisterHost(
-            SystemTime::now(),
-            HostType::TCP,
-            listeners
-                .get_listeners()
-                .await
-                .map_err(|e| RpcError::CouldNotSend(e.to_string()))?,
-        );
-        let msg = send_host_to_daemon_msg(&mut rpc_client, host_token, host_hello).await;
-        match msg {
-            Ok(DaemonToHostReply::Ack) => {
-                info!("Host token accepted by daemon.");
-                break rpc_client;
-            }
-            Ok(DaemonToHostReply::Reject(reason)) => {
-                error!("Daemon has rejected this host: {}. Shutting down.", reason);
-                kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
-                return Err(RpcError::AuthenticationError(format!(
-                    "Daemon rejected host token: {reason}"
-                )));
+        let timestamp = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {}", e)))?
+            .as_nanos() as u64;
+
+        let host_type_fb = moor_rpc::HostType::Tcp;
+
+        let listener_list = listeners
+            .get_listeners()
+            .await
+            .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
+
+        let listeners_fb: Vec<moor_rpc::Listener> = listener_list
+            .iter()
+            .map(|(obj, addr)| moor_rpc::Listener {
+                handler_object: Box::new(rpc_common::obj_to_flatbuffer_struct(obj)),
+                socket_addr: addr.to_string(),
+            })
+            .collect();
+
+        let host_hello = moor_rpc::HostToDaemonMessage {
+            message: moor_rpc::HostToDaemonMessageUnion::RegisterHost(Box::new(
+                moor_rpc::RegisterHost {
+                    timestamp,
+                    host_type: host_type_fb,
+                    listeners: listeners_fb,
+                },
+            )),
+        };
+        let reply_bytes = send_host_to_daemon_msg(&mut rpc_client, host_token, host_hello).await;
+        match reply_bytes {
+            Ok(bytes) => {
+                use planus::ReadAsRoot;
+                let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&bytes)
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e)))?;
+
+                match reply_ref
+                    .result()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing result: {}", e)))?
+                {
+                    moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
+                        let daemon_reply = host_success.reply().map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Missing reply: {}", e))
+                        })?;
+                        match daemon_reply.reply().map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Missing reply union: {}", e))
+                        })? {
+                            moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostAck(_) => {
+                                info!("Host token accepted by daemon.");
+                                break rpc_client;
+                            }
+                            moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostReject(reject) => {
+                                let reason = reject
+                                    .reason()
+                                    .map_err(|e| {
+                                        RpcError::CouldNotDecode(format!("Missing reason: {}", e))
+                                    })?
+                                    .to_string();
+                                error!("Daemon has rejected this host: {}. Shutting down.", reason);
+                                kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
+                                return Err(RpcError::AuthenticationError(format!(
+                                    "Daemon rejected host token: {reason}"
+                                )));
+                            }
+                            _ => {
+                                return Err(RpcError::UnexpectedReply(
+                                    "Expected Ack or Reject".to_string(),
+                                ));
+                            }
+                        }
+                    }
+                    moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                        let error_ref = failure.error().map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Missing error: {}", e))
+                        })?;
+                        let error_code = error_ref.error_code().map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Missing error code: {}", e))
+                        })?;
+                        return Err(RpcError::CouldNotSend(format!(
+                            "Daemon error: {:?}",
+                            error_code
+                        )));
+                    }
+                    _ => {
+                        return Err(RpcError::UnexpectedReply(
+                            "Expected HostSuccess or Failure".to_string(),
+                        ));
+                    }
+                }
             }
             Err(e) => {
                 warn!("Error communicating with daemon: {} to send host token", e);
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 continue;
-            }
-            _ => {
-                error!("Unexpected reply from daemon: {:?}", msg);
-                return Err(RpcError::UnexpectedReply(format!(
-                    "Unexpected reply from daemon: {msg:?}"
-                )));
             }
         }
     };
@@ -125,26 +176,110 @@ pub async fn process_hosts_events(
             return Ok(());
         }
         let msg = hosts_events_recv(&mut events_sub).await?;
+        let event = msg.event()?;
 
-        match msg {
-            HostBroadcastEvent::PingPong(_) => {
+        use planus::ReadAsRoot;
+        match event
+            .event()
+            .map_err(|e| RpcError::CouldNotDecode(format!("Missing event: {}", e)))?
+        {
+            moor_rpc::HostBroadcastEventUnionRef::HostBroadcastPingPong(_) => {
                 // Respond with a HostPong
-                let host_pong = HostToDaemonMessage::HostPong(
-                    SystemTime::now(),
-                    our_host_type,
-                    listeners
-                        .get_listeners()
-                        .await
-                        .map_err(|e| RpcError::CouldNotSend(e.to_string()))?,
-                );
-                let msg = send_host_to_daemon_msg(&mut rpc_client, &host_token, host_pong).await;
-                match msg {
-                    Ok(DaemonToHostReply::Ack) => {
-                        // All good
-                    }
-                    Ok(DaemonToHostReply::Reject(reason)) => {
-                        error!("Daemon has rejected this host: {}. Shutting down.", reason);
-                        kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
+                let timestamp = SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {}", e)))?
+                    .as_nanos() as u64;
+
+                let host_type_fb = match our_host_type {
+                    HostType::TCP => moor_rpc::HostType::Tcp,
+                    HostType::WebSocket => moor_rpc::HostType::WebSocket,
+                };
+
+                let listener_list = listeners
+                    .get_listeners()
+                    .await
+                    .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
+
+                let listeners_fb: Vec<moor_rpc::Listener> = listener_list
+                    .iter()
+                    .map(|(obj, addr)| moor_rpc::Listener {
+                        handler_object: Box::new(rpc_common::obj_to_flatbuffer_struct(obj)),
+                        socket_addr: addr.to_string(),
+                    })
+                    .collect();
+
+                let host_pong = moor_rpc::HostToDaemonMessage {
+                    message: moor_rpc::HostToDaemonMessageUnion::HostPong(Box::new(
+                        moor_rpc::HostPong {
+                            timestamp,
+                            host_type: host_type_fb,
+                            listeners: listeners_fb,
+                        },
+                    )),
+                };
+                let reply_bytes =
+                    send_host_to_daemon_msg(&mut rpc_client, &host_token, host_pong).await;
+                match reply_bytes {
+                    Ok(bytes) => {
+                        let reply_ref =
+                            moor_rpc::ReplyResultRef::read_as_root(&bytes).map_err(|e| {
+                                RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e))
+                            })?;
+
+                        match reply_ref.result().map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Missing result: {}", e))
+                        })? {
+                            moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
+                                let daemon_reply = host_success.reply().map_err(|e| {
+                                    RpcError::CouldNotDecode(format!("Missing reply: {}", e))
+                                })?;
+                                match daemon_reply.reply().map_err(|e| {
+                                    RpcError::CouldNotDecode(format!("Missing reply union: {}", e))
+                                })? {
+                                    moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostAck(_) => {
+                                        // All good
+                                    }
+                                    moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostReject(
+                                        reject,
+                                    ) => {
+                                        let reason = reject
+                                            .reason()
+                                            .map_err(|e| {
+                                                RpcError::CouldNotDecode(format!(
+                                                    "Missing reason: {}",
+                                                    e
+                                                ))
+                                            })?
+                                            .to_string();
+                                        error!(
+                                            "Daemon has rejected this host: {}. Shutting down.",
+                                            reason
+                                        );
+                                        kill_switch
+                                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                                    }
+                                    _ => {
+                                        return Err(RpcError::UnexpectedReply(
+                                            "Expected Ack or Reject".to_string(),
+                                        ));
+                                    }
+                                }
+                            }
+                            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                                let error_ref = failure.error().map_err(|e| {
+                                    RpcError::CouldNotDecode(format!("Missing error: {}", e))
+                                })?;
+                                let error_code = error_ref.error_code().map_err(|e| {
+                                    RpcError::CouldNotDecode(format!("Missing error code: {}", e))
+                                })?;
+                                warn!("Daemon error responding to ping: {:?}", error_code);
+                            }
+                            _ => {
+                                return Err(RpcError::UnexpectedReply(
+                                    "Expected HostSuccess or Failure".to_string(),
+                                ));
+                            }
+                        }
                     }
                     Err(e) => {
                         warn!(
@@ -152,20 +287,33 @@ pub async fn process_hosts_events(
                             e
                         );
                     }
-                    _ => {
-                        error!("Unexpected reply from daemon: {:?}", msg);
-                        return Err(RpcError::UnexpectedReply(format!(
-                            "Unexpected reply from daemon: {msg:?}"
-                        )));
-                    }
                 }
             }
-            HostBroadcastEvent::Listen {
-                handler_object,
-                host_type,
-                port,
-                print_messages: _,
-            } => {
+            moor_rpc::HostBroadcastEventUnionRef::HostBroadcastListen(listen) => {
+                let handler_object_ref = listen.handler_object().map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Missing handler_object: {}", e))
+                })?;
+                let handler_object_struct =
+                    moor_rpc::Obj::try_from(handler_object_ref).map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to convert handler_object: {}", e))
+                    })?;
+                let handler_object = rpc_common::obj_from_flatbuffer_struct(&handler_object_struct)
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to decode handler_object: {}", e))
+                    })?;
+
+                let host_type_fb = listen
+                    .host_type()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing host_type: {}", e)))?;
+                let host_type = match host_type_fb {
+                    moor_rpc::HostType::Tcp => HostType::TCP,
+                    moor_rpc::HostType::WebSocket => HostType::WebSocket,
+                };
+
+                let port = listen
+                    .port()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {}", e)))?;
+
                 if host_type == our_host_type {
                     let listen_addr = format!("{listen_address}:{port}");
                     let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
@@ -188,7 +336,19 @@ pub async fn process_hosts_events(
                     });
                 }
             }
-            HostBroadcastEvent::Unlisten { host_type, port } => {
+            moor_rpc::HostBroadcastEventUnionRef::HostBroadcastUnlisten(unlisten) => {
+                let host_type_fb = unlisten
+                    .host_type()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing host_type: {}", e)))?;
+                let host_type = match host_type_fb {
+                    moor_rpc::HostType::Tcp => HostType::TCP,
+                    moor_rpc::HostType::WebSocket => HostType::WebSocket,
+                };
+
+                let port = unlisten
+                    .port()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {}", e)))?;
+
                 if host_type == our_host_type {
                     // Stop listening on the given port, on `listen_address`.
                     let listen_addr = format!("{listen_address}:{port}");

@@ -12,20 +12,25 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::vm::activation::{Activation, Frame};
-use crate::vm::exec_state::VMExecState;
-use crate::vm::moo_frame::{CatchType, ScopeType};
-use crate::vm::vm_host::ExecutionResult;
+use crate::vm::{
+    activation::{Activation, Frame},
+    exec_state::VMExecState,
+    moo_frame::{CatchType, ScopeType},
+    vm_host::ExecutionResult,
+};
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
 use bincode::{Decode, Encode};
-use moor_common::model::Named;
-use moor_common::model::VerbFlag;
-use moor_common::tasks::Exception;
+use moor_common::{
+    model::{Named, VerbFlag},
+    tasks::Exception,
+};
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
-use moor_var::{Error, NOTHING, v_arc_string, v_bool, v_error, v_string};
-use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
+use moor_var::{
+    Error, NOTHING, Var, v_arc_string, v_bool, v_err, v_error, v_int, v_list, v_none, v_obj, v_str,
+    v_string,
+};
 use tracing::warn;
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

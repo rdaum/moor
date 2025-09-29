@@ -13,15 +13,16 @@
 
 //! Builtin functions for value inspection, conversion, and manipulation.
 
-use crate::task_context::with_current_transaction;
-use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::{
+    task_context::with_current_transaction,
+    vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err},
+};
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
-use moor_var::{AsByteBuffer, Sequence};
-use moor_var::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
-use moor_var::{Variant, v_err};
-use moor_var::{v_float, v_int, v_obj, v_objid, v_str, v_sym};
+use moor_var::{
+    AsByteBuffer, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Sequence, Variant, v_err, v_float, v_int,
+    v_obj, v_objid, v_str, v_sym,
+};
 
 /// MOO: `int typeof(any value)`
 /// Returns the type code of the given value.

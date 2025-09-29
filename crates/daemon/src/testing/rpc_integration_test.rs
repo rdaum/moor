@@ -18,18 +18,42 @@ mod tests {
     use std::sync::{Arc, RwLock};
     use uuid::Uuid;
 
-    use moor_kernel::config::Config;
-    use moor_kernel::testing::MockScheduler;
+    use moor_kernel::{config::Config, testing::MockScheduler};
     use rusty_paseto::prelude::Key;
 
-    use crate::connections::ConnectionRegistryFactory;
-    use crate::event_log::EventLogOps;
-    use crate::rpc::{MessageHandler, hosts::Hosts, message_handler::RpcMessageHandler};
-    use crate::tasks::task_monitor::TaskMonitor;
-    use crate::testing::{MockEventLog, MockTransport};
+    use crate::{
+        connections::ConnectionRegistryFactory,
+        event_log::EventLogOps,
+        rpc::{MessageHandler, hosts::Hosts, message_handler::RpcMessageHandler},
+        tasks::task_monitor::TaskMonitor,
+        testing::{MockEventLog, MockTransport},
+    };
     use moor_var::{Obj, SYSTEM_OBJECT};
-    use rpc_common::{HostToDaemonMessage, HostToken, HostType, make_host_token};
-    use std::net::SocketAddr;
+    use planus::ReadAsRoot;
+    use rpc_common::{
+        HostToken, flatbuffers_generated::moor_rpc, make_host_token, mk_client_pong_msg,
+        mk_command_msg, mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg,
+        mk_host_pong_msg, mk_login_command_msg, mk_properties_msg, mk_register_host_msg,
+        mk_request_performance_counters_msg, mk_request_sys_prop_msg, mk_requested_input_msg,
+        mk_verbs_msg, obj_fb,
+    };
+    use std::{
+        net::SocketAddr,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn systemtime_to_nanos(time: SystemTime) -> u64 {
+        time.duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_nanos() as u64
+    }
+
+    fn create_listener(obj: Obj, addr: SocketAddr) -> moor_rpc::Listener {
+        moor_rpc::Listener {
+            handler_object: obj_fb(&obj),
+            socket_addr: addr.to_string(),
+        }
+    }
 
     fn create_test_keys() -> (Key<32>, Key<64>) {
         // Use the fixed test keys instead of random generation to avoid Ed25519 validation issues
@@ -110,18 +134,18 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
 
         let host_token = create_test_host_token();
-        let listeners: Vec<(Obj, SocketAddr)> = Vec::new();
-        let message = HostToDaemonMessage::RegisterHost(
-            std::time::SystemTime::now(),
-            HostType::WebSocket,
+        let listeners: Vec<moor_rpc::Listener> = Vec::new();
+        let message = mk_register_host_msg(
+            systemtime_to_nanos(SystemTime::now()),
+            moor_rpc::HostType::WebSocket,
             listeners,
         );
 
         let result = transport.process_host_message(message_handler.as_ref(), host_token, message);
 
         assert!(result.is_ok(), "Host registration should succeed");
-        match result.unwrap() {
-            rpc_common::DaemonToHostReply::Ack => {
+        match result.unwrap().reply {
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
                 // Expected response
             }
             other => panic!("Expected Ack, got {other:?}"),
@@ -135,20 +159,17 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let host_token = create_test_host_token();
 
         // Create some test listeners for the host
-        let listener1 = (
-            Obj::mk_id(100),
-            "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
-        );
-        let listener2 = (
-            Obj::mk_id(101),
-            "127.0.0.1:8081".parse::<SocketAddr>().unwrap(),
-        );
-        let listeners = vec![listener1, listener2];
+        let listener1_addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
+        let listener2_addr = "127.0.0.1:8081".parse::<SocketAddr>().unwrap();
+        let listeners = vec![
+            create_listener(Obj::mk_id(100), listener1_addr),
+            create_listener(Obj::mk_id(101), listener2_addr),
+        ];
 
         // Step 1: Register the host (attach)
-        let register_message = HostToDaemonMessage::RegisterHost(
-            std::time::SystemTime::now(),
-            HostType::WebSocket,
+        let register_message = mk_register_host_msg(
+            systemtime_to_nanos(SystemTime::now()),
+            moor_rpc::HostType::WebSocket,
             listeners.clone(),
         );
 
@@ -159,8 +180,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         assert!(result.is_ok(), "Host registration should succeed");
-        match result.unwrap() {
-            rpc_common::DaemonToHostReply::Ack => {
+        match result.unwrap().reply {
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
                 // Expected response for registration
             }
             other => panic!("Expected Ack for registration, got {other:?}"),
@@ -198,7 +219,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 3: Detach the host and verify reply
-        let detach_message = HostToDaemonMessage::DetachHost;
+        let detach_message = mk_detach_host_msg();
         let result = transport.process_host_message(
             message_handler.as_ref(),
             host_token.clone(),
@@ -206,8 +227,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         assert!(result.is_ok(), "Host detach should succeed");
-        match result.unwrap() {
-            rpc_common::DaemonToHostReply::Ack => {
+        match result.unwrap().reply {
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
                 // Expected response for detach
             }
             other => panic!("Expected Ack for detach, got {other:?}"),
@@ -220,10 +241,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Should have captured a host reply"
         );
         match last_host_reply.unwrap() {
-            Ok(rpc_common::DaemonToHostReply::Ack) => {
-                // Expected Ack reply captured correctly
-            }
-            other => panic!("Transport captured wrong host reply: {other:?}"),
+            Ok(reply) => match reply.reply {
+                moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_) => {
+                    // Expected Ack reply captured correctly
+                }
+                other => panic!("Transport captured wrong host reply: {other:?}"),
+            },
+            Err(e) => panic!("Transport captured error: {e:?}"),
         }
 
         // Step 4: Verify host is no longer registered (no listeners)
@@ -242,15 +266,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let host_token = create_test_host_token();
 
         // Step 1: Register host with listeners
-        let listener1 = (
-            Obj::mk_id(100),
-            "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
-        );
-        let listeners = vec![listener1];
+        let listener1_addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
+        let listeners = vec![create_listener(Obj::mk_id(100), listener1_addr)];
 
-        let register_message = HostToDaemonMessage::RegisterHost(
-            std::time::SystemTime::now(),
-            HostType::WebSocket,
+        let register_message = mk_register_host_msg(
+            systemtime_to_nanos(SystemTime::now()),
+            moor_rpc::HostType::WebSocket,
             listeners,
         );
 
@@ -263,13 +284,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 2: Establish a client connection
         let client_id = Uuid::new_v4();
-        let connect_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let connect_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let result = transport.process_client_message(
             message_handler.as_ref(),
@@ -288,7 +311,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 3: Detach the host
-        let detach_message = HostToDaemonMessage::DetachHost;
+        let detach_message = mk_detach_host_msg();
         let result = transport.process_host_message(
             message_handler.as_ref(),
             host_token.clone(),
@@ -312,7 +335,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
 
         let host_token = create_test_host_token();
-        let message = HostToDaemonMessage::RequestPerformanceCounters;
+        let message = mk_request_performance_counters_msg();
 
         let result = transport.process_host_message(message_handler.as_ref(), host_token, message);
 
@@ -320,12 +343,17 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             result.is_ok(),
             "Performance counters request should succeed"
         );
-        match result.unwrap() {
-            rpc_common::DaemonToHostReply::PerfCounters(timestamp, counters) => {
-                assert!(!counters.is_empty(), "Should have performance counters");
+        match result.unwrap().reply {
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostPerfCounters(perf) => {
+                assert!(
+                    !perf.counters.is_empty(),
+                    "Should have performance counters"
+                );
                 // Verify timestamp is recent
                 use std::time::{Duration, SystemTime};
                 let now = SystemTime::now();
+                let timestamp_nanos = Duration::from_nanos(perf.timestamp);
+                let timestamp = UNIX_EPOCH + timestamp_nanos;
                 let diff = now.duration_since(timestamp).unwrap_or(Duration::ZERO);
                 assert!(diff < Duration::from_secs(1), "Timestamp should be recent");
             }
@@ -344,13 +372,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let initial_count = connections_before.len();
 
         // Step 2: Establish connection
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let result = transport.process_client_message(
             message_handler.as_ref(),
@@ -360,15 +390,20 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         assert!(result.is_ok(), "Connection establishment should succeed");
-        let (client_token, connection_obj) = match result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, connection_obj) => {
+        let (client_token, connection_obj) = match result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
                 assert!(!token.0.is_empty(), "Should receive a client token");
                 assert!(
-                    connection_obj.id().0 != 0,
+                    obj.id().0 != 0,
                     "Should receive a valid connection object (got ID: {})",
-                    connection_obj.id().0
+                    obj.id().0
                 );
-                (token, connection_obj)
+                (token, obj)
             }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
@@ -386,12 +421,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 4: Test client activity (ping)
-        let ping_message = rpc_common::HostClientToDaemonMessage::ClientPong(
-            client_token.clone(),
-            std::time::SystemTime::now(),
-            connection_obj,
-            HostType::WebSocket,
-            "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+        let ping_message = mk_client_pong_msg(
+            &client_token,
+            systemtime_to_nanos(SystemTime::now()),
+            &connection_obj,
+            moor_rpc::HostType::WebSocket,
+            "127.0.0.1:8080".to_string(),
         );
 
         let ping_result = transport.process_client_message(
@@ -404,7 +439,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(ping_result.is_ok(), "Client ping should succeed");
 
         // Step 5: Test detachment and verify reply
-        let detach_message = rpc_common::HostClientToDaemonMessage::Detach(client_token, true);
+        let detach_message = mk_detach_msg(&client_token, true);
 
         let detach_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -416,8 +451,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(detach_result.is_ok(), "Client detach should succeed");
 
         // Step 5a: Verify the correct reply was sent
-        match detach_result.unwrap() {
-            rpc_common::DaemonToClientReply::Disconnected => {
+        match detach_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::Disconnected(_) => {
                 // This is the expected reply for detach
             }
             other => panic!("Expected Disconnected reply, got {other:?}"),
@@ -430,10 +465,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "Should have captured a client reply"
         );
         match last_client_reply.unwrap() {
-            Ok(rpc_common::DaemonToClientReply::Disconnected) => {
-                // Expected reply captured correctly
-            }
-            other => panic!("Transport captured wrong reply: {other:?}"),
+            Ok(reply) => match reply.reply {
+                moor_rpc::DaemonToClientReplyUnion::Disconnected(_) => {
+                    // Expected reply captured correctly
+                }
+                other => panic!("Transport captured wrong reply: {other:?}"),
+            },
+            Err(e) => panic!("Transport captured error: {e:?}"),
         }
     }
 
@@ -445,13 +483,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id_2 = Uuid::new_v4();
 
         // Establish first connection
-        let establish_message_1 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message_1 = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let result_1 = transport.process_client_message(
             message_handler.as_ref(),
@@ -464,19 +504,28 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             result_1.is_ok(),
             "First connection establishment should succeed"
         );
-        let (_token_1, connection_obj_1) = match result_1.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (_token_1, connection_obj_1) = match result_1.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Establish second connection
-        let establish_message_2 = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8081".to_string(),
-            local_port: 7777,
-            remote_port: 8081,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/html")]),
-            connection_attributes: None,
-        };
+        let establish_message_2 = mk_connection_establish_msg(
+            "127.0.0.1:8081".to_string(),
+            7777,
+            8081,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/html".to_string(),
+            }]),
+            None,
+        );
 
         let result_2 = transport.process_client_message(
             message_handler.as_ref(),
@@ -489,8 +538,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             result_2.is_ok(),
             "Second connection establishment should succeed"
         );
-        let (token_2, connection_obj_2) = match result_2.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (token_2, connection_obj_2) = match result_2.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
@@ -511,7 +567,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Detach first connection
-        let detach_message_1 = rpc_common::HostClientToDaemonMessage::Detach(token_2.clone(), true);
+        let detach_message_1 = mk_detach_msg(&token_2, true);
 
         let detach_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -547,10 +603,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Test 1: Host registration should reply with Ack
-        let register_message = HostToDaemonMessage::RegisterHost(
-            std::time::SystemTime::now(),
-            HostType::WebSocket,
-            vec![(
+        let register_message = mk_register_host_msg(
+            systemtime_to_nanos(SystemTime::now()),
+            moor_rpc::HostType::WebSocket,
+            vec![create_listener(
                 Obj::mk_id(100),
                 "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
             )],
@@ -564,18 +620,20 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         assert!(register_result.is_ok(), "Host registration should succeed");
         assert!(matches!(
-            register_result.unwrap(),
-            rpc_common::DaemonToHostReply::Ack
+            register_result.unwrap().reply,
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_)
         ));
 
         // Verify captured reply
         let host_replies = transport.get_host_replies();
         assert_eq!(host_replies.len(), 1, "Should have captured 1 host reply");
         let (_, _, reply) = &host_replies[0];
-        assert!(matches!(reply, Ok(rpc_common::DaemonToHostReply::Ack)));
+        assert!(
+            matches!(reply, Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_)))
+        );
 
         // Test 2: Performance counters request should reply with PerfCounters
-        let perf_message = HostToDaemonMessage::RequestPerformanceCounters;
+        let perf_message = mk_request_performance_counters_msg();
 
         let perf_result = transport.process_host_message(
             message_handler.as_ref(),
@@ -587,21 +645,26 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             perf_result.is_ok(),
             "Performance counters request should succeed"
         );
-        match perf_result.unwrap() {
-            rpc_common::DaemonToHostReply::PerfCounters(_, counters) => {
-                assert!(!counters.is_empty(), "Should have performance counters");
+        match perf_result.unwrap().reply {
+            moor_rpc::DaemonToHostReplyUnion::DaemonToHostPerfCounters(perf) => {
+                assert!(
+                    !perf.counters.is_empty(),
+                    "Should have performance counters"
+                );
             }
             other => panic!("Expected PerfCounters reply, got {other:?}"),
         }
 
         // Test 3: Client connection establishment should reply with NewConnection
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -614,8 +677,17 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_result.is_ok(),
             "Connection establishment should succeed"
         );
-        let (client_token, connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection reply, got {other:?}"),
         };
 
@@ -633,16 +705,16 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         assert!(matches!(
             reply,
-            Ok(rpc_common::DaemonToClientReply::NewConnection(_, _))
+            Ok(r) if matches!(r.reply, moor_rpc::DaemonToClientReplyUnion::NewConnection(_))
         ));
 
         // Test 4: Client ping should reply with Ack (or similar)
-        let ping_message = rpc_common::HostClientToDaemonMessage::ClientPong(
-            client_token.clone(),
-            std::time::SystemTime::now(),
-            connection_obj,
-            HostType::WebSocket,
-            "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+        let ping_message = mk_client_pong_msg(
+            &client_token,
+            systemtime_to_nanos(SystemTime::now()),
+            &connection_obj,
+            moor_rpc::HostType::WebSocket,
+            "127.0.0.1:8080".to_string(),
         );
 
         let ping_result = transport.process_client_message(
@@ -655,7 +727,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(ping_result.is_ok(), "Client ping should succeed");
 
         // Test 5: Client detach should reply with Disconnected
-        let detach_message = rpc_common::HostClientToDaemonMessage::Detach(client_token, true);
+        let detach_message = mk_detach_msg(&client_token, true);
 
         let detach_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -666,8 +738,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         assert!(detach_result.is_ok(), "Client detach should succeed");
         assert!(matches!(
-            detach_result.unwrap(),
-            rpc_common::DaemonToClientReply::Disconnected
+            detach_result.unwrap().reply,
+            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::Disconnected(_)
         ));
 
         // Verify all client replies were captured correctly
@@ -682,13 +754,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (_, _, establish_reply) = &final_client_replies[0];
         assert!(matches!(
             establish_reply,
-            Ok(rpc_common::DaemonToClientReply::NewConnection(_, _))
+            Ok(r) if matches!(r.reply, moor_rpc::DaemonToClientReplyUnion::NewConnection(_))
         ));
 
         let (_, _, detach_reply) = &final_client_replies[2];
         assert!(matches!(
             detach_reply,
-            Ok(rpc_common::DaemonToClientReply::Disconnected)
+            Ok(r) if matches!(r.reply, moor_rpc::DaemonToClientReplyUnion::Disconnected(_))
         ));
     }
 
@@ -700,12 +772,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Test 1: Invalid client token should generate error reply
         let invalid_token = rpc_common::ClientToken("invalid_token".to_string());
-        let invalid_ping_message = rpc_common::HostClientToDaemonMessage::ClientPong(
-            invalid_token,
-            std::time::SystemTime::now(),
-            Obj::mk_id(1),
-            HostType::WebSocket,
-            "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+        let invalid_ping_message = mk_client_pong_msg(
+            &invalid_token,
+            systemtime_to_nanos(SystemTime::now()),
+            &Obj::mk_id(1),
+            moor_rpc::HostType::WebSocket,
+            "127.0.0.1:8080".to_string(),
         );
 
         let invalid_ping_result = transport.process_client_message(
@@ -744,12 +816,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let client_id = Uuid::new_v4();
         let invalid_token = rpc_common::ClientToken("invalid_token".to_string());
-        let message = rpc_common::HostClientToDaemonMessage::ClientPong(
-            invalid_token,
-            std::time::SystemTime::now(),
-            Obj::mk_id(1),
-            HostType::WebSocket,
-            "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+        let message = mk_client_pong_msg(
+            &invalid_token,
+            systemtime_to_nanos(SystemTime::now()),
+            &Obj::mk_id(1),
+            moor_rpc::HostType::WebSocket,
+            "127.0.0.1:8080".to_string(),
         );
 
         let result = transport.process_client_message(
@@ -853,13 +925,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 1: Set up a client connection to receive narrative events
         let client_id = uuid::Uuid::new_v4();
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:12345".to_string(),
-            local_port: 7777,
-            remote_port: 12345,
-            acceptable_content_types: None,
-            connection_attributes: None,
-        };
+        let establish_message =
+            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -868,8 +935,17 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (_client_token, connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (_client_token, connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
@@ -923,11 +999,19 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
 
         // Step 4: Test client event capture (like system messages, disconnect, etc.)
-        let system_message_event = rpc_common::ClientEvent::SystemMessage(
-            connection_obj,
-            "System broadcast message".to_string(),
-        );
-        let disconnect_event = rpc_common::ClientEvent::Disconnect();
+        let system_message_event = moor_rpc::ClientEvent {
+            event: moor_rpc::ClientEventUnion::SystemMessageEvent(Box::new(
+                moor_rpc::SystemMessageEvent {
+                    player: obj_fb(&connection_obj),
+                    message: "System broadcast message".to_string(),
+                },
+            )),
+        };
+        let disconnect_event = moor_rpc::ClientEvent {
+            event: moor_rpc::ClientEventUnion::DisconnectEvent(Box::new(
+                moor_rpc::DisconnectEvent {},
+            )),
+        };
 
         transport.capture_client_event(client_id, system_message_event);
         transport.capture_client_event(client_id, disconnect_event);
@@ -948,15 +1032,23 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
 
         // Step 5: Test host broadcast event capture
-        let listen_event = rpc_common::HostBroadcastEvent::Listen {
-            handler_object: SYSTEM_OBJECT,
-            host_type: rpc_common::HostType::TCP,
-            port: 8080,
-            print_messages: true,
+        let listen_event = moor_rpc::HostBroadcastEvent {
+            event: moor_rpc::HostBroadcastEventUnion::HostBroadcastListen(Box::new(
+                moor_rpc::HostBroadcastListen {
+                    handler_object: obj_fb(&SYSTEM_OBJECT),
+                    host_type: moor_rpc::HostType::Tcp,
+                    port: 8080,
+                    print_messages: true,
+                },
+            )),
         };
-        let unlisten_event = rpc_common::HostBroadcastEvent::Unlisten {
-            host_type: rpc_common::HostType::TCP,
-            port: 8080,
+        let unlisten_event = moor_rpc::HostBroadcastEvent {
+            event: moor_rpc::HostBroadcastEventUnion::HostBroadcastUnlisten(Box::new(
+                moor_rpc::HostBroadcastUnlisten {
+                    host_type: moor_rpc::HostType::Tcp,
+                    port: 8080,
+                },
+            )),
         };
 
         transport.send_host_event(listen_event.clone());
@@ -970,8 +1062,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 6: Test client broadcast event capture
-        let ping_pong_event =
-            rpc_common::ClientsBroadcastEvent::PingPong(std::time::SystemTime::now());
+        let ping_pong_event = moor_rpc::ClientsBroadcastEvent {
+            event: moor_rpc::ClientsBroadcastEventUnion::ClientsBroadcastPingPong(Box::new(
+                moor_rpc::ClientsBroadcastPingPong {
+                    timestamp: systemtime_to_nanos(std::time::SystemTime::now()),
+                },
+            )),
+        };
 
         transport.send_client_broadcast_event(ping_pong_event);
 
@@ -1020,13 +1117,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Step 1: Establish connection
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1039,18 +1138,27 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_result.is_ok(),
             "Connection establishment should succeed"
         );
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Attempt login command
-        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
-            client_token: client_token.clone(),
-            handler_object: SYSTEM_OBJECT,
-            connect_args: vec!["create".to_string(), "TestPlayer".to_string()],
-            do_attach: true,
-        };
+        let login_message = mk_login_command_msg(
+            &client_token,
+            &SYSTEM_OBJECT,
+            vec!["create".to_string(), "TestPlayer".to_string()],
+            true,
+        );
 
         let login_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1078,8 +1186,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With NormalOperation scenario, should get successful LoginResult
         assert!(
             matches!(
-                login_reply,
-                Ok(rpc_common::DaemonToClientReply::LoginResult(Some(_)))
+                login_reply.as_ref().map(|r| &r.reply),
+                Ok(rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(lr)) if lr.success
             ),
             "Should have successful LoginResult with NormalOperation scenario: {login_reply:?}"
         );
@@ -1095,13 +1203,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Step 1: Establish connection
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:12345".to_string(),
-            local_port: 7777,
-            remote_port: 12345,
-            acceptable_content_types: None,
-            connection_attributes: None,
-        };
+        let establish_message =
+            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1110,18 +1213,27 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Attempt login command - should fail due to LoginFailures scenario
-        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
-            client_token: client_token.clone(),
-            handler_object: SYSTEM_OBJECT,
-            connect_args: vec!["connect".to_string(), "TestPlayer".to_string()],
-            do_attach: true,
-        };
+        let login_message = mk_login_command_msg(
+            &client_token,
+            &SYSTEM_OBJECT,
+            vec!["connect".to_string(), "TestPlayer".to_string()],
+            true,
+        );
 
         let login_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1131,11 +1243,19 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // With LoginFailures scenario (20% success rate), login should mostly fail
-        let login_failed = matches!(
-            &login_result,
-            Ok(rpc_common::DaemonToClientReply::LoginResult(None)) // Failed login
-                | Err(rpc_common::RpcMessageError::LoginTaskFailed(_))
-        );
+        let login_failed = match &login_result {
+            Ok(reply) => {
+                if let rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) =
+                    &reply.reply
+                {
+                    !lr.success // Failed login
+                } else {
+                    false
+                }
+            }
+            Err(rpc_common::RpcMessageError::LoginTaskFailed(_)) => true,
+            _ => false,
+        };
         // Note: Due to 20% success rate, we might occasionally get success, but failure is expected
         if !login_failed && login_result.is_err() {
             panic!("Unexpected login result with LoginFailures scenario: {login_result:?}");
@@ -1156,13 +1276,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Step 1: Establish connection
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1171,16 +1293,25 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Request a system property
-        let sysprop_message = rpc_common::HostClientToDaemonMessage::RequestSysProp(
-            client_token,
-            moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
-            moor_var::Symbol::mk("name"),
+        let sysprop_message = mk_request_sys_prop_msg(
+            &client_token,
+            &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
+            &moor_var::Symbol::mk("name"),
         );
 
         let sysprop_result = transport.process_client_message(
@@ -1207,13 +1338,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Establish connection first
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:12345".to_string(),
-            local_port: 7777,
-            remote_port: 12345,
-            acceptable_content_types: None,
-            connection_attributes: None,
-        };
+        let establish_message =
+            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1222,16 +1348,25 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Request a system property - should fail due to DatabaseIssues scenario
-        let sysprop_message = rpc_common::HostClientToDaemonMessage::RequestSysProp(
-            client_token,
-            moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
-            moor_var::Symbol::mk("welcome_message"),
+        let sysprop_message = mk_request_sys_prop_msg(
+            &client_token,
+            &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
+            &moor_var::Symbol::mk("welcome_message"),
         );
 
         let sysprop_result = transport.process_client_message(
@@ -1265,13 +1400,18 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (message_handler, _transport, _event_log, _scheduler) = setup_test_environment();
 
         // Test broadcast_listen
-        let listen_result =
-            message_handler.broadcast_listen(Obj::mk_id(100), HostType::WebSocket, 8080, true);
+        let listen_result = message_handler.broadcast_listen(
+            Obj::mk_id(100),
+            rpc_common::HostType::WebSocket,
+            8080,
+            true,
+        );
 
         assert!(listen_result.is_ok(), "Broadcast listen should succeed");
 
         // Test broadcast_unlisten
-        let unlisten_result = message_handler.broadcast_unlisten(HostType::WebSocket, 8080);
+        let unlisten_result =
+            message_handler.broadcast_unlisten(rpc_common::HostType::WebSocket, 8080);
 
         assert!(unlisten_result.is_ok(), "Broadcast unlisten should succeed");
     }
@@ -1282,10 +1422,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 1: Register a host first
         let host_token = create_test_host_token();
-        let listeners = vec![(SYSTEM_OBJECT, "127.0.0.1:7777".parse().unwrap())];
-        let register_message = rpc_common::HostToDaemonMessage::RegisterHost(
-            std::time::SystemTime::now(),
-            rpc_common::HostType::TCP,
+        let listeners = vec![create_listener(
+            SYSTEM_OBJECT,
+            "127.0.0.1:7777".parse().unwrap(),
+        )];
+        let register_message = mk_register_host_msg(
+            systemtime_to_nanos(SystemTime::now()),
+            moor_rpc::HostType::Tcp,
             listeners.clone(),
         );
 
@@ -1297,10 +1440,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(register_result.is_ok(), "Host registration should succeed");
 
         // Step 2: Send a HostPong message (response to daemon's ping)
-        let pong_time = std::time::SystemTime::now();
-        let pong_message = rpc_common::HostToDaemonMessage::HostPong(
-            pong_time,
-            rpc_common::HostType::TCP,
+        let pong_time = SystemTime::now();
+        let pong_message = mk_host_pong_msg(
+            systemtime_to_nanos(pong_time),
+            moor_rpc::HostType::Tcp,
             listeners,
         );
 
@@ -1309,7 +1452,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // With NormalOperation scenario, pong should be acknowledged
         assert!(
-            matches!(pong_result, Ok(rpc_common::DaemonToHostReply::Ack)),
+            matches!(&pong_result, Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToHostReplyUnion::DaemonToHostAck(_))),
             "Host pong should be acknowledged with NormalOperation scenario: {pong_result:?}"
         );
 
@@ -1317,13 +1460,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = uuid::Uuid::new_v4();
 
         // Establish client connection first
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:12345".to_string(),
-            local_port: 7777,
-            remote_port: 12345,
-            acceptable_content_types: None,
-            connection_attributes: None,
-        };
+        let establish_message =
+            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1332,19 +1470,28 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Send ClientPong message
         let client_pong_time = std::time::SystemTime::now();
-        let client_pong_message = rpc_common::HostClientToDaemonMessage::ClientPong(
-            client_token,
-            client_pong_time,
-            SYSTEM_OBJECT,
-            rpc_common::HostType::TCP,
-            "127.0.0.1:12345".parse().unwrap(),
+        let client_pong_message = mk_client_pong_msg(
+            &client_token,
+            systemtime_to_nanos(client_pong_time),
+            &SYSTEM_OBJECT,
+            moor_rpc::HostType::Tcp,
+            "127.0.0.1:12345".to_string(),
         );
 
         let client_pong_result = transport.process_client_message(
@@ -1357,8 +1504,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With NormalOperation scenario and established connection, pong should succeed
         assert!(
             matches!(
-                client_pong_result,
-                Ok(rpc_common::DaemonToClientReply::ThanksPong(_))
+                &client_pong_result,
+                Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::ThanksPong(_))
             ),
             "Client pong should succeed with established connection: {client_pong_result:?}"
         );
@@ -1377,20 +1524,30 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Verify host pong was processed
-        let host_pong_processed = host_replies
-            .iter()
-            .any(|(_, msg, _)| matches!(msg, rpc_common::HostToDaemonMessage::HostPong(_, _, _)));
+        let host_pong_processed = host_replies.iter().any(|(_, msg_bytes, _)| {
+            moor_rpc::HostToDaemonMessageRef::read_as_root(msg_bytes)
+                .ok()
+                .and_then(|msg_ref| msg_ref.message().ok())
+                .map(|msg| matches!(msg, moor_rpc::HostToDaemonMessageUnionRef::HostPong(_)))
+                .unwrap_or(false)
+        });
         assert!(
             host_pong_processed,
             "Host pong message should have been processed"
         );
 
         // Verify client pong was processed
-        let client_pong_processed = client_replies.iter().any(|(_, msg, _)| {
-            matches!(
-                msg,
-                rpc_common::HostClientToDaemonMessage::ClientPong(_, _, _, _, _)
-            )
+        let client_pong_processed = client_replies.iter().any(|(_, msg_bytes, _)| {
+            moor_rpc::HostClientToDaemonMessageRef::read_as_root(msg_bytes)
+                .ok()
+                .and_then(|msg_ref| msg_ref.message().ok())
+                .map(|msg| {
+                    matches!(
+                        msg,
+                        moor_rpc::HostClientToDaemonMessageUnionRef::ClientPong(_)
+                    )
+                })
+                .unwrap_or(false)
         });
         assert!(
             client_pong_processed,
@@ -1414,13 +1571,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Test client token validation with a real token
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1429,10 +1588,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        if let Ok(rpc_common::DaemonToClientReply::NewConnection(client_token, _)) =
-            establish_result
+        if let Ok(reply) = establish_result
+            && let moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) = reply.reply
         {
-            let client_validation = message_handler.validate_client_token(client_token, client_id);
+            let client_token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+            let client_validation =
+                message_handler.validate_client_token_impl(client_token, client_id);
             assert!(
                 client_validation.is_ok(),
                 "Valid client token should validate successfully"
@@ -1441,7 +1602,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Test invalid client token
         let invalid_token = rpc_common::ClientToken("invalid".to_string());
-        let invalid_validation = message_handler.validate_client_token(invalid_token, client_id);
+        let invalid_validation =
+            message_handler.validate_client_token_impl(invalid_token, client_id);
         assert!(
             invalid_validation.is_err(),
             "Invalid client token should fail validation"
@@ -1455,13 +1617,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Setup: Establish connection and login
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1470,18 +1634,27 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Perform login to get auth token
-        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
-            client_token: client_token.clone(),
-            handler_object: SYSTEM_OBJECT,
-            connect_args: vec!["create".to_string(), "TestPlayer".to_string()],
-            do_attach: true,
-        };
+        let login_message = mk_login_command_msg(
+            &client_token,
+            &SYSTEM_OBJECT,
+            vec!["create".to_string(), "TestPlayer".to_string()],
+            true,
+        );
 
         let login_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1499,15 +1672,21 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_replies = transport.get_client_replies();
         let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
         let auth_token = match login_reply {
-            Ok(rpc_common::DaemonToClientReply::LoginResult(Some((token, _, _)))) => token.clone(),
+            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::LoginResult(ref lr) if lr.success) => {
+                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
+                    rpc_common::AuthToken(lr.auth_token.as_ref().unwrap().token.clone())
+                } else {
+                    unreachable!()
+                }
+            }
             other => panic!("Expected successful LoginResult, got {other:?}"),
         };
 
         // Test verb introspection
-        let verbs_message = rpc_common::HostClientToDaemonMessage::Verbs(
-            client_token.clone(),
-            auth_token.clone(),
-            moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
+        let verbs_message = mk_verbs_msg(
+            &client_token,
+            &auth_token,
+            &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
             false, // inherited = false for testing
         );
 
@@ -1529,10 +1708,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Test property introspection
-        let props_message = rpc_common::HostClientToDaemonMessage::Properties(
-            client_token.clone(),
-            auth_token.clone(),
-            moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
+        let props_message = mk_properties_msg(
+            &client_token,
+            &auth_token,
+            &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
             false, // inherited = false for testing
         );
 
@@ -1561,13 +1740,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_id = Uuid::new_v4();
 
         // Setup: Establish connection
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:8080".to_string(),
-            local_port: 7777,
-            remote_port: 8080,
-            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
-            connection_attributes: None,
-        };
+        let establish_message = mk_connection_establish_msg(
+            "127.0.0.1:8080".to_string(),
+            7777,
+            8080,
+            Some(vec![moor_rpc::Symbol {
+                value: "text/plain".to_string(),
+            }]),
+            None,
+        );
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1576,18 +1757,27 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Perform login to get auth token
-        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
-            client_token: client_token.clone(),
-            handler_object: SYSTEM_OBJECT,
-            connect_args: vec!["create".to_string(), "TestPlayer".to_string()],
-            do_attach: true,
-        };
+        let login_message = mk_login_command_msg(
+            &client_token,
+            &SYSTEM_OBJECT,
+            vec!["create".to_string(), "TestPlayer".to_string()],
+            true,
+        );
 
         let login_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1605,15 +1795,21 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_replies = transport.get_client_replies();
         let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
         let auth_token = match login_reply {
-            Ok(rpc_common::DaemonToClientReply::LoginResult(Some((token, _, _)))) => token.clone(),
+            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::LoginResult(ref lr) if lr.success) => {
+                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
+                    rpc_common::AuthToken(lr.auth_token.as_ref().unwrap().token.clone())
+                } else {
+                    unreachable!()
+                }
+            }
             other => panic!("Expected successful LoginResult, got {other:?}"),
         };
 
         // Test command execution
-        let command_message = rpc_common::HostClientToDaemonMessage::Command(
-            client_token,
-            auth_token,
-            SYSTEM_OBJECT,
+        let command_message = mk_command_msg(
+            &client_token,
+            &auth_token,
+            &SYSTEM_OBJECT,
             "look".to_string(),
         );
 
@@ -1627,8 +1823,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With NormalOperation scenario, command should be submitted successfully
         assert!(
             matches!(
-                command_result,
-                Ok(rpc_common::DaemonToClientReply::TaskSubmitted(_))
+                &command_result,
+                Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::TaskSubmitted(_))
             ),
             "Command should be submitted successfully with NormalOperation scenario: {command_result:?}"
         );
@@ -1640,13 +1836,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 1: Establish a client connection
         let client_id = uuid::Uuid::new_v4();
-        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
-            peer_addr: "127.0.0.1:12345".to_string(),
-            local_port: 7777,
-            remote_port: 12345,
-            acceptable_content_types: None,
-            connection_attributes: None,
-        };
+        let establish_message =
+            mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
         let establish_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1655,18 +1846,27 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap() {
-            rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
+        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+                let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
+
+                let obj = match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                };
+
+                (token, obj)
+            }
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 1.5: Perform login to get auth token
-        let login_message = rpc_common::HostClientToDaemonMessage::LoginCommand {
-            client_token: client_token.clone(),
-            handler_object: SYSTEM_OBJECT,
-            connect_args: vec!["create".to_string(), "TestPlayer".to_string()],
-            do_attach: true,
-        };
+        let login_message = mk_login_command_msg(
+            &client_token,
+            &SYSTEM_OBJECT,
+            vec!["create".to_string(), "TestPlayer".to_string()],
+            true,
+        );
 
         let login_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1684,7 +1884,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let client_replies = transport.get_client_replies();
         let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
         let auth_token = match login_reply {
-            Ok(rpc_common::DaemonToClientReply::LoginResult(Some((token, _, _)))) => token.clone(),
+            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::LoginResult(ref lr) if lr.success) => {
+                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
+                    rpc_common::AuthToken(lr.auth_token.as_ref().unwrap().token.clone())
+                } else {
+                    unreachable!()
+                }
+            }
             other => panic!("Expected successful LoginResult, got {other:?}"),
         };
 
@@ -1693,7 +1899,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let request_id = uuid::Uuid::new_v4();
 
         // Simulate the daemon sending a RequestInput event to the client
-        let request_input_event = rpc_common::ClientEvent::RequestInput(request_id);
+        let request_input_event = moor_rpc::ClientEvent {
+            event: moor_rpc::ClientEventUnion::RequestInputEvent(Box::new(
+                moor_rpc::RequestInputEvent {
+                    request_id: Box::new(moor_rpc::Uuid {
+                        data: request_id.as_bytes().to_vec(),
+                    }),
+                },
+            )),
+        };
 
         // In a real scenario, this would be sent through the transport to the client
         // For testing, we'll simulate the client receiving this and responding
@@ -1701,12 +1915,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 3: Simulate client responding with RequestedInput message
         let input_response = "user typed response".to_string();
-        let response_message = rpc_common::HostClientToDaemonMessage::RequestedInput(
-            client_token.clone(),
-            auth_token,
+        let response_message = mk_requested_input_msg(
+            &client_token,
+            &auth_token,
             request_id,
-            moor_var::v_str(&input_response),
-        );
+            &moor_var::v_str(&input_response),
+        )
+        .expect("Failed to create requested_input message");
 
         let response_result = transport.process_client_message(
             message_handler.as_ref(),
@@ -1719,9 +1934,11 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // The daemon should acknowledge the input
         // Input response should be processed (MockScheduler may not fully support this feature)
         let input_processed = matches!(
-            response_result,
-            Ok(rpc_common::DaemonToClientReply::InputThanks)
-                | Err(rpc_common::RpcMessageError::InternalError(_))
+            &response_result,
+            Ok(reply) if matches!(reply.reply, moor_rpc::DaemonToClientReplyUnion::InputThanks(_))
+        ) || matches!(
+            &response_result,
+            Err(rpc_common::RpcMessageError::InternalError(_))
         );
         assert!(
             input_processed,
@@ -1741,11 +1958,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             *captured_client_id, client_id,
             "Event should be for correct client"
         );
-        match captured_event {
-            rpc_common::ClientEvent::RequestInput(captured_request_id) => {
-                assert_eq!(*captured_request_id, request_id, "Request ID should match");
+        match &captured_event.event {
+            moor_rpc::ClientEventUnion::RequestInputEvent(req) => {
+                let captured_request_id = uuid::Uuid::from_slice(&req.request_id.data).unwrap();
+                assert_eq!(captured_request_id, request_id, "Request ID should match");
             }
-            other => panic!("Expected RequestInput event, got {other:?}"),
+            other => panic!("Expected RequestInputEvent, got {other:?}"),
         }
 
         // Step 6: Verify replies were captured
@@ -1756,10 +1974,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Find the input response reply
-        let input_reply_found = client_replies.iter().any(|(_, msg, reply)| {
-            matches!(msg, rpc_common::HostClientToDaemonMessage::RequestedInput(_, _, captured_id, _) 
-                     if *captured_id == request_id) &&
-                matches!(reply, Ok(rpc_common::DaemonToClientReply::InputThanks) | Err(_))
+        let input_reply_found = client_replies.iter().any(|(_, msg_bytes, reply)| {
+            if let Ok(msg_ref) = moor_rpc::HostClientToDaemonMessageRef::read_as_root(msg_bytes)
+                && let Ok(moor_rpc::HostClientToDaemonMessageUnionRef::RequestedInput(req)) = msg_ref.message()
+                    && let Ok(request_id_data) = req.request_id()
+                        && let Ok(data_vec) = request_id_data.data()
+                            && let Ok(captured_id) = uuid::Uuid::from_slice(data_vec) {
+                                return captured_id == request_id && (matches!(reply, Ok(r) if matches!(r.reply, moor_rpc::DaemonToClientReplyUnion::InputThanks(_))) || reply.is_err());
+                            }
+            false
         });
         assert!(input_reply_found, "Should have found input response reply");
 
@@ -1769,15 +1992,22 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Check client event
         for (_, event) in &client_events {
-            if let rpc_common::ClientEvent::RequestInput(id) = event {
-                request_ids_seen.insert(*id);
+            if let moor_rpc::ClientEventUnion::RequestInputEvent(req) = &event.event {
+                let id = uuid::Uuid::from_slice(&req.request_id.data).unwrap();
+                request_ids_seen.insert(id);
             }
         }
 
         // Check client replies
-        for (_, msg, _) in &client_replies {
-            if let rpc_common::HostClientToDaemonMessage::RequestedInput(_, _, id, _) = msg {
-                request_ids_seen.insert(*id);
+        for (_, msg_bytes, _) in &client_replies {
+            if let Ok(msg_ref) = moor_rpc::HostClientToDaemonMessageRef::read_as_root(msg_bytes)
+                && let Ok(moor_rpc::HostClientToDaemonMessageUnionRef::RequestedInput(req)) =
+                    msg_ref.message()
+                && let Ok(request_id_data) = req.request_id()
+                && let Ok(data_vec) = request_id_data.data()
+                && let Ok(id) = uuid::Uuid::from_slice(data_vec)
+            {
+                request_ids_seen.insert(id);
             }
         }
 

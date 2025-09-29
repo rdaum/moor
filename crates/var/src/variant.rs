@@ -11,19 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Associative;
-use crate::Symbol;
-use crate::binary::Binary;
-use crate::flyweight::Flyweight;
-use crate::lambda::Lambda;
-use crate::list::List;
-use crate::{Error, Obj};
-use crate::{Sequence, map, string};
+use crate::{
+    Associative, Error, Obj, Sequence, Symbol, binary::Binary, flyweight::Flyweight,
+    lambda::Lambda, list::List, map, string,
+};
 use bincode::{Decode, Encode};
-use std::cmp::Ordering;
-use std::fmt::{Debug, Formatter};
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Formatter},
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 /// Our series of types
 #[derive(Clone, Encode, Decode)]

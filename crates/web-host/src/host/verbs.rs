@@ -12,16 +12,18 @@
 //
 
 use crate::host::{WebHost, auth, web_host};
-use axum::Json;
-use axum::body::Bytes;
-use axum::extract::{ConnectInfo, Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::{
+    Json,
+    body::Bytes,
+    extract::{ConnectInfo, Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+};
 use moor_common::model::ObjectRef;
-use moor_common::tasks::VerbProgramError;
 use moor_var::Symbol;
+use planus::ReadAsRoot;
 use rpc_common::{
-    DaemonToClientReply, EntityType, HostClientToDaemonMessage, VerbInfo, VerbProgramResponse,
+    flatbuffers_generated::moor_rpc, mk_detach_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -46,7 +48,7 @@ pub async fn verb_program_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Some(object) = ObjectRef::parse_curie(&object) else {
+    let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
 
@@ -58,55 +60,92 @@ pub async fn verb_program_handler(
         .split('\n')
         .map(|s| s.to_string())
         .collect::<Vec<String>>();
-    let response = match web_host::rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Program(
-            client_token.clone(),
-            auth_token.clone(),
-            object,
-            name,
-            code,
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Success(
-            objid,
-            verb_name,
-        ))) => Json(json!({
-            "location": objid.as_u64(),
-            "name": verb_name,
-        }))
-        .into_response(),
-        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::NoVerbToProgram,
-        ))) => {
-            // 404
-            StatusCode::NOT_FOUND.into_response()
+
+    let program_msg = mk_program_msg(&client_token, &auth_token, &object_ref, &name, code);
+
+    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, program_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::DatabaseError,
-        ))) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::CompilationError(error),
-        ))) => Json(json!({
-            "errors": serde_json::to_value(error).unwrap()
-        }))
-        .into_response(),
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::VerbProgramResponseReply(
+                    prog_response_reply,
+                ) => {
+                    let prog_response = prog_response_reply.response().expect("Missing response");
+                    let response_union = prog_response.response().expect("Missing response union");
+                    match response_union {
+                        moor_rpc::VerbProgramResponseUnionRef::VerbProgramSuccess(success) => {
+                            let objid_ref = success.obj().expect("Missing obj");
+                            let objid_struct =
+                                moor_rpc::Obj::try_from(objid_ref).expect("Failed to convert obj");
+                            let objid = rpc_common::obj_from_flatbuffer_struct(&objid_struct)
+                                .expect("Failed to decode obj");
+
+                            let verb_name = success.verb_name().expect("Missing verb_name");
+
+                            Json(json!({
+                                "location": objid.as_u64(),
+                                "name": verb_name,
+                            }))
+                            .into_response()
+                        }
+                        moor_rpc::VerbProgramResponseUnionRef::VerbProgramFailure(failure) => {
+                            let error_wrapper = failure.error().expect("Missing error");
+                            let error_type = error_wrapper.error().expect("Missing error union");
+                            match error_type {
+                                moor_rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => {
+                                    StatusCode::NOT_FOUND.into_response()
+                                }
+                                moor_rpc::VerbProgramErrorUnionRef::VerbDatabaseError(_) => {
+                                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                                }
+                                moor_rpc::VerbProgramErrorUnionRef::VerbCompilationError(
+                                    comp_error_wrapper,
+                                ) => {
+                                    let comp_error_ref =
+                                        comp_error_wrapper.error().expect("Missing error");
+                                    let error_struct =
+                                        rpc_common::compilation_error_from_ref(comp_error_ref)
+                                            .expect("Failed to convert compilation error");
+                                    Json(json!({
+                                        "errors": serde_json::to_value(error_struct).unwrap()
+                                    }))
+                                    .into_response()
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -125,62 +164,111 @@ pub async fn verb_retrieval_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Some(object) = ObjectRef::parse_curie(&object) else {
+    let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
 
     let name = Symbol::mk(&name);
 
-    let response = match web_host::rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Retrieve(
-            client_token.clone(),
-            auth_token.clone(),
-            object,
-            EntityType::Verb,
-            name,
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::VerbValue(
-            VerbInfo {
-                location,
-                owner,
-                names,
-                r,
-                w,
-                x,
-                d,
-                arg_spec,
-            },
-            code,
-        )) => Json(json!({
-            "location": location.as_u64(),
-            "owner": owner.as_u64(),
-            "names": names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
-            "code": code,
-            "r": r,
-            "w": w,
-            "x": x,
-            "d": d,
-            "arg_spec": arg_spec.iter().map(|s| s.to_string()).collect::<Vec<String>>()
-        }))
-        .into_response(),
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    let retrieve_msg = mk_retrieve_msg(
+        &client_token,
+        &auth_token,
+        &object_ref,
+        moor_rpc::EntityType::Verb,
+        &name,
+    );
+
+    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, retrieve_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::VerbValue(verb_value) => {
+                    let verb_info = verb_value.verb_info().expect("Missing verb_info");
+
+                    let location_ref = verb_info.location().expect("Missing location");
+                    let location_struct =
+                        moor_rpc::Obj::try_from(location_ref).expect("Failed to convert location");
+                    let location = rpc_common::obj_from_flatbuffer_struct(&location_struct)
+                        .expect("Failed to decode location");
+
+                    let owner_ref = verb_info.owner().expect("Missing owner");
+                    let owner_struct =
+                        moor_rpc::Obj::try_from(owner_ref).expect("Failed to convert owner");
+                    let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
+                        .expect("Failed to decode owner");
+
+                    let names_vec = verb_info.names().expect("Missing names");
+                    let names: Vec<String> = names_vec
+                        .iter()
+                        .map(|name_result| {
+                            let name_ref = name_result.expect("Failed to get name");
+                            let name_struct = moor_rpc::Symbol::try_from(name_ref)
+                                .expect("Failed to convert name");
+                            rpc_common::symbol_from_flatbuffer_struct(&name_struct).to_string()
+                        })
+                        .collect();
+
+                    let arg_spec_vec = verb_info.arg_spec().expect("Missing arg_spec");
+                    let arg_spec: Vec<String> = arg_spec_vec
+                        .iter()
+                        .map(|arg_result| {
+                            let arg_ref = arg_result.expect("Failed to get arg");
+                            let arg_struct =
+                                moor_rpc::Symbol::try_from(arg_ref).expect("Failed to convert arg");
+                            rpc_common::symbol_from_flatbuffer_struct(&arg_struct).to_string()
+                        })
+                        .collect();
+
+                    let code_vec = verb_value.code().expect("Missing code");
+                    let code: Vec<String> = code_vec
+                        .iter()
+                        .map(|line| line.expect("Failed to get code line").to_string())
+                        .collect();
+
+                    Json(json!({
+                        "location": location.as_u64(),
+                        "owner": owner.as_u64(),
+                        "names": names,
+                        "code": code,
+                        "r": verb_info.r().expect("Missing r"),
+                        "w": verb_info.w().expect("Missing w"),
+                        "x": verb_info.x().expect("Missing x"),
+                        "d": verb_info.d().expect("Missing d"),
+                        "arg_spec": arg_spec
+                    }))
+                    .into_response()
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -200,50 +288,109 @@ pub async fn verbs_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Some(object) = ObjectRef::parse_curie(&object) else {
+    let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
 
     let inherited = query.inherited.unwrap_or(false);
 
-    let response = match web_host::rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Verbs(client_token.clone(), auth_token.clone(), object, inherited),
-    )
-        .await
-    {
-        Ok(DaemonToClientReply::Verbs(verbs)) => Json(
-            verbs
-                .iter()
-                .map(|verb| {
-                    json!({
-                        "location": verb.location.as_u64(),
-                        "owner": verb.owner.as_u64(),
-                        "names": verb.names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
-                        "r": verb.r,
-                        "w": verb.w,
-                        "x": verb.x,
-                        "d": verb.d,
-                        "arg_spec": verb.arg_spec.iter().map(|s| s.to_string()).collect::<Vec<String>>()
-                    })
-                })
-                .collect::<Vec<serde_json::Value>>(),
-        )
-            .into_response(),
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    let verbs_msg = mk_verbs_msg(&client_token, &auth_token, &object_ref, inherited);
+
+    let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, verbs_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::VerbsReply(verbs_reply) => {
+                    let verbs_vec = verbs_reply.verbs().expect("Missing verbs");
+                    Json(
+                        verbs_vec
+                            .iter()
+                            .map(|verb_result| {
+                                let verb = verb_result.expect("Failed to get verb");
+
+                                let location_ref = verb.location().expect("Missing location");
+                                let location_struct = moor_rpc::Obj::try_from(location_ref)
+                                    .expect("Failed to convert location");
+                                let location =
+                                    rpc_common::obj_from_flatbuffer_struct(&location_struct)
+                                        .expect("Failed to decode location");
+
+                                let owner_ref = verb.owner().expect("Missing owner");
+                                let owner_struct = moor_rpc::Obj::try_from(owner_ref)
+                                    .expect("Failed to convert owner");
+                                let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
+                                    .expect("Failed to decode owner");
+
+                                let names_vec = verb.names().expect("Missing names");
+                                let names: Vec<String> = names_vec
+                                    .iter()
+                                    .map(|name_result| {
+                                        let name_ref = name_result.expect("Failed to get name");
+                                        let name_struct = moor_rpc::Symbol::try_from(name_ref)
+                                            .expect("Failed to convert name");
+                                        rpc_common::symbol_from_flatbuffer_struct(&name_struct)
+                                            .to_string()
+                                    })
+                                    .collect();
+
+                                let arg_spec_vec = verb.arg_spec().expect("Missing arg_spec");
+                                let arg_spec: Vec<String> = arg_spec_vec
+                                    .iter()
+                                    .map(|arg_result| {
+                                        let arg_ref = arg_result.expect("Failed to get arg");
+                                        let arg_struct = moor_rpc::Symbol::try_from(arg_ref)
+                                            .expect("Failed to convert arg");
+                                        rpc_common::symbol_from_flatbuffer_struct(&arg_struct)
+                                            .to_string()
+                                    })
+                                    .collect();
+
+                                json!({
+                                    "location": location.as_u64(),
+                                    "owner": owner.as_u64(),
+                                    "names": names,
+                                    "r": verb.r().expect("Missing r"),
+                                    "w": verb.w().expect("Missing w"),
+                                    "x": verb.x().expect("Missing x"),
+                                    "d": verb.d().expect("Missing d"),
+                                    "arg_spec": arg_spec
+                                })
+                            })
+                            .collect::<Vec<serde_json::Value>>(),
+                    )
+                    .into_response()
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 

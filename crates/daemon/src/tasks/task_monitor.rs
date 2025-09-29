@@ -13,15 +13,19 @@
 
 //! Task completion monitoring and lifecycle management
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 use uuid::Uuid;
 
 use flume::Sender;
 use moor_common::tasks::{SchedulerError, TaskId};
 use moor_kernel::tasks::TaskHandle;
-use rpc_common::ClientEvent;
+use rpc_common::flatbuffers_generated::moor_rpc;
 use tracing::info;
 
 use crate::rpc::SessionActions;
@@ -135,14 +139,41 @@ impl TaskMonitor {
             Ok((task_id, r)) => {
                 let result = match r {
                     Ok(moor_kernel::tasks::TaskResult::Result(v)) => {
-                        ClientEvent::TaskSuccess(task_id, v)
+                        let value_bytes =
+                            rpc_common::var_to_flatbuffer_bytes(&v).unwrap_or_default();
+                        moor_rpc::ClientEvent {
+                            event: moor_rpc::ClientEventUnion::TaskSuccessEvent(Box::new(
+                                moor_rpc::TaskSuccessEvent {
+                                    task_id: task_id as u64,
+                                    result: Box::new(moor_rpc::VarBytes { data: value_bytes }),
+                                },
+                            )),
+                        }
                     }
                     Ok(moor_kernel::tasks::TaskResult::Replaced(th)) => {
                         info!(?client_id, ?task_id, "Task restarted");
                         self.task_handles.insert(task_id, (client_id, th), &guard);
                         return;
                     }
-                    Err(e) => ClientEvent::TaskError(task_id, e),
+                    Err(e) => {
+                        let scheduler_error = rpc_common::scheduler_error_to_flatbuffer_struct(&e)
+                            .unwrap_or_else(|_| {
+                                // Fallback to SchedulerNotResponding if conversion fails
+                                moor_rpc::SchedulerError {
+                                    error: moor_rpc::SchedulerErrorUnion::SchedulerNotResponding(
+                                        Box::new(moor_rpc::SchedulerNotResponding {}),
+                                    ),
+                                }
+                            });
+                        moor_rpc::ClientEvent {
+                            event: moor_rpc::ClientEventUnion::TaskErrorEvent(Box::new(
+                                moor_rpc::TaskErrorEvent {
+                                    task_id: task_id as u64,
+                                    error: Box::new(scheduler_error),
+                                },
+                            )),
+                        }
+                    }
                 };
 
                 // Emit task completion event

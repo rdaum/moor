@@ -17,33 +17,37 @@
 mod test {
     use semver::Version;
 
-    use std::collections::BTreeSet;
-    use std::fs::File;
-    use std::io::{BufReader, Read};
-    use std::path::PathBuf;
-    use std::sync::Arc;
+    use std::{
+        collections::BTreeSet,
+        fs::File,
+        io::{BufReader, Read},
+        path::PathBuf,
+        sync::Arc,
+    };
 
-    use moor_common::model::VerbArgsSpec;
-    use moor_common::model::VerbFlag;
-    use moor_common::model::WorldStateSource;
-    use moor_common::model::loader::LoaderInterface;
-    use moor_common::model::{CommitResult, PropFlag, ValSet};
-    use moor_common::model::{HasUuid, Named};
-    use moor_common::util::BitEnum;
-    use moor_compiler::CompileOptions;
-    use moor_compiler::compile;
+    use moor_common::{
+        model::{
+            CommitResult, HasUuid, Named, PropFlag, ValSet, VerbArgsSpec, VerbFlag,
+            WorldStateSource, loader::LoaderInterface,
+        },
+        util::BitEnum,
+    };
+    use moor_compiler::{CompileOptions, compile};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::{
         EncodingMode, LambdaMOODBVersion, TextdumpReader, TextdumpVersion, TextdumpWriter,
         make_textdump, read_textdump, textdump_load,
     };
-    use moor_var::SYSTEM_OBJECT;
-    use moor_var::Symbol;
-    use moor_var::program::ProgramType;
-    use moor_var::program::labels::Label;
-    use moor_var::program::names::Name;
-    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
-    use moor_var::{NOTHING, Obj, Sequence, Var, v_int};
+    use moor_var::{
+        NOTHING, Obj, SYSTEM_OBJECT, Sequence, Symbol, Var,
+        program::{
+            ProgramType,
+            labels::Label,
+            names::Name,
+            opcode::{ScatterArgs, ScatterLabel},
+        },
+        v_int,
+    };
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

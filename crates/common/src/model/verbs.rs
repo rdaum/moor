@@ -11,15 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::model::r#match::VerbArgsSpec;
-use crate::util::BitEnum;
+use crate::{model::r#match::VerbArgsSpec, util::BitEnum};
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
-use moor_var::Obj;
-use moor_var::Symbol;
-use moor_var::encode::{DecodingError, EncodingError};
-use moor_var::program::ProgramType;
+use moor_var::{
+    Obj, Symbol,
+    encode::{DecodingError, EncodingError},
+    program::ProgramType,
+};
 use num_traits::FromPrimitive;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]

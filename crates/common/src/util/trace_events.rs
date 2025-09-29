@@ -17,8 +17,10 @@
 //! for performance tracing and visualization in Chrome DevTools or other compatible tools.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// A single trace event in the Chrome Trace Event Format
 #[derive(Debug, Clone, Serialize, Deserialize)]

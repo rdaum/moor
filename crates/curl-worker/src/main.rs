@@ -17,13 +17,15 @@ use moor_common::tasks::WorkerError;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
 use reqwest::Url;
 use rpc_async_client::{make_worker_token, worker_loop};
-use rpc_common::client_args::RpcClientArgs;
-use rpc_common::{WorkerToken, load_keypair};
-use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use tokio::select;
-use tokio::signal::unix::{SignalKind, signal};
+use rpc_common::{WorkerToken, client_args::RpcClientArgs, load_keypair};
+use std::{
+    str::FromStr,
+    sync::{Arc, atomic::AtomicBool},
+};
+use tokio::{
+    select,
+    signal::unix::{SignalKind, signal},
+};
 use tracing::{error, info};
 use uuid::Uuid;
 

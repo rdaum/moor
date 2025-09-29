@@ -1,0 +1,1316 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for the mooR RPC system
+
+namespace MoorRpc;
+
+// ============================================================================
+// Basic primitive wrappers and tokens
+// ============================================================================
+
+table HostToken {
+    token: string (required);
+}
+
+table ClientToken {
+    token: string (required);
+}
+
+table AuthToken {
+    token: string (required);
+}
+
+table WorkerToken {
+    token: string (required);
+}
+
+// ============================================================================
+// Core types from moor-var and moor-common (some as byte arrays, some structured)
+// ============================================================================
+
+table VarBytes {
+    data: [uint8] (required);
+}
+
+table Symbol {
+    value: string (required);
+}
+
+table Uuid {
+    data: [uint8] (required);  // UUID as 16-byte array
+}
+
+// ============================================================================
+// Obj union type (proper representation)
+// ============================================================================
+
+union ObjUnion {
+    ObjId,
+    UuObjId,
+    AnonymousObjId
+}
+
+table ObjId {
+    id: int32;
+}
+
+table UuObjId {
+    // 62-bit packed: [autoincrement (16)] [rng (6)] [epoch_ms (40)]
+    packed_value: uint64;
+}
+
+table AnonymousObjId {
+    // 62-bit packed: [autoincrement (16)] [rng (6)] [epoch_ms (40)]
+    packed_value: uint64;
+}
+
+table Obj {
+    obj: ObjUnion (required);
+}
+
+// ============================================================================
+// Error type (proper representation)
+// ============================================================================
+
+enum ErrorCode: uint8 {
+    E_NONE = 0,
+    E_TYPE = 1,
+    E_DIV = 2,
+    E_PERM = 3,
+    E_PROPNF = 4,
+    E_VERBNF = 5,
+    E_VARNF = 6,
+    E_INVIND = 7,
+    E_RECMOVE = 8,
+    E_MAXREC = 9,
+    E_RANGE = 10,
+    E_ARGS = 11,
+    E_NACC = 12,
+    E_INVARG = 13,
+    E_QUOTA = 14,
+    E_FLOAT = 15,
+    E_FILE = 16,
+    E_EXEC = 17,
+    E_INTRPT = 18,
+    ErrCustom = 255  // Custom errors will need special handling
+}
+
+table Error {
+    err_type: ErrorCode;
+    msg: string;  // Optional
+    value: VarBytes;  // Optional
+    custom_symbol: Symbol;  // For ErrCustom variant
+}
+
+// ============================================================================
+// Narrative Events and Presentations (properly structured)
+// ============================================================================
+
+table NarrativeEvent {
+    event_id: Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    author: VarBytes (required);
+    event: Event (required);
+}
+
+union EventUnion {
+    NotifyEvent,
+    PresentEvent,
+    UnpresentEvent,
+    TracebackEvent
+}
+
+table NotifyEvent {
+    value: VarBytes (required);
+    content_type: Symbol;  // Optional
+    no_flush: bool;
+    no_newline: bool;
+}
+
+table PresentEvent {
+    presentation: Presentation (required);
+}
+
+table UnpresentEvent {
+    presentation_id: string (required);
+}
+
+table TracebackEvent {
+    exception: Exception (required);
+}
+
+table Event {
+    event: EventUnion (required);
+}
+
+table Presentation {
+    id: string (required);
+    content_type: string (required);
+    content: string (required);
+    target: string (required);
+    attributes: [PresentationAttribute] (required);
+}
+
+table PresentationAttribute {
+    key: string (required);
+    value: string (required);
+}
+
+table Exception {
+    error: Error (required);  // moor_var::Error
+    stack: [VarBytes] (required);
+    backtrace: [VarBytes] (required);
+}
+
+// ============================================================================
+// Scheduler and other errors (properly structured)
+// ============================================================================
+
+enum AbortLimitReason: uint8 {
+    Ticks = 0,
+    Time = 1
+}
+
+table AbortLimit {
+    reason: AbortLimitReason;
+    ticks: uint64;  // for Ticks variant
+    time_nanos: uint64;  // for Time variant (Duration as nanos)
+}
+
+union SchedulerErrorUnion {
+    SchedulerNotResponding,
+    TaskNotFound,
+    InputRequestNotFound,
+    CouldNotStartTask,
+    CompilationError,
+    CommandExecutionError,
+    TaskAbortedLimit,
+    TaskAbortedError,
+    TaskAbortedException,
+    TaskAbortedCancelled,
+    VerbProgramFailed,
+    PropertyRetrievalFailed,
+    VerbRetrievalFailed,
+    ObjectResolutionFailed,
+    GarbageCollectionFailed
+}
+
+table SchedulerNotResponding {
+}
+
+table TaskNotFound {
+    task_id: uint64;
+}
+
+table InputRequestNotFound {
+    request_id: Uuid (required);
+}
+
+table CouldNotStartTask {
+}
+
+table CompilationError {
+    error: CompileError (required);
+}
+
+table CommandExecutionError {
+    error: CommandError (required);
+}
+
+table TaskAbortedLimit {
+    limit: AbortLimit (required);
+}
+
+table TaskAbortedError {
+}
+
+table TaskAbortedException {
+    exception: Exception (required);
+}
+
+table TaskAbortedCancelled {
+}
+
+table VerbProgramFailed {
+    error: VerbProgramError (required);
+}
+
+table PropertyRetrievalFailed {
+    error: WorldStateError (required);
+}
+
+table VerbRetrievalFailed {
+    error: WorldStateError (required);
+}
+
+table ObjectResolutionFailed {
+    error: WorldStateError (required);
+}
+
+table GarbageCollectionFailed {
+    message: string (required);
+}
+
+table SchedulerError {
+    error: SchedulerErrorUnion (required);
+}
+
+// Command errors
+union CommandErrorUnion {
+    CouldNotParseCommand,
+    NoObjectMatch,
+    NoCommandMatch,
+    DatabaseError,
+    PermissionDenied
+}
+
+table CouldNotParseCommand {
+}
+
+table NoObjectMatch {
+}
+
+table NoCommandMatch {
+}
+
+table DatabaseError {
+    error: WorldStateError (required);
+}
+
+table PermissionDenied {
+}
+
+table CommandError {
+    error: CommandErrorUnion (required);
+}
+
+// Verb program errors
+union VerbProgramErrorUnion {
+    NoVerbToProgram,
+    VerbCompilationError,
+    VerbDatabaseError
+}
+
+table NoVerbToProgram {
+}
+
+table VerbCompilationError {
+    error: CompileError (required);
+}
+
+table VerbDatabaseError {
+}
+
+table VerbProgramError {
+    error: VerbProgramErrorUnion (required);
+}
+
+// Worker errors
+union WorkerErrorUnion {
+    WorkerPermissionDenied,
+    WorkerInvalidRequest,
+    WorkerInternalError,
+    WorkerRequestTimedOut,
+    WorkerRequestError,
+    WorkerDetached,
+    NoWorkerAvailable
+}
+
+table WorkerPermissionDenied {
+    message: string (required);
+}
+
+table WorkerInvalidRequest {
+    message: string (required);
+}
+
+table WorkerInternalError {
+    message: string (required);
+}
+
+table WorkerRequestTimedOut {
+    message: string (required);
+}
+
+table WorkerRequestError {
+    message: string (required);
+}
+
+table WorkerDetached {
+    message: string (required);
+}
+
+table NoWorkerAvailable {
+    worker_type: Symbol (required);
+}
+
+table WorkerError {
+    error: WorkerErrorUnion (required);
+}
+
+// CompileError types
+table CompileContext {
+    line: uint64;
+    col: uint64;
+}
+
+table StringLexError {
+    context: CompileContext (required);
+    message: string (required);
+}
+
+table ParseError {
+    error_position: CompileContext (required);
+    context: string (required);
+    end_line: uint64;
+    end_col: uint64;
+    has_end: bool;
+    message: string (required);
+}
+
+table UnknownBuiltinFunction {
+    context: CompileContext (required);
+    name: string (required);
+}
+
+table UnknownTypeConstant {
+    context: CompileContext (required);
+    name: string (required);
+}
+
+table UnknownLoopLabel {
+    context: CompileContext (required);
+    label: string (required);
+}
+
+table DuplicateVariable {
+    context: CompileContext (required);
+    var_name: Symbol (required);
+}
+
+table AssignToConst {
+    context: CompileContext (required);
+    var_name: Symbol (required);
+}
+
+table DisabledFeature {
+    context: CompileContext (required);
+    feature: string (required);
+}
+
+table BadSlotName {
+    context: CompileContext (required);
+    slot: string (required);
+}
+
+table InvalidAssignment {
+    context: CompileContext (required);
+}
+
+union CompileErrorUnion {
+    StringLexError,
+    ParseError,
+    UnknownBuiltinFunction,
+    UnknownTypeConstant,
+    UnknownLoopLabel,
+    DuplicateVariable,
+    AssignToConst,
+    DisabledFeature,
+    BadSlotName,
+    InvalidAssignment
+}
+
+table CompileError {
+    error: CompileErrorUnion (required);
+}
+
+// ============================================================================
+// WorldStateError types
+// ============================================================================
+
+union WorldStateErrorUnion {
+    ObjectNotFound,
+    ObjectAlreadyExists,
+    RecursiveMove,
+    ObjectPermissionDenied,
+    PropertyNotFound,
+    PropertyPermissionDenied,
+    PropertyDefinitionNotFound,
+    DuplicatePropertyDefinition,
+    ChparentPropertyNameConflict,
+    PropertyTypeMismatch,
+    VerbNotFound,
+    InvalidVerb,
+    VerbDecodeError,
+    VerbPermissionDenied,
+    DuplicateVerb,
+    FailedMatch,
+    AmbiguousMatch,
+    InvalidRenumber,
+    WorldStateDatabaseError,
+    RollbackRetry
+}
+
+table ObjectNotFound {
+    object_ref: ObjectRef (required);
+}
+
+table ObjectAlreadyExists {
+    obj: Obj (required);
+}
+
+table RecursiveMove {
+    from_obj: Obj (required);
+    to_obj: Obj (required);
+}
+
+table ObjectPermissionDenied {
+}
+
+table PropertyNotFound {
+    obj: Obj (required);
+    property: string (required);
+}
+
+table PropertyPermissionDenied {
+}
+
+table PropertyDefinitionNotFound {
+    obj: Obj (required);
+    property: string (required);
+}
+
+table DuplicatePropertyDefinition {
+    obj: Obj (required);
+    property: string (required);
+}
+
+table ChparentPropertyNameConflict {
+    descendant: Obj (required);
+    ancestor: Obj (required);
+    property: string (required);
+}
+
+table PropertyTypeMismatch {
+}
+
+table VerbNotFound {
+    obj: Obj (required);
+    verb: string (required);
+}
+
+table InvalidVerb {
+    vid: int64;
+}
+
+table VerbDecodeError {
+    obj: Obj (required);
+    verb: Symbol (required);
+}
+
+table VerbPermissionDenied {
+}
+
+table DuplicateVerb {
+    obj: Obj (required);
+    verb: Symbol (required);
+}
+
+table FailedMatch {
+    match_string: string (required);
+}
+
+table AmbiguousMatch {
+    match_string: string (required);
+}
+
+table InvalidRenumber {
+    message: string (required);
+}
+
+table WorldStateDatabaseError {
+    message: string (required);
+}
+
+table RollbackRetry {
+}
+
+table WorldStateError {
+    error: WorldStateErrorUnion (required);
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum HostType: uint8 {
+    TCP = 0,
+    WebSocket = 1
+}
+
+enum ConnectType: uint8 {
+    Connected = 0,
+    Reconnected = 1,
+    Created = 2
+}
+
+enum EntityType: uint8 {
+    Property = 0,
+    Verb = 1
+}
+
+// ============================================================================
+// Object References
+// ============================================================================
+
+union ObjectRefUnion {
+    ObjectRefId,
+    ObjectRefSysObj,
+    ObjectRefMatch
+}
+
+table ObjectRefId {
+    obj: Obj (required);
+}
+
+table ObjectRefSysObj {
+    symbols: [Symbol] (required);
+}
+
+table ObjectRefMatch {
+    match_string: string (required);
+}
+
+table ObjectRef {
+    ref: ObjectRefUnion (required);
+}
+
+// ============================================================================
+// Property and Verb Info
+// ============================================================================
+
+table PropInfo {
+    definer: Obj (required);
+    location: Obj (required);
+    name: Symbol (required);
+    owner: Obj (required);
+    r: bool;
+    w: bool;
+    chown: bool;
+}
+
+table VerbInfo {
+    location: Obj (required);
+    owner: Obj (required);
+    names: [Symbol] (required);
+    r: bool;
+    w: bool;
+    x: bool;
+    d: bool;
+    arg_spec: [Symbol] (required);
+}
+
+// ============================================================================
+// History and Events
+// ============================================================================
+
+union HistoryRecallUnion {
+    HistoryRecallSinceEvent,
+    HistoryRecallUntilEvent,
+    HistoryRecallSinceSeconds,
+    HistoryRecallNone
+}
+
+table HistoryRecallSinceEvent {
+    event_id: Uuid (required);
+    limit: uint64;  // Optional limit, 0 means no limit
+}
+
+table HistoryRecallUntilEvent {
+    event_id: Uuid (required);
+    limit: uint64;  // Optional limit, 0 means no limit
+}
+
+table HistoryRecallSinceSeconds {
+    seconds_ago: uint64;
+    limit: uint64;  // Optional limit, 0 means no limit
+}
+
+table HistoryRecallNone {
+}
+
+table HistoryRecall {
+    recall: HistoryRecallUnion (required);
+}
+
+table HistoricalNarrativeEvent {
+    event: NarrativeEvent (required);
+    is_historical: bool;
+    player: Obj (required);
+}
+
+table HistoryResponse {
+    events: [HistoricalNarrativeEvent] (required);
+    time_range_start: uint64;  // SystemTime as nanos since epoch
+    time_range_end: uint64;    // SystemTime as nanos since epoch
+    total_events: uint64;
+    has_more_before: bool;
+    earliest_event_id: Uuid;  // Optional UUID
+    latest_event_id: Uuid;    // Optional UUID
+}
+
+// ============================================================================
+// Verb Programming
+// ============================================================================
+
+union VerbProgramResponseUnion {
+    VerbProgramSuccess,
+    VerbProgramFailure
+}
+
+table VerbProgramSuccess {
+    obj: Obj (required);
+    verb_name: string (required);
+}
+
+table VerbProgramFailure {
+    error: VerbProgramError (required);
+}
+
+table VerbProgramResponse {
+    response: VerbProgramResponseUnion (required);
+}
+
+// ============================================================================
+// Connection attributes
+// ============================================================================
+
+table ConnectionAttribute {
+    key: Symbol (required);
+    value: VarBytes (required);
+}
+
+// ============================================================================
+// Host-to-Daemon Messages
+// ============================================================================
+
+union HostToDaemonMessageUnion {
+    RegisterHost,
+    DetachHost,
+    RequestPerformanceCounters,
+    HostPong
+}
+
+table RegisterHost {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    host_type: HostType;
+    listeners: [Listener] (required);
+}
+
+table DetachHost {
+}
+
+table RequestPerformanceCounters {
+}
+
+table HostPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    host_type: HostType;
+    listeners: [Listener] (required);
+}
+
+table Listener {
+    handler_object: Obj (required);
+    socket_addr: string (required);  // SocketAddr serialized as string
+}
+
+table HostToDaemonMessage {
+    message: HostToDaemonMessageUnion (required);
+}
+
+// ============================================================================
+// Daemon-to-Host Messages
+// ============================================================================
+
+union DaemonToHostReplyUnion {
+    DaemonToHostAck,
+    DaemonToHostReject,
+    DaemonToHostPerfCounters
+}
+
+table DaemonToHostAck {
+}
+
+table DaemonToHostReject {
+    reason: string (required);
+}
+
+table Counter {
+    name: Symbol (required);
+    count: int64;
+    total_cumulative_ns: int64;
+}
+
+table CounterCategory {
+    category: Symbol (required);
+    counters: [Counter] (required);
+}
+
+table DaemonToHostPerfCounters {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    counters: [CounterCategory] (required);
+}
+
+table DaemonToHostReply {
+    reply: DaemonToHostReplyUnion (required);
+}
+
+// ============================================================================
+// Host Broadcast Events
+// ============================================================================
+
+union HostBroadcastEventUnion {
+    HostBroadcastListen,
+    HostBroadcastUnlisten,
+    HostBroadcastPingPong
+}
+
+table HostBroadcastListen {
+    handler_object: Obj (required);
+    host_type: HostType;
+    port: uint16;
+    print_messages: bool;
+}
+
+table HostBroadcastUnlisten {
+    host_type: HostType;
+    port: uint16;
+}
+
+table HostBroadcastPingPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+}
+
+table HostBroadcastEvent {
+    event: HostBroadcastEventUnion (required);
+}
+
+// ============================================================================
+// Client-to-Daemon Messages (via Host)
+// ============================================================================
+
+union HostClientToDaemonMessageUnion {
+    ConnectionEstablish,
+    RequestSysProp,
+    LoginCommand,
+    Attach,
+    Command,
+    Verbs,
+    InvokeVerb,
+    Properties,
+    Retrieve,
+    Program,
+    RequestedInput,
+    OutOfBand,
+    Eval,
+    Resolve,
+    ClientPong,
+    RequestHistory,
+    RequestCurrentPresentations,
+    DismissPresentation,
+    SetClientAttribute,
+    Detach
+}
+
+table ConnectionEstablish {
+    peer_addr: string (required);
+    local_port: uint16;
+    remote_port: uint16;
+    acceptable_content_types: [Symbol];
+    connection_attributes: [ConnectionAttribute];
+}
+
+table RequestSysProp {
+    client_token: ClientToken (required);
+    object: ObjectRef (required);
+    property: Symbol (required);
+}
+
+table LoginCommand {
+    client_token: ClientToken (required);
+    handler_object: Obj (required);
+    connect_args: [string] (required);
+    do_attach: bool;
+}
+
+table Attach {
+    auth_token: AuthToken (required);
+    connect_type: ConnectType;  // Optional, 255 means None
+    handler_object: Obj (required);
+    peer_addr: string (required);
+    local_port: uint16;
+    remote_port: uint16;
+    acceptable_content_types: [Symbol];
+}
+
+table Command {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    handler_object: Obj (required);
+    command: string (required);
+}
+
+table Verbs {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: ObjectRef (required);
+    inherited: bool;
+}
+
+table InvokeVerb {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: ObjectRef (required);
+    verb: Symbol (required);
+    args: [VarBytes] (required);
+}
+
+table Properties {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: ObjectRef (required);
+    inherited: bool;
+}
+
+table Retrieve {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: ObjectRef (required);
+    entity_type: EntityType;
+    name: Symbol (required);
+}
+
+table Program {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: ObjectRef (required);
+    verb: Symbol (required);
+    code: [string] (required);
+}
+
+table RequestedInput {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    request_id: Uuid (required);
+    input: VarBytes (required);
+}
+
+table OutOfBand {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    handler_object: Obj (required);
+    command: string (required);
+}
+
+table Eval {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    expression: string (required);
+}
+
+table Resolve {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    objref: ObjectRef (required);
+}
+
+table ClientPong {
+    client_token: ClientToken (required);
+    client_sys_time: uint64;  // SystemTime as nanos since epoch
+    player: Obj (required);
+    host_type: HostType;
+    socket_addr: string (required);  // SocketAddr as string
+}
+
+table RequestHistory {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    history_recall: HistoryRecall (required);
+}
+
+table RequestCurrentPresentations {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+}
+
+table DismissPresentation {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    presentation_id: string (required);
+}
+
+table SetClientAttribute {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    key: Symbol (required);
+    value: VarBytes;  // Optional, null means remove
+}
+
+table Detach {
+    client_token: ClientToken (required);
+    disconnected: bool;
+}
+
+table HostClientToDaemonMessage {
+    message: HostClientToDaemonMessageUnion (required);
+}
+
+// ============================================================================
+// Daemon-to-Client Replies
+// ============================================================================
+
+union DaemonToClientReplyUnion {
+    NewConnection,
+    LoginResult,
+    AttachResult,
+    SysPropValue,
+    TaskSubmitted,
+    InputThanks,
+    EvalResult,
+    ThanksPong,
+    VerbsReply,
+    PropertiesReply,
+    VerbProgramResponseReply,
+    PropertyValue,
+    VerbValue,
+    ResolveResult,
+    HistoryResponse,
+    CurrentPresentations,
+    PresentationDismissed,
+    ClientAttributeSet,
+    Disconnected
+}
+
+table NewConnection {
+    client_token: ClientToken (required);
+    connection_obj: Obj (required);
+}
+
+table LoginResult {
+    success: bool;
+    auth_token: AuthToken;
+    connect_type: ConnectType;
+    player: Obj;
+}
+
+table AttachResult {
+    success: bool;
+    client_token: ClientToken;
+    player: Obj;
+}
+
+table SysPropValue {
+    value: VarBytes;  // Optional
+}
+
+table TaskSubmitted {
+    task_id: uint64;
+}
+
+table InputThanks {
+}
+
+table EvalResult {
+    result: VarBytes (required);
+}
+
+table ThanksPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+}
+
+table VerbsReply {
+    verbs: [VerbInfo] (required);
+}
+
+table PropertiesReply {
+    properties: [PropInfo] (required);
+}
+
+table VerbProgramResponseReply {
+    response: VerbProgramResponse (required);
+}
+
+table PropertyValue {
+    prop_info: PropInfo (required);
+    value: VarBytes (required);
+}
+
+table VerbValue {
+    verb_info: VerbInfo (required);
+    code: [string] (required);
+}
+
+table ResolveResult {
+    result: VarBytes (required);
+}
+
+table CurrentPresentations {
+    presentations: [Presentation] (required);
+}
+
+table PresentationDismissed {
+}
+
+table ClientAttributeSet {
+}
+
+table Disconnected {
+}
+
+table DaemonToClientReply {
+    reply: DaemonToClientReplyUnion (required);
+}
+
+// ============================================================================
+// Client Events
+// ============================================================================
+
+union ClientEventUnion {
+    NarrativeEventMessage,
+    RequestInputEvent,
+    SystemMessageEvent,
+    DisconnectEvent,
+    TaskErrorEvent,
+    TaskSuccessEvent,
+    PlayerSwitchedEvent,
+    SetConnectionOptionEvent
+}
+
+table NarrativeEventMessage {
+    player: Obj (required);
+    event: NarrativeEvent (required);
+}
+
+table RequestInputEvent {
+    request_id: Uuid (required);
+}
+
+table SystemMessageEvent {
+    player: Obj (required);
+    message: string (required);
+}
+
+table DisconnectEvent {
+}
+
+table TaskErrorEvent {
+    task_id: uint64;
+    error: SchedulerError (required);
+}
+
+table TaskSuccessEvent {
+    task_id: uint64;
+    result: VarBytes (required);
+}
+
+table PlayerSwitchedEvent {
+    new_player: Obj (required);
+    new_auth_token: AuthToken (required);
+}
+
+table SetConnectionOptionEvent {
+    connection_obj: Obj (required);
+    option_name: Symbol (required);
+    value: VarBytes (required);
+}
+
+table ClientEvent {
+    event: ClientEventUnion (required);
+}
+
+// ============================================================================
+// Client Broadcast Events
+// ============================================================================
+
+union ClientsBroadcastEventUnion {
+    ClientsBroadcastPingPong
+}
+
+table ClientsBroadcastPingPong {
+    timestamp: uint64;  // SystemTime as nanos since epoch
+}
+
+table ClientsBroadcastEvent {
+    event: ClientsBroadcastEventUnion (required);
+}
+
+// ============================================================================
+// Worker Messages
+// ============================================================================
+
+union DaemonToWorkerMessageUnion {
+    PingWorkers,
+    WorkerRequest,
+    PleaseDie
+}
+
+table PingWorkers {
+}
+
+table WorkerRequest {
+    worker_id: Uuid (required);
+    token: WorkerToken (required);
+    id: Uuid (required);
+    perms: Obj (required);
+    request: [VarBytes] (required);
+    timeout_ms: uint64;  // Optional timeout in milliseconds, 0 means no timeout
+}
+
+table PleaseDie {
+    token: WorkerToken (required);
+    worker_id: Uuid (required);
+}
+
+table DaemonToWorkerMessage {
+    message: DaemonToWorkerMessageUnion (required);
+}
+
+union WorkerToDaemonMessageUnion {
+    AttachWorker,
+    WorkerPong,
+    DetachWorker,
+    RequestResult,
+    RequestError
+}
+
+table AttachWorker {
+    token: WorkerToken (required);
+    worker_type: Symbol (required);
+}
+
+table WorkerPong {
+    token: WorkerToken (required);
+    worker_type: Symbol (required);
+}
+
+table DetachWorker {
+    token: WorkerToken (required);
+}
+
+table RequestResult {
+    token: WorkerToken (required);
+    id: Uuid (required);
+    result: VarBytes (required);
+}
+
+table RequestError {
+    token: WorkerToken (required);
+    id: Uuid (required);
+    error: WorkerError (required);
+}
+
+table WorkerToDaemonMessage {
+    message: WorkerToDaemonMessageUnion (required);
+}
+
+union DaemonToWorkerReplyUnion {
+    WorkerAck,
+    WorkerRejected,
+    WorkerAttached
+}
+
+table WorkerAck {
+}
+
+table WorkerRejected {
+}
+
+table WorkerAttached {
+    token: WorkerToken (required);
+    worker_id: Uuid (required);
+}
+
+table DaemonToWorkerReply {
+    reply: DaemonToWorkerReplyUnion (required);
+}
+
+// ============================================================================
+// Top-level Error and Message Types
+// ============================================================================
+
+enum RpcMessageErrorCode: uint8 {
+    AlreadyConnected = 0,
+    InvalidRequest = 1,
+    NoConnection = 2,
+    ErrorCouldNotRetrieveSysProp = 3,
+    LoginTaskFailed = 4,
+    CreateSessionFailed = 5,
+    PermissionDenied = 6,
+    TaskError = 7,
+    EntityRetrievalError = 8,
+    InternalError = 9
+}
+
+table RpcMessageError {
+    error_code: RpcMessageErrorCode;
+    message: string;
+    scheduler_error: SchedulerError;  // Optional, for TaskError variant
+}
+
+union MessageTypeUnion {
+    HostToDaemonMsg,
+    HostClientToDaemonMsg
+}
+
+table HostToDaemonMsg {
+    host_token: HostToken (required);
+    message: HostToDaemonMessage (required);
+}
+
+table HostClientToDaemonMsg {
+    client_data: [uint8] (required);
+    message: HostClientToDaemonMessage (required);
+}
+
+table MessageType {
+    message: MessageTypeUnion (required);
+}
+
+union ReplyResultUnion {
+    HostSuccess,
+    ClientSuccess,
+    Failure
+}
+
+table HostSuccess {
+    reply: DaemonToHostReply (required);
+}
+
+table ClientSuccess {
+    reply: DaemonToClientReply (required);
+}
+
+table Failure {
+    error: RpcMessageError (required);
+}
+
+table ReplyResult {
+    result: ReplyResultUnion (required);
+}
+
+// ============================================================================
+// Root tables for different message flows
+// ============================================================================
+
+root_type MessageType;

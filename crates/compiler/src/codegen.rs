@@ -17,28 +17,32 @@ use pest::iterators::Pairs;
 use std::sync::Arc;
 use tracing::warn;
 
-use moor_var::{ErrorCode, Symbol, Var, v_arc_string, v_int};
-use moor_var::{Variant, v_sym};
+use moor_var::{ErrorCode, Symbol, Var, Variant, v_arc_string, v_int, v_sym};
 
-use crate::Op::{
-    BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
+use crate::{
+    Op::{
+        BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop,
+        Put,
+    },
+    ast::{
+        Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
+        UnaryOp,
+    },
+    parse::{CompileOptions, Parse, moo::Rule, parse_program, parse_tree},
 };
-use crate::ast::{
-    Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
+use moor_common::{
+    builtins::BUILTINS,
+    model::{CompileContext, CompileError, CompileError::InvalidAssignemnt},
 };
-use crate::parse::moo::Rule;
-use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
-use moor_common::builtins::BUILTINS;
-use moor_common::model::CompileError::InvalidAssignemnt;
-use moor_common::model::{CompileContext, CompileError};
-use moor_var::program::labels::{JumpLabel, Label, Offset};
-use moor_var::program::names::{Name, Names, Variable};
-use moor_var::program::opcode::Op::Jump;
-use moor_var::program::opcode::{
-    ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend,
-    ScatterArgs, ScatterLabel,
+use moor_var::program::{
+    labels::{JumpLabel, Label, Offset},
+    names::{Name, Names, Variable},
+    opcode::{
+        ComprehensionType, ForRangeOperand, ForSequenceOperand, ListComprehend, Op, Op::Jump,
+        RangeComprehend, ScatterArgs, ScatterLabel,
+    },
+    program::{PrgInner, Program},
 };
-use moor_var::program::program::{PrgInner, Program};
 
 pub struct Loop {
     loop_name: Option<Name>,

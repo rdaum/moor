@@ -11,34 +11,37 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::{BufRead, BufReader, Read},
+};
 
 use base64::{Engine, engine::general_purpose};
 use tracing::{info, warn};
 
 use crate::LambdaMOODBVersion::DbvFloat;
 
-use crate::TextdumpVersion;
-use crate::TextdumpVersion::{LambdaMOO, ToastStunt};
-use crate::ToastStuntDBVersion::{
-    ToastDbvAnon, ToastDbvInterrupt, ToastDbvLastMove, ToastDbvNextGen, ToastDbvTaskLocal,
-    ToastDbvThis, ToastDbvThreaded,
+use crate::{
+    EncodingMode, Object, Propval, Textdump, TextdumpVersion,
+    TextdumpVersion::{LambdaMOO, ToastStunt},
+    ToastStuntDBVersion::{
+        ToastDbvAnon, ToastDbvInterrupt, ToastDbvLastMove, ToastDbvNextGen, ToastDbvTaskLocal,
+        ToastDbvThis, ToastDbvThreaded,
+    },
+    Verb, Verbdef,
 };
-use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
-use moor_common::model::CompileError;
-use moor_common::model::WorldStateError;
+use moor_common::model::{CompileError, WorldStateError};
 use moor_compiler::{CompileOptions, compile};
-use moor_var::program::labels::Label;
-use moor_var::program::names::Name;
-use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
-use moor_var::{Error, ErrorCode, NOTHING, Sequence, Variant, v_error, v_list, v_map};
 use moor_var::{
-    List, Symbol, Var, VarType, v_binary, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str,
-    v_sym,
+    Error, ErrorCode, List, NOTHING, Obj, Sequence, Symbol, Var, VarType, Variant,
+    program::{
+        labels::Label,
+        names::Name,
+        opcode::{ScatterArgs, ScatterLabel},
+    },
+    v_binary, v_bool_int, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
+    v_obj, v_str, v_sym,
 };
-use moor_var::{Obj, v_flyweight};
 
 pub const TYPE_CLEAR: i64 = 5;
 // Textdump-specific type constant for anonymous objects (matching ToastStunt)

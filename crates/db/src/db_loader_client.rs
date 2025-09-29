@@ -14,22 +14,16 @@
 use uuid::Uuid;
 
 use crate::db_worldstate::DbWorldState;
-use moor_common::model::ObjAttrs;
-use moor_common::model::ObjSet;
-use moor_common::model::PropFlag;
-use moor_common::model::VerbArgsSpec;
-use moor_common::model::VerbAttrs;
-use moor_common::model::VerbDefs;
-use moor_common::model::VerbFlag;
-use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
-use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
-use moor_common::model::{HasUuid, Named, ObjFlag, PropPerms, ValSet};
-use moor_common::model::{PropDef, PropDefs, VerbDef};
-use moor_common::util::BitEnum;
-use moor_var::Obj;
-use moor_var::Symbol;
-use moor_var::Var;
-use moor_var::program::ProgramType;
+use moor_common::{
+    model::{
+        CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, PropDef, PropDefs,
+        PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
+        WorldStateError,
+        loader::{LoaderInterface, SnapshotInterface},
+    },
+    util::BitEnum,
+};
+use moor_var::{Obj, Symbol, Var, program::ProgramType};
 
 /// Implementation of LoaderInterface for write operations during loading
 impl LoaderInterface for DbWorldState {

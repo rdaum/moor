@@ -14,9 +14,12 @@
 //! ZMQ transport layer for workers, separated from business logic
 
 use eyre::Context;
-use rpc_common::{DaemonToWorkerReply, WorkerToDaemonMessage};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use planus::{Builder, ReadAsRoot};
+use rpc_common::flatbuffers_generated::moor_rpc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use tracing::{error, info, warn};
 use zmq::Socket;
 
@@ -78,37 +81,42 @@ impl WorkersTransport {
 
             // First argument should be a WorkerToken
             // Second argument is a Uuid
-            // Third argument is a bincoded WorkerToDaemonMessage
+            // Third argument is either a flatbuffer or bincoded WorkerToDaemonMessage
             let (worker_token, worker_id, request) = (&msg[0], &msg[1], &msg[2]);
 
-            let Ok((msg, _)) = bincode::decode_from_slice::<WorkerToDaemonMessage, _>(
-                request,
-                bincode::config::standard(),
-            ) else {
-                error!("Unable to decode WorkerToDaemonMessage message");
+            let Ok(fb_msg) = moor_rpc::WorkerToDaemonMessageRef::read_as_root(request) else {
+                error!("Unable to decode flatbuffer WorkerToDaemonMessage");
                 Self::reject(&rpc_socket);
                 continue;
             };
 
-            // Delegate to message handler
-            let reply = message_handler.handle_worker_message(worker_token, worker_id, msg);
-
-            // Send the reply
-            Self::send_reply(&rpc_socket, reply)?;
+            // Use flatbuffer handler
+            let fb_reply = message_handler.handle_worker_message(worker_token, worker_id, &fb_msg);
+            Self::send_flatbuffer_reply(&rpc_socket, fb_reply)?;
         }
     }
 
     fn reject(rpc_socket: &Socket) {
-        Self::send_reply(rpc_socket, DaemonToWorkerReply::Rejected).ok();
+        let reject_reply = moor_rpc::DaemonToWorkerReply {
+            reply: moor_rpc::DaemonToWorkerReplyUnion::WorkerRejected(Box::new(
+                moor_rpc::WorkerRejected {
+                    reason: Some("Message rejected".to_string()),
+                },
+            )),
+        };
+        Self::send_flatbuffer_reply(rpc_socket, reject_reply).ok();
     }
 
-    fn send_reply(rpc_socket: &Socket, reply: DaemonToWorkerReply) -> eyre::Result<()> {
-        let response = bincode::encode_to_vec(&reply, bincode::config::standard())
-            .context("Unable to encode response")?;
+    fn send_flatbuffer_reply(
+        rpc_socket: &Socket,
+        reply: moor_rpc::DaemonToWorkerReply,
+    ) -> eyre::Result<()> {
+        let mut builder = Builder::new();
+        let response = builder.finish(&reply, None);
 
         rpc_socket
-            .send_multipart([&response], 0)
-            .context("Unable to send response")?;
+            .send_multipart([response.to_vec()], 0)
+            .context("Unable to send flatbuffer response")?;
 
         Ok(())
     }

@@ -64,4 +64,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 # Utilities & Helpers
+planus.workspace = true
 uuid.workspace = true

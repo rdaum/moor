@@ -13,20 +13,23 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::config::DatabaseConfig;
-    use crate::db_worldstate::DbWorldState;
-    use crate::moor_db::MoorDB;
-    use moor_common::model::{
-        ArgSpec, CommitResult, ObjectKind, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag,
-        WorldState, WorldStateError,
+    use crate::{config::DatabaseConfig, db_worldstate::DbWorldState, moor_db::MoorDB};
+    use moor_common::{
+        model::{
+            ArgSpec, CommitResult, ObjectKind, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag,
+            WorldState, WorldStateError,
+        },
+        util::BitEnum,
     };
-    use moor_common::util::BitEnum;
-    use moor_var::program::ProgramType;
-    use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
+    use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType, v_int, v_str};
     use shuttle::{check_random, sync::Arc, thread};
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::{
+        collections::HashMap,
+        sync::{
+            Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
 
     fn setup_test_db() -> Arc<MoorDB> {
         let (db, _) = MoorDB::open(None, DatabaseConfig::default());

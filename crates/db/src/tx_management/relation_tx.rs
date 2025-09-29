@@ -11,14 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tx_management::indexes::RelationIndex;
-use crate::tx_management::{Canonical, Error, Timestamp, Tx};
+use crate::tx_management::{Canonical, Error, Timestamp, Tx, indexes::RelationIndex};
 use ahash::AHasher;
 use indexmap::IndexMap;
 use moor_common::model::WorldStateError;
-use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, Hash};
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    hash::{BuildHasherDefault, Hash},
+    sync::Arc,
+};
 
 /// A key-value caching store that is scoped for the lifetime of a transaction.
 /// When the transaction is completed, it collapses into a WorkingSet which can be applied to the

@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::matching::{MatchEnvironment, ObjectNameMatcher};
-use crate::model::ValSet;
-use crate::model::WorldStateError;
-use moor_var::Obj;
-use moor_var::{AMBIGUOUS, FAILED_MATCH, NOTHING};
+use crate::{
+    matching::{MatchEnvironment, ObjectNameMatcher},
+    model::{ValSet, WorldStateError},
+};
+use moor_var::{AMBIGUOUS, FAILED_MATCH, NOTHING, Obj};
 
 const ME: &str = "me";
 const HERE: &str = "here";
@@ -133,14 +133,15 @@ impl<M: MatchEnvironment> ObjectNameMatcher for DefaultObjectNameMatcher<M> {
 
 #[cfg(test)]
 mod tests {
-    use crate::matching::match_env::{
-        DefaultObjectNameMatcher, MatchData, ObjectNameMatcher, do_match_object_names,
+    use crate::matching::{
+        match_env::{
+            DefaultObjectNameMatcher, MatchData, ObjectNameMatcher, do_match_object_names,
+        },
+        mock_matching_env::{
+            MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
+        },
     };
-    use crate::matching::mock_matching_env::{
-        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
-    };
-    use moor_var::Obj;
-    use moor_var::{FAILED_MATCH, NOTHING};
+    use moor_var::{FAILED_MATCH, NOTHING, Obj};
 
     #[test]
     fn test_match_object_names_fail() {

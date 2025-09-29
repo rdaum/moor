@@ -11,31 +11,23 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::read::TextdumpReaderError;
 use crate::{
     Object, PREP_ANY, PREP_NONE, TextdumpReader, TextdumpVersion, VF_ASPEC_ANY, VF_ASPEC_NONE,
     VF_ASPEC_THIS, VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ,
-    VF_WRITE,
+    VF_WRITE, read::TextdumpReaderError,
 };
-use moor_common::matching::Preposition;
-use moor_common::model::PropFlag;
-use moor_common::model::VerbFlag;
-use moor_common::model::loader::LoaderInterface;
-use moor_common::model::{ArgSpec, PrepSpec, VerbArgsSpec};
-use moor_common::model::{ObjAttrs, ObjFlag};
-use moor_common::util::BitEnum;
-use moor_compiler::compile;
-use moor_compiler::{CompileOptions, Program};
-use moor_var::Obj;
-use moor_var::Var;
-use moor_var::program::ProgramType;
-use moor_var::{NOTHING, Symbol};
+use moor_common::{
+    matching::Preposition,
+    model::{
+        ArgSpec, ObjAttrs, ObjFlag, PrepSpec, PropFlag, VerbArgsSpec, VerbFlag,
+        loader::LoaderInterface,
+    },
+    util::BitEnum,
+};
+use moor_compiler::{CompileOptions, Program, compile};
+use moor_var::{NOTHING, Obj, Symbol, Var, program::ProgramType};
 use semver::Version;
-use std::collections::BTreeMap;
-use std::fs::File;
-use std::io;
-use std::io::BufReader;
-use std::path::PathBuf;
+use std::{collections::BTreeMap, fs::File, io, io::BufReader, path::PathBuf};
 use tracing::{info, span, trace, warn};
 
 struct RProp {

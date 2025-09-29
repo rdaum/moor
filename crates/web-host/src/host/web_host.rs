@@ -13,34 +13,31 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::host::ws_connection::WebSocketConnection;
-use crate::host::{auth, var_as_json};
-use axum::Json;
-use axum::body::{Body, Bytes};
-use axum::extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
+use crate::host::{auth, var_as_json, ws_connection::WebSocketConnection};
+use axum::{
+    Json,
+    body::{Body, Bytes},
+    extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade},
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+};
 use eyre::eyre;
 use hickory_resolver::TokioResolver;
 
-use moor_common::model::ObjectRef;
-use moor_common::tasks::Event;
-use moor_var::v_obj;
-use moor_var::{E_INVIND, Obj, Symbol, Var, v_err};
+use moor_common::{model::ObjectRef, tasks::Event};
+use moor_var::{E_INVIND, Obj, Symbol, Var, v_err, v_obj};
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::AuthToken;
-use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};
 use rpc_common::{
-    CLIENT_BROADCAST_TOPIC, ConnectType, DaemonToClientReply, HistoryRecall,
-    HostClientToDaemonMessage, ReplyResult,
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, flatbuffers_generated::moor_rpc, mk_attach_msg,
+    mk_connection_establish_msg, mk_detach_msg, mk_dismiss_presentation_msg, mk_eval_msg,
+    mk_invoke_verb_msg, mk_request_current_presentations_msg, mk_request_history_msg,
+    mk_request_sys_prop_msg, mk_resolve_msg,
 };
-use rpc_common::{ClientToken, RpcMessageError};
 use serde_derive::Deserialize;
 use serde_json::json;
 use std::net::{IpAddr, SocketAddr};
 use tmq::{request, subscribe};
-use tracing::warn;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Perform async reverse DNS lookup for an IP address
@@ -76,8 +73,6 @@ pub struct WebHost {
 
 #[derive(Debug, thiserror::Error)]
 pub enum WsHostError {
-    #[error("RPC request error: {0}")]
-    RpcFailure(RpcMessageError),
     #[error("RPC system error: {0}")]
     RpcError(eyre::Error),
     #[error("Authentication failed")]
@@ -108,7 +103,7 @@ impl WebHost {
     pub async fn attach_authenticated(
         &self,
         auth_token: AuthToken,
-        connect_type: Option<ConnectType>,
+        connect_type: Option<moor_rpc::ConnectType>,
         peer_addr: SocketAddr,
     ) -> Result<(Obj, Uuid, ClientToken, RpcSendClient), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
@@ -139,48 +134,83 @@ impl WebHost {
             }
         };
 
-        let (client_token, player) = match rpc_client
-            .make_client_rpc_call(
-                client_id,
-                Attach {
-                    auth_token,
-                    connect_type,
-                    handler_object: self.handler_object,
-                    peer_addr: hostname,
-                    local_port: self.local_port,
-                    remote_port: peer_addr.port(),
-                    acceptable_content_types: Some(vec![
-                        Symbol::mk("text_html"),
-                        Symbol::mk("text_djot"),
-                        Symbol::mk("text_plain"),
-                    ]),
-                },
-            )
-            .await
-        {
-            Ok(ReplyResult::ClientSuccess(DaemonToClientReply::AttachResult(Some((
-                client_token,
-                player,
-            ))))) => {
-                info!("Connection authenticated, player: {}", player);
-                (client_token, player)
-            }
-            Ok(ReplyResult::ClientSuccess(DaemonToClientReply::AttachResult(None))) => {
-                warn!("Connection authentication failed from {}", peer_addr);
-                return Err(WsHostError::AuthenticationFailed);
-            }
-            Ok(ReplyResult::Failure(f)) => {
-                error!("RPC failure in connection establishment: {}", f);
-                return Err(WsHostError::RpcFailure(f));
-            }
-            Ok(resp) => {
-                return Err(WsHostError::RpcError(eyre::eyre!(
-                    "Unexpected response from RPC server: {:?}",
-                    resp
-                )));
-            }
+        let content_types = vec![
+            moor_rpc::Symbol {
+                value: "text_html".to_string(),
+            },
+            moor_rpc::Symbol {
+                value: "text_djot".to_string(),
+            },
+            moor_rpc::Symbol {
+                value: "text_plain".to_string(),
+            },
+        ];
+
+        let attach_msg = mk_attach_msg(
+            &auth_token,
+            connect_type,
+            &self.handler_object,
+            hostname,
+            self.local_port,
+            peer_addr.port(),
+            Some(content_types),
+        );
+
+        let reply_bytes = match rpc_client.make_client_rpc_call(client_id, attach_msg).await {
+            Ok(bytes) => bytes,
             Err(e) => {
+                error!("Unable to attach: {}", e);
                 return Err(WsHostError::RpcError(eyre!(e)));
+            }
+        };
+
+        use planus::ReadAsRoot;
+        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+            .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
+
+        let (client_token, player) = match reply.result().expect("Missing result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Missing reply");
+                match daemon_reply.reply().expect("Missing reply union") {
+                    moor_rpc::DaemonToClientReplyUnionRef::AttachResult(attach_result) => {
+                        if attach_result.success().expect("Missing success") {
+                            let client_token_ref = attach_result
+                                .client_token()
+                                .expect("Missing client_token")
+                                .expect("Client token is None");
+                            let client_token = ClientToken(
+                                client_token_ref.token().expect("Missing token").to_string(),
+                            );
+                            let player_ref = attach_result
+                                .player()
+                                .expect("Missing player")
+                                .expect("Player is None");
+                            let player_struct = moor_rpc::Obj::try_from(player_ref)
+                                .expect("Failed to convert player");
+                            let player = rpc_common::obj_from_flatbuffer_struct(&player_struct)
+                                .expect("Failed to decode player");
+                            info!("Connection authenticated, player: {}", player);
+                            (client_token, player)
+                        } else {
+                            warn!("Connection authentication failed from {}", peer_addr);
+                            return Err(WsHostError::AuthenticationFailed);
+                        }
+                    }
+                    _ => {
+                        error!("Unexpected response from RPC server");
+                        return Err(WsHostError::RpcError(eyre!(
+                            "Unexpected response from RPC server"
+                        )));
+                    }
+                }
+            }
+            moor_rpc::ReplyResultUnionRef::Failure(_) => {
+                error!("RPC failure in attach");
+                return Err(WsHostError::RpcError(eyre!("RPC failure")));
+            }
+            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+                error!("Unexpected host success response");
+                return Err(WsHostError::RpcError(eyre!("Unexpected host success")));
             }
         };
 
@@ -260,51 +290,74 @@ impl WebHost {
             }
         };
 
-        let client_token = match rpc_client
-            .make_client_rpc_call(
-                client_id,
-                ConnectionEstablish {
-                    peer_addr: hostname,
-                    local_port: self.local_port,
-                    remote_port: addr.port(),
-                    acceptable_content_types: Some(vec![
-                        Symbol::mk("text_plain"),
-                        Symbol::mk("text_html"),
-                        Symbol::mk("text_djot"),
-                    ]),
-                    connection_attributes: None,
-                },
-            )
+        let content_types = vec![
+            moor_rpc::Symbol {
+                value: "text_plain".to_string(),
+            },
+            moor_rpc::Symbol {
+                value: "text_html".to_string(),
+            },
+            moor_rpc::Symbol {
+                value: "text_djot".to_string(),
+            },
+        ];
+
+        let establish_msg = mk_connection_establish_msg(
+            hostname,
+            self.local_port,
+            addr.port(),
+            Some(content_types),
+            Some(vec![]),
+        );
+
+        let reply_bytes = match rpc_client
+            .make_client_rpc_call(client_id, establish_msg)
             .await
         {
-            Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(
-                client_token,
-                objid,
-            ))) => {
-                info!("Connection established, connection ID: {}", objid);
-                client_token
-            }
-            Ok(ReplyResult::Failure(f)) => {
-                error!("RPC failure in connection establishment: {}", f);
-                return Err(WsHostError::RpcFailure(f));
-            }
-            Ok(ReplyResult::ClientSuccess(r)) => {
-                error!("Unexpected response from RPC server");
-                return Err(WsHostError::RpcError(eyre!(
-                    "Unexpected response from RPC server: {:?}",
-                    r
-                )));
-            }
+            Ok(bytes) => bytes,
             Err(e) => {
                 error!("Unable to establish connection: {}", e);
                 return Err(WsHostError::RpcError(eyre!(e)));
             }
-            Ok(ReplyResult::HostSuccess(hs)) => {
-                error!("Unexpected response from RPC server: {:?}", hs);
-                return Err(WsHostError::RpcError(eyre!(
-                    "Unexpected response from RPC server: {:?}",
-                    hs
-                )));
+        };
+
+        use planus::ReadAsRoot;
+        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+            .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
+
+        let client_token = match reply.result().expect("Missing result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Missing reply");
+                match daemon_reply.reply().expect("Missing reply union") {
+                    moor_rpc::DaemonToClientReplyUnionRef::NewConnection(new_conn) => {
+                        let client_token_ref =
+                            new_conn.client_token().expect("Missing client_token");
+                        let client_token = ClientToken(
+                            client_token_ref.token().expect("Missing token").to_string(),
+                        );
+                        let objid_ref = new_conn.connection_obj().expect("Missing connection_obj");
+                        let objid_struct = moor_rpc::Obj::try_from(objid_ref)
+                            .expect("Failed to convert connection_obj");
+                        let objid = rpc_common::obj_from_flatbuffer_struct(&objid_struct)
+                            .expect("Failed to decode connection_obj");
+                        info!("Connection established, connection ID: {}", objid);
+                        client_token
+                    }
+                    _ => {
+                        error!("Unexpected response from RPC server");
+                        return Err(WsHostError::RpcError(eyre!(
+                            "Unexpected response from RPC server"
+                        )));
+                    }
+                }
+            }
+            moor_rpc::ReplyResultUnionRef::Failure(_) => {
+                error!("RPC failure in connection establishment");
+                return Err(WsHostError::RpcError(eyre!("RPC failure")));
+            }
+            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+                error!("Unexpected host success response");
+                return Err(WsHostError::RpcError(eyre!("Unexpected host success")));
             }
         };
 
@@ -315,25 +368,14 @@ impl WebHost {
 pub(crate) async fn rpc_call(
     client_id: Uuid,
     rpc_client: &mut RpcSendClient,
-    request: HostClientToDaemonMessage,
-) -> Result<DaemonToClientReply, StatusCode> {
+    request: moor_rpc::HostClientToDaemonMessage,
+) -> Result<Vec<u8>, StatusCode> {
     match rpc_client.make_client_rpc_call(client_id, request).await {
-        Ok(rpc_response) => match rpc_response {
-            ReplyResult::ClientSuccess(r) => Ok(r),
-
-            ReplyResult::Failure(RpcMessageError::PermissionDenied) => {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-            ReplyResult::Failure(f) => {
-                error!("RPC failure in RPC call retrieval: {:?}", f);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-            ReplyResult::HostSuccess(hs) => {
-                error!("Unexpected response from RPC server: {:?}", hs);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(bytes) => Ok(bytes),
+        Err(e) => {
+            error!("RPC failure: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
@@ -364,34 +406,58 @@ pub async fn system_property_handler(
         (obj_parts.iter().map(|&s| Symbol::mk(s)).collect(), prop)
     };
 
-    let response = match rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::RequestSysProp(
-            client_token.clone(),
-            ObjectRef::SysObj(obj_path),
-            Symbol::mk(property_name),
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::SysPropValue(Some(value))) => {
-            Json(var_as_json(&value)).into_response()
+    let sysprop_msg = mk_request_sys_prop_msg(
+        &client_token,
+        &moor_common::model::ObjectRef::SysObj(obj_path),
+        &Symbol::mk(property_name),
+    );
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, sysprop_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Ok(DaemonToClientReply::SysPropValue(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(host_success) => {
+            let daemon_reply = host_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::SysPropValue(sysprop) => {
+                    if let Ok(Some(value_ref)) = sysprop.value() {
+                        let value_bytes = value_ref.data().expect("Missing value data");
+                        let value = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                            .expect("Failed to decode value");
+                        Json(var_as_json(&value)).into_response()
+                    } else {
+                        StatusCode::NOT_FOUND.into_response()
+                    }
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -412,30 +478,52 @@ pub async fn eval_handler(
         };
     let expression = String::from_utf8_lossy(&expression).to_string();
 
-    let response = match rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Eval(client_token.clone(), auth_token.clone(), expression),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::EvalResult(value)) => {
-            debug!("Eval result: {:?}", value);
-            Json(var_as_json(&value)).into_response()
+    let eval_msg = mk_eval_msg(&client_token, &auth_token, expression);
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, eval_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::EvalResult(eval_result) => {
+                    let value_ref = eval_result.result().expect("Missing value");
+                    let value_bytes = value_ref.data().expect("Missing value data");
+                    let value = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                        .expect("Failed to decode value");
+                    debug!("Eval result: {:?}", value);
+                    Json(var_as_json(&value)).into_response()
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -461,33 +549,55 @@ pub async fn resolve_objref_handler(
         Some(oref) => oref,
     };
 
-    let response = match rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::Resolve(client_token.clone(), auth_token.clone(), objref),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::ResolveResult(obj)) => {
-            if obj == v_err(E_INVIND) {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                Json(var_as_json(&obj)).into_response()
+    let resolve_msg = mk_resolve_msg(&client_token, &auth_token, &objref);
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, resolve_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::ResolveResult(resolve_result) => {
+                    let value_ref = resolve_result.result().expect("Missing value");
+                    let value_bytes = value_ref.data().expect("Missing value data");
+                    let obj = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                        .expect("Failed to decode value");
+                    if obj == v_err(E_INVIND) {
+                        StatusCode::NOT_FOUND.into_response()
+                    } else {
+                        Json(var_as_json(&obj)).into_response()
+                    }
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
             }
         }
-        Ok(r) => {
-            error!("Unexpected response from RPC server: {:?}", r);
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -498,7 +608,7 @@ pub async fn resolve_objref_handler(
 async fn attach(
     ws: WebSocketUpgrade,
     addr: SocketAddr,
-    connect_type: ConnectType,
+    connect_type: moor_rpc::ConnectType,
     host: &WebHost,
     auth_token: String,
 ) -> impl IntoResponse + use<> {
@@ -556,7 +666,7 @@ pub async fn ws_connect_attach_handler(
 ) -> impl IntoResponse + use<> {
     info!("Connection from {}", addr);
 
-    attach(ws, addr, ConnectType::Connected, &ws_host, token).await
+    attach(ws, addr, moor_rpc::ConnectType::Connected, &ws_host, token).await
 }
 
 /// Websocket upgrade handler for authenticated users who are connecting to a new user
@@ -568,7 +678,7 @@ pub async fn ws_create_attach_handler(
 ) -> impl IntoResponse + use<> {
     info!("Connection from {}", addr);
 
-    attach(ws, addr, ConnectType::Created, &ws_host, token).await
+    attach(ws, addr, moor_rpc::ConnectType::Created, &ws_host, token).await
 }
 
 #[derive(Deserialize)]
@@ -592,100 +702,192 @@ pub async fn history_handler(
             Err(status) => return status.into_response(),
         };
 
-    let history_recall = if let Some(since_seconds) = query.since_seconds {
-        HistoryRecall::SinceSeconds(since_seconds, query.limit)
+    let history_recall_union = if let Some(since_seconds) = query.since_seconds {
+        moor_rpc::HistoryRecallUnion::HistoryRecallSinceSeconds(Box::new(
+            moor_rpc::HistoryRecallSinceSeconds {
+                seconds_ago: since_seconds,
+                limit: query.limit.unwrap_or(0) as u64,
+            },
+        ))
     } else if let Some(since_event_str) = query.since_event {
         match Uuid::parse_str(&since_event_str) {
-            Ok(uuid) => HistoryRecall::SinceEvent(uuid, query.limit),
+            Ok(uuid) => {
+                let uuid_bytes = uuid.as_bytes().to_vec();
+                moor_rpc::HistoryRecallUnion::HistoryRecallSinceEvent(Box::new(
+                    moor_rpc::HistoryRecallSinceEvent {
+                        event_id: Box::new(moor_rpc::Uuid { data: uuid_bytes }),
+                        limit: query.limit.unwrap_or(0) as u64,
+                    },
+                ))
+            }
             Err(_) => return StatusCode::BAD_REQUEST.into_response(),
         }
     } else if let Some(until_event_str) = query.until_event {
         match Uuid::parse_str(&until_event_str) {
-            Ok(uuid) => HistoryRecall::UntilEvent(uuid, query.limit),
+            Ok(uuid) => {
+                let uuid_bytes = uuid.as_bytes().to_vec();
+                moor_rpc::HistoryRecallUnion::HistoryRecallUntilEvent(Box::new(
+                    moor_rpc::HistoryRecallUntilEvent {
+                        event_id: Box::new(moor_rpc::Uuid { data: uuid_bytes }),
+                        limit: query.limit.unwrap_or(0) as u64,
+                    },
+                ))
+            }
             Err(_) => return StatusCode::BAD_REQUEST.into_response(),
         }
     } else {
-        HistoryRecall::None
+        moor_rpc::HistoryRecallUnion::HistoryRecallNone(Box::new(moor_rpc::HistoryRecallNone {}))
     };
 
-    let response = match rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::RequestHistory(
-            client_token.clone(),
-            auth_token.clone(),
-            history_recall,
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::HistoryResponse(history)) => Json(json!({
-            "events": history.events.iter().map(|e| {
-                json!({
-                    "event_id": e.event.event_id(),
-                    "author": var_as_json(e.event.author()),
-                    "message": match e.event.event() {
-                        Event::Notify { value: msg, content_type, no_flush, no_newline } => {
-                            // TODO: In web/JSON context, no_flush and no_newline are not directly applicable
-                            //  but we could potentially expose them as attributes for client handling
-                            let _ = (no_flush, no_newline); // Acknowledge parameters
-                            // Normalize content type to match live events (text_djot -> text/djot, etc.)
-                            let normalized_content_type = content_type.as_ref().map(|ct| {
-                                match ct.as_string().as_str() {
-                                    "text_djot" => "text/djot".to_string(),
-                                    "text_html" => "text/html".to_string(),
-                                    "text_plain" => "text/plain".to_string(),
-                                    _ => ct.as_string(), // Pass through unknown types unchanged
-                                }
-                            });
-                            json!({
-                                "type": "notify",
-                                "content": var_as_json(&msg),
-                                "content_type": normalized_content_type
-                            })
-                        },
-                        Event::Traceback(ex) => json!({
-                            "type": "traceback",
-                            "error": format!("{}", ex)
-                        }),
-                        Event::Present(p) => json!({
-                            "type": "present",
-                            "presentation": p
-                        }),
-                        Event::Unpresent(id) => json!({
-                            "type": "unpresent",
-                            "id": id
-                        })
-                    },
-                    "timestamp": e.event.timestamp(),
-                    "is_historical": e.is_historical,
-                    "player": var_as_json(&v_obj(e.player))
-                })
-            }).collect::<Vec<_>>(),
-            "meta": {
-                "total_events": history.total_events,
-                "time_range": history.time_range,
-                "has_more_before": history.has_more_before,
-                "earliest_event_id": history.earliest_event_id,
-                "latest_event_id": history.latest_event_id
-            }
-        })),
-        Ok(other) => {
-            error!("Unexpected daemon response: {:?}", other);
+    let history_msg = mk_request_history_msg(
+        &client_token,
+        &auth_token,
+        Box::new(moor_rpc::HistoryRecall {
+            recall: history_recall_union,
+        }),
+    );
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, history_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Err(e) => {
-            error!("RPC error getting history: {:?}", e);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(host_success) => {
+            let daemon_reply = host_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::HistoryResponse(history_ref) => {
+                    let events_ref = history_ref.events().expect("Missing events");
+                    let events: Vec<_> = events_ref
+                        .iter()
+                        .filter_map(|event_result| {
+                            let historical_event = event_result.ok()?;
+                            let narrative_event_ref = historical_event.event().ok()?;
+                            let narrative_event = rpc_common::narrative_event_from_ref(narrative_event_ref).ok()?;
+                            let is_historical = historical_event.is_historical().ok()?;
+                            let player_ref = historical_event.player().ok()?;
+                            let player_struct = moor_rpc::Obj::try_from(player_ref).ok()?;
+                            let player = rpc_common::obj_from_flatbuffer_struct(&player_struct).ok()?;
+
+                            Some(json!({
+                                "event_id": narrative_event.event_id(),
+                                "author": var_as_json(narrative_event.author()),
+                                "message": match narrative_event.event() {
+                                    Event::Notify { value: msg, content_type, no_flush, no_newline } => {
+                                        let _ = (no_flush, no_newline);
+                                        let normalized_content_type = content_type.as_ref().map(|ct| {
+                                            match ct.as_string().as_str() {
+                                                "text_djot" => "text/djot".to_string(),
+                                                "text_html" => "text/html".to_string(),
+                                                "text_plain" => "text/plain".to_string(),
+                                                _ => ct.as_string(),
+                                            }
+                                        });
+                                        json!({
+                                            "type": "notify",
+                                            "content": var_as_json(&msg),
+                                            "content_type": normalized_content_type
+                                        })
+                                    },
+                                    Event::Traceback(ex) => json!({
+                                        "type": "traceback",
+                                        "error": format!("{}", ex)
+                                    }),
+                                    Event::Present(p) => json!({
+                                        "type": "present",
+                                        "presentation": p
+                                    }),
+                                    Event::Unpresent(id) => json!({
+                                        "type": "unpresent",
+                                        "id": id
+                                    })
+                                },
+                                "timestamp": narrative_event.timestamp(),
+                                "is_historical": is_historical,
+                                "player": var_as_json(&v_obj(player))
+                            }))
+                        })
+                        .collect();
+
+                    let total_events = history_ref.total_events().expect("Missing total_events");
+                    let time_range_start = history_ref
+                        .time_range_start()
+                        .expect("Missing time_range_start");
+                    let time_range_end = history_ref
+                        .time_range_end()
+                        .expect("Missing time_range_end");
+                    let has_more_before = history_ref
+                        .has_more_before()
+                        .expect("Missing has_more_before");
+
+                    let earliest_event_id = history_ref
+                        .earliest_event_id()
+                        .ok()
+                        .flatten()
+                        .and_then(|uuid_ref| uuid_ref.data().ok())
+                        .and_then(|bytes| {
+                            if bytes.len() == 16 {
+                                let mut uuid_bytes = [0u8; 16];
+                                uuid_bytes.copy_from_slice(bytes);
+                                Some(Uuid::from_bytes(uuid_bytes))
+                            } else {
+                                None
+                            }
+                        });
+
+                    let latest_event_id = history_ref
+                        .latest_event_id()
+                        .ok()
+                        .flatten()
+                        .and_then(|uuid_ref| uuid_ref.data().ok())
+                        .and_then(|bytes| {
+                            if bytes.len() == 16 {
+                                let mut uuid_bytes = [0u8; 16];
+                                uuid_bytes.copy_from_slice(bytes);
+                                Some(Uuid::from_bytes(uuid_bytes))
+                            } else {
+                                None
+                            }
+                        });
+
+                    Json(json!({
+                        "events": events,
+                        "meta": {
+                            "total_events": total_events,
+                            "time_range": (time_range_start, time_range_end),
+                            "has_more_before": has_more_before,
+                            "earliest_event_id": earliest_event_id,
+                            "latest_event_id": latest_event_id
+                        }
+                    }))
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -704,35 +906,56 @@ pub async fn presentations_handler(
             Err(status) => return status.into_response(),
         };
 
-    let response = match rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::RequestCurrentPresentations(
-            client_token.clone(),
-            auth_token.clone(),
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::CurrentPresentations(presentations)) => Json(json!({
-            "presentations": presentations
-        })),
-        Ok(other) => {
-            error!("Unexpected daemon response: {:?}", other);
+    let presentations_msg = mk_request_current_presentations_msg(&client_token, &auth_token);
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, presentations_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Err(e) => {
-            error!("RPC error getting presentations: {:?}", e);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(host_success) => {
+            let daemon_reply = host_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::CurrentPresentations(presentations_ref) => {
+                    let presentations_vec = presentations_ref
+                        .presentations()
+                        .expect("Missing presentations");
+                    let presentations: Vec<_> = presentations_vec
+                        .iter()
+                        .filter_map(|p| rpc_common::presentation_from_ref(p.ok()?).ok())
+                        .collect();
+                    Json(json!({
+                        "presentations": presentations
+                    }))
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -752,37 +975,49 @@ pub async fn dismiss_presentation_handler(
             Err(status) => return status.into_response(),
         };
 
-    let response = match rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::DismissPresentation(
-            client_token.clone(),
-            auth_token.clone(),
-            presentation_id.clone(),
-        ),
-    )
-    .await
-    {
-        Ok(DaemonToClientReply::PresentationDismissed) => Json(json!({
-            "dismissed": true,
-            "presentation_id": presentation_id
-        })),
-        Ok(other) => {
-            error!("Unexpected daemon response: {:?}", other);
+    let dismiss_msg =
+        mk_dismiss_presentation_msg(&client_token, &auth_token, presentation_id.clone());
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, dismiss_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Err(e) => {
-            error!("RPC error dismissing presentation: {:?}", e);
+    };
+
+    let response = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(host_success) => {
+            let daemon_reply = host_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::PresentationDismissed(_) => Json(json!({
+                    "dismissed": true,
+                    "presentation_id": presentation_id
+                })),
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+        }
+        _ => {
+            error!("RPC failure");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -828,43 +1063,62 @@ pub async fn invoke_verb_handler(
         };
 
     // Make the InvokeVerb RPC call
-    let response = rpc_call(
-        client_id,
-        &mut rpc_client,
-        HostClientToDaemonMessage::InvokeVerb(
-            client_token.clone(),
-            auth_token,
-            object_ref,
-            verb_symbol,
-            moo_args,
-        ),
+    let args_refs: Vec<&Var> = moo_args.iter().collect();
+    let invoke_msg = mk_invoke_verb_msg(
+        &client_token,
+        &auth_token,
+        &object_ref,
+        &verb_symbol,
+        args_refs,
     )
-    .await;
+    .expect("Failed to create invoke_verb message");
 
-    let result = match response {
-        Ok(DaemonToClientReply::EvalResult(result)) => {
-            // Convert the result to JSON and return
-            Json(var_as_json(&result)).into_response()
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, invoke_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    use planus::ReadAsRoot;
+    let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse reply: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Ok(DaemonToClientReply::TaskSubmitted(task_id)) => {
-            // Verb invocation is async - task was queued successfully
-            // The actual output will come through WebSocket narrative
-            Json(json!({"task_submitted": task_id, "status": "success"})).into_response()
+    };
+
+    let result = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::EvalResult(eval_result) => {
+                    let value_ref = eval_result.result().expect("Missing value");
+                    let value_bytes = value_ref.data().expect("Missing value data");
+                    let result = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                        .expect("Failed to decode value");
+                    Json(var_as_json(&result)).into_response()
+                }
+                moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                    let task_id = task_submitted.task_id().expect("Missing task_id");
+                    Json(json!({"task_submitted": task_id, "status": "success"})).into_response()
+                }
+                _ => {
+                    error!("Unexpected response from RPC server");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
         }
-        Ok(other) => {
-            error!("Unexpected daemon response to InvokeVerb: {:?}", other);
+        _ => {
+            error!("RPC failure");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
-        Err(status) => status.into_response(),
     };
 
     // Clean up the RPC connection
-    let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token, false),
-        )
-        .await;
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
+    let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
 
     result
 }

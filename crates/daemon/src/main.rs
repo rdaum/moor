@@ -15,31 +15,35 @@
 use crate::args::Args;
 use eyre::{bail, eyre};
 use fs2::FileExt;
-use std::fs::{File, OpenOptions};
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::exit;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    path::PathBuf,
+    process::exit,
+    sync::{Arc, atomic::AtomicBool},
+};
 
-use crate::connections::ConnectionRegistryFactory;
-use crate::event_log::{EventLog, EventLogConfig, EventLogOps, NoOpEventLog};
-use crate::rpc::{RpcServer, Transport, transport::RpcTransport};
-use crate::workers::WorkersServer;
+use crate::{
+    connections::ConnectionRegistryFactory,
+    event_log::{EventLog, EventLogConfig, EventLogOps, NoOpEventLog},
+    rpc::{RpcServer, Transport, transport::RpcTransport},
+    workers::WorkersServer,
+};
 use base64::{Engine as _, engine::general_purpose};
 use clap::Parser;
-use ed25519_dalek::SigningKey;
-use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
+use ed25519_dalek::{
+    SigningKey,
+    pkcs8::{EncodePrivateKey, EncodePublicKey},
+};
 use eyre::Report;
 use mimalloc::MiMalloc;
-use moor_common::build;
-use moor_common::model::ObjectRef;
-use moor_common::tasks::SessionFactory;
+use moor_common::{build, model::ObjectRef, tasks::SessionFactory};
 use moor_db::{Database, TxDB};
-use moor_kernel::SchedulerClient;
-use moor_kernel::config::{Config, ImportExportFormat};
-use moor_kernel::tasks::scheduler::Scheduler;
-use moor_kernel::tasks::{NoopTasksDb, TasksDb};
+use moor_kernel::{
+    SchedulerClient,
+    config::{Config, ImportExportFormat},
+    tasks::{NoopTasksDb, TasksDb, scheduler::Scheduler},
+};
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::textdump_load;
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
@@ -60,8 +64,7 @@ mod workers;
 
 // main.rs
 use crate::tasks::tasks_db_fjall::FjallTasksDB;
-use moor_common::model::CommitResult;
-use moor_common::model::loader::LoaderInterface;
+use moor_common::model::{CommitResult, loader::LoaderInterface};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;

@@ -127,6 +127,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -208,6 +214,12 @@ dependencies = [
  "cpufeatures",
  "password-hash",
 ]
+
+[[package]]
+name = "array-init-cursor"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed51fe0f224d1d4ea768be38c51f9f831dee9d05c163c11fba0b8c44387b1fc3"
 
 [[package]]
 name = "assoc"
@@ -1597,6 +1609,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
 name = "foreign-types"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1878,6 +1896,11 @@ name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash",
+]
 
 [[package]]
 name = "hashbrown"
@@ -2896,6 +2919,7 @@ dependencies = [
  "moor-var",
  "oneshot",
  "papaya",
+ "planus",
  "rand 0.8.5",
  "rpc-common",
  "rusty_paseto",
@@ -3017,6 +3041,7 @@ dependencies = [
  "moor-db",
  "moor-kernel",
  "moor-var",
+ "planus",
  "rand 0.8.5",
  "rpc-async-client",
  "rpc-common",
@@ -3076,6 +3101,7 @@ dependencies = [
  "moor-common",
  "moor-moot",
  "moor-var",
+ "planus",
  "rpc-async-client",
  "rpc-common",
  "serde",
@@ -3149,6 +3175,7 @@ dependencies = [
  "hickory-resolver",
  "moor-common",
  "moor-var",
+ "planus",
  "rpc-async-client",
  "rpc-common",
  "serde",
@@ -3740,6 +3767,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
+name = "planus"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4089d373413156aa4d05851e1a9b302fa5648c4007de7a85214532cdd9d12e2"
+dependencies = [
+ "array-init-cursor",
+ "hashbrown 0.15.5",
+]
+
+[[package]]
 name = "plotters"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4136,10 +4173,10 @@ dependencies = [
 name = "rpc-async-client"
 version = "0.9.0-alpha"
 dependencies = [
- "bincode",
  "futures-util",
  "moor-common",
  "moor-var",
+ "planus",
  "rpc-common",
  "rusty_paseto",
  "thiserror 2.0.16",
@@ -4153,27 +4190,17 @@ dependencies = [
 name = "rpc-common"
 version = "0.9.0-alpha"
 dependencies = [
- "bincode",
+ "byteview",
  "clap",
  "clap_derive",
  "ed25519-dalek",
  "moor-common",
  "moor-var",
+ "planus",
  "rusty_paseto",
  "serde",
  "thiserror 2.0.16",
  "uuid 1.18.1",
-]
-
-[[package]]
-name = "rpc-sync-client"
-version = "0.9.0-alpha"
-dependencies = [
- "bincode",
- "rpc-common",
- "tracing",
- "uuid 1.18.1",
- "zmq",
 ]
 
 [[package]]

@@ -13,8 +13,7 @@
 
 pub use load_textdump::{read_textdump, textdump_load};
 use moor_compiler::CompileOptions;
-use moor_var::Var;
-use moor_var::{Obj, Symbol};
+use moor_var::{Obj, Symbol, Var};
 pub use read::TextdumpReader;
 use semver::Version;
 use serde::{Deserialize, Serialize};

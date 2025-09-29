@@ -11,11 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use rpc_common::{
-    HostClientToDaemonMessage, HostToDaemonMessage, HostToken, MessageType, ReplyResult, RpcError,
-};
-use tmq::Multipart;
-use tmq::request_reply::RequestSender;
+use planus::Builder;
+use rpc_common::{HostToken, RpcError, flatbuffers_generated::moor_rpc};
+use tmq::{Multipart, request_reply::RequestSender};
 use tracing::error;
 use uuid::Uuid;
 
@@ -38,14 +36,23 @@ impl RpcSendClient {
     pub async fn make_client_rpc_call(
         &mut self,
         client_id: Uuid,
-        rpc_msg: HostClientToDaemonMessage,
-    ) -> Result<ReplyResult, RpcError> {
-        let rpc_msg_payload = bincode::encode_to_vec(&rpc_msg, bincode::config::standard())
-            .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
-        let client_message_type = MessageType::HostClientToDaemon(client_id.into_bytes().to_vec());
-        let message_type_bytes =
-            bincode::encode_to_vec(&client_message_type, bincode::config::standard())
-                .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
+        rpc_msg: moor_rpc::HostClientToDaemonMessage,
+    ) -> Result<Vec<u8>, RpcError> {
+        // Serialize the message to FlatBuffer bytes
+        let mut builder = Builder::new();
+        let rpc_msg_payload = builder.finish(&rpc_msg, None).to_vec();
+
+        // Build the MessageType discriminator
+        let client_msg = moor_rpc::HostClientToDaemonMsg {
+            client_data: client_id.as_bytes().to_vec(),
+            message: Box::new(rpc_msg),
+        };
+        let message_type = moor_rpc::MessageType {
+            message: moor_rpc::MessageTypeUnion::HostClientToDaemonMsg(Box::new(client_msg)),
+        };
+        let mut discriminator_builder = Builder::new();
+        let message_type_bytes = discriminator_builder.finish(&message_type, None).to_vec();
+
         let message = Multipart::from(vec![message_type_bytes, rpc_msg_payload]);
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
@@ -72,30 +79,35 @@ impl RpcSendClient {
             }
         };
 
-        match bincode::decode_from_slice(&msg[0], bincode::config::standard()) {
-            Ok((msg, _)) => {
-                self.rcp_request_sock = Some(recv_sock);
-                Ok(msg)
-            }
-            Err(e) => {
-                error!("Unable to decode RPC response: {}", e);
-                Err(RpcError::CouldNotDecode(e.to_string()))
-            }
-        }
+        // Return raw reply bytes - caller will decode the FlatBuffer
+        let reply_bytes = msg[0].to_vec();
+        self.rcp_request_sock = Some(recv_sock);
+        Ok(reply_bytes)
     }
 
     pub async fn make_host_rpc_call(
         &mut self,
         host_token: &HostToken,
-        rpc_message: HostToDaemonMessage,
-    ) -> Result<ReplyResult, RpcError> {
-        let host_message_type = MessageType::HostToDaemon(host_token.clone());
-        let message_type_bytes =
-            bincode::encode_to_vec(&host_message_type, bincode::config::standard())
-                .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
+        rpc_message: moor_rpc::HostToDaemonMessage,
+    ) -> Result<Vec<u8>, RpcError> {
+        // Serialize the message to FlatBuffer bytes
+        let mut builder = Builder::new();
+        let rpc_msg_payload = builder.finish(&rpc_message, None).to_vec();
 
-        let rpc_msg_payload = bincode::encode_to_vec(&rpc_message, bincode::config::standard())
-            .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
+        // Build the MessageType discriminator
+        let host_token_fb = moor_rpc::HostToken {
+            token: host_token.0.clone(),
+        };
+        let host_msg = moor_rpc::HostToDaemonMsg {
+            host_token: Box::new(host_token_fb),
+            message: Box::new(rpc_message),
+        };
+        let message_type = moor_rpc::MessageType {
+            message: moor_rpc::MessageTypeUnion::HostToDaemonMsg(Box::new(host_msg)),
+        };
+        let mut discriminator_builder = Builder::new();
+        let message_type_bytes = discriminator_builder.finish(&message_type, None).to_vec();
+
         let message = Multipart::from(vec![message_type_bytes, rpc_msg_payload]);
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
@@ -122,15 +134,9 @@ impl RpcSendClient {
             }
         };
 
-        match bincode::decode_from_slice(&msg[0], bincode::config::standard()) {
-            Ok((msg, _)) => {
-                self.rcp_request_sock = Some(recv_sock);
-                Ok(msg)
-            }
-            Err(e) => {
-                error!("Unable to decode RPC response: {}", e);
-                Err(RpcError::CouldNotDecode(e.to_string()))
-            }
-        }
+        // Return raw reply bytes - caller will decode the FlatBuffer
+        let reply_bytes = msg[0].to_vec();
+        self.rcp_request_sock = Some(recv_sock);
+        Ok(reply_bytes)
     }
 }

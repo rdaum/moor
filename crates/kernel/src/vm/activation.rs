@@ -11,33 +11,31 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use moor_common::model::VerbArgsSpec;
-use moor_common::model::VerbDef;
-use moor_common::model::VerbFlag;
-use moor_common::util::BitEnum;
-use moor_compiler::BuiltinId;
-use moor_compiler::Program;
-use moor_compiler::ScatterLabel;
-use moor_var::Lambda;
-use moor_var::{AsByteBuffer, Symbol};
-use moor_var::{Error, v_empty_str};
-use moor_var::{List, NOTHING};
-use moor_var::{Obj, v_arc_string};
-use moor_var::{Var, v_empty_list, v_list, v_obj, v_str, v_string};
+use moor_common::{
+    model::{VerbArgsSpec, VerbDef, VerbFlag},
+    util::BitEnum,
+};
+use moor_compiler::{BuiltinId, Program, ScatterLabel};
+use moor_var::{
+    AsByteBuffer, Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_arc_string, v_empty_list,
+    v_empty_str, v_list, v_obj, v_str, v_string,
+};
 
-use crate::vm::VerbCall;
-use crate::vm::moo_frame::MooStackFrame;
-use crate::vm::scatter_assign::scatter_assign;
-use moor_var::program::ProgramType;
-use moor_var::program::names::{GlobalName, Name};
+use crate::vm::{VerbCall, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
+use moor_var::program::{
+    ProgramType,
+    names::{GlobalName, Name},
+};
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");

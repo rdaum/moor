@@ -19,9 +19,7 @@ use moor_db::DatabaseConfig;
 use moor_textdump::{EncodingMode, TextdumpVersion};
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Config {

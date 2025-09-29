@@ -11,14 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Mutex;
+use std::{collections::HashMap, path::Path, sync::Mutex};
 
-use crate::connections::FIRST_CONNECTION_ID;
-use crate::connections::persistence::{
-    ClientMappingChanges, ConnectionRegistryPersistence, InitialConnectionRegistryState,
-    PlayerConnectionChanges,
+use crate::connections::{
+    FIRST_CONNECTION_ID,
+    persistence::{
+        ClientMappingChanges, ConnectionRegistryPersistence, InitialConnectionRegistryState,
+        PlayerConnectionChanges,
+    },
 };
 use byteview::ByteView;
 use eyre::Error;

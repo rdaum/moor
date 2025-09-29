@@ -13,23 +13,21 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::DatabaseConfig;
-    use crate::ObjAndUUIDHolder;
+    use crate::{DatabaseConfig, ObjAndUUIDHolder};
 
     use crate::moor_db::MoorDB;
-    use moor_common::model::{CommitResult, ObjectKind, WorldStateError};
-    use moor_common::model::{HasUuid, Named};
-    use moor_common::model::{ObjAttrs, PropFlag, ValSet};
-    use moor_common::model::{ObjFlag, VerbAttrs};
-    use moor_common::model::{ObjSet, ObjectRef};
-    use moor_common::model::{VerbArgsSpec, VerbFlag};
-    use moor_common::util::BitEnum;
-    use moor_var::Obj;
-    use moor_var::Symbol;
-    use moor_var::program::ProgramType;
-    use moor_var::program::program::Program;
-    use moor_var::{Associative, Variant, v_int, v_str};
-    use moor_var::{NOTHING, SYSTEM_OBJECT};
+    use moor_common::{
+        model::{
+            CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef,
+            PropFlag, ValSet, VerbArgsSpec, VerbAttrs, VerbFlag, WorldStateError,
+        },
+        util::BitEnum,
+    };
+    use moor_var::{
+        Associative, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant,
+        program::{ProgramType, program::Program},
+        v_int, v_str,
+    };
     use std::sync::Arc;
 
     fn test_db() -> Arc<MoorDB> {

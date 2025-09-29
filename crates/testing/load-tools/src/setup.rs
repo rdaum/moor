@@ -15,25 +15,29 @@
 #[cfg_attr(coverage_nightly, coverage(off))]
 use eyre::{anyhow, bail};
 use moor_common::model::ObjectRef;
-use moor_common::tasks::VerbProgramError;
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
-use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
-use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_async_client::{ListenersClient, ListenersMessage};
-use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
-use rpc_common::{
-    AuthToken, CLIENT_BROADCAST_TOPIC, ClientEvent, ClientToken, ClientsBroadcastEvent,
-    DaemonToClientReply, HostClientToDaemonMessage, HostType, ReplyResult, VerbProgramResponse,
+use planus::ReadAsRoot;
+use rpc_async_client::{
+    ListenersClient, ListenersMessage,
+    pubsub_client::{broadcast_recv, events_recv},
+    rpc_client::RpcSendClient,
 };
-use std::collections::HashMap;
-use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::{Instant, SystemTime};
-use tmq::subscribe::Subscribe;
-use tmq::{request, subscribe};
-use tokio::sync::{Mutex, Notify};
-use tokio::task::JoinHandle;
+use rpc_common::{
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, auth_token_from_ref,
+    flatbuffers_generated::moor_rpc, mk_client_pong_msg, mk_connection_establish_msg, mk_eval_msg,
+    mk_login_command_msg, mk_program_msg, mk_verbs_msg, obj_from_ref,
+};
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddr},
+    sync::{Arc, atomic::AtomicBool},
+    time::{Instant, SystemTime},
+};
+use tmq::{request, subscribe, subscribe::Subscribe};
+use tokio::{
+    sync::{Mutex, Notify},
+    task::JoinHandle,
+};
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -78,21 +82,22 @@ pub async fn broadcast_handle(
             if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
                 break;
             }
-            if let Ok(event) = broadcast_recv(&mut broadcast_sub).await {
-                match event {
-                    ClientsBroadcastEvent::PingPong(_) => {
-                        let _ = rpc_client
-                            .make_client_rpc_call(
-                                client_id,
-                                HostClientToDaemonMessage::ClientPong(
-                                    client_token.clone(),
-                                    SystemTime::now(),
-                                    connection_oid,
-                                    HostType::TCP,
-                                    SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0),
-                                ),
-                            )
-                            .await;
+            if let Ok(event_msg) = broadcast_recv(&mut broadcast_sub).await {
+                let event = event_msg.event().expect("Failed to parse broadcast event");
+                match event.event().expect("Missing event union") {
+                    moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(_) => {
+                        let timestamp = SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos() as u64;
+                        let pong_msg = mk_client_pong_msg(
+                            &client_token,
+                            timestamp,
+                            &connection_oid,
+                            moor_rpc::HostType::Tcp,
+                            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0).to_string(),
+                        );
+                        let _ = rpc_client.make_client_rpc_call(client_id, pong_msg).await;
                     }
                 }
             }
@@ -128,30 +133,45 @@ pub async fn create_user_session(
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);
     let client_id = uuid::Uuid::new_v4();
     let peer_addr = format!("{}.test", Uuid::new_v4());
-    let (client_token, connection_oid) = match rpc_client
-        .make_client_rpc_call(
-            client_id,
-            ConnectionEstablish {
-                peer_addr: peer_addr.to_string(),
-                local_port: 7777,
-                remote_port: 12345,
-                acceptable_content_types: None,
-                connection_attributes: None,
-            },
-        )
+
+    let establish_msg = mk_connection_establish_msg(peer_addr, 7777, 12345, None, None);
+
+    let reply_bytes = match rpc_client
+        .make_client_rpc_call(client_id, establish_msg)
         .await
     {
-        Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(token, objid))) => {
-            (token, objid)
-        }
-        Ok(ReplyResult::Failure(f)) => {
-            bail!("RPC failure in connection establishment: {}", f);
-        }
-        Ok(_) => {
-            bail!("Unexpected response from RPC server");
-        }
+        Ok(bytes) => bytes,
         Err(e) => {
             bail!("Unable to establish connection: {}", e);
+        }
+    };
+
+    let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        .map_err(|e| anyhow!("Failed to parse reply: {}", e))?;
+
+    let (client_token, connection_oid) = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::NewConnection(new_conn) => {
+                    let client_token_ref = new_conn.client_token().expect("Missing client_token");
+                    let client_token =
+                        ClientToken(client_token_ref.token().expect("Missing token").to_string());
+                    let objid_ref = new_conn.connection_obj().expect("Missing connection_obj");
+                    let objid = obj_from_ref(objid_ref).expect("Failed to decode connection_obj");
+                    (client_token, objid)
+                }
+                _ => {
+                    bail!("Unexpected response from RPC server");
+                }
+            }
+        }
+        moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+            let error_ref = failure.error().expect("Missing error");
+            bail!("RPC failure in connection establishment: {:?}", error_ref);
+        }
+        _ => {
+            bail!("Unexpected response type from RPC server");
         }
     };
     debug!(client_id = ?client_id, connection = ?connection_oid, "Connection established");
@@ -175,25 +195,50 @@ pub async fn create_user_session(
     );
 
     // Now "connect wizard"
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::LoginCommand {
-                client_token: client_token.clone(),
-                handler_object: SYSTEM_OBJECT,
-                connect_args: vec!["connect".to_string(), "wizard".to_string()],
-                do_attach: false,
-            },
-        )
+    let login_msg = mk_login_command_msg(
+        &client_token,
+        &SYSTEM_OBJECT,
+        vec!["connect".to_string(), "wizard".to_string()],
+        false,
+    );
+
+    let reply_bytes = rpc_client
+        .make_client_rpc_call(client_id, login_msg)
         .await
         .expect("Unable to send login request to RPC server");
-    let (connection_oid, auth_token) = if let ReplyResult::ClientSuccess(
-        DaemonToClientReply::LoginResult(Some((auth_token, _connect_type, player))),
-    ) = response
-    {
-        (player, auth_token.clone())
-    } else {
-        panic!("Unexpected response from RPC server");
+
+    let reply =
+        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse login reply");
+
+    let (connection_oid, auth_token) = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) => {
+                    if !login_result.success().expect("Missing success") {
+                        panic!("Login failed");
+                    }
+                    let auth_token_ref = login_result
+                        .auth_token()
+                        .expect("Missing auth_token")
+                        .expect("Auth token is None");
+                    let auth_token =
+                        auth_token_from_ref(auth_token_ref).expect("Failed to decode auth token");
+                    let player_ref = login_result
+                        .player()
+                        .expect("Missing player")
+                        .expect("Player is None");
+                    let player = obj_from_ref(player_ref).expect("Failed to decode player");
+                    (player, auth_token)
+                }
+                _ => {
+                    panic!("Unexpected response from RPC server");
+                }
+            }
+        }
+        _ => {
+            panic!("Unexpected response type from RPC server");
+        }
     };
 
     Ok((
@@ -216,60 +261,67 @@ pub async fn compile(
     verb_name: Symbol,
     verb_contents: Vec<String>,
 ) {
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Verbs(
-                client_token.clone(),
-                auth_token.clone(),
-                ObjectRef::Id(oid),
-                false, // inherited = false for testing
-            ),
-        )
+    // Query verbs (optional - just for logging)
+    let verbs_message = mk_verbs_msg(&client_token, &auth_token, &ObjectRef::Id(oid), false);
+
+    let reply_bytes = rpc_client
+        .make_client_rpc_call(client_id, verbs_message)
         .await
         .expect("Unable to send verbs request to RPC server");
-    match response {
-        ReplyResult::ClientSuccess(DaemonToClientReply::Verbs(verbs)) => {
-            info!("Got verbs: {:?}", verbs);
-        }
-        _ => {
-            panic!("RPC failure in verbs");
+
+    let reply =
+        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse verbs reply");
+    if let moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) =
+        reply.result().expect("Missing result")
+    {
+        let daemon_reply = client_success.reply().expect("Missing reply");
+        if let moor_rpc::DaemonToClientReplyUnionRef::VerbsReply(verbs_reply) =
+            daemon_reply.reply().expect("Missing reply union")
+        {
+            info!(
+                "Got {} verbs",
+                verbs_reply.verbs().expect("Missing verbs").len()
+            );
         }
     }
 
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Program(
-                client_token.clone(),
-                auth_token.clone(),
-                ObjectRef::Id(oid),
-                verb_name,
-                verb_contents,
-            ),
-        )
+    // Program the verb
+    let program_msg = mk_program_msg(
+        &client_token,
+        &auth_token,
+        &ObjectRef::Id(oid),
+        &verb_name,
+        verb_contents,
+    );
+
+    let reply_bytes = rpc_client
+        .make_client_rpc_call(client_id, program_msg)
         .await
         .expect("Unable to send program request to RPC server");
 
-    match response {
-        ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(
-            VerbProgramResponse::Success(_, _),
-        )) => {
-            info!("Programmed {}:{} successfully", oid, verb_name);
+    let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+        .expect("Failed to parse program reply");
+    match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::VerbProgramResponseReply(prog_resp) => {
+                    let response = prog_resp.response().expect("Missing response");
+                    match response.response().expect("Missing response union") {
+                        moor_rpc::VerbProgramResponseUnionRef::VerbProgramSuccess(_) => {
+                            info!("Programmed {}:{} successfully", oid, verb_name);
+                        }
+                        moor_rpc::VerbProgramResponseUnionRef::VerbProgramFailure(failure) => {
+                            let error = failure.error().expect("Missing error");
+                            error!("Compilation error in {}:{}: {:?}", oid, verb_name, error);
+                        }
+                    }
+                }
+                _ => {
+                    panic!("Unexpected response from RPC server");
+                }
+            }
         }
-        ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(
-            VerbProgramResponse::Failure(e),
-        )) => match e {
-            VerbProgramError::NoVerbToProgram => {
-                panic!("No verb to program");
-            }
-            VerbProgramError::CompilationError(e) => {
-                error!("Compilation error in {}:{}: {:?}", oid, verb_name, e);
-            }
-            VerbProgramError::DatabaseError => {
-                panic!("Database error");
-            }
-        },
         _ => {
             panic!("RPC failure in program");
         }
@@ -285,27 +337,29 @@ pub async fn initialization_session(
     initialization_script: &str,
     verbs: &[(Symbol, String)],
 ) -> Result<(), eyre::Error> {
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Eval(
-                client_token.clone(),
-                auth_token.clone(),
-                initialization_script.to_string(),
-            ),
-        )
+    let eval_message = mk_eval_msg(
+        &client_token,
+        &auth_token,
+        initialization_script.to_string(),
+    );
+
+    let reply_bytes = rpc_client
+        .make_client_rpc_call(client_id, eval_message)
         .await
         .expect("Unable to send eval request to RPC server");
 
-    match response {
-        ReplyResult::HostSuccess(hs) => {
-            info!("Evaluated successfully: {:?}", hs);
+    let reply =
+        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse eval reply");
+    match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(_) => {
+            info!("Evaluated successfully");
         }
-        ReplyResult::ClientSuccess(cs) => {
-            info!("Evaluated successfully: {:?}", cs);
+        moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+            let error_ref = failure.error().expect("Missing error");
+            panic!("RPC failure in eval: {:?}", error_ref);
         }
-        ReplyResult::Failure(f) => {
-            panic!("RPC failure in eval: {f}");
+        _ => {
+            panic!("Unexpected response type from RPC server");
         }
     }
 
@@ -392,32 +446,52 @@ pub async fn listen_responses(
             }
             let msg = events_recv(client_id, &mut events_sub).await;
             match msg {
-                Ok(ClientEvent::TaskSuccess(tid, v)) => {
-                    let mut tasks = event_listen_task_results.lock().await;
-                    if let Some((_, notify)) = tasks.get(&tid) {
-                        let notify = notify.clone();
-                        tasks.insert(tid, (Ok(v), notify.clone()));
-                        notify.notify_one();
-                    } else {
-                        // Task not found in pending tasks, create new entry
-                        tasks.insert(tid, (Ok(v), Arc::new(Notify::new())));
+                Ok(event_msg) => {
+                    let event = event_msg.event().expect("Failed to parse event");
+                    match event.event().expect("Missing event union") {
+                        moor_rpc::ClientEventUnionRef::TaskSuccessEvent(task_success) => {
+                            let tid = task_success.task_id().expect("Missing task_id") as usize;
+                            let value_ref = task_success.result().expect("Missing result");
+                            let value_bytes = value_ref.data().expect("Missing value data");
+                            let v = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                                .expect("Failed to decode value");
+
+                            let mut tasks = event_listen_task_results.lock().await;
+                            if let Some((_, notify)) = tasks.get(&tid) {
+                                let notify = notify.clone();
+                                tasks.insert(tid, (Ok(v), notify.clone()));
+                                notify.notify_one();
+                            } else {
+                                // Task not found in pending tasks, create new entry
+                                tasks.insert(tid, (Ok(v), Arc::new(Notify::new())));
+                            }
+                        }
+                        moor_rpc::ClientEventUnionRef::TaskErrorEvent(task_error) => {
+                            let tid = task_error.task_id().expect("Missing task_id") as usize;
+                            let error = task_error.error().expect("Missing error");
+
+                            let mut tasks = event_listen_task_results.lock().await;
+                            if let Some((_, notify)) = tasks.get(&tid) {
+                                let notify = notify.clone();
+                                tasks.insert(
+                                    tid,
+                                    (Err(anyhow!("Task error: {:?}", error)), notify.clone()),
+                                );
+                                notify.notify_one();
+                            } else {
+                                // Task not found in pending tasks, create new entry
+                                tasks.insert(
+                                    tid,
+                                    (
+                                        Err(anyhow!("Task error: {:?}", error)),
+                                        Arc::new(Notify::new()),
+                                    ),
+                                );
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                Ok(ClientEvent::TaskError(tid, e)) => {
-                    let mut tasks = event_listen_task_results.lock().await;
-                    if let Some((_, notify)) = tasks.get(&tid) {
-                        let notify = notify.clone();
-                        tasks.insert(tid, (Err(anyhow!("Task error: {:?}", e)), notify.clone()));
-                        notify.notify_one();
-                    } else {
-                        // Task not found in pending tasks, create new entry
-                        tasks.insert(
-                            tid,
-                            (Err(anyhow!("Task error: {:?}", e)), Arc::new(Notify::new())),
-                        );
-                    }
-                }
-                Ok(_) => {}
                 Err(e) => {
                     panic!("Error in event recv: {e}");
                 }

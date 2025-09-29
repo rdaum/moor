@@ -10,7 +10,6 @@ members = [
     "crates/objdef",
     "crates/rpc/rpc-async-client",
     "crates/rpc/rpc-common",
-    "crates/rpc/rpc-sync-client",
     "crates/telnet-host",
     "crates/testing/bench-utils",
     "crates/testing/load-tools",
@@ -29,7 +28,6 @@ default-members = [
     "crates/db",
     "crates/textdump",
     "crates/rpc/rpc-common",
-    "crates/rpc/rpc-sync-client",
     "crates/rpc/rpc-async-client",
     "crates/daemon",
     "crates/telnet-host",
@@ -97,6 +95,7 @@ figment = { version = "0.10", features = ["yaml", "json"] }
 bincode = { version = "2.0", features = ["serde"] }
 csv = "1.3"
 edn-format = "3.3"
+planus = "1.2.0"
 humantime = "2.2"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_derive = "1.0"

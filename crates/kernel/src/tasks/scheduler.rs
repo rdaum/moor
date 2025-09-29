@@ -15,56 +15,62 @@ use crate::task_context::TaskGuard;
 use flume::{Receiver, Sender};
 use lazy_static::lazy_static;
 use minstant::Instant;
-use std::fs::File;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::yield_now;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    fs::File,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::yield_now,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_common::model::{CommitResult, Perms};
-use moor_common::model::{ObjectRef, WorldState};
+use moor_common::model::{CommitResult, ObjectRef, Perms, WorldState};
 use moor_compiler::to_literal;
 use moor_db::Database;
 
-use crate::config::{Config, ImportExportFormat};
-use crate::tasks::gc_thread::spawn_gc_mark_phase;
-use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
-use crate::tasks::task::Task;
-use crate::tasks::task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition};
-use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, WorkerInfo};
-use crate::tasks::tasks_db::TasksDb;
-use crate::tasks::workers::{WorkerRequest, WorkerResponse};
-use crate::tasks::world_state_action::{WorldStateAction, WorldStateResponse};
-use crate::tasks::world_state_executor::{WorldStateActionExecutor, match_object_ref};
-use crate::tasks::{
-    DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-    DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult,
-    TaskStart, sched_counters,
-};
-use crate::vm::builtins::BuiltinRegistry;
-use crate::vm::{Fork, TaskSuspend};
 use crate::{
+    config::{Config, ImportExportFormat},
+    tasks::{
+        DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
+        DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle,
+        TaskResult, TaskStart,
+        gc_thread::spawn_gc_mark_phase,
+        sched_counters,
+        scheduler_client::{SchedulerClient, SchedulerClientMsg},
+        task::Task,
+        task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition},
+        task_scheduler_client::{TaskControlMsg, TaskSchedulerClient, WorkerInfo},
+        tasks_db::TasksDb,
+        workers::{WorkerRequest, WorkerResponse},
+        world_state_action::{WorldStateAction, WorldStateResponse},
+        world_state_executor::{WorldStateActionExecutor, match_object_ref},
+    },
     trace_task_create_command, trace_task_create_eval, trace_task_create_oob,
     trace_task_create_verb,
+    vm::{Fork, TaskSuspend, builtins::BuiltinRegistry},
 };
-use moor_common::tasks::SchedulerError::{
-    CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
-    TaskAbortedException, TaskAbortedLimit,
+use moor_common::{
+    tasks::{
+        AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError,
+        SchedulerError::{
+            CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
+            TaskAbortedException, TaskAbortedLimit,
+        },
+        Session, SessionFactory, SystemControl, TaskId, WorkerError,
+    },
+    util::PerfTimerGuard,
 };
-use moor_common::tasks::{
-    AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId, WorkerError,
+use moor_objdef::{
+    collect_object, collect_object_definitions, dump_object, dump_object_definitions,
 };
-use moor_common::tasks::{Session, SessionFactory, SystemControl};
-use moor_common::util::PerfTimerGuard;
-use moor_objdef::{collect_object, dump_object};
-use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::{E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, v_bool_int};
-use moor_var::{Error, SYSTEM_OBJECT};
-use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
-use moor_var::{Obj, Variant};
+use moor_var::{
+    E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, Obj, SYSTEM_OBJECT, Symbol,
+    Var, Variant, v_bool_int, v_err, v_int, v_obj, v_string,
+};
 use std::collections::HashMap;
 
 /// Action to take when resuming a suspended task

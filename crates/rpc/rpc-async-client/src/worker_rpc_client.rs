@@ -11,9 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use rpc_common::{DaemonToWorkerReply, RpcError, WorkerToDaemonMessage, WorkerToken};
-use tmq::Multipart;
-use tmq::request_reply::RequestSender;
+use moor_common::tasks::WorkerError;
+use moor_var::{Symbol, Var};
+use planus::{Builder, ReadAsRoot};
+use rpc_common::{
+    DaemonToWorkerReply, RpcError, WorkerToken, flatbuffers_generated::moor_rpc,
+    mk_attach_worker_msg, mk_request_error_msg, mk_request_result_msg, mk_worker_pong_msg,
+    var_to_flatbuffer_bytes,
+};
+use tmq::{Multipart, request_reply::RequestSender};
 use tracing::error;
 use uuid::Uuid;
 
@@ -32,29 +38,123 @@ impl WorkerRpcSendClient {
         }
     }
 
-    pub async fn make_worker_rpc_call(
+    pub async fn make_worker_rpc_call_fb_pong(
         &mut self,
         worker_token: &WorkerToken,
         worker_id: Uuid,
-        rpc_message: WorkerToDaemonMessage,
-    ) -> Result<DaemonToWorkerReply, RpcError> {
-        // (worker_token, worker_id, request)
+        worker_type: Symbol,
+    ) -> Result<(), RpcError> {
+        let fb_message = mk_worker_pong_msg(worker_token, &worker_type);
+
         let worker_token_bytes = worker_token.0.as_bytes().to_vec();
         let worker_id_bytes = worker_id.as_bytes().to_vec();
 
-        let rpc_msg_payload = bincode::encode_to_vec(&rpc_message, bincode::config::standard())
-            .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
-        let message = Multipart::from(vec![worker_token_bytes, worker_id_bytes, rpc_msg_payload]);
+        let mut builder = Builder::new();
+        let rpc_msg_payload = builder.finish(&fb_message, None);
+
+        let message = Multipart::from(vec![
+            worker_token_bytes,
+            worker_id_bytes,
+            rpc_msg_payload.to_vec(),
+        ]);
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;
         let rpc_reply_sock = match rpc_request_sock.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
+                error!("Unable to send worker pong request to RPC server: {}", e);
+                return Err(RpcError::CouldNotSend(e.to_string()));
+            }
+        };
+
+        let (_msg, recv_sock) = match rpc_reply_sock.recv().await {
+            Ok((msg, recv_sock)) => (msg, recv_sock),
+            Err(e) => {
+                error!("Unable to receive worker pong reply from RPC server: {}", e);
+                return Err(RpcError::CouldNotReceive(e.to_string()));
+            }
+        };
+
+        self.rcp_request_sock = Some(recv_sock);
+        Ok(())
+    }
+
+    pub async fn make_worker_rpc_call_fb_result(
+        &mut self,
+        worker_token: &WorkerToken,
+        worker_id: Uuid,
+        request_id: Uuid,
+        result: Var,
+    ) -> Result<(), RpcError> {
+        let result_bytes = var_to_flatbuffer_bytes(&result)
+            .map_err(|e| RpcError::CouldNotSend(format!("Failed to serialize result: {}", e)))?;
+
+        let fb_message = mk_request_result_msg(worker_token, request_id, result_bytes);
+
+        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
+        let worker_id_bytes = worker_id.as_bytes().to_vec();
+
+        let mut builder = Builder::new();
+        let rpc_msg_payload = builder.finish(&fb_message, None);
+
+        let message = Multipart::from(vec![
+            worker_token_bytes,
+            worker_id_bytes,
+            rpc_msg_payload.to_vec(),
+        ]);
+        let rcp_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
+            RpcError::CouldNotSend("RPC request socket not initialized".to_string())
+        })?;
+        let rpc_reply_sock = match rcp_request_sock.send(message).await {
+            Ok(rpc_reply_sock) => rpc_reply_sock,
+            Err(e) => {
+                error!("Unable to send request result to RPC server: {}", e);
+                return Err(RpcError::CouldNotSend(e.to_string()));
+            }
+        };
+
+        let (_msg, recv_sock) = match rpc_reply_sock.recv().await {
+            Ok((msg, recv_sock)) => (msg, recv_sock),
+            Err(e) => {
                 error!(
-                    "Unable to send connection establish request to RPC server: {}",
+                    "Unable to receive request result reply from RPC server: {}",
                     e
                 );
+                return Err(RpcError::CouldNotReceive(e.to_string()));
+            }
+        };
+
+        self.rcp_request_sock = Some(recv_sock);
+        Ok(())
+    }
+
+    pub async fn make_worker_rpc_call_fb_attach(
+        &mut self,
+        worker_token: &WorkerToken,
+        worker_id: Uuid,
+        worker_type: Symbol,
+    ) -> Result<DaemonToWorkerReply, RpcError> {
+        let fb_message = mk_attach_worker_msg(worker_token, &worker_type);
+
+        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
+        let worker_id_bytes = worker_id.as_bytes().to_vec();
+
+        let mut builder = Builder::new();
+        let rpc_msg_payload = builder.finish(&fb_message, None);
+
+        let message = Multipart::from(vec![
+            worker_token_bytes,
+            worker_id_bytes,
+            rpc_msg_payload.to_vec(),
+        ]);
+        let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
+            RpcError::CouldNotSend("RPC request socket not initialized".to_string())
+        })?;
+        let rpc_reply_sock = match rpc_request_sock.send(message).await {
+            Ok(rpc_reply_sock) => rpc_reply_sock,
+            Err(e) => {
+                error!("Unable to send worker attach request to RPC server: {}", e);
                 return Err(RpcError::CouldNotSend(e.to_string()));
             }
         };
@@ -63,22 +163,187 @@ impl WorkerRpcSendClient {
             Ok((msg, recv_sock)) => (msg, recv_sock),
             Err(e) => {
                 error!(
-                    "Unable to receive connection establish reply from RPC server: {}",
+                    "Unable to receive worker attach reply from RPC server: {}",
                     e
                 );
                 return Err(RpcError::CouldNotReceive(e.to_string()));
             }
         };
 
-        match bincode::decode_from_slice(&msg[0], bincode::config::standard()) {
-            Ok((msg, _)) => {
-                self.rcp_request_sock = Some(recv_sock);
-                Ok(msg)
+        // Decode flatbuffer response
+        let fb_reply = moor_rpc::DaemonToWorkerReplyRef::read_as_root(&msg[0]).map_err(|e| {
+            RpcError::CouldNotDecode(format!("Unable to decode flatbuffer daemon reply: {}", e))
+        })?;
+
+        let reply_union = fb_reply.reply().map_err(|e| {
+            RpcError::CouldNotDecode(format!("Unable to decode reply union: {}", e))
+        })?;
+
+        let reply = match reply_union {
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAck(_) => DaemonToWorkerReply::Ack,
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerRejected(rejected) => {
+                let reason = rejected
+                    .reason()
+                    .ok()
+                    .flatten()
+                    .unwrap_or("Unknown reason")
+                    .to_string();
+                DaemonToWorkerReply::Rejected(reason)
             }
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAttached(attached) => {
+                let token_str = attached
+                    .token()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {}", e)))?
+                    .token()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get token string: {}", e))
+                    })?;
+                let token = WorkerToken(token_str.to_owned());
+
+                let worker_id_data = attached
+                    .worker_id()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get worker_id: {}", e))
+                    })?
+                    .data()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get worker_id data: {}", e))
+                    })?;
+                let worker_id = Uuid::from_slice(worker_id_data)
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {}", e)))?;
+
+                DaemonToWorkerReply::Attached(token, worker_id)
+            }
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAuthFailed(auth_failed) => {
+                let reason = auth_failed
+                    .reason()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get reason: {}", e)))?
+                    .to_string();
+                DaemonToWorkerReply::AuthFailed(reason)
+            }
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerInvalidPayload(invalid) => {
+                let reason = invalid
+                    .reason()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get reason: {}", e)))?
+                    .to_string();
+                DaemonToWorkerReply::InvalidPayload(reason)
+            }
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerUnknownRequest(unknown) => {
+                let request_id_data = unknown
+                    .request_id()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get request_id: {}", e))
+                    })?
+                    .data()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get request_id data: {}", e))
+                    })?;
+                let request_id = Uuid::from_slice(request_id_data).map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Invalid request UUID: {}", e))
+                })?;
+                DaemonToWorkerReply::UnknownRequest(request_id)
+            }
+            moor_rpc::DaemonToWorkerReplyUnionRef::WorkerNotRegistered(not_registered) => {
+                let worker_id_data = not_registered
+                    .worker_id()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get worker_id: {}", e))
+                    })?
+                    .data()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get worker_id data: {}", e))
+                    })?;
+                let worker_id = Uuid::from_slice(worker_id_data)
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {}", e)))?;
+                DaemonToWorkerReply::NotRegistered(worker_id)
+            }
+        };
+
+        self.rcp_request_sock = Some(recv_sock);
+        Ok(reply)
+    }
+
+    pub async fn make_worker_rpc_call_fb_error(
+        &mut self,
+        worker_token: &WorkerToken,
+        worker_id: Uuid,
+        request_id: Uuid,
+        error: WorkerError,
+    ) -> Result<(), RpcError> {
+        let fb_error = match error {
+            WorkerError::PermissionDenied(msg) => {
+                moor_rpc::WorkerErrorUnion::WorkerPermissionDenied(Box::new(
+                    moor_rpc::WorkerPermissionDenied { message: msg },
+                ))
+            }
+            WorkerError::InvalidRequest(msg) => moor_rpc::WorkerErrorUnion::WorkerInvalidRequest(
+                Box::new(moor_rpc::WorkerInvalidRequest { message: msg }),
+            ),
+            WorkerError::InternalError(msg) => moor_rpc::WorkerErrorUnion::WorkerInternalError(
+                Box::new(moor_rpc::WorkerInternalError { message: msg }),
+            ),
+            WorkerError::RequestTimedOut(msg) => moor_rpc::WorkerErrorUnion::WorkerRequestTimedOut(
+                Box::new(moor_rpc::WorkerRequestTimedOut { message: msg }),
+            ),
+            WorkerError::RequestError(msg) => moor_rpc::WorkerErrorUnion::WorkerRequestError(
+                Box::new(moor_rpc::WorkerRequestError { message: msg }),
+            ),
+            WorkerError::WorkerDetached(msg) => {
+                moor_rpc::WorkerErrorUnion::WorkerDetached(Box::new(moor_rpc::WorkerDetached {
+                    message: msg,
+                }))
+            }
+            WorkerError::NoWorkerAvailable(symbol) => {
+                moor_rpc::WorkerErrorUnion::NoWorkerAvailable(Box::new(
+                    moor_rpc::NoWorkerAvailable {
+                        worker_type: Box::new(moor_rpc::Symbol {
+                            value: symbol.as_arc_str().to_string(),
+                        }),
+                    },
+                ))
+            }
+        };
+
+        let fb_message = mk_request_error_msg(
+            worker_token,
+            request_id,
+            moor_rpc::WorkerError { error: fb_error },
+        );
+
+        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
+        let worker_id_bytes = worker_id.as_bytes().to_vec();
+
+        let mut builder = Builder::new();
+        let rpc_msg_payload = builder.finish(&fb_message, None);
+
+        let message = Multipart::from(vec![
+            worker_token_bytes,
+            worker_id_bytes,
+            rpc_msg_payload.to_vec(),
+        ]);
+        let rcp_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
+            RpcError::CouldNotSend("RPC request socket not initialized".to_string())
+        })?;
+        let rpc_reply_sock = match rcp_request_sock.send(message).await {
+            Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
-                error!("Unable to decode RPC response: {}", e);
-                Err(RpcError::CouldNotDecode(e.to_string()))
+                error!("Unable to send request error to RPC server: {}", e);
+                return Err(RpcError::CouldNotSend(e.to_string()));
             }
-        }
+        };
+
+        let (_msg, recv_sock) = match rpc_reply_sock.recv().await {
+            Ok((msg, recv_sock)) => (msg, recv_sock),
+            Err(e) => {
+                error!(
+                    "Unable to receive request error reply from RPC server: {}",
+                    e
+                );
+                return Err(RpcError::CouldNotReceive(e.to_string()));
+            }
+        };
+
+        self.rcp_request_sock = Some(recv_sock);
+        Ok(())
     }
 }

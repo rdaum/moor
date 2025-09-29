@@ -11,17 +11,21 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::AsByteBuffer;
-use crate::encode::{DecodingError, EncodingError};
+use crate::{
+    AsByteBuffer,
+    encode::{DecodingError, EncodingError},
+};
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::Add;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    ops::Add,
+    sync::atomic::{AtomicU16, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// Global atomic counter for UUID object sequence generation

@@ -17,14 +17,19 @@ use eyre::Context;
 use moor_common::tasks::WorkerError;
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use moor_var::{Obj, Symbol, Var};
+use planus::Builder;
 use rpc_common::{
-    DaemonToWorkerMessage, DaemonToWorkerReply, MOOR_WORKER_TOKEN_FOOTER, RpcMessageError,
-    WORKER_BROADCAST_TOPIC, WorkerToDaemonMessage, WorkerToken,
+    MOOR_WORKER_TOKEN_FOOTER, RpcMessageError, WORKER_BROADCAST_TOPIC, WorkerToken,
+    flatbuffers_generated::moor_rpc, mk_ping_workers_msg, mk_worker_ack_reply,
+    mk_worker_attached_reply, mk_worker_rejected_reply, mk_worker_request_msg,
+    var_from_flatbuffer_bytes, var_to_flatbuffer_bytes, worker_error_from_flatbuffer_struct,
 };
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPublicKey, Public, V4};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
+};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
@@ -43,13 +48,13 @@ struct Worker {
 
 /// Trait for handling workers message business logic
 pub trait WorkersMessageHandler: Send + Sync {
-    /// Process a worker-to-daemon message
+    /// Process a worker-to-daemon message (flatbuffer format)
     fn handle_worker_message(
         &self,
         worker_token: &[u8],
         worker_id: &[u8],
-        message: WorkerToDaemonMessage,
-    ) -> DaemonToWorkerReply;
+        message: &moor_rpc::WorkerToDaemonMessageRef,
+    ) -> moor_rpc::DaemonToWorkerReply;
 
     /// Check for expired workers and handle pending requests
     fn check_expired_workers(&self);
@@ -145,12 +150,12 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
         &self,
         worker_token: &[u8],
         worker_id: &[u8],
-        msg: WorkerToDaemonMessage,
-    ) -> DaemonToWorkerReply {
+        message: &moor_rpc::WorkerToDaemonMessageRef,
+    ) -> moor_rpc::DaemonToWorkerReply {
         // Worker token has to be a valid UTF8 string
         let Ok(worker_token_str) = std::str::from_utf8(worker_token) else {
             error!("Worker token is not valid UTF8");
-            return DaemonToWorkerReply::Rejected;
+            return mk_worker_invalid_payload_reply("Worker token is not valid UTF8");
         };
 
         // Verify the token
@@ -164,151 +169,41 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
             None,
         ) else {
             error!("Unable to verify worker token; ignoring");
-            return DaemonToWorkerReply::Rejected;
+            return mk_worker_auth_failed_reply("Unable to verify worker token");
         };
 
         let Ok(worker_id) = Uuid::from_slice(worker_id) else {
             error!("Unable to parse worker id {worker_id:?} from message");
-            return DaemonToWorkerReply::Rejected;
+            return mk_worker_invalid_payload_reply("Invalid worker ID format");
         };
 
         // Worker ID must match the one in the token
         if token_worker_id != worker_id.to_string() {
             error!("Worker ID does not match token");
-            return DaemonToWorkerReply::Rejected;
+            return mk_worker_auth_failed_reply("Worker ID does not match token");
         }
 
-        // Now handle the message
-        match msg {
-            WorkerToDaemonMessage::AttachWorker { token, worker_type } => {
-                let mut workers = self.workers.write().unwrap();
-                workers.insert(
-                    worker_id,
-                    Worker {
-                        token: token.clone(),
-                        last_ping_time: Instant::now(),
-                        worker_type,
-                        id: worker_id,
-                        requests: vec![],
-                    },
-                );
-                info!("Worker {} of type {} attached", worker_id, worker_type);
-                DaemonToWorkerReply::Attached(token, worker_id)
+        // Now handle the message using flatbuffer types directly
+        let Ok(message_union) = message.message() else {
+            error!("Failed to read message union from WorkerToDaemonMessage");
+            return mk_worker_invalid_payload_reply("Missing or invalid message union");
+        };
+
+        let result = match message_union {
+            moor_rpc::WorkerToDaemonMessageUnionRef::AttachWorker(attach) => {
+                self.handle_attach_worker(worker_id, attach)
             }
-            WorkerToDaemonMessage::Pong(token, worker_type) => {
-                // Update the last ping time for this worker
-                let mut workers = self.workers.write().unwrap();
-                if let Some(worker) = workers.get_mut(&worker_id) {
-                    worker.last_ping_time = Instant::now();
-                    DaemonToWorkerReply::Ack
-                } else {
-                    warn!(
-                        "Received pong from unknown or old worker (did we restart?); re-establishing..."
-                    );
-                    workers.insert(
-                        worker_id,
-                        Worker {
-                            token: token.clone(),
-                            last_ping_time: Instant::now(),
-                            worker_type,
-                            id: worker_id,
-                            requests: vec![],
-                        },
-                    );
-                    info!("Worker {} of type {} re-attached", worker_id, worker_type);
-                    DaemonToWorkerReply::Attached(token, worker_id)
-                }
+            moor_rpc::WorkerToDaemonMessageUnionRef::WorkerPong(pong) => {
+                self.handle_worker_pong(worker_id, pong)
             }
-            WorkerToDaemonMessage::DetachWorker(_) => {
-                // Remove the worker from the list of workers, discarding all its requests
-                let mut workers = self.workers.write().unwrap();
-                if let Some(worker) = workers.remove(&worker_id) {
-                    for (id, _, _) in worker.requests {
-                        self.scheduler_send
-                            .send(WorkerResponse::Error {
-                                request_id: id,
-                                error: WorkerError::WorkerDetached(format!(
-                                    "{} worker {} detached",
-                                    worker.worker_type, worker_id
-                                )),
-                            })
-                            .ok();
-                    }
-                } else {
-                    error!("Received detach from unknown or old worker");
-                }
-                DaemonToWorkerReply::Ack
+            moor_rpc::WorkerToDaemonMessageUnionRef::DetachWorker(_detach) => {
+                self.handle_detach_worker(worker_id)
             }
-            WorkerToDaemonMessage::RequestResult(token, request_id, r) => {
-                let worker_id = match self.validate_worker_token(&token) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        error!(error = ?e, "Unable to validate worker token");
-                        return DaemonToWorkerReply::Rejected;
-                    }
-                };
-
-                let mut workers = self.workers.write().unwrap();
-                if let Some(worker) = workers.get_mut(&worker_id) {
-                    let mut found_request_idx = None;
-                    for (idx, (pending_request_id, _, _)) in worker.requests.iter().enumerate() {
-                        if request_id == *pending_request_id {
-                            found_request_idx = Some(idx);
-                            break;
-                        }
-                    }
-
-                    if let Some(found_request_idx) = found_request_idx {
-                        worker.requests.remove(found_request_idx);
-
-                        // Send back the result
-                        self.scheduler_send
-                            .send(WorkerResponse::Response {
-                                request_id,
-                                response: r,
-                            })
-                            .ok();
-                    } else {
-                        error!("Received result from unknown or old request");
-                    }
-                } else {
-                    error!(
-                        "Received result from unknown or old request ({}), ignoring",
-                        request_id
-                    );
-                }
-                DaemonToWorkerReply::Ack
+            moor_rpc::WorkerToDaemonMessageUnionRef::RequestResult(result) => {
+                self.handle_request_result(result)
             }
-            WorkerToDaemonMessage::RequestError(_, request_id, e) => {
-                // Same as RequestResult, but dispatch an error
-                let mut workers = self.workers.write().unwrap();
-                if let Some(worker) = workers.get_mut(&worker_id) {
-                    let mut found_request_idx = None;
-
-                    // Search for the request corresponding to the given request_id
-                    for (idx, (worker_request_id, _, _)) in worker.requests.iter().enumerate() {
-                        if request_id == *worker_request_id {
-                            found_request_idx = Some(idx);
-                            break;
-                        }
-                    }
-
-                    if let Some(found_request_idx) = found_request_idx {
-                        worker.requests.remove(found_request_idx);
-
-                        self.scheduler_send
-                            .send(WorkerResponse::Error {
-                                request_id,
-                                error: e,
-                            })
-                            .ok();
-                    } else {
-                        error!("Received error for an unknown or old request");
-                    }
-                } else {
-                    error!("Received error from unknown or old worker");
-                }
-                DaemonToWorkerReply::Ack
+            moor_rpc::WorkerToDaemonMessageUnionRef::RequestError(error) => {
+                self.handle_request_error(worker_id, error)
             }
         }
     }
@@ -342,10 +237,12 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
     }
 
     fn ping_workers(&self) -> Result<(), eyre::Error> {
-        let event = DaemonToWorkerMessage::PingWorkers;
-        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
-            .context("Unable to encode ping event")?;
-        let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes];
+        // Create flatbuffer message
+        let fb_message = mk_ping_workers_msg();
+
+        let mut builder = Builder::new();
+        let event_bytes = builder.finish(&fb_message, None);
+        let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes.to_vec()];
 
         let publish = self.workers_publish.lock().unwrap();
         publish
@@ -387,17 +284,32 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 };
 
                 // Then send the message out on the workers broadcast channel
-                let event = DaemonToWorkerMessage::WorkerRequest {
-                    worker_id: worker.id,
-                    token: worker.token.clone(),
-                    id: request_id,
-                    perms,
-                    request: request.clone(),
-                    timeout,
-                };
-                let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
-                    .context("Unable to encode worker request")?;
-                let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes];
+                // Convert request parameters to flatbuffer VarBytes
+                let request_var_bytes: Result<Vec<Vec<u8>>, _> =
+                    request.iter().map(var_to_flatbuffer_bytes).collect();
+                let request_bytes = request_var_bytes
+                    .context("Failed to serialize request variables to flatbuffer")?;
+
+                let timeout_ms = timeout.map(|d| d.as_millis() as u64).unwrap_or(0);
+
+                // Create flatbuffer WorkerRequest message using builder
+                let request_varbytes: Vec<moor_rpc::VarBytes> = request_bytes
+                    .into_iter()
+                    .map(|bytes| moor_rpc::VarBytes { data: bytes })
+                    .collect();
+
+                let fb_message = mk_worker_request_msg(
+                    worker.id,
+                    &worker.token,
+                    request_id,
+                    &perms,
+                    request_varbytes,
+                    timeout_ms,
+                );
+
+                let mut builder = Builder::new();
+                let event_bytes = builder.finish(&fb_message, None);
+                let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes.to_vec()];
 
                 {
                     let publish = self.workers_publish.lock().unwrap();

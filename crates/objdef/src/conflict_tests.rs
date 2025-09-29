@@ -21,8 +21,7 @@ mod tests {
     use moor_compiler::CompileOptions;
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
-    use std::path::Path;
-    use std::sync::Arc;
+    use std::{path::Path, sync::Arc};
 
     fn test_db(path: &Path) -> Arc<TxDB> {
         Arc::new(TxDB::open(Some(path), DatabaseConfig::default()).0)

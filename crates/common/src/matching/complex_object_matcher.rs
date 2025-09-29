@@ -13,10 +13,12 @@
 
 //! Enhanced object name matcher using complex_match functionality
 
-use crate::matching::{
-    ComplexMatchResult, MatchEnvironment, ObjectNameMatcher, complex_match_objects_keys,
+use crate::{
+    matching::{
+        ComplexMatchResult, MatchEnvironment, ObjectNameMatcher, complex_match_objects_keys,
+    },
+    model::{ValSet, WorldStateError},
 };
-use crate::model::{ValSet, WorldStateError};
 use moor_var::{AMBIGUOUS, FAILED_MATCH, Obj, Var, v_list, v_str};
 
 const ME: &str = "me";

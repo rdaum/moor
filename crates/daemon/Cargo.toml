@@ -52,9 +52,8 @@ signal-hook.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
 figment.workspace = true
-
-# Serialization & Data Formats
 bincode.workspace = true
+planus.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

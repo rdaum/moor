@@ -15,11 +15,14 @@ use crate::model::ValSet;
 use byteview::ByteView;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use moor_var::AsByteBuffer;
-use moor_var::Obj;
-use moor_var::encode::{DecodingError, EncodingError};
-use std::collections::HashSet;
-use std::fmt::{Debug, Display, Formatter};
+use moor_var::{
+    AsByteBuffer, Obj,
+    encode::{DecodingError, EncodingError},
+};
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display, Formatter},
+};
 // TODO: this won't work for non-objid objects
 
 lazy_static! {

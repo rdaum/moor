@@ -11,23 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::FeaturesConfig;
-use crate::task_context::with_current_transaction_mut;
-use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
-use crate::vm::scatter_assign::scatter_assign;
-use crate::vm::vm_host::ExecutionResult;
-use crate::vm::vm_unwind::FinallyReason;
+use crate::{
+    config::FeaturesConfig,
+    task_context::with_current_transaction_mut,
+    vm::{
+        moo_frame::{CatchType, MooStackFrame, ScopeType},
+        scatter_assign::scatter_assign,
+        vm_host::ExecutionResult,
+        vm_unwind::FinallyReason,
+    },
+};
 use lazy_static::lazy_static;
 use moor_compiler::{Op, to_literal};
-use moor_var::program::names::Name;
 use moor_var::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_bool, v_error,
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, Error, IndexMode, Obj, Symbol,
+    TypeClass, Var, VarType, Variant, program::names::Name, v_arc_string, v_bool, v_bool_int,
+    v_empty_list, v_empty_map, v_err, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
+    v_obj, v_sym,
 };
-use moor_var::{
-    Error, IndexMode, Obj, TypeClass, Var, Variant, v_bool_int, v_empty_list, v_empty_map, v_err,
-    v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
-};
-use moor_var::{Symbol, VarType};
 use std::time::Duration;
 
 lazy_static! {

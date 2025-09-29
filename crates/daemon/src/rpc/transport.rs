@@ -14,9 +14,14 @@
 //! ZMQ transport layer for RPC, separated from business logic
 
 use eyre::Context;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use planus::ReadAsRoot;
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use zmq::Socket;
@@ -24,11 +29,10 @@ use zmq::Socket;
 use super::message_handler::MessageHandler;
 use moor_common::tasks::NarrativeEvent;
 use moor_kernel::SchedulerClient;
+use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
 use moor_var::Obj;
 use rpc_common::{
-    CLIENT_BROADCAST_TOPIC, ClientEvent, ClientsBroadcastEvent, DaemonToClientReply,
-    DaemonToHostReply, HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostToDaemonMessage, MessageType,
-    ReplyResult, RpcMessageError,
+    CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError, flatbuffers_generated::moor_rpc,
 };
 
 /// Trait for the transport layer that handles communication between hosts and the daemon
@@ -47,11 +51,18 @@ pub trait Transport: Send + Sync {
         connections: &dyn crate::connections::ConnectionRegistry,
     ) -> Result<(), eyre::Error>;
     /// Broadcast events to hosts
-    fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error>;
+    fn broadcast_host_event(&self, event: moor_rpc::HostBroadcastEvent) -> Result<(), eyre::Error>;
     /// Publish event to specific client
-    fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error>;
+    fn publish_client_event(
+        &self,
+        client_id: Uuid,
+        event: moor_rpc::ClientEvent,
+    ) -> Result<(), eyre::Error>;
     /// Broadcast events to all clients
-    fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error>;
+    fn broadcast_client_event(
+        &self,
+        event: moor_rpc::ClientsBroadcastEvent,
+    ) -> Result<(), eyre::Error>;
 }
 
 /// ZMQ + bincoded structs transport layer that handles socket management and message routing
@@ -132,27 +143,48 @@ impl RpcTransport {
         scheduler_client: &SchedulerClient,
         message_handler: &dyn MessageHandler,
     ) -> eyre::Result<()> {
-        // Components are: [msg_type, request_body]
+        // Components are: [discriminator, request_body]
+        // discriminator is a MessageType FlatBuffer that tells us what's in request_body
         if request.len() != 2 {
             Self::reply_invalid_request(rpc_socket, "Incorrect message length")?;
             return Ok(());
         }
 
-        let (msg_type, request_body) = (&request[0], &request[1]);
+        let (discriminator, request_body) = (&request[0], &request[1]);
 
-        // Decode the msg_type
-        let msg_type: MessageType =
-            match bincode::decode_from_slice(msg_type, bincode::config::standard()) {
-                Ok((msg_type, _)) => msg_type,
-                Err(_) => {
-                    Self::reply_invalid_request(rpc_socket, "Could not decode message type")?;
-                    return Ok(());
-                }
-            };
+        // Decode the MessageType discriminator
+        let message_type_ref = match MessageTypeRef::read_as_root(discriminator) {
+            Ok(msg) => msg,
+            Err(_) => {
+                Self::reply_invalid_request(rpc_socket, "Could not decode message type")?;
+                return Ok(());
+            }
+        };
 
-        match msg_type {
-            MessageType::HostToDaemon(host_token) => {
-                // Validate host token, and process host message
+        use moor_rpc::MessageTypeUnionRef;
+        match message_type_ref
+            .message()
+            .map_err(|_| eyre::eyre!("Missing message union"))?
+        {
+            MessageTypeUnionRef::HostToDaemonMsg(host_msg) => {
+                // Extract host token from discriminator
+                let host_token_ref = match host_msg.host_token() {
+                    Ok(t) => t,
+                    Err(_) => {
+                        Self::reply_invalid_request(rpc_socket, "Missing host token")?;
+                        return Ok(());
+                    }
+                };
+                let host_token_string = match host_token_ref.token() {
+                    Ok(s) => s.to_string(),
+                    Err(_) => {
+                        Self::reply_invalid_request(rpc_socket, "Invalid host token")?;
+                        return Ok(());
+                    }
+                };
+                let host_token = rpc_common::HostToken(host_token_string);
+
+                // Validate host token
                 if let Err(e) = message_handler.validate_host_token(&host_token) {
                     Self::reply_invalid_request(
                         rpc_socket,
@@ -161,60 +193,47 @@ impl RpcTransport {
                     return Ok(());
                 }
 
-                // Decode
-                let host_message: HostToDaemonMessage =
-                    match bincode::decode_from_slice(request_body, bincode::config::standard()) {
-                        Ok((host_message, _)) => host_message,
-                        Err(_) => {
-                            Self::reply_invalid_request(
-                                rpc_socket,
-                                "Could not decode host message",
-                            )?;
-                            return Ok(());
-                        }
-                    };
+                // Decode the actual HostToDaemonMessage from request_body
+                let Ok(host_message_fb) = HostToDaemonMessageRef::read_as_root(request_body) else {
+                    Self::reply_invalid_request(rpc_socket, "Could not decode host message")?;
+                    return Ok(());
+                };
 
                 // Process
-                let response = message_handler.handle_host_message(host_token, host_message);
+                let response = message_handler.handle_host_message(host_token, host_message_fb);
                 match Self::pack_host_response(response) {
                     Ok(response) => {
-                        // Reply
                         rpc_socket.send_multipart(vec![response], 0)?;
                     }
                     Err(e) => {
                         error!(error = ?e, "Failed to encode host response");
-                        // Skip sending response if encoding failed
                     }
                 }
             }
-            MessageType::HostClientToDaemon(client_id) => {
-                // Parse the client_id as a uuid
-                let client_id = match Uuid::from_slice(&client_id) {
-                    Ok(client_id) => client_id,
-                    Err(_) => {
-                        Self::reply_invalid_request(rpc_socket, "Bad client id")?;
-                        return Ok(());
-                    }
+            MessageTypeUnionRef::HostClientToDaemonMsg(client_msg) => {
+                // Extract client_id from discriminator
+                let Ok(client_data) = client_msg.client_data() else {
+                    Self::reply_invalid_request(rpc_socket, "Missing client data")?;
+                    return Ok(());
+                };
+                let Ok(client_id) = Uuid::from_slice(client_data) else {
+                    Self::reply_invalid_request(rpc_socket, "Bad client id")?;
+                    return Ok(());
                 };
 
-                // Decode 'request_body' as a bincode'd ClientEvent
-                let request =
-                    match bincode::decode_from_slice(request_body, bincode::config::standard()) {
-                        Ok((request, _)) => request,
-                        Err(_) => {
-                            Self::reply_invalid_request(
-                                rpc_socket,
-                                "Could not decode request body",
-                            )?;
-                            return Ok(());
-                        }
-                    };
+                // Decode the actual HostClientToDaemonMessage from request_body
+                let Ok(request_fb) =
+                    moor_rpc::HostClientToDaemonMessageRef::read_as_root(request_body)
+                else {
+                    Self::reply_invalid_request(rpc_socket, "Could not decode request body")?;
+                    return Ok(());
+                };
 
                 // Process the request
                 let response = message_handler.handle_client_message(
                     scheduler_client.clone(),
                     client_id,
-                    request,
+                    request_fb,
                 );
                 match Self::pack_client_response(response) {
                     Ok(response) => {
@@ -222,7 +241,6 @@ impl RpcTransport {
                     }
                     Err(e) => {
                         error!(error = ?e, "Failed to encode client response");
-                        // Skip sending response if encoding failed
                     }
                 }
             }
@@ -240,25 +258,73 @@ impl RpcTransport {
     }
 
     fn pack_client_response(
-        result: Result<DaemonToClientReply, RpcMessageError>,
+        result: Result<moor_rpc::DaemonToClientReply, RpcMessageError>,
     ) -> Result<Vec<u8>, eyre::Error> {
-        let rpc_result = match result {
-            Ok(r) => ReplyResult::ClientSuccess(r),
-            Err(e) => ReplyResult::Failure(e),
-        };
-        bincode::encode_to_vec(&rpc_result, bincode::config::standard())
-            .context("Failed to encode client response")
+        match result {
+            Ok(reply) => {
+                let mut builder = planus::Builder::new();
+                let reply_result = moor_rpc::ReplyResult {
+                    result: moor_rpc::ReplyResultUnion::ClientSuccess(Box::new(
+                        moor_rpc::ClientSuccess {
+                            reply: Box::new(reply),
+                        },
+                    )),
+                };
+                let finished = builder.finish(&reply_result, None);
+                Ok(finished.to_vec())
+            }
+            Err(e) => {
+                // TODO: Convert RpcMessageError to FlatBuffer properly
+                let mut builder = planus::Builder::new();
+                let error_fb = moor_rpc::RpcMessageError {
+                    error_code: moor_rpc::RpcMessageErrorCode::InternalError,
+                    message: Some(format!("{:?}", e)),
+                    scheduler_error: None,
+                };
+                let reply_result = moor_rpc::ReplyResult {
+                    result: moor_rpc::ReplyResultUnion::Failure(Box::new(moor_rpc::Failure {
+                        error: Box::new(error_fb),
+                    })),
+                };
+                let finished = builder.finish(&reply_result, None);
+                Ok(finished.to_vec())
+            }
+        }
     }
 
     fn pack_host_response(
-        result: Result<DaemonToHostReply, RpcMessageError>,
+        result: Result<moor_rpc::DaemonToHostReply, RpcMessageError>,
     ) -> Result<Vec<u8>, eyre::Error> {
-        let rpc_result = match result {
-            Ok(r) => ReplyResult::HostSuccess(r),
-            Err(e) => ReplyResult::Failure(e),
-        };
-        bincode::encode_to_vec(&rpc_result, bincode::config::standard())
-            .context("Failed to encode host response")
+        match result {
+            Ok(reply) => {
+                let mut builder = planus::Builder::new();
+                let reply_result = moor_rpc::ReplyResult {
+                    result: moor_rpc::ReplyResultUnion::HostSuccess(Box::new(
+                        moor_rpc::HostSuccess {
+                            reply: Box::new(reply),
+                        },
+                    )),
+                };
+                let finished = builder.finish(&reply_result, None);
+                Ok(finished.to_vec())
+            }
+            Err(e) => {
+                // TODO: Convert RpcMessageError to FlatBuffer properly
+                let mut builder = planus::Builder::new();
+                let error_fb = moor_rpc::RpcMessageError {
+                    error_code: moor_rpc::RpcMessageErrorCode::InternalError,
+                    message: Some(format!("{:?}", e)),
+                    scheduler_error: None,
+                };
+                let reply_result = moor_rpc::ReplyResult {
+                    result: moor_rpc::ReplyResultUnion::Failure(Box::new(moor_rpc::Failure {
+                        error: Box::new(error_fb),
+                    })),
+                };
+                let finished = builder.finish(&reply_result, None);
+                Ok(finished.to_vec())
+            }
+        }
     }
 }
 
@@ -331,8 +397,23 @@ impl Transport for RpcTransport {
         let publish = self.events_publish.lock().unwrap();
         for (player, event) in events {
             let client_ids = connections.client_ids_for(*player)?;
-            let event = ClientEvent::Narrative(*player, event.as_ref().clone());
-            let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
+
+            // Build FlatBuffer ClientEvent directly
+            let narrative_fb = rpc_common::narrative_event_to_flatbuffer_struct(event.as_ref())
+                .map_err(|e| eyre::eyre!("Failed to convert narrative event: {}", e))?;
+            let client_event = moor_rpc::ClientEvent {
+                event: moor_rpc::ClientEventUnion::NarrativeEventMessage(Box::new(
+                    moor_rpc::NarrativeEventMessage {
+                        player: Box::new(rpc_common::obj_to_flatbuffer_struct(player)),
+                        event: Box::new(narrative_fb),
+                    },
+                )),
+            };
+
+            // Serialize to bytes
+            let mut builder = planus::Builder::new();
+            let event_bytes = builder.finish(&client_event, None).to_vec();
+
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
                 publish.send_multipart(payload, 0).map_err(|e| {
@@ -344,8 +425,9 @@ impl Transport for RpcTransport {
         Ok(())
     }
     /// Broadcast events to hosts
-    fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error> {
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
+    fn broadcast_host_event(&self, event: moor_rpc::HostBroadcastEvent) -> Result<(), eyre::Error> {
+        let mut builder = planus::Builder::new();
+        let event_bytes = builder.finish(&event, None).to_vec();
         let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
 
         let publish = self.events_publish.lock().unwrap();
@@ -357,9 +439,13 @@ impl Transport for RpcTransport {
         Ok(())
     }
     /// Publish event to specific client
-    fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error> {
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .context("Unable to serialize client event")?;
+    fn publish_client_event(
+        &self,
+        client_id: Uuid,
+        event: moor_rpc::ClientEvent,
+    ) -> Result<(), eyre::Error> {
+        let mut builder = planus::Builder::new();
+        let event_bytes = builder.finish(&event, None).to_vec();
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
 
         let publish = self.events_publish.lock().unwrap();
@@ -371,8 +457,12 @@ impl Transport for RpcTransport {
         Ok(())
     }
     /// Broadcast events to all clients
-    fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error> {
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
+    fn broadcast_client_event(
+        &self,
+        event: moor_rpc::ClientsBroadcastEvent,
+    ) -> Result<(), eyre::Error> {
+        let mut builder = planus::Builder::new();
+        let event_bytes = builder.finish(&event, None).to_vec();
         let payload = vec![CLIENT_BROADCAST_TOPIC.to_vec(), event_bytes];
 
         let publish = self.events_publish.lock().unwrap();

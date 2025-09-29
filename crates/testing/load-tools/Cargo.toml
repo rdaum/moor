@@ -46,6 +46,7 @@ clap_derive.workspace = true
 
 # Serialization & Data Formats
 csv.workspace = true
+planus.workspace = true
 
 # Networking & Communication
 tmq.workspace = true

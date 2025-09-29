@@ -20,18 +20,17 @@ use moor_common::matching::{
     complex_match_strings_with_fuzzy_threshold,
 };
 use moor_compiler::offset_for_builtin;
-use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, Variant};
 use moor_var::{
-    IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
-    v_obj, v_str, v_string,
+    Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, IndexMode, List, Sequence,
+    Var, VarType, Variant, v_empty_list, v_int, v_list, v_list_iter, v_map, v_obj, v_str, v_string,
 };
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
-use std::ops::BitOr;
-use std::sync::Mutex;
+use std::{ops::BitOr, sync::Mutex};
 
-use crate::task_context::with_current_transaction;
-use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::{
+    task_context::with_current_transaction,
+    vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction},
+};
 
 /// MOO: `int is_member(any value, list|map container)`
 /// Returns non-zero if value is a member of container, zero otherwise.

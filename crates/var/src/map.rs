@@ -11,17 +11,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Associative;
-use crate::Error;
-use crate::error::ErrorCode::{E_RANGE, E_TYPE};
-use crate::var::Var;
-use crate::variant::Variant;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
-use std::cmp::Ordering;
-use std::hash::Hash;
+use crate::{
+    Associative, Error,
+    error::ErrorCode::{E_RANGE, E_TYPE},
+    var::Var,
+    variant::Variant,
+};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
+use std::{cmp::Ordering, hash::Hash};
 
 #[derive(Clone)]
 pub struct Map(Box<im::Vector<(Var, Var)>>);
@@ -289,10 +291,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for Map {
 
 #[cfg(test)]
 mod tests {
-    use crate::var::Var;
-    use crate::variant::Variant;
-    use crate::{Associative, IndexMode};
-    use crate::{v_bool_int, v_int, v_str};
+    use crate::{Associative, IndexMode, v_bool_int, v_int, v_str, var::Var, variant::Variant};
 
     #[test]
     fn test_map_pack_unpack_index() {

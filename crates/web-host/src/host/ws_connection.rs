@@ -13,26 +13,27 @@
 
 use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
-use futures_util::stream::SplitSink;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt, stream::SplitSink};
 use moor_common::tasks::{
     AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
     VerbProgramError,
 };
 use moor_var::{Obj, Var, v_obj};
-use rpc_async_client::pubsub_client::broadcast_recv;
-use rpc_async_client::pubsub_client::events_recv;
-use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::ClientsBroadcastEvent;
-use rpc_common::{
-    AuthToken, ClientToken, ConnectType, DaemonToClientReply, HostClientToDaemonMessage,
-    ReplyResult, RpcMessageError,
+use planus::ReadAsRoot;
+use rpc_async_client::{
+    pubsub_client::{broadcast_recv, events_recv},
+    rpc_client::RpcSendClient,
 };
-use rpc_common::{ClientEvent, HostType};
+use rpc_common::{
+    AuthToken, ClientToken, extract_obj, flatbuffers_generated::moor_rpc, mk_client_pong_msg,
+    mk_command_msg, mk_detach_msg, mk_requested_input_msg,
+};
 use serde_json::Value;
-use std::collections::VecDeque;
-use std::net::SocketAddr;
-use std::time::{Duration, Instant, SystemTime};
+use std::{
+    collections::VecDeque,
+    net::SocketAddr,
+    time::{Duration, Instant, SystemTime},
+};
 use tmq::subscribe::Subscribe;
 use tokio::select;
 use tracing::{debug, error, info, trace, warn};
@@ -128,14 +129,14 @@ impl WebSocketConnection {
         })
     }
 
-    pub async fn handle(&mut self, connect_type: ConnectType, stream: WebSocket) {
+    pub async fn handle(&mut self, connect_type: moor_rpc::ConnectType, stream: WebSocket) {
         info!("New connection from {}, {}", self.peer_addr, self.player);
         let (mut ws_sender, mut ws_receiver) = stream.split();
 
         let connect_message = match connect_type {
-            ConnectType::Connected => "*** Connected ***",
-            ConnectType::Reconnected => "*** Reconnected ***",
-            ConnectType::Created => "*** Created ***",
+            moor_rpc::ConnectType::Connected => "*** Connected ***",
+            moor_rpc::ConnectType::Reconnected => "*** Reconnected ***",
+            moor_rpc::ConnectType::Created => "*** Created ***",
         };
         Self::emit_narrative_sys_msg(
             &mut ws_sender,
@@ -195,19 +196,30 @@ impl WebSocketConnection {
                         }
                     }
                 }
-                Ok(event) = broadcast_recv(&mut self.broadcast_sub) => {
-                    trace!(?event, "broadcast_event");
-                    match event {
-                        ClientsBroadcastEvent::PingPong(_server_time) => {
-                            let _ = self.rpc_client.make_client_rpc_call(self.client_id,
-                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(),
-                                    self.handler_object, HostType::WebSocket, self.peer_addr)).await.expect("Unable to send pong to RPC server");
-
+                Ok(event_msg) = broadcast_recv(&mut self.broadcast_sub) => {
+                    let event = event_msg.event().expect("Failed to parse broadcast event");
+                    trace!("broadcast_event");
+                    match event.event().expect("Missing event union") {
+                        moor_rpc::ClientsBroadcastEventUnionRef::ClientsBroadcastPingPong(_server_time) => {
+                            let timestamp = SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_nanos() as u64;
+                            let pong_msg = mk_client_pong_msg(
+                                &self.client_token,
+                                timestamp,
+                                &self.player,
+                                moor_rpc::HostType::WebSocket,
+                                self.peer_addr.to_string(),
+                            );
+                            let _ = self.rpc_client.make_client_rpc_call(self.client_id, pong_msg).await.expect("Unable to send pong to RPC server");
                         }
                     }
                 }
-                Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
-                    if let Some(input_request) = self.handle_narrative_event(&mut ws_sender, event).await {
+                Ok(event_msg) = events_recv(self.client_id, &mut self.narrative_sub) => {
+                    let event = event_msg.event().expect("Failed to parse client event");
+                    let event_ref = event.event().expect("Missing event union");
+                    if let Some(input_request) = self.handle_narrative_event(&mut ws_sender, event_ref).await {
                         expecting_input.push_back(input_request);
                     }
                 }
@@ -215,11 +227,9 @@ impl WebSocketConnection {
         }
 
         // We're done now send detach.
+        let detach_msg = mk_detach_msg(&self.client_token, true);
         self.rpc_client
-            .make_client_rpc_call(
-                self.client_id,
-                HostClientToDaemonMessage::Detach(self.client_token.clone(), true),
-            )
+            .make_client_rpc_call(self.client_id, detach_msg)
             .await
             .expect("Unable to send detach event to RPC server");
     }
@@ -227,11 +237,14 @@ impl WebSocketConnection {
     async fn handle_narrative_event(
         &mut self,
         ws_sender: &mut SplitSink<WebSocket, Message>,
-        event: ClientEvent,
+        event_ref: moor_rpc::ClientEventUnionRef<'_>,
     ) -> Option<Uuid> {
-        trace!(?event, "narrative_event");
-        match event {
-            ClientEvent::SystemMessage(author, msg) => {
+        trace!("narrative_event");
+        match event_ref {
+            moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
+                let author = extract_obj(&sys_msg, "player", |s| s.player())
+                    .expect("Failed to extract player");
+                let msg = sys_msg.message().expect("Missing message").to_string();
                 Self::emit_narrative_sys_msg(
                     ws_sender,
                     &author,
@@ -240,9 +253,13 @@ impl WebSocketConnection {
                 )
                 .await;
             }
-            ClientEvent::Narrative(_author, event) => {
-                let msg = event.event();
-                let event_id = event.event_id().to_string();
+            moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative) => {
+                let event_ref = narrative.event().expect("Missing narrative event");
+                let narrative_event = rpc_common::narrative_event_from_ref(event_ref)
+                    .expect("Failed to convert narrative event");
+                let msg = narrative_event.event();
+                let event_id = narrative_event.event_id().to_string();
+                let author = narrative_event.author();
                 match &msg {
                     Event::Notify {
                         value: msg,
@@ -253,12 +270,13 @@ impl WebSocketConnection {
                         // In web context, no_flush isn't directly applicable (websockets handle buffering)
                         // but no_newline can be passed to the client for proper message concatenation.
                         let _ = no_flush; // Acknowledge parameter - not used in websocket context
-                        let content_type =
-                            Self::normalize_content_type(content_type.map(|s| s.to_string()));
+                        let content_type = Self::normalize_content_type(
+                            content_type.as_ref().map(|s| s.to_string()),
+                        );
                         Self::emit_narrative_msg(
                             ws_sender,
                             Some(event_id),
-                            event.author(),
+                            author,
                             content_type,
                             msg.clone(),
                             if *no_newline { Some(true) } else { None },
@@ -266,23 +284,23 @@ impl WebSocketConnection {
                         .await;
                     }
                     Event::Traceback(exception) => {
-                        Self::emit_traceback(ws_sender, Some(event_id), event.author(), exception)
-                            .await;
+                        Self::emit_traceback(ws_sender, Some(event_id), author, exception).await;
                     }
                     Event::Present(p) => {
-                        Self::emit_present(ws_sender, Some(event_id), event.author(), p.clone())
-                            .await;
+                        Self::emit_present(ws_sender, Some(event_id), author, p.clone()).await;
                     }
                     Event::Unpresent(id) => {
-                        Self::emit_unpresent(ws_sender, Some(event_id), event.author(), id.clone())
-                            .await;
+                        Self::emit_unpresent(ws_sender, Some(event_id), author, id.clone()).await;
                     }
                 }
             }
-            ClientEvent::RequestInput(request_id) => {
+            moor_rpc::ClientEventUnionRef::RequestInputEvent(request_input) => {
+                let request_id_ref = request_input.request_id().expect("Missing request_id");
+                let request_id_data = request_id_ref.data().expect("Missing request_id data");
+                let request_id = Uuid::from_slice(request_id_data).expect("Invalid request UUID");
                 return Some(request_id);
             }
-            ClientEvent::Disconnect() => {
+            moor_rpc::ClientEventUnionRef::DisconnectEvent(_) => {
                 self.pending_task = None;
                 Self::emit_narrative_sys_msg(
                     ws_sender,
@@ -293,7 +311,8 @@ impl WebSocketConnection {
                 .await;
                 ws_sender.close().await.expect("Unable to close connection");
             }
-            ClientEvent::TaskError(ti, te) => {
+            moor_rpc::ClientEventUnionRef::TaskErrorEvent(task_err) => {
+                let ti = task_err.task_id().expect("Missing task_id") as usize;
                 if let Some(pending_event) = self.pending_task.take()
                     && pending_event.task_id != ti
                 {
@@ -301,11 +320,15 @@ impl WebSocketConnection {
                         "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
                     );
                 }
+                let err_ref = task_err.error().expect("Missing error");
+                let te = rpc_common::scheduler_error_from_ref(err_ref)
+                    .expect("Failed to convert scheduler error");
                 self.handle_task_error(ws_sender, te)
                     .await
                     .expect("Unable to handle task error");
             }
-            ClientEvent::TaskSuccess(ti, s) => {
+            moor_rpc::ClientEventUnionRef::TaskSuccessEvent(task_success) => {
+                let ti = task_success.task_id().expect("Missing task_id") as usize;
                 if let Some(pending_event) = self.pending_task.take()
                     && pending_event.task_id != ti
                 {
@@ -313,12 +336,22 @@ impl WebSocketConnection {
                         "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
                     );
                 }
+                let value_ref = task_success.result().expect("Missing value");
+                let value_bytes = value_ref.data().expect("Missing value data");
+                let s = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                    .expect("Failed to decode value");
                 Self::emit_value(ws_sender, ValueResult(s)).await;
             }
-            ClientEvent::PlayerSwitched {
-                new_player,
-                new_auth_token,
-            } => {
+            moor_rpc::ClientEventUnionRef::PlayerSwitchedEvent(switch) => {
+                let new_player = extract_obj(&switch, "new_player", |s| s.new_player())
+                    .expect("Failed to extract new_player");
+                let new_auth_token_ref = switch.new_auth_token().expect("Missing new_auth_token");
+                let new_auth_token = AuthToken(
+                    new_auth_token_ref
+                        .token()
+                        .expect("Missing token")
+                        .to_string(),
+                );
                 info!(
                     "Switching player from {} to {} for client {}",
                     self.player, new_player, self.client_id
@@ -330,11 +363,7 @@ impl WebSocketConnection {
                     new_player, self.client_id
                 );
             }
-            ClientEvent::SetConnectionOption {
-                connection_obj: _,
-                option_name: _,
-                value: _,
-            } => {
+            moor_rpc::ClientEventUnionRef::SetConnectionOptionEvent(_) => {
                 // WebSocket connections don't currently support connection options
             }
         }
@@ -350,42 +379,57 @@ impl WebSocketConnection {
         let line = line.into_text().unwrap();
         let cmd = line.trim().to_string();
 
-        match self
+        let command_msg = mk_command_msg(
+            &self.client_token,
+            &self.auth_token,
+            &self.handler_object,
+            cmd,
+        );
+
+        let reply_bytes = self
             .rpc_client
-            .make_client_rpc_call(
-                self.client_id,
-                HostClientToDaemonMessage::Command(
-                    self.client_token.clone(),
-                    self.auth_token.clone(),
-                    self.handler_object,
-                    cmd,
-                ),
-            )
+            .make_client_rpc_call(self.client_id, command_msg)
             .await
-            .expect("Unable to send command to RPC server")
-        {
-            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(ti)) => {
-                self.pending_task = Some(PendingTask {
-                    task_id: ti,
-                    start_time: Instant::now(),
-                });
+            .expect("Unable to send command to RPC server");
+
+        let reply =
+            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+        match reply.result().expect("Missing result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Missing reply");
+                match daemon_reply.reply().expect("Missing reply union") {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        let ti = task_submitted.task_id().expect("Missing task_id") as usize;
+                        self.pending_task = Some(PendingTask {
+                            task_id: ti,
+                            start_time: Instant::now(),
+                        });
+                    }
+                    moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                        warn!("Received input thanks unprovoked, out of order")
+                    }
+                    _ => {
+                        error!("Unexpected daemon to client reply");
+                    }
+                }
             }
-            ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
-                warn!("Received input thanks unprovoked, out of order")
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error_ref = failure.error().expect("Missing error");
+                let error_code = error_ref.error_code().expect("Missing error code");
+                if error_code == moor_rpc::RpcMessageErrorCode::TaskError {
+                    if let Ok(Some(scheduler_error_ref)) = error_ref.scheduler_error() {
+                        let e = rpc_common::scheduler_error_from_ref(scheduler_error_ref)
+                            .expect("Failed to convert scheduler error");
+                        self.handle_task_error(ws_sender, e)
+                            .await
+                            .expect("Unable to handle task error");
+                    }
+                } else {
+                    error!("Unhandled RPC error: {:?}", error_code);
+                }
             }
-            ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
-                self.handle_task_error(ws_sender, e)
-                    .await
-                    .expect("Unable to handle task error");
-            }
-            ReplyResult::Failure(e) => {
-                error!("Unhandled RPC error: {:?}", e);
-            }
-            ReplyResult::ClientSuccess(s) => {
-                error!("Unexpected RPC success: {:?}", s);
-            }
-            ReplyResult::HostSuccess(hs) => {
-                error!("Unexpected host success: {:?}", hs);
+            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+                error!("Unexpected host success");
             }
         }
     }
@@ -410,43 +454,61 @@ impl WebSocketConnection {
             return;
         };
 
-        match self
+        let Some(input_msg) = mk_requested_input_msg(
+            &self.client_token,
+            &self.auth_token,
+            *input_request_id,
+            &cmd,
+        ) else {
+            warn!("Failed to create requested input message");
+            return;
+        };
+
+        let reply_bytes = self
             .rpc_client
-            .make_client_rpc_call(
-                self.client_id,
-                HostClientToDaemonMessage::RequestedInput(
-                    self.client_token.clone(),
-                    self.auth_token.clone(),
-                    *input_request_id,
-                    cmd,
-                ),
-            )
+            .make_client_rpc_call(self.client_id, input_msg)
             .await
-            .expect("Unable to send input to RPC server")
-        {
-            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(task_id)) => {
-                self.pending_task = Some(PendingTask {
-                    task_id,
-                    start_time: Instant::now(),
-                });
-                warn!("Got TaskSubmitted when expecting input-thanks")
+            .expect("Unable to send input to RPC server");
+
+        let reply =
+            moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+        match reply.result().expect("Missing result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Missing reply");
+                match daemon_reply.reply().expect("Missing reply union") {
+                    moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {
+                        let task_id = task_submitted.task_id().expect("Missing task_id") as usize;
+                        self.pending_task = Some(PendingTask {
+                            task_id,
+                            start_time: Instant::now(),
+                        });
+                        warn!("Got TaskSubmitted when expecting input-thanks")
+                    }
+                    moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                        expecting_input.pop_front();
+                    }
+                    _ => {
+                        error!("Unexpected daemon to client reply");
+                    }
+                }
             }
-            ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
-                expecting_input.pop_front();
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let error_ref = failure.error().expect("Missing error");
+                let error_code = error_ref.error_code().expect("Missing error code");
+                if error_code == moor_rpc::RpcMessageErrorCode::TaskError {
+                    if let Ok(Some(scheduler_error_ref)) = error_ref.scheduler_error() {
+                        let e = rpc_common::scheduler_error_from_ref(scheduler_error_ref)
+                            .expect("Failed to convert scheduler error");
+                        self.handle_task_error(ws_sender, e)
+                            .await
+                            .expect("Unable to handle task error");
+                    }
+                } else {
+                    error!("Unhandled RPC error: {:?}", error_code);
+                }
             }
-            ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
-                self.handle_task_error(ws_sender, e)
-                    .await
-                    .expect("Unable to handle task error");
-            }
-            ReplyResult::Failure(e) => {
-                error!("Unhandled RPC error: {:?}", e);
-            }
-            ReplyResult::ClientSuccess(s) => {
-                error!("Unexpected RPC success: {:?}", s);
-            }
-            ReplyResult::HostSuccess(hs) => {
-                error!("Unexpected host success: {:?}", hs);
+            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+                error!("Unexpected host success");
             }
         }
     }

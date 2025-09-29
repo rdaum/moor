@@ -18,13 +18,13 @@
 
 #[cfg(test)]
 mod tests {
-    use moor_common::model::{ObjFlag, ObjectKind, PropFlag, WorldStateSource};
-    use moor_common::util::BitEnum;
+    use moor_common::{
+        model::{ObjFlag, ObjectKind, PropFlag, WorldStateSource},
+        util::BitEnum,
+    };
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
-    use std::collections::HashMap;
-    use std::path::Path;
-    use std::sync::Arc;
+    use std::{collections::HashMap, path::Path, sync::Arc};
 
     fn test_db(path: &Path) -> Arc<TxDB> {
         Arc::new(TxDB::open(Some(path), DatabaseConfig::default()).0)

@@ -11,46 +11,46 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::fmt::{Debug, Formatter};
-use std::time::{Duration, SystemTime};
+use std::{
+    fmt::{Debug, Formatter},
+    time::{Duration, SystemTime},
+};
 
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use tracing::{debug, error, warn};
 
 #[cfg(feature = "trace_events")]
 use crate::tracing_events::{TraceEventType, emit_trace_event};
 
-use moor_common::model::ObjFlag;
-use moor_common::model::VerbDef;
-use moor_common::tasks::{AbortLimitReason, TaskId};
-use moor_compiler::Program;
-use moor_compiler::{BuiltinId, Offset};
-use moor_compiler::{CompileOptions, compile};
-use moor_var::List;
-use moor_var::Obj;
-use moor_var::Var;
-use moor_var::{E_MAXREC, Error};
-use moor_var::{Symbol, v_none};
+use moor_common::{
+    model::{ObjFlag, VerbDef},
+    tasks::{AbortLimitReason, TaskId},
+};
+use moor_compiler::{BuiltinId, CompileOptions, Offset, Program, compile};
+use moor_var::{E_MAXREC, Error, List, Obj, Symbol, Var, v_none};
 
-use crate::PhantomUnsync;
-use crate::config::FeaturesConfig;
-use crate::task_context::with_current_transaction;
-use crate::vm::FinallyReason;
-use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
-use crate::vm::activation::Frame;
-use crate::vm::builtins::BuiltinRegistry;
-use crate::vm::exec_state::VMExecState;
-use crate::vm::moo_execute::moo_frame_execute;
-use crate::vm::vm_call::VmExecParams;
-use crate::vm::{Fork, VMHostResponse, VerbExecutionRequest};
-use crate::vm::{TaskSuspend, VerbCall};
-use moor_common::matching::ParsedCommand;
-use moor_common::tasks::Session;
-use moor_var::program::ProgramType;
-use moor_var::program::names::Name;
+use crate::{
+    PhantomUnsync,
+    config::FeaturesConfig,
+    task_context::with_current_transaction,
+    vm::{
+        FinallyReason, Fork, TaskSuspend, VMHostResponse,
+        VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
+        VerbCall, VerbExecutionRequest,
+        activation::Frame,
+        builtins::BuiltinRegistry,
+        exec_state::VMExecState,
+        moo_execute::moo_frame_execute,
+        vm_call::VmExecParams,
+    },
+};
+use moor_common::{matching::ParsedCommand, tasks::Session};
+use moor_var::program::{ProgramType, names::Name};
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
 #[derive(Debug, Clone)]

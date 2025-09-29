@@ -24,10 +24,17 @@
 //
 
 use moor_common::model::CompileError;
-use moor_var::Symbol;
-use moor_var::program::names::VarName::{Named, Register};
-use moor_var::program::names::{GlobalName, Name, Names, Variable};
-use moor_var::program::{Decl, DeclType};
+use moor_var::{
+    Symbol,
+    program::{
+        Decl, DeclType,
+        names::{
+            GlobalName, Name, Names,
+            VarName::{Named, Register},
+            Variable,
+        },
+    },
+};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 

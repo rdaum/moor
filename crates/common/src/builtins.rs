@@ -15,9 +15,10 @@ use ArgCount::{Q, U};
 use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use lazy_static::lazy_static;
-use moor_var::Symbol;
-use moor_var::VarType;
-use moor_var::VarType::{TYPE_BOOL, TYPE_ERR, TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
+use moor_var::{
+    Symbol, VarType,
+    VarType::{TYPE_BOOL, TYPE_ERR, TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL},
+};
 /// Global registry of built-in function names.
 use std::collections::HashMap;
 

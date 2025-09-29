@@ -14,8 +14,10 @@
 #![recursion_limit = "256"]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use moor_common::model::{CommitResult, ObjectKind, PropFlag, WorldStateSource};
-use moor_common::util::BitEnum;
+use moor_common::{
+    model::{CommitResult, ObjectKind, PropFlag, WorldStateSource},
+    util::BitEnum,
+};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int, v_list_iter};
 use rand::prelude::SliceRandom;

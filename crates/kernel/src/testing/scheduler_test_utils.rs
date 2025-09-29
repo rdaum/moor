@@ -13,18 +13,20 @@
 
 //! Scheduler testing utilities for integration tests with scheduler clients
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use moor_common::tasks::{CommandError, SchedulerError};
 use moor_var::{E_VERBNF, Obj, SYSTEM_OBJECT, Var};
 
-use crate::config::FeaturesConfig;
-use crate::tasks::scheduler_client::SchedulerClient;
-use crate::tasks::{TaskHandle, TaskResult};
-use moor_common::tasks::Exception;
-use moor_common::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
-use moor_common::tasks::Session;
+use crate::{
+    config::FeaturesConfig,
+    tasks::{TaskHandle, TaskResult, scheduler_client::SchedulerClient},
+};
+use moor_common::tasks::{
+    Exception,
+    SchedulerError::{CommandExecutionError, TaskAbortedException},
+    Session,
+};
 
 pub type ExecResult = Result<Var, Exception>;
 

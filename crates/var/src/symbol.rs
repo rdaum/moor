@@ -21,18 +21,24 @@
 //! The implementation is thread-safe and uses lock-free data structures where possible.
 
 use ahash::AHasher;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use boxcar::Vec as BoxcarVec;
 use once_cell::sync::Lazy;
 use papaya::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Debug, Display};
-use std::hash::{BuildHasherDefault, Hash, Hasher};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::{
+    fmt::{Debug, Display},
+    hash::{BuildHasherDefault, Hash, Hasher},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU32, Ordering},
+    },
+};
 use unicase::UniCase;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -437,8 +443,10 @@ impl<'de, C> BorrowDecode<'de, C> for Symbol {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::{HashMap, HashSet};
-    use std::thread;
+    use std::{
+        collections::{HashMap, HashSet},
+        thread,
+    };
 
     // Create a fresh Symbol from an isolated interner for testing
     fn make_test_symbol(s: &str, interner: &GlobalInternerState) -> Symbol {
@@ -713,8 +721,7 @@ mod tests {
 #[cfg(test)]
 mod shuttle_tests {
     use super::*;
-    use shuttle::sync::Arc;
-    use shuttle::{check, thread};
+    use shuttle::{check, sync::Arc, thread};
     use std::collections::HashMap;
 
     #[test]

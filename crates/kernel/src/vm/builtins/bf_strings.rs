@@ -13,21 +13,19 @@
 
 //! Builtin functions for string manipulation, hashing, and encoding operations.
 
-use argon2::password_hash::SaltString;
-use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
-use base64::Engine;
-use base64::engine::general_purpose;
+use argon2::{
+    Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version, password_hash::SaltString,
+};
+use base64::{Engine, engine::general_purpose};
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::{Sequence, Variant};
-use moor_var::{v_int, v_str, v_string};
-use rand::distributions::Alphanumeric;
-use rand::{Rng, thread_rng};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_int, v_str, v_string};
+use rand::{Rng, distributions::Alphanumeric, thread_rng};
 use tracing::warn;
 
-use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::{
+    BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err,
+};
 
 /// Internal helper for string substitution with case sensitivity control.
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {

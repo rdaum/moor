@@ -11,18 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::program::labels::{JumpLabel, Label, Offset};
-use crate::program::names::{Name, Names};
-use crate::program::opcode::{
-    ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
+use crate::{
+    AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, ErrorCode, Symbol,
+    Var,
+    program::{
+        labels::{JumpLabel, Label, Offset},
+        names::{Name, Names},
+        opcode::{
+            ForRangeOperand, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
+        },
+    },
 };
-use crate::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, Symbol};
-use crate::{ErrorCode, Var};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use lazy_static::lazy_static;
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
+use std::{
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 
 lazy_static! {
     pub static ref EMPTY_PROGRAM: Program = Program::new();

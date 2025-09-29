@@ -11,19 +11,22 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::db_counters;
-use crate::tx_management::{Error, Provider, Timestamp};
+use crate::{
+    db_counters,
+    tx_management::{Error, Provider, Timestamp},
+};
 use byteview::ByteView;
 use fjall::UserValue;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_common::util::PerfTimerGuard;
 use moor_var::AsByteBuffer;
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex, RwLock, atomic::AtomicBool},
+    thread::JoinHandle,
+    time::Duration,
+};
 use tracing::error;
 
 enum WriteOp<

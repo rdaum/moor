@@ -13,19 +13,26 @@
 
 //! Builtin functions for property manipulation and introspection.
 
-use moor_common::model::{PropAttrs, PropFlag, prop_flags_string};
-use moor_common::util::BitEnum;
+use moor_common::{
+    model::{PropAttrs, PropFlag, prop_flags_string},
+    util::BitEnum,
+};
 use moor_compiler::offset_for_builtin;
-use moor_var::Variant;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::{List, v_empty_list};
-use moor_var::{Sequence, Symbol};
-use moor_var::{v_list, v_obj, v_string};
+use moor_var::{
+    E_ARGS, E_INVARG, E_TYPE, List, Sequence, Symbol, Variant, v_empty_list, v_list, v_obj,
+    v_string,
+};
 
-use crate::task_context::{with_current_transaction, with_current_transaction_mut};
-use crate::vm::builtins::BfErr::{Code, ErrValue};
-use crate::vm::builtins::BfRet::{Ret, RetNil};
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::{
+    task_context::{with_current_transaction, with_current_transaction_mut},
+    vm::builtins::{
+        BfCallState, BfErr,
+        BfErr::{Code, ErrValue},
+        BfRet,
+        BfRet::{Ret, RetNil},
+        BuiltinFunction, world_state_bf_err,
+    },
+};
 
 /// MOO: `list property_info(obj object, symbol prop_name)`
 /// Returns property information as `{owner, perms}`.

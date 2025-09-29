@@ -15,15 +15,18 @@ use byteview::ByteView;
 use fjall::UserValue;
 use uuid::Uuid;
 
-use crate::tx_management::{Error, Timestamp};
-use crate::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder};
-use moor_common::model::{
-    HasUuid, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropPerms, ValSet, VerbDefs,
-    WorldStateError, loader::SnapshotInterface,
+use crate::{
+    AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder,
+    tx_management::{Error, Timestamp},
 };
-use moor_common::util::BitEnum;
-use moor_var::program::ProgramType;
-use moor_var::{AsByteBuffer, NOTHING, Obj, Var};
+use moor_common::{
+    model::{
+        HasUuid, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropPerms, ValSet, VerbDefs,
+        WorldStateError, loader::SnapshotInterface,
+    },
+    util::BitEnum,
+};
+use moor_var::{AsByteBuffer, NOTHING, Obj, Var, program::ProgramType};
 
 /// A snapshot-based implementation of LoaderInterface for read-only database access
 pub struct SnapshotLoader {

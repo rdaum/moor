@@ -15,8 +15,7 @@
 
 use bincode::{Decode, Encode};
 use moor_var::{Symbol, Var};
-use std::collections::HashMap;
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 mod fjall_persistence;
 mod in_memory;

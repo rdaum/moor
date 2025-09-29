@@ -11,19 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::model::loader::SnapshotInterface;
 use moor_common::model::{
-    HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
+    HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, loader::SnapshotInterface,
+    prop_flags_string, verb_perms_string,
 };
 use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
     to_literal_objsub, unparse,
 };
-use moor_var::program::ProgramType;
-use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_arc_string, v_str, v_string};
-use std::collections::HashMap;
-use std::io::Write;
-use std::path::Path;
+use moor_var::{
+    NOTHING, Obj, SYSTEM_OBJECT, Symbol, program::ProgramType, v_arc_string, v_str, v_string,
+};
+use std::{collections::HashMap, io::Write, path::Path};
 use thiserror::Error;
 use tracing::info;
 
@@ -589,19 +588,24 @@ fn dump_property_override(
 #[cfg(test)]
 mod tests {
     use crate::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
-    use moor_common::model::CommitResult;
-    use moor_common::model::{ObjectKind, PropFlag, WorldStateSource};
-    use moor_common::util::BitEnum;
+    use moor_common::{
+        model::{CommitResult, ObjectKind, PropFlag, WorldStateSource},
+        util::BitEnum,
+    };
     use moor_compiler::{CompileOptions, compile};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::textdump_load;
-    use moor_var::program::labels::Label;
-    use moor_var::program::names::Name;
-    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
-    use moor_var::{Obj, SYSTEM_OBJECT, Sequence, Symbol, Var, v_int, v_list, v_obj, v_str};
+    use moor_var::{
+        Obj, SYSTEM_OBJECT, Sequence, Symbol, Var,
+        program::{
+            labels::Label,
+            names::Name,
+            opcode::{ScatterArgs, ScatterLabel},
+        },
+        v_int, v_list, v_obj, v_str,
+    };
     use semver::Version;
-    use std::path::PathBuf;
-    use std::sync::Arc;
+    use std::{path::PathBuf, sync::Arc};
 
     /// 1. Load from a classical textdump
     /// 2. Dump to a objdef dump

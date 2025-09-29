@@ -16,21 +16,177 @@ use futures_util::StreamExt;
 use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
+use moor_var::{Obj, Var};
+use planus::ReadAsRoot;
 use rpc_common::{
-    ClientEvent, ClientsBroadcastEvent, DaemonToWorkerMessage, HostBroadcastEvent, RpcError,
+    RpcError, WorkerToken, flatbuffers_generated::moor_rpc, obj_from_flatbuffer_struct,
+    var_from_flatbuffer_bytes,
 };
+use std::time::Duration;
+
+/// Type alias for the complex return type of worker request extraction
+type WorkerRequestData = (Uuid, WorkerToken, Uuid, Obj, Vec<Var>, Option<Duration>);
+
+/// Owned wrapper around worker message flatbuffer data that provides zero-copy access
+pub struct WorkerMessage {
+    buffer: Vec<u8>,
+}
+
+impl WorkerMessage {
+    pub fn from_buffer(buffer: Vec<u8>) -> Result<Self, RpcError> {
+        // Validate it's a valid flatbuffer by attempting to parse
+        let _msg = moor_rpc::DaemonToWorkerMessageRef::read_as_root(&buffer)
+            .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e)))?;
+        Ok(WorkerMessage { buffer })
+    }
+
+    /// Get zero-copy reference to the message union
+    pub fn message(&self) -> Result<moor_rpc::DaemonToWorkerMessageUnionRef<'_>, RpcError> {
+        let fb_msg = moor_rpc::DaemonToWorkerMessageRef::read_as_root(&self.buffer)
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))?;
+        fb_msg
+            .message()
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to access message: {}", e)))
+    }
+
+    /// Extract WorkerRequest data with all business logic conversions
+    pub fn extract_worker_request(&self) -> Result<WorkerRequestData, RpcError> {
+        match self.message()? {
+            moor_rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
+                let worker_id_data = req
+                    .worker_id()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
+                    .data()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get worker_id data: {e}"))
+                    })?;
+                let worker_id = Uuid::from_slice(worker_id_data)
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}")))?;
+
+                let request_id_data = req
+                    .id()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get id: {e}")))?
+                    .data()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get id data: {e}")))?;
+                let request_id = Uuid::from_slice(request_id_data)
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid request UUID: {e}")))?;
+
+                let token_str = req
+                    .token()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {e}")))?
+                    .token()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get token string: {e}"))
+                    })?;
+                let token = WorkerToken(token_str.to_owned());
+
+                let perms_ref = req
+                    .perms()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get perms: {e}")))?;
+                let perms_obj = moor_rpc::Obj::try_from(perms_ref).map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Failed to convert perms ref: {e}"))
+                })?;
+                let perms = obj_from_flatbuffer_struct(&perms_obj).map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Failed to decode perms: {e}"))
+                })?;
+
+                let request_vec = req
+                    .request()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get request: {e}")))?;
+                let request = request_vec
+                    .iter()
+                    .map(|var_bytes_result| {
+                        let var_bytes = var_bytes_result.map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Failed to get var_bytes: {e}"))
+                        })?;
+                        let data = var_bytes.data().map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Failed to get var_bytes data: {e}"))
+                        })?;
+                        var_from_flatbuffer_bytes(data).map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, RpcError>>()?;
+
+                let timeout_ms = req.timeout_ms().map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Failed to get timeout_ms: {e}"))
+                })?;
+                let timeout = if timeout_ms == 0 {
+                    None
+                } else {
+                    Some(Duration::from_millis(timeout_ms))
+                };
+
+                Ok((worker_id, token, request_id, perms, request, timeout))
+            }
+            _ => Err(RpcError::CouldNotDecode(
+                "Expected WorkerRequest message".to_string(),
+            )),
+        }
+    }
+
+    /// Extract PleaseDie data with all business logic conversions
+    pub fn extract_please_die(&self) -> Result<(WorkerToken, Uuid), RpcError> {
+        match self.message()? {
+            moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
+                let token_str = die
+                    .token()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {e}")))?
+                    .token()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get token string: {e}"))
+                    })?;
+                let token = WorkerToken(token_str.to_owned());
+
+                let worker_id_data = die
+                    .worker_id()
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
+                    .data()
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!("Failed to get worker_id data: {e}"))
+                    })?;
+                let worker_id = Uuid::from_slice(worker_id_data)
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}")))?;
+
+                Ok((token, worker_id))
+            }
+            _ => Err(RpcError::CouldNotDecode(
+                "Expected PleaseDie message".to_string(),
+            )),
+        }
+    }
+
+    /// Check if this is a PingWorkers message
+    pub fn is_ping_workers(&self) -> Result<bool, RpcError> {
+        match self.message()? {
+            moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => Ok(true),
+            _ => Ok(false),
+        }
+    }
+}
+
+/// Owned wrapper for ClientEvent that keeps the buffer alive for zero-copy access
+pub struct ClientEventMessage {
+    buffer: Vec<u8>,
+}
+
+impl ClientEventMessage {
+    pub fn event(&self) -> Result<moor_rpc::ClientEventRef<'_>, RpcError> {
+        moor_rpc::ClientEventRef::read_as_root(&self.buffer)
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
+    }
+}
 
 pub async fn events_recv(
     client_id: Uuid,
     subscribe: &mut Subscribe,
-) -> Result<ClientEvent, RpcError> {
+) -> Result<ClientEventMessage, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive published event".to_string(),
         ));
     };
 
-    // bincode decode the message, and it should be ConnectionEvent
     if inbound.len() != 2 {
         return Err(RpcError::CouldNotDecode(format!(
             "Unexpected message length: {}",
@@ -53,14 +209,28 @@ pub async fn events_recv(
         return Err(RpcError::CouldNotDecode("Unexpected client ID".to_string()));
     }
 
-    let decode_result = bincode::decode_from_slice(event.as_ref(), bincode::config::standard());
-    let (msg, _msg_size): (ClientEvent, usize) = decode_result
-        .map_err(|e| RpcError::CouldNotDecode(format!("Unable to decode published event: {e}")))?;
+    // Validate it's a valid flatbuffer
+    let _fb_event = moor_rpc::ClientEventRef::read_as_root(event.as_ref())
+        .map_err(|e| RpcError::CouldNotDecode(format!("Unable to parse FlatBuffer: {e:?}")))?;
 
-    Ok(msg)
+    Ok(ClientEventMessage {
+        buffer: event.to_vec(),
+    })
 }
 
-pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<ClientsBroadcastEvent, RpcError> {
+/// Owned wrapper for ClientsBroadcastEvent that keeps the buffer alive for zero-copy access
+pub struct BroadcastEventMessage {
+    buffer: Vec<u8>,
+}
+
+impl BroadcastEventMessage {
+    pub fn event(&self) -> Result<moor_rpc::ClientsBroadcastEventRef<'_>, RpcError> {
+        moor_rpc::ClientsBroadcastEventRef::read_as_root(&self.buffer)
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
+    }
+}
+
+pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<BroadcastEventMessage, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive broadcast message".to_string(),
@@ -92,14 +262,30 @@ pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<ClientsBroadcas
         ));
     };
 
-    let (msg, _msg_size): (ClientsBroadcastEvent, usize) =
-        bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {e}"))
-        })?;
-    Ok(msg)
+    // Validate it's a valid flatbuffer
+    let _fb_event = moor_rpc::ClientsBroadcastEventRef::read_as_root(event.as_ref())
+        .map_err(|e| RpcError::CouldNotDecode(format!("Unable to parse FlatBuffer: {e:?}")))?;
+
+    Ok(BroadcastEventMessage {
+        buffer: event.to_vec(),
+    })
 }
 
-pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcastEvent, RpcError> {
+/// Owned wrapper for HostBroadcastEvent that keeps the buffer alive for zero-copy access
+pub struct HostBroadcastMessage {
+    buffer: Vec<u8>,
+}
+
+impl HostBroadcastMessage {
+    pub fn event(&self) -> Result<moor_rpc::HostBroadcastEventRef<'_>, RpcError> {
+        moor_rpc::HostBroadcastEventRef::read_as_root(&self.buffer)
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
+    }
+}
+
+pub async fn hosts_events_recv(
+    subscribe: &mut Subscribe,
+) -> Result<HostBroadcastMessage, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive host broadcast message".to_string(),
@@ -131,16 +317,16 @@ pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcas
         ));
     };
 
-    let (msg, _msg_size): (HostBroadcastEvent, usize) =
-        bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode host broadcast message: {e}"))
-        })?;
-    Ok(msg)
+    // Validate it's a valid flatbuffer
+    let _fb_event = moor_rpc::HostBroadcastEventRef::read_as_root(event.as_ref())
+        .map_err(|e| RpcError::CouldNotDecode(format!("Unable to parse FlatBuffer: {e:?}")))?;
+
+    Ok(HostBroadcastMessage {
+        buffer: event.to_vec(),
+    })
 }
 
-pub async fn workers_events_recv(
-    subscribe: &mut Subscribe,
-) -> Result<DaemonToWorkerMessage, RpcError> {
+pub async fn workers_events_recv(subscribe: &mut Subscribe) -> Result<WorkerMessage, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive worker broadcast message".to_string(),
@@ -172,9 +358,6 @@ pub async fn workers_events_recv(
         ));
     };
 
-    let (msg, _msg_size): (DaemonToWorkerMessage, usize) =
-        bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode worker broadcast message: {e}"))
-        })?;
-    Ok(msg)
+    // Create owned wrapper with zero-copy access
+    WorkerMessage::from_buffer(event.to_vec())
 }

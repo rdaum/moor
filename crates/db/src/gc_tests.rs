@@ -16,11 +16,11 @@
 #[cfg(test)]
 mod tests {
     use crate::{Database, DatabaseConfig, TxDB};
-    use moor_common::model::{CommitResult, ObjAttrs, ObjectKind, WorldStateSource};
-    use moor_common::util::BitEnum;
-    use moor_var::Obj;
-    use moor_var::Symbol;
-    use moor_var::{NOTHING, v_int, v_list, v_map, v_obj, v_str};
+    use moor_common::{
+        model::{CommitResult, ObjAttrs, ObjectKind, WorldStateSource},
+        util::BitEnum,
+    };
+    use moor_var::{NOTHING, Obj, Symbol, v_int, v_list, v_map, v_obj, v_str};
 
     const WIZARD: Obj = Obj::mk_id(2);
 

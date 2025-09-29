@@ -11,8 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::cmp::min;
-use std::ops::Index;
+use std::{cmp::min, ops::Index};
 
 use num_traits::PrimInt;
 

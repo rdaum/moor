@@ -15,8 +15,7 @@
 //! with explicit flush control, similar to LambdaMOO's networking capabilities.
 
 use bytes::{Buf, Bytes, BytesMut};
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 use tokio_util::codec::{Decoder, Encoder};
 
 /// Connection mode determines how data is parsed and handled

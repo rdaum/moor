@@ -11,20 +11,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::fmt::Debug;
-use std::time::SystemTime;
+use std::{fmt::Debug, time::SystemTime};
 
 use bincode::{Decode, Encode};
 use flume::Receiver;
 use lazy_static::lazy_static;
 use moor_compiler::{Program, to_literal};
-use moor_var::{List, Obj};
-use moor_var::{Symbol, Var};
+use moor_var::{List, Obj, Symbol, Var};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
-use moor_common::tasks::{SchedulerError, TaskId};
-use moor_common::util::PerfCounter;
+use moor_common::{
+    tasks::{SchedulerError, TaskId},
+    util::PerfCounter,
+};
 
 pub mod scheduler;
 

@@ -13,9 +13,7 @@
 
 use crate::worker_rpc_client::WorkerRpcSendClient;
 use moor_var::Symbol;
-use rpc_common::{
-    DaemonToWorkerReply, MOOR_WORKER_TOKEN_FOOTER, RpcError, WorkerToDaemonMessage, WorkerToken,
-};
+use rpc_common::{DaemonToWorkerReply, MOOR_WORKER_TOKEN_FOOTER, RpcError, WorkerToken};
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use tmq::request;
 use tracing::{error, info, warn};
@@ -60,12 +58,8 @@ pub async fn attach_worker(
             "Attaching worker type {} to daemon with worker id {} via {}",
             worker_type, worker_id, rpc_address
         );
-        let worker_hello = WorkerToDaemonMessage::AttachWorker {
-            token: worker_token.clone(),
-            worker_type,
-        };
         match rpc_client
-            .make_worker_rpc_call(worker_token, worker_id, worker_hello)
+            .make_worker_rpc_call_fb_attach(worker_token, worker_id, worker_type)
             .await
         {
             Ok(DaemonToWorkerReply::Attached(_, _)) => {

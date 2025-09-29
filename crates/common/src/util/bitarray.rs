@@ -12,9 +12,11 @@
 //
 
 use crate::util::BitsetTrait;
-use std::fmt::{Debug, Formatter};
-use std::mem::MaybeUninit;
-use std::ops::Index;
+use std::{
+    fmt::{Debug, Formatter},
+    mem::MaybeUninit,
+    ops::Index,
+};
 
 // BITSET_WIDTH must be RANGE_WIDTH / 16
 // Once generic_const_exprs is stabilized, we can use that to calculate this from a RANGE_WIDTH.

@@ -16,30 +16,23 @@
 //! program code that doesn't interact with the DB, to measure opcode execution efficiency.
 #![recursion_limit = "256"]
 
-use std::hint::black_box;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{hint::black_box, sync::Arc, time::Duration};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
-use moor_common::model::VerbArgsSpec;
-use moor_common::model::VerbFlag;
-use moor_common::model::{CommitResult, ObjectKind};
-use moor_common::model::{WorldState, WorldStateSource};
-use moor_common::tasks::AbortLimitReason;
-use moor_common::tasks::{NoopClientSession, Session};
-use moor_common::util::BitEnum;
+use moor_common::{
+    model::{CommitResult, ObjectKind, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource},
+    tasks::{AbortLimitReason, NoopClientSession, Session},
+    util::BitEnum,
+};
 use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
-use moor_kernel::config::FeaturesConfig;
-use moor_kernel::testing::vm_test_utils::setup_task_context;
-use moor_kernel::vm::VMHostResponse;
-use moor_kernel::vm::VerbCall;
-use moor_kernel::vm::builtins::BuiltinRegistry;
-use moor_kernel::vm::vm_host::VmHost;
-use moor_var::program::ProgramType;
-use moor_var::{List, Symbol, v_obj};
-use moor_var::{NOTHING, SYSTEM_OBJECT};
+use moor_kernel::{
+    config::FeaturesConfig,
+    testing::vm_test_utils::setup_task_context,
+    vm::{VMHostResponse, VerbCall, builtins::BuiltinRegistry, vm_host::VmHost},
+};
+use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_obj};
 
 fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());

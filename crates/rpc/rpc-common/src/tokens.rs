@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::HostType;
-use bincode::{Decode, Encode};
-use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey};
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use crate::{flatbuffers_generated::moor_rpc, host::HostType};
+use ed25519_dalek::{
+    SigningKey, VerifyingKey,
+    pkcs8::{DecodePrivateKey, DecodePublicKey},
+};
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use std::path::Path;
 use thiserror::Error;
@@ -25,20 +26,20 @@ pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
 pub const MOOR_WORKER_TOKEN_FOOTER: &str = "key-id:moor_worker";
 
 /// PASETO public token representing the host's identity.
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct HostToken(pub String);
 
 /// PASETO public token for a connection, used for the validation of RPC requests after the initial
 /// connection is established.
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ClientToken(pub String);
 
 /// PASTEO public token for an authenticated player, encoding the player's identity.
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct AuthToken(pub String);
 
 /// PASETO public token for a worker. Encodes the worker type, and its creation time.
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct WorkerToken(pub String);
 
 #[derive(Error, Debug)]
@@ -89,4 +90,22 @@ pub fn make_host_token(private_key: &Key<64>, host_type: HostType) -> HostToken 
         .expect("Unable to build Paseto host token");
 
     HostToken(token)
+}
+
+/// Convert from FlatBuffer ClientTokenRef to ClientToken
+pub fn client_token_from_ref(
+    token_ref: moor_rpc::ClientTokenRef<'_>,
+) -> Result<crate::ClientToken, String> {
+    let token_string = token_ref
+        .token()
+        .map_err(|_| "Missing client token string")?;
+    Ok(crate::ClientToken(token_string.to_string()))
+}
+
+/// Convert from FlatBuffer AuthTokenRef to AuthToken
+pub fn auth_token_from_ref(
+    token_ref: moor_rpc::AuthTokenRef<'_>,
+) -> Result<crate::AuthToken, String> {
+    let token_string = token_ref.token().map_err(|_| "Missing auth token string")?;
+    Ok(crate::AuthToken(token_string.to_string()))
 }

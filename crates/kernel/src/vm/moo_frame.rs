@@ -12,15 +12,22 @@
 //
 
 use crate::vm::FinallyReason;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use moor_compiler::{Label, Op, Program};
-use moor_var::VarType::TYPE_NONE;
-use moor_var::program::labels::Offset;
-use moor_var::program::names::{GlobalName, Name};
-use moor_var::{Error, Var, v_none};
+use moor_var::{
+    Error, Var,
+    VarType::TYPE_NONE,
+    program::{
+        labels::Offset,
+        names::{GlobalName, Name},
+    },
+    v_none,
+};
 use std::cmp::max;
 use strum::EnumCount;
 

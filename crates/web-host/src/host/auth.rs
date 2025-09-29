@@ -11,15 +11,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::WebHost;
-use crate::host::web_host::{LoginType, WsHostError};
-use axum::Form;
-use axum::extract::{ConnectInfo, State};
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Response};
+use crate::host::{
+    WebHost,
+    web_host::{LoginType, WsHostError},
+};
+use axum::{
+    Form,
+    extract::{ConnectInfo, State},
+    http::{HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
+};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{
-    AuthToken, ClientToken, DaemonToClientReply, HostClientToDaemonMessage, ReplyResult,
+    AuthToken, ClientToken, flatbuffers_generated::moor_rpc, mk_detach_msg, mk_login_command_msg,
 };
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
@@ -83,30 +87,62 @@ async fn auth_handler(
     };
 
     let words = vec![auth_verb.to_string(), player, password];
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::LoginCommand {
-                client_token: client_token.clone(),
-                handler_object: host.handler_object,
-                connect_args: words,
-                do_attach: false,
-            },
-        )
+    let login_msg = mk_login_command_msg(&client_token, &host.handler_object, words, false);
+
+    let reply_bytes = rpc_client
+        .make_client_rpc_call(client_id, login_msg)
         .await
         .expect("Unable to send login request to RPC server");
-    let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(Some((
-        auth_token,
-        _connect_type,
-        player,
-    )))) = response
-    else {
-        error!(?response, "Login failed");
 
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body("".to_string())
-            .unwrap();
+    use planus::ReadAsRoot;
+    let reply =
+        moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
+
+    let (auth_token, player) = match reply.result().expect("Missing result") {
+        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+            let daemon_reply = client_success.reply().expect("Missing reply");
+            match daemon_reply.reply().expect("Missing reply union") {
+                moor_rpc::DaemonToClientReplyUnionRef::LoginResult(login_result) => {
+                    if login_result.success().expect("Missing success") {
+                        let auth_token_ref = login_result
+                            .auth_token()
+                            .expect("Missing auth_token")
+                            .expect("Missing auth token");
+                        let auth_token =
+                            AuthToken(auth_token_ref.token().expect("Missing token").to_string());
+                        let player_ref = login_result
+                            .player()
+                            .expect("Missing player")
+                            .expect("Missing player obj");
+                        let player_struct =
+                            moor_rpc::Obj::try_from(player_ref).expect("Failed to convert player");
+                        let player = rpc_common::obj_from_flatbuffer_struct(&player_struct)
+                            .expect("Failed to decode player");
+                        (auth_token, player)
+                    } else {
+                        error!("Login failed");
+                        return Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .body("".to_string())
+                            .unwrap();
+                    }
+                }
+                _ => {
+                    error!("Unexpected reply type");
+                    return Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body("".to_string())
+                        .unwrap();
+                }
+            }
+        }
+        _ => {
+            error!("Login failed");
+            return Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body("".to_string())
+                .unwrap();
+        }
     };
 
     // We now have a valid auth token for the player, so we return it in the response headers.
@@ -119,11 +155,11 @@ async fn auth_handler(
     // We now need to wait for the login message completion.
 
     // We're done with this RPC connection, so we detach it.
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
     let _ = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Detach(client_token.clone(), false),
-        )
+        .make_client_rpc_call(client_id, detach_msg)
         .await
         .expect("Unable to send detach to RPC server");
 

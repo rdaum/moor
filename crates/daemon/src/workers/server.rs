@@ -15,13 +15,19 @@
 
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use rusty_paseto::core::Key;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
+};
 use tracing::{error, info};
 
-use super::message_handler::{PING_FREQUENCY, WorkersMessageHandler, WorkersMessageHandlerImpl};
-use super::transport::WorkersTransport;
+use super::{
+    message_handler::{PING_FREQUENCY, WorkersMessageHandler, WorkersMessageHandlerImpl},
+    transport::WorkersTransport,
+};
 
 /// Coordinator for workers server that delegates business logic to message handler
 pub struct WorkersServer {

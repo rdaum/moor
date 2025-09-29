@@ -13,8 +13,10 @@
 
 use crate::Timestamp;
 use ahash::AHasher;
-use std::any::Any;
-use std::hash::{BuildHasherDefault, Hash};
+use std::{
+    any::Any,
+    hash::{BuildHasherDefault, Hash},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry<T: Clone + PartialEq> {

@@ -15,8 +15,7 @@
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence};
-use moor_var::{Var, Variant, v_list};
+use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence, Var, Variant, v_list};
 /// MOO: `map mapdelete(map m, any key)`
 /// Returns a copy of map with the value corresponding to key removed.
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

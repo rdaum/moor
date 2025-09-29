@@ -11,15 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use crate::tasks::ServerOptions;
-pub use crate::tasks::scheduler_client::SchedulerClient;
-pub use crate::tasks::task::Task;
-pub use crate::tasks::task_q::{SuspendedTask, WakeCondition};
-pub use crate::tracing_events::{TraceEventType, emit_trace_event, init_tracing, shutdown_tracing};
+pub use crate::{
+    tasks::{
+        ServerOptions,
+        scheduler_client::SchedulerClient,
+        task::Task,
+        task_q::{SuspendedTask, WakeCondition},
+    },
+    tracing_events::{TraceEventType, emit_trace_event, init_tracing, shutdown_tracing},
+};
 pub use moor_common::tasks::TaskId;
 
-use std::cell::Cell;
-use std::marker::PhantomData;
+use std::{cell::Cell, marker::PhantomData};
 
 pub mod config;
 pub mod task_context;

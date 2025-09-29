@@ -13,18 +13,14 @@
 
 use uuid::Uuid;
 
-use crate::model::ObjSet;
-use crate::model::PropFlag;
-use crate::model::VerbArgsSpec;
-use crate::model::VerbDefs;
-use crate::model::VerbFlag;
-use crate::model::{CommitResult, WorldStateError};
-use crate::model::{ObjAttrs, ObjFlag, PropPerms};
-use crate::model::{PropDef, PropDefs, VerbDef};
-use crate::util::BitEnum;
-use moor_var::Var;
-use moor_var::program::ProgramType;
-use moor_var::{Obj, Symbol};
+use crate::{
+    model::{
+        CommitResult, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs, PropFlag, PropPerms,
+        VerbArgsSpec, VerbDef, VerbDefs, VerbFlag, WorldStateError,
+    },
+    util::BitEnum,
+};
+use moor_var::{Obj, Symbol, Var, program::ProgramType};
 
 /// Interface for read-only access to database snapshots for exporting/dumping
 pub trait SnapshotInterface: Send {

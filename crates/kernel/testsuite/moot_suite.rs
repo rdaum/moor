@@ -21,15 +21,18 @@ use anstream::eprintln;
 use eyre::Context;
 
 use common::{create_db, testsuite_dir};
-use moor_common::tasks::{NoopClientSession, Session};
-use moor_common::tasks::{NoopSystemControl, SessionError, SessionFactory};
+use moor_common::tasks::{
+    NoopClientSession, NoopSystemControl, Session, SessionError, SessionFactory,
+};
 use moor_compiler::to_literal;
 use moor_db::Database;
-use moor_kernel::config::Config;
-use moor_kernel::tasks::NoopTasksDb;
-use moor_kernel::{SchedulerClient, tasks::scheduler::Scheduler, testing::scheduler_test_utils};
-use moor_moot::stylesheet::MOOT_STYLESHEET;
-use moor_moot::{MootOptions, MootRunner, execute_moot_test};
+use moor_kernel::{
+    SchedulerClient,
+    config::Config,
+    tasks::{NoopTasksDb, scheduler::Scheduler},
+    testing::scheduler_test_utils,
+};
+use moor_moot::{MootOptions, MootRunner, execute_moot_test, stylesheet::MOOT_STYLESHEET};
 use moor_var::{Obj, Var, v_bool};
 
 mod common;

@@ -13,8 +13,10 @@
 
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_common::tasks::TaskId;
-use moor_kernel::SuspendedTask;
-use moor_kernel::tasks::{TasksDb, TasksDbError};
+use moor_kernel::{
+    SuspendedTask,
+    tasks::{TasksDb, TasksDbError},
+};
 use moor_var::BINCODE_CONFIG;
 use std::path::Path;
 use tracing::error;
@@ -109,12 +111,15 @@ impl TasksDb for FjallTasksDB {
 mod tests {
     use crate::tasks::tasks_db_fjall::FjallTasksDB;
     use moor_common::tasks::NoopClientSession;
-    use moor_kernel::tasks::{ServerOptions, TaskStart, TasksDb};
-    use moor_kernel::{SuspendedTask, Task, WakeCondition};
+    use moor_kernel::{
+        SuspendedTask, Task, WakeCondition,
+        tasks::{ServerOptions, TaskStart, TasksDb},
+    };
     use moor_var::SYSTEM_OBJECT;
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
-    use std::time::Duration;
+    use std::{
+        sync::{Arc, atomic::AtomicBool},
+        time::Duration,
+    };
     use uuid::Uuid;
 
     // Verify creation of an empty DB, including creation of tables.

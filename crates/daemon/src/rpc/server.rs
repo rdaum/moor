@@ -14,21 +14,25 @@
 //! Thin coordinator for RPC server that delegates business logic to message handler
 
 use flume::{Receiver, Sender};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
-use super::message_handler::RpcMessageHandler;
-use super::session::{RpcSession, SessionActions};
-use super::transport::Transport;
-use crate::connections::ConnectionRegistry;
-use crate::event_log::EventLogOps;
-use crate::rpc::MessageHandler;
-use crate::system_control::SystemControlHandle;
-use crate::tasks::task_monitor::TaskMonitor;
+use super::{
+    message_handler::RpcMessageHandler,
+    session::{RpcSession, SessionActions},
+    transport::Transport,
+};
+use crate::{
+    connections::ConnectionRegistry, event_log::EventLogOps, rpc::MessageHandler,
+    system_control::SystemControlHandle, tasks::task_monitor::TaskMonitor,
+};
 use moor_common::tasks::{Session, SessionError, SessionFactory};
-use moor_kernel::SchedulerClient;
-use moor_kernel::config::Config;
+use moor_kernel::{SchedulerClient, config::Config};
 use moor_var::Obj;
 use rusty_paseto::prelude::Key;
 use tracing::{error, info};

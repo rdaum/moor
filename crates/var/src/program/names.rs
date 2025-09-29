@@ -11,9 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Symbol;
-use crate::program::Decl;
-use crate::program::names::VarName::{Named, Register};
+use crate::{
+    Symbol,
+    program::{
+        Decl,
+        names::VarName::{Named, Register},
+    },
+};
 use bincode::{Decode, Encode};
 use std::collections::HashMap;
 use strum::{Display, EnumCount, EnumIter, FromRepr};

@@ -12,57 +12,16 @@
 //
 
 use crate::tokens::WorkerToken;
-use bincode::{Decode, Encode};
-use moor_common::tasks::WorkerError;
-use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
-pub enum DaemonToWorkerMessage {
-    /// Ping all workers to ask them to respond with a Pong message.
-    PingWorkers,
-    /// Initiate a one-shot request from the daemon to a specific worker to execute something in its worker
-    /// specific way.
-    /// The interpretation of the request is left to the worker.
-    /// Only the worker with this specific worker id should respond to this request.
-    WorkerRequest {
-        #[bincode(with_serde)]
-        worker_id: Uuid,
-        token: WorkerToken,
-        #[bincode(with_serde)]
-        id: Uuid,
-        perms: Obj,
-        request: Vec<Var>,
-        timeout: Option<std::time::Duration>,
-    },
-    // TODO: sessions/connections, which are longer running multiple-request -- potentially
-    //  transaction-attached, potentially bi-directional -- for things like e.g. outbound network connections
-    /// Ask the worker to shut down.
-    PleaseDie(WorkerToken, #[bincode(with_serde)] Uuid),
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
-pub enum WorkerToDaemonMessage {
-    /// Register this worker with the daemon as available.
-    AttachWorker {
-        token: WorkerToken,
-        worker_type: Symbol,
-    },
-    /// Respond to a ping from the daemon, letting it know that this worker is still alive, or
-    /// if the daemon restarted, basically re-attaching to the daemon.
-    Pong(WorkerToken, Symbol),
-    /// Detach this worker from the daemon.
-    DetachWorker(WorkerToken),
-    /// Return the results of a daemon initiated request.
-    RequestResult(WorkerToken, #[bincode(with_serde)] Uuid, Var),
-    /// Return an error from a daemon initiated request.
-    RequestError(WorkerToken, #[bincode(with_serde)] Uuid, WorkerError),
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DaemonToWorkerReply {
     Ack,
     Rejected,
     /// Let the worker know that it is attached to the daemon.
-    Attached(WorkerToken, #[bincode(with_serde)] Uuid),
+    Attached(WorkerToken, Uuid),
+    AuthFailed(String),
+    InvalidPayload(String),
+    UnknownRequest(Uuid),
+    NotRegistered(Uuid),
 }

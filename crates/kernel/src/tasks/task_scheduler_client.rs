@@ -15,16 +15,15 @@ use std::time::Duration;
 
 use flume::Sender;
 
-use crate::tasks::task::Task;
-use crate::tasks::{TaskDescription, TaskStart};
-use crate::vm::{Fork, TaskSuspend};
-use moor_common::model::{Perms, WorldState};
-use moor_common::tasks::{
-    AbortLimitReason, CommandError, Exception, NarrativeEvent, SchedulerError, TaskId,
+use crate::{
+    tasks::{TaskDescription, TaskStart, task::Task},
+    vm::{Fork, TaskSuspend},
 };
-use moor_var::Symbol;
-use moor_var::Var;
-use moor_var::{Error, Obj};
+use moor_common::{
+    model::{Perms, WorldState},
+    tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, SchedulerError, TaskId},
+};
+use moor_var::{Error, Obj, Symbol, Var};
 
 /// Information about a worker type and its current state
 #[derive(Debug, Clone)]
