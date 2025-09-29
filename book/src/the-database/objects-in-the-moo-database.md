@@ -122,20 +122,27 @@ temp_obj.description = "This won't be around for long";
 temp_obj = 0;  // Now nothing references the anonymous object
 ```
 
-### Detecting Anonymous Objects
+### Detecting Object Types
 
-Since anonymous objects have `typeof(obj) == OBJ` (same as regular objects), you need the `is_anonymous()` builtin to
-detect them:
+Since all object types have `typeof(obj) == OBJ`, you need specific builtin functions to detect what kind of object you're working with:
 
 ```moo
-let regular_obj = create($thing);      // Regular numbered/UUID object  
-let anon_obj = create($thing, player, 1); // Anonymous object
+let numbered_obj = create($thing);        // Regular numbered object
+let uuid_obj = create($thing, player, 0); // UUID object (if enabled)
+let anon_obj = create($thing, player, 1); // Anonymous object (if enabled)
 
-typeof(regular_obj);    // Returns OBJ
-typeof(anon_obj);       // Also returns OBJ - same type!
+typeof(numbered_obj);    // Returns OBJ
+typeof(uuid_obj);        // Also returns OBJ - same type!
+typeof(anon_obj);        // Also returns OBJ - same type!
 
-is_anonymous(regular_obj);  // Returns 0 (false)
-is_anonymous(anon_obj);     // Returns 1 (true)
+// Use specific functions to detect object types:
+is_anonymous(numbered_obj);  // Returns 0 (false)
+is_anonymous(uuid_obj);      // Returns 0 (false)
+is_anonymous(anon_obj);      // Returns 1 (true)
+
+is_uuobjid(numbered_obj);    // Returns 0 (false)
+is_uuobjid(uuid_obj);        // Returns 1 (true)
+is_uuobjid(anon_obj);        // Returns 0 (false)
 ```
 
 > **Porting from ToastStunt**: This is an important difference from ToastStunt, where anonymous objects had

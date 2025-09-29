@@ -158,6 +158,29 @@ If object is not a valid object, `E_INVARG` is raised.
 > **Porting from ToastStunt**: In ToastStunt, anonymous objects had `typeof(anon_obj) == ANON`. In mooR,
 > anonymous objects have `typeof(anon_obj) == OBJ` and you must use `is_anonymous()` to detect them.
 
+### `is_uuobjid`
+
+```
+int is_uuobjid(obj object)
+```
+
+Returns a non-zero integer (i.e., a true value) if object is a UUID object (like `#048D05-1234567890`) and zero (i.e., a false value) otherwise.
+
+Since UUID objects have `typeof(obj) == OBJ` (same as numbered and anonymous objects), this is the way to distinguish them programmatically.
+
+```
+let numbered_obj = create($thing);        // Regular numbered object
+let uuid_obj = create($thing, player, 0); // UUID object (if enabled)
+
+is_uuobjid(numbered_obj);  =>  0   // false - not UUID
+is_uuobjid(uuid_obj);      =>  1   // true - is UUID
+typeof(uuid_obj);         =>  1   // OBJ - same as other objects!
+```
+
+If object is not a valid object, `E_INVARG` is raised.
+
+> **Feature requirement**: UUID objects require the `use_uuobjids` feature flag to be enabled by the server administrator.
+
 ### Functions: `parent`
 
 parent -- return the parent of object

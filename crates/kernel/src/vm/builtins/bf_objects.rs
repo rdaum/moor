@@ -1515,6 +1515,29 @@ fn bf_is_anonymous(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_bool(obj.is_anonymous())))
 }
 
+/// Determine if the given OBJ is a UUID-obj reference.
+fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(E_ARGS.msg("is_uuobjid() takes 1 argument")));
+    }
+
+    let Some(obj) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("is_uuobjid() argument must be an object"),
+        ));
+    };
+
+    if !with_current_transaction(|world_state| world_state.valid(&obj))
+        .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("is_uuobjid() argument must be a valid object"),
+        ));
+    }
+
+    Ok(Ret(v_bool(obj.is_uuobjid())))
+}
+
 /// Convert a MOO entity specification to an internal Entity enum.
 /// Entity specs can be:
 /// - `object_flags / "object_flags"
@@ -1683,4 +1706,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("load_object")] = Box::new(bf_load_object);
     builtins[offset_for_builtin("renumber")] = Box::new(bf_renumber);
     builtins[offset_for_builtin("is_anonymous")] = Box::new(bf_is_anonymous);
+    builtins[offset_for_builtin("is_uuobjid")] = Box::new(bf_is_uuobjid);
 }

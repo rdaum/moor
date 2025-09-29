@@ -91,6 +91,8 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`players`](objects.md#players)                 | &check;  | Potentially slow in a large DB.    |
 | [`is_player`](objects.md#is_player)             | &check;  |                                    |
 | [`set_player_flag`](objects.md#set_player_flag) | &check;  |                                    |
+| [`is_anonymous`](objects.md#is_anonymous)       | &check;  |                                    |
+| [`is_uuobjid`](objects.md#is_uuobjid)           | &check;  |                                    |
 | [`move`](objects.md#move)                       | &check;  |                                    |
 
 ### Properties
