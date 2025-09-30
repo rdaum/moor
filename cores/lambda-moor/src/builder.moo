@@ -570,7 +570,7 @@ object BUILDER
 
   verb _recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     set_task_perms(caller_perms());
-    if (this:build_option("bi_create"))
+    if (this:build_option("bi_create") || is_uuobjid(@args))
       return recycle(@args);
     else
       return $recycler:(verb)(@args);
