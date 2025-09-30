@@ -153,6 +153,8 @@ features_config:
   use_symbols_in_builtins: false
   custom_errors: false
   enable_eventlog: true
+  use_uuobjids: true
+  anonymous_objects: true
 
 # Import/export configuration
 import_export_config:
@@ -163,8 +165,7 @@ import_export_config:
 
 ## LambdaMOO Compatibility Mode
 
-If you need to maintain compatibility with LambdaMOO 1.8, you'll need to disable several features. Here's a
-configuration that maintains LambdaMOO compatibility:
+If you need to maintain compatibility with LambdaMOO 1.8, you'll need to either update your core with the changes provided in the [Lambda-moor core](https://codeberg.org/timbran/moor/src/branch/main/cores/lambda-moor/README.md) or disable several features. Here's a configuration that maintains LambdaMOO compatibility by disabling mooR features:
 
 ```yaml
 # LambdaMOO 1.8 compatible features
@@ -181,6 +182,8 @@ features_config:
   use_symbols_in_builtins: false
   custom_errors: false
   enable_eventlog: true
+  use_uuobjids: false
+  anonymous_objects: false
 
 # LambdaMOO compatible import/export
 import_export_config:

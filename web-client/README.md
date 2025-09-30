@@ -17,7 +17,7 @@ npm run dev
 # Start daemon in development
 npm run daemon:dev
 
-# Start web-host in development  
+# Start web-host in development
 npm run web-host:dev
 
 # Start daemon, web-host, and web client together
@@ -56,4 +56,4 @@ and learning how
 to avoid surprises.
 
 For more details on the overall system architecture, see the
-[server architecture documentation](../book/src/the-system/server-architecture.md).
+[server architecture documentation](https://timbran.codeberg.page/moor-book-html/the-system/server-architecture.html).
