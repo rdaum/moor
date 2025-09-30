@@ -31,7 +31,7 @@ mod tests {
         rpc::RpcServer,
         testing::{MockEventLog, MockTransport},
     };
-    use moor_common::{model::CommitResult, tasks::Event};
+    use moor_common::{model::CommitResult, schema::rpc as moor_rpc, tasks::Event};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::{
         config::{Config, ImportExportFormat},
@@ -40,12 +40,10 @@ mod tests {
     use moor_textdump::textdump_load;
     use moor_var::{Obj, SYSTEM_OBJECT};
     use rpc_common::{
-        AuthToken, ClientToken, flatbuffers_generated::moor_rpc, mk_command_msg,
-        mk_connection_establish_msg, mk_login_command_msg,
+        AuthToken, ClientToken, mk_command_msg, mk_connection_establish_msg, mk_login_command_msg,
     };
     use rusty_paseto::prelude::Key;
     use semver::Version;
-
     /// Wait for the scheduler to be ready by attempting simple operations
     fn wait_for_scheduler_ready(scheduler_client: &moor_kernel::SchedulerClient) {
         let start = std::time::Instant::now();
@@ -388,15 +386,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         let (client_token, connection_obj) = match establish_result.unwrap().reply {
-            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                (
-                    ClientToken(new_conn.client_token.token.clone()),
-                    match &new_conn.connection_obj.obj {
-                        moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                        _ => panic!("Unexpected obj variant"),
-                    },
-                )
-            }
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => (
+                ClientToken(new_conn.client_token.token.clone()),
+                match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                },
+            ),
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
@@ -445,15 +441,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                (
-                    ClientToken(new_conn.client_token.token.clone()),
-                    match &new_conn.connection_obj.obj {
-                        moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                        _ => panic!("Unexpected obj variant"),
-                    },
-                )
-            }
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => (
+                ClientToken(new_conn.client_token.token.clone()),
+                match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                },
+            ),
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
@@ -543,10 +537,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Should be LoginResult with success=true, ConnectType::Connected, and objid 2
         let login_result = login_result.expect("Bad login result");
-        let rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(
-            login_res,
-        ) = login_result.reply
-        else {
+        let moor_rpc::DaemonToClientReplyUnion::LoginResult(login_res) = login_result.reply else {
             // Get debugging information for unexpected results too
             let all_events = env.event_log.get_all_events();
             let narrative_events = env.transport.get_narrative_events();
@@ -582,7 +573,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         assert_eq!(
             connect_type,
-            rpc_common::flatbuffers_generated::moor_rpc::ConnectType::Connected,
+            moor_rpc::ConnectType::Connected,
             "Expected connected type"
         );
         assert!(player_obj.id().0 > 0, "Expected valid player object ID");
@@ -782,7 +773,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 6: Verify the connection was established properly
         match establish_result.unwrap().reply {
-            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
                 let token = ClientToken(new_conn.client_token.token.clone());
                 let obj = match &new_conn.connection_obj.obj {
                     moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
@@ -883,15 +874,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         let (client_token, _connection_obj) = match establish_result.unwrap().reply {
-            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                (
-                    ClientToken(new_conn.client_token.token.clone()),
-                    match &new_conn.connection_obj.obj {
-                        moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                        _ => panic!("Unexpected obj variant"),
-                    },
-                )
-            }
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => (
+                ClientToken(new_conn.client_token.token.clone()),
+                match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                },
+            ),
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
@@ -936,9 +925,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             5000,
         );
 
-        let rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(
-            login_res,
-        ) = login_result.expect("Login should succeed").reply
+        let moor_rpc::DaemonToClientReplyUnion::LoginResult(login_res) =
+            login_result.expect("Login should succeed").reply
         else {
             panic!("Expected successful login result");
         };
@@ -959,10 +947,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             _ => panic!("Unexpected obj variant"),
         };
 
-        assert_eq!(
-            connect_type,
-            rpc_common::flatbuffers_generated::moor_rpc::ConnectType::Connected
-        );
+        assert_eq!(connect_type, moor_rpc::ConnectType::Connected);
         assert_eq!(player_obj, Obj::mk_id(2));
 
         // Wait for connection events
@@ -1050,15 +1035,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         let (client_token_2, _connection_obj_2) = match establish_result_2.unwrap().reply {
-            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
-                (
-                    ClientToken(new_conn.client_token.token.clone()),
-                    match &new_conn.connection_obj.obj {
-                        moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
-                        _ => panic!("Unexpected obj variant"),
-                    },
-                )
-            }
+            moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => (
+                ClientToken(new_conn.client_token.token.clone()),
+                match &new_conn.connection_obj.obj {
+                    moor_rpc::ObjUnion::ObjId(obj_id) => Obj::mk_id(obj_id.id),
+                    _ => panic!("Unexpected obj variant"),
+                },
+            ),
             other => panic!("Expected NewConnection, got {other:?}"),
         };
 
@@ -1090,9 +1073,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // If guest login succeeds, test that gc_collect() fails with permission error
         if let Ok(reply) = login_result_2
-            && let rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(
-                login_res,
-            ) = reply.reply
+            && let moor_rpc::DaemonToClientReplyUnion::LoginResult(login_res) = reply.reply
         {
             if !login_res.success {
                 return;

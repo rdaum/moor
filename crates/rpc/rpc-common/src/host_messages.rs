@@ -13,14 +13,14 @@
 
 //! Host message builders for HostToDaemon messages
 
-use crate::flatbuffers_generated::moor_rpc;
+use moor_common::schema::rpc;
 
 /// Build a RequestPerformanceCounters message
 #[inline]
-pub fn mk_request_performance_counters_msg() -> moor_rpc::HostToDaemonMessage {
-    moor_rpc::HostToDaemonMessage {
-        message: moor_rpc::HostToDaemonMessageUnion::RequestPerformanceCounters(Box::new(
-            moor_rpc::RequestPerformanceCounters {},
+pub fn mk_request_performance_counters_msg() -> rpc::HostToDaemonMessage {
+    rpc::HostToDaemonMessage {
+        message: rpc::HostToDaemonMessageUnion::RequestPerformanceCounters(Box::new(
+            rpc::RequestPerformanceCounters {},
         )),
     }
 }
@@ -29,25 +29,23 @@ pub fn mk_request_performance_counters_msg() -> moor_rpc::HostToDaemonMessage {
 #[inline]
 pub fn mk_register_host_msg(
     timestamp: u64,
-    host_type: moor_rpc::HostType,
-    listeners: Vec<moor_rpc::Listener>,
-) -> moor_rpc::HostToDaemonMessage {
-    moor_rpc::HostToDaemonMessage {
-        message: moor_rpc::HostToDaemonMessageUnion::RegisterHost(Box::new(
-            moor_rpc::RegisterHost {
-                timestamp,
-                host_type,
-                listeners,
-            },
-        )),
+    host_type: rpc::HostType,
+    listeners: Vec<rpc::Listener>,
+) -> rpc::HostToDaemonMessage {
+    rpc::HostToDaemonMessage {
+        message: rpc::HostToDaemonMessageUnion::RegisterHost(Box::new(rpc::RegisterHost {
+            timestamp,
+            host_type,
+            listeners,
+        })),
     }
 }
 
 /// Build a DetachHost message
 #[inline]
-pub fn mk_detach_host_msg() -> moor_rpc::HostToDaemonMessage {
-    moor_rpc::HostToDaemonMessage {
-        message: moor_rpc::HostToDaemonMessageUnion::DetachHost(Box::new(moor_rpc::DetachHost {})),
+pub fn mk_detach_host_msg() -> rpc::HostToDaemonMessage {
+    rpc::HostToDaemonMessage {
+        message: rpc::HostToDaemonMessageUnion::DetachHost(Box::new(rpc::DetachHost {})),
     }
 }
 
@@ -55,11 +53,11 @@ pub fn mk_detach_host_msg() -> moor_rpc::HostToDaemonMessage {
 #[inline]
 pub fn mk_host_pong_msg(
     timestamp: u64,
-    host_type: moor_rpc::HostType,
-    listeners: Vec<moor_rpc::Listener>,
-) -> moor_rpc::HostToDaemonMessage {
-    moor_rpc::HostToDaemonMessage {
-        message: moor_rpc::HostToDaemonMessageUnion::HostPong(Box::new(moor_rpc::HostPong {
+    host_type: rpc::HostType,
+    listeners: Vec<rpc::Listener>,
+) -> rpc::HostToDaemonMessage {
+    rpc::HostToDaemonMessage {
+        message: rpc::HostToDaemonMessageUnion::HostPong(Box::new(rpc::HostPong {
             timestamp,
             host_type,
             listeners,

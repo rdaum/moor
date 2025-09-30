@@ -15,9 +15,9 @@
 
 use crate::{
     WorkerToken,
-    flatbuffers_generated::moor_rpc,
     helpers::{mk_worker_token, obj_fb, symbol_fb, uuid_fb},
 };
+use moor_common::schema::rpc;
 use moor_var::{Obj, Symbol};
 use uuid::Uuid;
 
@@ -27,11 +27,9 @@ use uuid::Uuid;
 
 /// Build a PingWorkers broadcast message
 #[inline]
-pub fn mk_ping_workers_msg() -> moor_rpc::DaemonToWorkerMessage {
-    moor_rpc::DaemonToWorkerMessage {
-        message: moor_rpc::DaemonToWorkerMessageUnion::PingWorkers(Box::new(
-            moor_rpc::PingWorkers {},
-        )),
+pub fn mk_ping_workers_msg() -> rpc::DaemonToWorkerMessage {
+    rpc::DaemonToWorkerMessage {
+        message: rpc::DaemonToWorkerMessageUnion::PingWorkers(Box::new(rpc::PingWorkers {})),
     }
 }
 
@@ -42,20 +40,18 @@ pub fn mk_worker_request_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
     perms: &Obj,
-    request: Vec<moor_rpc::VarBytes>,
+    request: Vec<rpc::VarBytes>,
     timeout_ms: u64,
-) -> moor_rpc::DaemonToWorkerMessage {
-    moor_rpc::DaemonToWorkerMessage {
-        message: moor_rpc::DaemonToWorkerMessageUnion::WorkerRequest(Box::new(
-            moor_rpc::WorkerRequest {
-                worker_id: uuid_fb(worker_id),
-                token: mk_worker_token(worker_token),
-                id: uuid_fb(request_id),
-                perms: obj_fb(perms),
-                request,
-                timeout_ms,
-            },
-        )),
+) -> rpc::DaemonToWorkerMessage {
+    rpc::DaemonToWorkerMessage {
+        message: rpc::DaemonToWorkerMessageUnion::WorkerRequest(Box::new(rpc::WorkerRequest {
+            worker_id: uuid_fb(worker_id),
+            token: mk_worker_token(worker_token),
+            id: uuid_fb(request_id),
+            perms: obj_fb(perms),
+            request,
+            timeout_ms,
+        })),
     }
 }
 
@@ -68,32 +64,28 @@ pub fn mk_worker_request_msg(
 pub fn mk_worker_attached_reply(
     worker_token: &WorkerToken,
     worker_id: Uuid,
-) -> moor_rpc::DaemonToWorkerReply {
-    moor_rpc::DaemonToWorkerReply {
-        reply: moor_rpc::DaemonToWorkerReplyUnion::WorkerAttached(Box::new(
-            moor_rpc::WorkerAttached {
-                token: mk_worker_token(worker_token),
-                worker_id: uuid_fb(worker_id),
-            },
-        )),
+) -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerAttached(Box::new(rpc::WorkerAttached {
+            token: mk_worker_token(worker_token),
+            worker_id: uuid_fb(worker_id),
+        })),
     }
 }
 
 /// Build a WorkerAck reply
 #[inline]
-pub fn mk_worker_ack_reply() -> moor_rpc::DaemonToWorkerReply {
-    moor_rpc::DaemonToWorkerReply {
-        reply: moor_rpc::DaemonToWorkerReplyUnion::WorkerAck(Box::new(moor_rpc::WorkerAck {})),
+pub fn mk_worker_ack_reply() -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerAck(Box::new(rpc::WorkerAck {})),
     }
 }
 
 /// Build a WorkerRejected reply
 #[inline]
-pub fn mk_worker_rejected_reply() -> moor_rpc::DaemonToWorkerReply {
-    moor_rpc::DaemonToWorkerReply {
-        reply: moor_rpc::DaemonToWorkerReplyUnion::WorkerRejected(Box::new(
-            moor_rpc::WorkerRejected {},
-        )),
+pub fn mk_worker_rejected_reply() -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerRejected(Box::new(rpc::WorkerRejected {})),
     }
 }
 
@@ -106,14 +98,12 @@ pub fn mk_worker_rejected_reply() -> moor_rpc::DaemonToWorkerReply {
 pub fn mk_attach_worker_msg(
     worker_token: &WorkerToken,
     worker_type: &Symbol,
-) -> moor_rpc::WorkerToDaemonMessage {
-    moor_rpc::WorkerToDaemonMessage {
-        message: moor_rpc::WorkerToDaemonMessageUnion::AttachWorker(Box::new(
-            moor_rpc::AttachWorker {
-                token: mk_worker_token(worker_token),
-                worker_type: symbol_fb(worker_type),
-            },
-        )),
+) -> rpc::WorkerToDaemonMessage {
+    rpc::WorkerToDaemonMessage {
+        message: rpc::WorkerToDaemonMessageUnion::AttachWorker(Box::new(rpc::AttachWorker {
+            token: mk_worker_token(worker_token),
+            worker_type: symbol_fb(worker_type),
+        })),
     }
 }
 
@@ -122,9 +112,9 @@ pub fn mk_attach_worker_msg(
 pub fn mk_worker_pong_msg(
     worker_token: &WorkerToken,
     worker_type: &Symbol,
-) -> moor_rpc::WorkerToDaemonMessage {
-    moor_rpc::WorkerToDaemonMessage {
-        message: moor_rpc::WorkerToDaemonMessageUnion::WorkerPong(Box::new(moor_rpc::WorkerPong {
+) -> rpc::WorkerToDaemonMessage {
+    rpc::WorkerToDaemonMessage {
+        message: rpc::WorkerToDaemonMessageUnion::WorkerPong(Box::new(rpc::WorkerPong {
             token: mk_worker_token(worker_token),
             worker_type: symbol_fb(worker_type),
         })),
@@ -133,13 +123,11 @@ pub fn mk_worker_pong_msg(
 
 /// Build a DetachWorker message
 #[inline]
-pub fn mk_detach_worker_msg(worker_token: &WorkerToken) -> moor_rpc::WorkerToDaemonMessage {
-    moor_rpc::WorkerToDaemonMessage {
-        message: moor_rpc::WorkerToDaemonMessageUnion::DetachWorker(Box::new(
-            moor_rpc::DetachWorker {
-                token: mk_worker_token(worker_token),
-            },
-        )),
+pub fn mk_detach_worker_msg(worker_token: &WorkerToken) -> rpc::WorkerToDaemonMessage {
+    rpc::WorkerToDaemonMessage {
+        message: rpc::WorkerToDaemonMessageUnion::DetachWorker(Box::new(rpc::DetachWorker {
+            token: mk_worker_token(worker_token),
+        })),
     }
 }
 
@@ -149,15 +137,13 @@ pub fn mk_request_result_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
     result_bytes: Vec<u8>,
-) -> moor_rpc::WorkerToDaemonMessage {
-    moor_rpc::WorkerToDaemonMessage {
-        message: moor_rpc::WorkerToDaemonMessageUnion::RequestResult(Box::new(
-            moor_rpc::RequestResult {
-                token: mk_worker_token(worker_token),
-                id: uuid_fb(request_id),
-                result: Box::new(moor_rpc::VarBytes { data: result_bytes }),
-            },
-        )),
+) -> rpc::WorkerToDaemonMessage {
+    rpc::WorkerToDaemonMessage {
+        message: rpc::WorkerToDaemonMessageUnion::RequestResult(Box::new(rpc::RequestResult {
+            token: mk_worker_token(worker_token),
+            id: uuid_fb(request_id),
+            result: Box::new(rpc::VarBytes { data: result_bytes }),
+        })),
     }
 }
 
@@ -166,15 +152,13 @@ pub fn mk_request_result_msg(
 pub fn mk_request_error_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
-    error: moor_rpc::WorkerError,
-) -> moor_rpc::WorkerToDaemonMessage {
-    moor_rpc::WorkerToDaemonMessage {
-        message: moor_rpc::WorkerToDaemonMessageUnion::RequestError(Box::new(
-            moor_rpc::RequestError {
-                token: mk_worker_token(worker_token),
-                id: uuid_fb(request_id),
-                error: Box::new(error),
-            },
-        )),
+    error: rpc::WorkerError,
+) -> rpc::WorkerToDaemonMessage {
+    rpc::WorkerToDaemonMessage {
+        message: rpc::WorkerToDaemonMessageUnion::RequestError(Box::new(rpc::RequestError {
+            token: mk_worker_token(worker_token),
+            id: uuid_fb(request_id),
+            error: Box::new(error),
+        })),
     }
 }

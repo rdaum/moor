@@ -23,9 +23,11 @@ use std::{
 use uuid::Uuid;
 
 use flume::Sender;
-use moor_common::tasks::{SchedulerError, TaskId};
+use moor_common::{
+    schema::rpc as moor_rpc,
+    tasks::{SchedulerError, TaskId},
+};
 use moor_kernel::tasks::TaskHandle;
-use rpc_common::flatbuffers_generated::moor_rpc;
 use tracing::info;
 
 use crate::rpc::SessionActions;

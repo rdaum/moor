@@ -20,6 +20,7 @@ moor-var = { path = "../var" }
 
 # Serialization & Data Formats
 bincode.workspace = true
+planus.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

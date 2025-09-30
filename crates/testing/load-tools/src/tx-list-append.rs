@@ -29,13 +29,13 @@ use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
 use futures::{StreamExt, stream::FuturesUnordered};
-use moor_common::model::ObjectRef;
+use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
 use moor_var::{List, Obj, Sequence, Symbol, Var, v_int, v_list};
 use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
 use rpc_common::{
-    AuthToken, ClientToken, HostType, client_args::RpcClientArgs, flatbuffers_generated::moor_rpc,
-    load_keypair, make_host_token, mk_invoke_verb_msg,
+    AuthToken, ClientToken, HostType, client_args::RpcClientArgs, load_keypair, make_host_token,
+    mk_invoke_verb_msg,
 };
 use setup::ExecutionContext;
 use std::{

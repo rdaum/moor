@@ -24,14 +24,14 @@ use axum::{
 use eyre::eyre;
 use hickory_resolver::TokioResolver;
 
-use moor_common::{model::ObjectRef, tasks::Event};
+use moor_common::{model::ObjectRef, schema::rpc as moor_rpc, tasks::Event};
 use moor_var::{E_INVIND, Obj, Symbol, Var, v_err, v_obj};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{
-    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, flatbuffers_generated::moor_rpc, mk_attach_msg,
-    mk_connection_establish_msg, mk_detach_msg, mk_dismiss_presentation_msg, mk_eval_msg,
-    mk_invoke_verb_msg, mk_request_current_presentations_msg, mk_request_history_msg,
-    mk_request_sys_prop_msg, mk_resolve_msg,
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_connection_establish_msg,
+    mk_detach_msg, mk_dismiss_presentation_msg, mk_eval_msg, mk_invoke_verb_msg,
+    mk_request_current_presentations_msg, mk_request_history_msg, mk_request_sys_prop_msg,
+    mk_resolve_msg,
 };
 use serde_derive::Deserialize;
 use serde_json::json;
@@ -765,8 +765,9 @@ pub async fn history_handler(
         moor_rpc::ReplyResultUnionRef::ClientSuccess(host_success) => {
             let daemon_reply = host_success.reply().expect("Missing reply");
             match daemon_reply.reply().expect("Missing reply union") {
-                moor_rpc::DaemonToClientReplyUnionRef::HistoryResponse(history_ref) => {
-                    let events_ref = history_ref.events().expect("Missing events");
+                moor_rpc::DaemonToClientReplyUnionRef::HistoryResponseReply(history_ref) => {
+                    let history_response = history_ref.response().expect("Missing response");
+                    let events_ref = history_response.events().expect("Missing events");
                     let events: Vec<_> = events_ref
                         .iter()
                         .filter_map(|event_result| {
@@ -818,18 +819,20 @@ pub async fn history_handler(
                         })
                         .collect();
 
-                    let total_events = history_ref.total_events().expect("Missing total_events");
-                    let time_range_start = history_ref
+                    let total_events = history_response
+                        .total_events()
+                        .expect("Missing total_events");
+                    let time_range_start = history_response
                         .time_range_start()
                         .expect("Missing time_range_start");
-                    let time_range_end = history_ref
+                    let time_range_end = history_response
                         .time_range_end()
                         .expect("Missing time_range_end");
-                    let has_more_before = history_ref
+                    let has_more_before = history_response
                         .has_more_before()
                         .expect("Missing has_more_before");
 
-                    let earliest_event_id = history_ref
+                    let earliest_event_id = history_response
                         .earliest_event_id()
                         .ok()
                         .flatten()
@@ -844,7 +847,7 @@ pub async fn history_handler(
                             }
                         });
 
-                    let latest_event_id = history_ref
+                    let latest_event_id = history_response
                         .latest_event_id()
                         .ok()
                         .flatten()

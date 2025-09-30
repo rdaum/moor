@@ -11,8 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_common::schema::rpc as moor_rpc;
 use planus::Builder;
-use rpc_common::{HostToken, RpcError, flatbuffers_generated::moor_rpc};
+use rpc_common::{HostToken, RpcError};
 use tmq::{Multipart, request_reply::RequestSender};
 use tracing::error;
 use uuid::Uuid;

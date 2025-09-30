@@ -12,11 +12,10 @@
 //
 
 use crate::rpc::message_handler::RpcMessageHandler;
+use moor_common::schema::rpc as moor_rpc;
 use moor_var::Obj;
 use rpc_common::{
-    RpcMessageError,
-    flatbuffers_generated::{moor_rpc, moor_rpc::HistoryRecallUnionRef},
-    narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct, uuid_from_ref,
+    RpcMessageError, narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct, uuid_from_ref,
     uuid_to_flatbuffer_struct,
 };
 use std::time::SystemTime;
@@ -32,7 +31,7 @@ impl RpcMessageHandler {
             .recall()
             .map_err(|_| RpcMessageError::InvalidRequest("Missing history recall".to_string()))?
         {
-            HistoryRecallUnionRef::HistoryRecallSinceEvent(since) => {
+            moor_rpc::HistoryRecallUnionRef::HistoryRecallSinceEvent(since) => {
                 let event_id_ref = since
                     .event_id()
                     .map_err(|_| RpcMessageError::InvalidRequest("Missing event_id".to_string()))?;
@@ -59,7 +58,7 @@ impl RpcMessageHandler {
                 };
                 (events, total_available, has_more)
             }
-            HistoryRecallUnionRef::HistoryRecallUntilEvent(until) => {
+            moor_rpc::HistoryRecallUnionRef::HistoryRecallUntilEvent(until) => {
                 let event_id_ref = until
                     .event_id()
                     .map_err(|_| RpcMessageError::InvalidRequest("Missing event_id".to_string()))?;
@@ -93,7 +92,7 @@ impl RpcMessageHandler {
                 };
                 (events, total_available, has_more)
             }
-            HistoryRecallUnionRef::HistoryRecallSinceSeconds(since_seconds) => {
+            moor_rpc::HistoryRecallUnionRef::HistoryRecallSinceSeconds(since_seconds) => {
                 let seconds_ago = since_seconds.seconds_ago().map_err(|_| {
                     RpcMessageError::InvalidRequest("Missing seconds_ago".to_string())
                 })?;
@@ -125,7 +124,7 @@ impl RpcMessageHandler {
                 };
                 (events, total_available, has_more)
             }
-            HistoryRecallUnionRef::HistoryRecallNone(_) => (Vec::new(), 0, false),
+            moor_rpc::HistoryRecallUnionRef::HistoryRecallNone(_) => (Vec::new(), 0, false),
         };
 
         // Calculate metadata

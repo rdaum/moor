@@ -11,20 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-extern crate core;
+//! Event log persistence types
+//!
+//! FlatBuffer types for persisting narrative events and presentations
+//! in the event log database. These replace bincode serialization for:
+//! - LoggedNarrativeEvent (narrative events with player info)
+//! - PlayerPresentations (current presentation state per player)
 
-use shadow_rs::shadow;
-
-pub mod builtins;
-pub mod matching;
-pub mod model;
-pub mod schema;
-pub mod tasks;
-pub mod tracing;
-pub mod util;
-
-/// When encoding or decoding types to/from data or network, this is a version tag put into headers
-/// for validity / version checking.
-pub const DATA_LAYOUT_VERSION: u8 = 1;
-
-shadow!(build);
+pub use crate::schema::schemas_generated::moor_event_log::*;

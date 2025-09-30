@@ -61,10 +61,9 @@ pub use client_messages::{
 pub use errors::{
     command_error_to_flatbuffer_struct, compilation_error_from_ref,
     compilation_error_to_flatbuffer_struct, error_from_flatbuffer_struct,
-    error_to_flatbuffer_struct, rpc_message_error_from_ref, scheduler_error_from_ref,
-    scheduler_error_to_flatbuffer_struct, verb_program_error_to_flatbuffer_struct,
-    worker_error_from_flatbuffer_struct, worker_error_to_flatbuffer_struct,
-    world_state_error_to_flatbuffer_struct,
+    error_to_flatbuffer_struct, scheduler_error_from_ref, scheduler_error_to_flatbuffer_struct,
+    verb_program_error_to_flatbuffer_struct, worker_error_from_flatbuffer_struct,
+    worker_error_to_flatbuffer_struct, world_state_error_to_flatbuffer_struct,
 };
 pub use events::{
     event_from_ref, event_to_flatbuffer_struct, narrative_event_from_ref,
@@ -85,7 +84,6 @@ pub use worker_messages::{
 
 // Public modules - allow direct access to generated types and client args
 pub mod client_args;
-pub mod flatbuffers_generated;
 
 // Private domain-organized modules
 mod client_messages;

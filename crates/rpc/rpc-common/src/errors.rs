@@ -21,19 +21,16 @@ use crate::{
         obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_to_flatbuffer_struct,
         var_from_flatbuffer_bytes, var_to_flatbuffer_bytes,
     },
-    flatbuffers_generated::{
-        moor_rpc,
-        moor_rpc::{
-            CommandErrorUnionRef, CompileErrorUnion, CompileErrorUnionRef, PropertyRetrievalFailed,
-            SchedulerErrorUnion, SchedulerErrorUnionRef, TaskAbortedCancelled, VerbProgramFailed,
-            WorkerErrorUnion, WorldStateErrorUnion,
-        },
-    },
     symbol_from_flatbuffer_struct, symbol_from_ref, uuid_from_ref,
 };
 use moor_common::{
     model,
     model::{CompileContext, CompileError, WorldStateError},
+    schema::{
+        common as moor_common_schema,
+        common::{CompileErrorUnion, CompileErrorUnionRef},
+        rpc,
+    },
     tasks::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError, WorkerError},
 };
 use moor_var::Var;
@@ -42,37 +39,37 @@ use std::time::Duration;
 /// Convert from moor_var::Error to flatbuffer Error struct
 pub fn error_to_flatbuffer_struct(
     error: &moor_var::Error,
-) -> Result<moor_rpc::Error, Box<dyn std::error::Error>> {
+) -> Result<moor_common_schema::Error, Box<dyn std::error::Error>> {
     use moor_var::ErrorCode as VarErrorCode;
 
     let err_code = match error.err_type {
-        VarErrorCode::E_NONE => moor_rpc::ErrorCode::ENone,
-        VarErrorCode::E_TYPE => moor_rpc::ErrorCode::EType,
-        VarErrorCode::E_DIV => moor_rpc::ErrorCode::EDiv,
-        VarErrorCode::E_PERM => moor_rpc::ErrorCode::EPerm,
-        VarErrorCode::E_PROPNF => moor_rpc::ErrorCode::EPropnf,
-        VarErrorCode::E_VERBNF => moor_rpc::ErrorCode::EVerbnf,
-        VarErrorCode::E_VARNF => moor_rpc::ErrorCode::EVarnf,
-        VarErrorCode::E_INVIND => moor_rpc::ErrorCode::EInvind,
-        VarErrorCode::E_RECMOVE => moor_rpc::ErrorCode::ERecmove,
-        VarErrorCode::E_MAXREC => moor_rpc::ErrorCode::EMaxrec,
-        VarErrorCode::E_RANGE => moor_rpc::ErrorCode::ERange,
-        VarErrorCode::E_ARGS => moor_rpc::ErrorCode::EArgs,
-        VarErrorCode::E_NACC => moor_rpc::ErrorCode::ENacc,
-        VarErrorCode::E_INVARG => moor_rpc::ErrorCode::EInvarg,
-        VarErrorCode::E_QUOTA => moor_rpc::ErrorCode::EQuota,
-        VarErrorCode::E_FLOAT => moor_rpc::ErrorCode::EFloat,
-        VarErrorCode::E_FILE => moor_rpc::ErrorCode::EFile,
-        VarErrorCode::E_EXEC => moor_rpc::ErrorCode::EExec,
-        VarErrorCode::E_INTRPT => moor_rpc::ErrorCode::EIntrpt,
-        VarErrorCode::ErrCustom(_) => moor_rpc::ErrorCode::ErrCustom,
+        VarErrorCode::E_NONE => moor_common_schema::ErrorCode::ENone,
+        VarErrorCode::E_TYPE => moor_common_schema::ErrorCode::EType,
+        VarErrorCode::E_DIV => moor_common_schema::ErrorCode::EDiv,
+        VarErrorCode::E_PERM => moor_common_schema::ErrorCode::EPerm,
+        VarErrorCode::E_PROPNF => moor_common_schema::ErrorCode::EPropnf,
+        VarErrorCode::E_VERBNF => moor_common_schema::ErrorCode::EVerbnf,
+        VarErrorCode::E_VARNF => moor_common_schema::ErrorCode::EVarnf,
+        VarErrorCode::E_INVIND => moor_common_schema::ErrorCode::EInvind,
+        VarErrorCode::E_RECMOVE => moor_common_schema::ErrorCode::ERecmove,
+        VarErrorCode::E_MAXREC => moor_common_schema::ErrorCode::EMaxrec,
+        VarErrorCode::E_RANGE => moor_common_schema::ErrorCode::ERange,
+        VarErrorCode::E_ARGS => moor_common_schema::ErrorCode::EArgs,
+        VarErrorCode::E_NACC => moor_common_schema::ErrorCode::ENacc,
+        VarErrorCode::E_INVARG => moor_common_schema::ErrorCode::EInvarg,
+        VarErrorCode::E_QUOTA => moor_common_schema::ErrorCode::EQuota,
+        VarErrorCode::E_FLOAT => moor_common_schema::ErrorCode::EFloat,
+        VarErrorCode::E_FILE => moor_common_schema::ErrorCode::EFile,
+        VarErrorCode::E_EXEC => moor_common_schema::ErrorCode::EExec,
+        VarErrorCode::E_INTRPT => moor_common_schema::ErrorCode::EIntrpt,
+        VarErrorCode::ErrCustom(_) => moor_common_schema::ErrorCode::ErrCustom,
     };
 
     let msg = error.msg.as_ref().map(|m| m.as_str().to_string());
     let value = match &error.value {
         Some(v) => var_to_flatbuffer_bytes(v)
             .ok()
-            .map(|data| Box::new(moor_rpc::VarBytes { data })),
+            .map(|data| Box::new(moor_common_schema::VarBytes { data })),
         None => None,
     };
     let custom_symbol = match &error.err_type {
@@ -80,7 +77,7 @@ pub fn error_to_flatbuffer_struct(
         _ => None,
     };
 
-    Ok(moor_rpc::Error {
+    Ok(moor_common_schema::Error {
         err_type: err_code,
         msg,
         value,
@@ -90,31 +87,31 @@ pub fn error_to_flatbuffer_struct(
 
 /// Convert from flatbuffer Error struct to moor_var::Error
 pub fn error_from_flatbuffer_struct(
-    fb_error: &moor_rpc::Error,
+    fb_error: &moor_common_schema::Error,
 ) -> Result<moor_var::Error, Box<dyn std::error::Error>> {
     use moor_var::ErrorCode as VarErrorCode;
 
     let err_type = match fb_error.err_type {
-        moor_rpc::ErrorCode::ENone => VarErrorCode::E_NONE,
-        moor_rpc::ErrorCode::EType => VarErrorCode::E_TYPE,
-        moor_rpc::ErrorCode::EDiv => VarErrorCode::E_DIV,
-        moor_rpc::ErrorCode::EPerm => VarErrorCode::E_PERM,
-        moor_rpc::ErrorCode::EPropnf => VarErrorCode::E_PROPNF,
-        moor_rpc::ErrorCode::EVerbnf => VarErrorCode::E_VERBNF,
-        moor_rpc::ErrorCode::EVarnf => VarErrorCode::E_VARNF,
-        moor_rpc::ErrorCode::EInvind => VarErrorCode::E_INVIND,
-        moor_rpc::ErrorCode::ERecmove => VarErrorCode::E_RECMOVE,
-        moor_rpc::ErrorCode::EMaxrec => VarErrorCode::E_MAXREC,
-        moor_rpc::ErrorCode::ERange => VarErrorCode::E_RANGE,
-        moor_rpc::ErrorCode::EArgs => VarErrorCode::E_ARGS,
-        moor_rpc::ErrorCode::ENacc => VarErrorCode::E_NACC,
-        moor_rpc::ErrorCode::EInvarg => VarErrorCode::E_INVARG,
-        moor_rpc::ErrorCode::EQuota => VarErrorCode::E_QUOTA,
-        moor_rpc::ErrorCode::EFloat => VarErrorCode::E_FLOAT,
-        moor_rpc::ErrorCode::EFile => VarErrorCode::E_FILE,
-        moor_rpc::ErrorCode::EExec => VarErrorCode::E_EXEC,
-        moor_rpc::ErrorCode::EIntrpt => VarErrorCode::E_INTRPT,
-        moor_rpc::ErrorCode::ErrCustom => {
+        moor_common_schema::ErrorCode::ENone => VarErrorCode::E_NONE,
+        moor_common_schema::ErrorCode::EType => VarErrorCode::E_TYPE,
+        moor_common_schema::ErrorCode::EDiv => VarErrorCode::E_DIV,
+        moor_common_schema::ErrorCode::EPerm => VarErrorCode::E_PERM,
+        moor_common_schema::ErrorCode::EPropnf => VarErrorCode::E_PROPNF,
+        moor_common_schema::ErrorCode::EVerbnf => VarErrorCode::E_VERBNF,
+        moor_common_schema::ErrorCode::EVarnf => VarErrorCode::E_VARNF,
+        moor_common_schema::ErrorCode::EInvind => VarErrorCode::E_INVIND,
+        moor_common_schema::ErrorCode::ERecmove => VarErrorCode::E_RECMOVE,
+        moor_common_schema::ErrorCode::EMaxrec => VarErrorCode::E_MAXREC,
+        moor_common_schema::ErrorCode::ERange => VarErrorCode::E_RANGE,
+        moor_common_schema::ErrorCode::EArgs => VarErrorCode::E_ARGS,
+        moor_common_schema::ErrorCode::ENacc => VarErrorCode::E_NACC,
+        moor_common_schema::ErrorCode::EInvarg => VarErrorCode::E_INVARG,
+        moor_common_schema::ErrorCode::EQuota => VarErrorCode::E_QUOTA,
+        moor_common_schema::ErrorCode::EFloat => VarErrorCode::E_FLOAT,
+        moor_common_schema::ErrorCode::EFile => VarErrorCode::E_FILE,
+        moor_common_schema::ErrorCode::EExec => VarErrorCode::E_EXEC,
+        moor_common_schema::ErrorCode::EIntrpt => VarErrorCode::E_INTRPT,
+        moor_common_schema::ErrorCode::ErrCustom => {
             let custom_symbol = fb_error
                 .custom_symbol
                 .as_ref()
@@ -133,73 +130,73 @@ pub fn error_from_flatbuffer_struct(
 }
 
 /// Convert from WorkerError to flatbuffer WorkerError struct
-pub fn worker_error_to_flatbuffer_struct(error: &WorkerError) -> moor_rpc::WorkerError {
+pub fn worker_error_to_flatbuffer_struct(error: &WorkerError) -> rpc::WorkerError {
     let error_union = match error {
         WorkerError::PermissionDenied(msg) => {
-            WorkerErrorUnion::WorkerPermissionDenied(Box::new(moor_rpc::WorkerPermissionDenied {
+            rpc::WorkerErrorUnion::WorkerPermissionDenied(Box::new(rpc::WorkerPermissionDenied {
                 message: msg.clone(),
             }))
         }
         WorkerError::InvalidRequest(msg) => {
-            WorkerErrorUnion::WorkerInvalidRequest(Box::new(moor_rpc::WorkerInvalidRequest {
+            rpc::WorkerErrorUnion::WorkerInvalidRequest(Box::new(rpc::WorkerInvalidRequest {
                 message: msg.clone(),
             }))
         }
         WorkerError::InternalError(msg) => {
-            WorkerErrorUnion::WorkerInternalError(Box::new(moor_rpc::WorkerInternalError {
+            rpc::WorkerErrorUnion::WorkerInternalError(Box::new(rpc::WorkerInternalError {
                 message: msg.clone(),
             }))
         }
         WorkerError::RequestTimedOut(msg) => {
-            WorkerErrorUnion::WorkerRequestTimedOut(Box::new(moor_rpc::WorkerRequestTimedOut {
+            rpc::WorkerErrorUnion::WorkerRequestTimedOut(Box::new(rpc::WorkerRequestTimedOut {
                 message: msg.clone(),
             }))
         }
         WorkerError::RequestError(msg) => {
-            WorkerErrorUnion::WorkerRequestError(Box::new(moor_rpc::WorkerRequestError {
+            rpc::WorkerErrorUnion::WorkerRequestError(Box::new(rpc::WorkerRequestError {
                 message: msg.clone(),
             }))
         }
         WorkerError::WorkerDetached(msg) => {
-            WorkerErrorUnion::WorkerDetached(Box::new(moor_rpc::WorkerDetached {
+            rpc::WorkerErrorUnion::WorkerDetached(Box::new(rpc::WorkerDetached {
                 message: msg.clone(),
             }))
         }
         WorkerError::NoWorkerAvailable(worker_type) => {
             let worker_type_struct = symbol_to_flatbuffer_struct(worker_type);
-            WorkerErrorUnion::NoWorkerAvailable(Box::new(moor_rpc::NoWorkerAvailable {
+            rpc::WorkerErrorUnion::NoWorkerAvailable(Box::new(rpc::NoWorkerAvailable {
                 worker_type: Box::new(worker_type_struct),
             }))
         }
     };
 
-    moor_rpc::WorkerError { error: error_union }
+    rpc::WorkerError { error: error_union }
 }
 
 /// Convert from flatbuffer WorkerError struct to WorkerError
 pub fn worker_error_from_flatbuffer_struct(
-    fb_error: &moor_rpc::WorkerError,
+    fb_error: &rpc::WorkerError,
 ) -> Result<WorkerError, Box<dyn std::error::Error>> {
     match &fb_error.error {
-        WorkerErrorUnion::WorkerPermissionDenied(perm_denied) => {
+        rpc::WorkerErrorUnion::WorkerPermissionDenied(perm_denied) => {
             Ok(WorkerError::PermissionDenied(perm_denied.message.clone()))
         }
-        WorkerErrorUnion::WorkerInvalidRequest(invalid_req) => {
+        rpc::WorkerErrorUnion::WorkerInvalidRequest(invalid_req) => {
             Ok(WorkerError::InvalidRequest(invalid_req.message.clone()))
         }
-        WorkerErrorUnion::WorkerInternalError(internal_err) => {
+        rpc::WorkerErrorUnion::WorkerInternalError(internal_err) => {
             Ok(WorkerError::InternalError(internal_err.message.clone()))
         }
-        WorkerErrorUnion::WorkerRequestTimedOut(timeout) => {
+        rpc::WorkerErrorUnion::WorkerRequestTimedOut(timeout) => {
             Ok(WorkerError::RequestTimedOut(timeout.message.clone()))
         }
-        WorkerErrorUnion::WorkerRequestError(req_err) => {
+        rpc::WorkerErrorUnion::WorkerRequestError(req_err) => {
             Ok(WorkerError::RequestError(req_err.message.clone()))
         }
-        WorkerErrorUnion::WorkerDetached(detached) => {
+        rpc::WorkerErrorUnion::WorkerDetached(detached) => {
             Ok(WorkerError::WorkerDetached(detached.message.clone()))
         }
-        WorkerErrorUnion::NoWorkerAvailable(no_worker) => {
+        rpc::WorkerErrorUnion::NoWorkerAvailable(no_worker) => {
             let worker_type = symbol_from_flatbuffer_struct(&no_worker.worker_type);
             Ok(WorkerError::NoWorkerAvailable(worker_type))
         }
@@ -209,81 +206,89 @@ pub fn worker_error_from_flatbuffer_struct(
 /// Convert VerbProgramError to FlatBuffer struct
 pub fn verb_program_error_to_flatbuffer_struct(
     error: &moor_common::tasks::VerbProgramError,
-) -> Result<moor_rpc::VerbProgramError, String> {
+) -> Result<rpc::VerbProgramError, String> {
     let error_union = match error {
         VerbProgramError::NoVerbToProgram => {
-            moor_rpc::VerbProgramErrorUnion::NoVerbToProgram(Box::new(moor_rpc::NoVerbToProgram {}))
+            rpc::VerbProgramErrorUnion::NoVerbToProgram(Box::new(rpc::NoVerbToProgram {}))
         }
         VerbProgramError::CompilationError(compile_error) => {
             let compile_error_fb = compilation_error_to_flatbuffer_struct(compile_error)?;
-            moor_rpc::VerbProgramErrorUnion::VerbCompilationError(Box::new(
-                moor_rpc::VerbCompilationError {
-                    error: Box::new(compile_error_fb),
-                },
-            ))
+            rpc::VerbProgramErrorUnion::VerbCompilationError(Box::new(rpc::VerbCompilationError {
+                error: Box::new(compile_error_fb),
+            }))
         }
-        VerbProgramError::DatabaseError => moor_rpc::VerbProgramErrorUnion::VerbDatabaseError(
-            Box::new(moor_rpc::VerbDatabaseError {}),
-        ),
+        VerbProgramError::DatabaseError => {
+            rpc::VerbProgramErrorUnion::VerbDatabaseError(Box::new(rpc::VerbDatabaseError {}))
+        }
     };
 
-    Ok(moor_rpc::VerbProgramError { error: error_union })
+    Ok(rpc::VerbProgramError { error: error_union })
 }
 
 /// Convert WorldStateError to FlatBuffer struct
 pub fn world_state_error_to_flatbuffer_struct(
     error: &model::WorldStateError,
-) -> Result<moor_rpc::WorldStateError, String> {
+) -> Result<moor_common_schema::WorldStateError, String> {
     let error_union = match error {
         WorldStateError::ObjectNotFound(objref) => {
-            WorldStateErrorUnion::ObjectNotFound(Box::new(moor_rpc::ObjectNotFound {
-                object_ref: Box::new(objectref_to_flatbuffer_struct(objref)),
-            }))
+            moor_common_schema::WorldStateErrorUnion::ObjectNotFound(Box::new(
+                moor_common_schema::ObjectNotFound {
+                    object_ref: Box::new(objectref_to_flatbuffer_struct(objref)),
+                },
+            ))
         }
         WorldStateError::ObjectAlreadyExists(obj) => {
-            WorldStateErrorUnion::ObjectAlreadyExists(Box::new(moor_rpc::ObjectAlreadyExists {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-            }))
+            moor_common_schema::WorldStateErrorUnion::ObjectAlreadyExists(Box::new(
+                moor_common_schema::ObjectAlreadyExists {
+                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                },
+            ))
         }
         WorldStateError::RecursiveMove(from_obj, to_obj) => {
-            WorldStateErrorUnion::RecursiveMove(Box::new(moor_rpc::RecursiveMove {
-                from_obj: Box::new(obj_to_flatbuffer_struct(from_obj)),
-                to_obj: Box::new(obj_to_flatbuffer_struct(to_obj)),
-            }))
+            moor_common_schema::WorldStateErrorUnion::RecursiveMove(Box::new(
+                moor_common_schema::RecursiveMove {
+                    from_obj: Box::new(obj_to_flatbuffer_struct(from_obj)),
+                    to_obj: Box::new(obj_to_flatbuffer_struct(to_obj)),
+                },
+            ))
         }
-        WorldStateError::ObjectPermissionDenied => WorldStateErrorUnion::ObjectPermissionDenied(
-            Box::new(moor_rpc::ObjectPermissionDenied {}),
-        ),
+        WorldStateError::ObjectPermissionDenied => {
+            moor_common_schema::WorldStateErrorUnion::ObjectPermissionDenied(Box::new(
+                moor_common_schema::ObjectPermissionDenied {},
+            ))
+        }
         WorldStateError::PropertyNotFound(obj, property) => {
-            WorldStateErrorUnion::PropertyNotFound(Box::new(moor_rpc::PropertyNotFound {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                property: property.clone(),
-            }))
+            moor_common_schema::WorldStateErrorUnion::PropertyNotFound(Box::new(
+                moor_common_schema::PropertyNotFound {
+                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    property: property.clone(),
+                },
+            ))
         }
         WorldStateError::PropertyPermissionDenied => {
-            WorldStateErrorUnion::PropertyPermissionDenied(Box::new(
-                moor_rpc::PropertyPermissionDenied {},
+            moor_common_schema::WorldStateErrorUnion::PropertyPermissionDenied(Box::new(
+                moor_common_schema::PropertyPermissionDenied {},
             ))
         }
         WorldStateError::PropertyDefinitionNotFound(obj, property) => {
-            WorldStateErrorUnion::PropertyDefinitionNotFound(Box::new(
-                moor_rpc::PropertyDefinitionNotFound {
+            moor_common_schema::WorldStateErrorUnion::PropertyDefinitionNotFound(Box::new(
+                moor_common_schema::PropertyDefinitionNotFound {
                     obj: Box::new(obj_to_flatbuffer_struct(obj)),
                     property: property.clone(),
                 },
             ))
         }
         WorldStateError::DuplicatePropertyDefinition(obj, property) => {
-            WorldStateErrorUnion::DuplicatePropertyDefinition(Box::new(
-                moor_rpc::DuplicatePropertyDefinition {
+            moor_common_schema::WorldStateErrorUnion::DuplicatePropertyDefinition(Box::new(
+                moor_common_schema::DuplicatePropertyDefinition {
                     obj: Box::new(obj_to_flatbuffer_struct(obj)),
                     property: property.clone(),
                 },
             ))
         }
         WorldStateError::ChparentPropertyNameConflict(descendant, ancestor, property) => {
-            WorldStateErrorUnion::ChparentPropertyNameConflict(Box::new(
-                moor_rpc::ChparentPropertyNameConflict {
+            moor_common_schema::WorldStateErrorUnion::ChparentPropertyNameConflict(Box::new(
+                moor_common_schema::ChparentPropertyNameConflict {
                     descendant: Box::new(obj_to_flatbuffer_struct(descendant)),
                     ancestor: Box::new(obj_to_flatbuffer_struct(ancestor)),
                     property: property.clone(),
@@ -291,63 +296,83 @@ pub fn world_state_error_to_flatbuffer_struct(
             ))
         }
         WorldStateError::PropertyTypeMismatch => {
-            WorldStateErrorUnion::PropertyTypeMismatch(Box::new(moor_rpc::PropertyTypeMismatch {}))
+            moor_common_schema::WorldStateErrorUnion::PropertyTypeMismatch(Box::new(
+                moor_common_schema::PropertyTypeMismatch {},
+            ))
         }
         WorldStateError::VerbNotFound(obj, verb) => {
-            WorldStateErrorUnion::VerbNotFound(Box::new(moor_rpc::VerbNotFound {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                verb: verb.clone(),
-            }))
+            moor_common_schema::WorldStateErrorUnion::VerbNotFound(Box::new(
+                moor_common_schema::VerbNotFound {
+                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    verb: verb.clone(),
+                },
+            ))
         }
-        WorldStateError::InvalidVerb(vid) => {
-            WorldStateErrorUnion::InvalidVerb(Box::new(moor_rpc::InvalidVerb { vid: vid.0 }))
-        }
+        WorldStateError::InvalidVerb(vid) => moor_common_schema::WorldStateErrorUnion::InvalidVerb(
+            Box::new(moor_common_schema::InvalidVerb { vid: vid.0 }),
+        ),
         WorldStateError::VerbDecodeError(obj, verb) => {
-            WorldStateErrorUnion::VerbDecodeError(Box::new(moor_rpc::VerbDecodeError {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                verb: Box::new(symbol_to_flatbuffer_struct(verb)),
-            }))
+            moor_common_schema::WorldStateErrorUnion::VerbDecodeError(Box::new(
+                moor_common_schema::VerbDecodeError {
+                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    verb: Box::new(symbol_to_flatbuffer_struct(verb)),
+                },
+            ))
         }
         WorldStateError::VerbPermissionDenied => {
-            WorldStateErrorUnion::VerbPermissionDenied(Box::new(moor_rpc::VerbPermissionDenied {}))
+            moor_common_schema::WorldStateErrorUnion::VerbPermissionDenied(Box::new(
+                moor_common_schema::VerbPermissionDenied {},
+            ))
         }
         WorldStateError::DuplicateVerb(obj, verb) => {
-            WorldStateErrorUnion::DuplicateVerb(Box::new(moor_rpc::DuplicateVerb {
-                obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                verb: Box::new(symbol_to_flatbuffer_struct(verb)),
-            }))
+            moor_common_schema::WorldStateErrorUnion::DuplicateVerb(Box::new(
+                moor_common_schema::DuplicateVerb {
+                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    verb: Box::new(symbol_to_flatbuffer_struct(verb)),
+                },
+            ))
         }
         WorldStateError::FailedMatch(match_string) => {
-            WorldStateErrorUnion::FailedMatch(Box::new(moor_rpc::FailedMatch {
-                match_string: match_string.clone(),
-            }))
+            moor_common_schema::WorldStateErrorUnion::FailedMatch(Box::new(
+                moor_common_schema::FailedMatch {
+                    match_string: match_string.clone(),
+                },
+            ))
         }
         WorldStateError::AmbiguousMatch(match_string) => {
-            WorldStateErrorUnion::AmbiguousMatch(Box::new(moor_rpc::AmbiguousMatch {
-                match_string: match_string.clone(),
-            }))
+            moor_common_schema::WorldStateErrorUnion::AmbiguousMatch(Box::new(
+                moor_common_schema::AmbiguousMatch {
+                    match_string: match_string.clone(),
+                },
+            ))
         }
         WorldStateError::InvalidRenumber(message) => {
-            WorldStateErrorUnion::InvalidRenumber(Box::new(moor_rpc::InvalidRenumber {
-                message: message.clone(),
-            }))
+            moor_common_schema::WorldStateErrorUnion::InvalidRenumber(Box::new(
+                moor_common_schema::InvalidRenumber {
+                    message: message.clone(),
+                },
+            ))
         }
-        WorldStateError::DatabaseError(message) => WorldStateErrorUnion::WorldStateDatabaseError(
-            Box::new(moor_rpc::WorldStateDatabaseError {
-                message: message.clone(),
-            }),
+        WorldStateError::DatabaseError(message) => {
+            moor_common_schema::WorldStateErrorUnion::WorldStateDatabaseError(Box::new(
+                moor_common_schema::WorldStateDatabaseError {
+                    message: message.clone(),
+                },
+            ))
+        }
+        WorldStateError::RollbackRetry => moor_common_schema::WorldStateErrorUnion::RollbackRetry(
+            Box::new(moor_common_schema::RollbackRetry {}),
         ),
-        WorldStateError::RollbackRetry => {
-            WorldStateErrorUnion::RollbackRetry(Box::new(moor_rpc::RollbackRetry {}))
-        }
     };
 
-    Ok(moor_rpc::WorldStateError { error: error_union })
+    Ok(moor_common_schema::WorldStateError { error: error_union })
 }
 
 /// Convert from FlatBuffer ErrorRef to moor_var::Error
-pub fn error_from_ref(error_ref: moor_rpc::ErrorRef<'_>) -> Result<moor_var::Error, String> {
-    use crate::flatbuffers_generated::moor_rpc::ErrorCode as FbErr;
+pub fn error_from_ref(
+    error_ref: moor_common_schema::ErrorRef<'_>,
+) -> Result<moor_var::Error, String> {
+    use moor_common_schema::ErrorCode as FbErr;
     use moor_var::ErrorCode as VarErrorCode;
 
     let error_code = error_ref.err_type().map_err(|_| "Missing err_type")?;
@@ -406,22 +431,20 @@ pub fn error_from_ref(error_ref: moor_rpc::ErrorRef<'_>) -> Result<moor_var::Err
 
 /// Convert from FlatBuffer VerbProgramErrorRef to VerbProgramError
 fn verb_program_error_from_ref(
-    error_ref: moor_rpc::VerbProgramErrorRef<'_>,
+    error_ref: rpc::VerbProgramErrorRef<'_>,
 ) -> Result<moor_common::tasks::VerbProgramError, String> {
-    use crate::flatbuffers_generated::moor_rpc::VerbProgramErrorUnionRef;
-
     match error_ref
         .error()
         .map_err(|_| "Failed to read VerbProgramError union")?
     {
-        VerbProgramErrorUnionRef::NoVerbToProgram(_) => {
+        rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => {
             Ok(moor_common::tasks::VerbProgramError::NoVerbToProgram)
         }
-        VerbProgramErrorUnionRef::VerbCompilationError(_compile_error) => {
+        rpc::VerbProgramErrorUnionRef::VerbCompilationError(_compile_error) => {
             // TODO: Implement CompileError conversion if needed
             Err("VerbCompilationError conversion not yet implemented".to_string())
         }
-        VerbProgramErrorUnionRef::VerbDatabaseError(_) => {
+        rpc::VerbProgramErrorUnionRef::VerbDatabaseError(_) => {
             Ok(moor_common::tasks::VerbProgramError::DatabaseError)
         }
     }
@@ -429,20 +452,20 @@ fn verb_program_error_from_ref(
 
 /// Convert from FlatBuffer SchedulerErrorRef to SchedulerError
 pub fn scheduler_error_from_ref(
-    error_ref: moor_rpc::SchedulerErrorRef<'_>,
+    error_ref: rpc::SchedulerErrorRef<'_>,
 ) -> Result<SchedulerError, String> {
     match error_ref
         .error()
         .map_err(|_| "Failed to read SchedulerError union")?
     {
-        SchedulerErrorUnionRef::SchedulerNotResponding(_) => {
+        rpc::SchedulerErrorUnionRef::SchedulerNotResponding(_) => {
             Ok(SchedulerError::SchedulerNotResponding)
         }
-        SchedulerErrorUnionRef::TaskNotFound(task_not_found) => {
+        rpc::SchedulerErrorUnionRef::TaskNotFound(task_not_found) => {
             let task_id = task_not_found.task_id().map_err(|_| "Missing task_id")? as usize;
             Ok(SchedulerError::TaskNotFound(task_id))
         }
-        SchedulerErrorUnionRef::InputRequestNotFound(input_not_found) => {
+        rpc::SchedulerErrorUnionRef::InputRequestNotFound(input_not_found) => {
             let request_id = uuid_from_ref(
                 input_not_found
                     .request_id()
@@ -450,58 +473,60 @@ pub fn scheduler_error_from_ref(
             )?;
             Ok(SchedulerError::InputRequestNotFound(request_id.as_u128()))
         }
-        SchedulerErrorUnionRef::CouldNotStartTask(_) => Ok(SchedulerError::CouldNotStartTask),
-        SchedulerErrorUnionRef::CompilationError(_compile_error) => {
+        rpc::SchedulerErrorUnionRef::CouldNotStartTask(_) => Ok(SchedulerError::CouldNotStartTask),
+        rpc::SchedulerErrorUnionRef::CompilationError(_compile_error) => {
             // CompileError is too complex to fully deserialize from bytes here
             // Return a placeholder for now
             Err("CompilationError deserialization not yet fully implemented".to_string())
         }
-        SchedulerErrorUnionRef::CommandExecutionError(cmd_error) => {
+        rpc::SchedulerErrorUnionRef::CommandExecutionError(cmd_error) => {
             let command_error =
                 command_error_from_ref(cmd_error.error().map_err(|_| "Missing command error")?)?;
             Ok(SchedulerError::CommandExecutionError(command_error))
         }
-        SchedulerErrorUnionRef::TaskAbortedLimit(task_aborted) => {
+        rpc::SchedulerErrorUnionRef::TaskAbortedLimit(task_aborted) => {
             let limit_ref = task_aborted.limit().map_err(|_| "Missing limit")?;
             let reason_enum = limit_ref.reason().map_err(|_| "Missing reason")?;
             let abort_reason = match reason_enum {
-                moor_rpc::AbortLimitReason::Ticks => {
+                rpc::AbortLimitReason::Ticks => {
                     let ticks = limit_ref.ticks().map_err(|_| "Missing ticks")? as usize;
                     AbortLimitReason::Ticks(ticks)
                 }
-                moor_rpc::AbortLimitReason::Time => {
+                rpc::AbortLimitReason::Time => {
                     let time_nanos = limit_ref.time_nanos().map_err(|_| "Missing time_nanos")?;
                     AbortLimitReason::Time(Duration::from_nanos(time_nanos))
                 }
             };
             Ok(SchedulerError::TaskAbortedLimit(abort_reason))
         }
-        SchedulerErrorUnionRef::TaskAbortedError(_) => Ok(SchedulerError::TaskAbortedError),
-        SchedulerErrorUnionRef::TaskAbortedException(task_aborted) => {
+        rpc::SchedulerErrorUnionRef::TaskAbortedError(_) => Ok(SchedulerError::TaskAbortedError),
+        rpc::SchedulerErrorUnionRef::TaskAbortedException(task_aborted) => {
             let exception_ref = task_aborted.exception().map_err(|_| "Missing exception")?;
             let exception = exception_from_ref(exception_ref)?;
             Ok(SchedulerError::TaskAbortedException(exception))
         }
-        SchedulerErrorUnionRef::TaskAbortedCancelled(_) => Ok(SchedulerError::TaskAbortedCancelled),
-        SchedulerErrorUnionRef::VerbProgramFailed(verb_failed) => {
+        rpc::SchedulerErrorUnionRef::TaskAbortedCancelled(_) => {
+            Ok(SchedulerError::TaskAbortedCancelled)
+        }
+        rpc::SchedulerErrorUnionRef::VerbProgramFailed(verb_failed) => {
             let verb_error = verb_program_error_from_ref(
                 verb_failed.error().map_err(|_| "Missing verb_error")?,
             )?;
             Ok(SchedulerError::VerbProgramFailed(verb_error))
         }
-        SchedulerErrorUnionRef::PropertyRetrievalFailed(_prop_failed) => {
+        rpc::SchedulerErrorUnionRef::PropertyRetrievalFailed(_prop_failed) => {
             // WorldStateError is too complex to fully deserialize from bytes
             Err("PropertyRetrievalFailed deserialization not yet fully implemented".to_string())
         }
-        SchedulerErrorUnionRef::VerbRetrievalFailed(_verb_failed) => {
+        rpc::SchedulerErrorUnionRef::VerbRetrievalFailed(_verb_failed) => {
             // WorldStateError is too complex to fully deserialize from bytes
             Err("VerbRetrievalFailed deserialization not yet fully implemented".to_string())
         }
-        SchedulerErrorUnionRef::ObjectResolutionFailed(_obj_failed) => {
+        rpc::SchedulerErrorUnionRef::ObjectResolutionFailed(_obj_failed) => {
             // WorldStateError is too complex to fully deserialize from bytes
             Err("ObjectResolutionFailed deserialization not yet fully implemented".to_string())
         }
-        SchedulerErrorUnionRef::GarbageCollectionFailed(gc_failed) => {
+        rpc::SchedulerErrorUnionRef::GarbageCollectionFailed(gc_failed) => {
             let message = gc_failed
                 .message()
                 .map_err(|_| "Missing message")?
@@ -512,112 +537,37 @@ pub fn scheduler_error_from_ref(
 }
 
 /// Convert from FlatBuffer CommandErrorRef to CommandError
-fn command_error_from_ref(
-    error_ref: moor_rpc::CommandErrorRef<'_>,
-) -> Result<CommandError, String> {
+fn command_error_from_ref(error_ref: rpc::CommandErrorRef<'_>) -> Result<CommandError, String> {
     match error_ref
         .error()
         .map_err(|_| "Failed to read CommandError union")?
     {
-        CommandErrorUnionRef::CouldNotParseCommand(_) => Ok(CommandError::CouldNotParseCommand),
-        CommandErrorUnionRef::NoObjectMatch(_) => Ok(CommandError::NoObjectMatch),
-        CommandErrorUnionRef::NoCommandMatch(_) => Ok(CommandError::NoCommandMatch),
-        CommandErrorUnionRef::DatabaseError(_db_error) => {
+        rpc::CommandErrorUnionRef::CouldNotParseCommand(_) => {
+            Ok(CommandError::CouldNotParseCommand)
+        }
+        rpc::CommandErrorUnionRef::NoObjectMatch(_) => Ok(CommandError::NoObjectMatch),
+        rpc::CommandErrorUnionRef::NoCommandMatch(_) => Ok(CommandError::NoCommandMatch),
+        rpc::CommandErrorUnionRef::DatabaseError(_db_error) => {
             // WorldStateError deserialization is complex
             Err("CommandError::DatabaseError deserialization not yet fully implemented".to_string())
         }
-        CommandErrorUnionRef::PermissionDenied(_) => Ok(CommandError::PermissionDenied),
-    }
-}
-
-/// Convert from FlatBuffer RpcMessageErrorRef to RpcMessageError
-pub fn rpc_message_error_from_ref(
-    error_ref: moor_rpc::RpcMessageErrorRef<'_>,
-) -> Result<crate::RpcMessageError, String> {
-    let error_code = error_ref.error_code().map_err(|_| "Missing error_code")?;
-
-    match error_code {
-        moor_rpc::RpcMessageErrorCode::AlreadyConnected => {
-            Ok(crate::RpcMessageError::AlreadyConnected)
-        }
-        moor_rpc::RpcMessageErrorCode::InvalidRequest => {
-            let message = error_ref
-                .message()
-                .ok()
-                .flatten()
-                .map(|m| m.to_string())
-                .unwrap_or_default();
-            Ok(crate::RpcMessageError::InvalidRequest(message))
-        }
-        moor_rpc::RpcMessageErrorCode::NoConnection => Ok(crate::RpcMessageError::NoConnection),
-        moor_rpc::RpcMessageErrorCode::ErrorCouldNotRetrieveSysProp => {
-            let message = error_ref
-                .message()
-                .ok()
-                .flatten()
-                .map(|m| m.to_string())
-                .unwrap_or_default();
-            Ok(crate::RpcMessageError::ErrorCouldNotRetrieveSysProp(
-                message,
-            ))
-        }
-        moor_rpc::RpcMessageErrorCode::LoginTaskFailed => {
-            let message = error_ref
-                .message()
-                .ok()
-                .flatten()
-                .map(|m| m.to_string())
-                .unwrap_or_default();
-            Ok(crate::RpcMessageError::LoginTaskFailed(message))
-        }
-        moor_rpc::RpcMessageErrorCode::CreateSessionFailed => {
-            Ok(crate::RpcMessageError::CreateSessionFailed)
-        }
-        moor_rpc::RpcMessageErrorCode::PermissionDenied => {
-            Ok(crate::RpcMessageError::PermissionDenied)
-        }
-        moor_rpc::RpcMessageErrorCode::TaskError => {
-            let scheduler_error_ref = error_ref
-                .scheduler_error()
-                .map_err(|_| "Missing scheduler_error for TaskError")?
-                .ok_or("scheduler_error is None")?;
-            let scheduler_error = scheduler_error_from_ref(scheduler_error_ref)?;
-            Ok(crate::RpcMessageError::TaskError(scheduler_error))
-        }
-        moor_rpc::RpcMessageErrorCode::EntityRetrievalError => {
-            let message = error_ref
-                .message()
-                .ok()
-                .flatten()
-                .map(|m| m.to_string())
-                .unwrap_or_default();
-            Ok(crate::RpcMessageError::EntityRetrievalError(message))
-        }
-        moor_rpc::RpcMessageErrorCode::InternalError => {
-            let message = error_ref
-                .message()
-                .ok()
-                .flatten()
-                .map(|m| m.to_string())
-                .unwrap_or_default();
-            Ok(crate::RpcMessageError::InternalError(message))
-        }
+        rpc::CommandErrorUnionRef::PermissionDenied(_) => Ok(CommandError::PermissionDenied),
     }
 }
 
 /// Convert CommandError to FlatBuffer struct
 pub fn command_error_to_flatbuffer_struct(
     error: &CommandError,
-) -> Result<moor_rpc::CommandError, moor_var::EncodingError> {
+) -> Result<rpc::CommandError, moor_var::EncodingError> {
     let error_union = match error {
-        CommandError::CouldNotParseCommand => moor_rpc::CommandErrorUnion::CouldNotParseCommand(
-            Box::new(moor_rpc::CouldNotParseCommand {}),
-        ),
+        CommandError::CouldNotParseCommand => {
+            rpc::CommandErrorUnion::CouldNotParseCommand(Box::new(rpc::CouldNotParseCommand {}))
+        }
         CommandError::NoObjectMatch => {
-            moor_rpc::CommandErrorUnion::NoObjectMatch(Box::new(moor_rpc::NoObjectMatch {}))
+            rpc::CommandErrorUnion::NoObjectMatch(Box::new(rpc::NoObjectMatch {}))
         }
         CommandError::NoCommandMatch => {
-            moor_rpc::CommandErrorUnion::NoCommandMatch(Box::new(moor_rpc::NoCommandMatch {}))
+            rpc::CommandErrorUnion::NoCommandMatch(Box::new(rpc::NoCommandMatch {}))
         }
         CommandError::DatabaseError(ws_error) => {
             let ws_error_fb = world_state_error_to_flatbuffer_struct(ws_error).map_err(|e| {
@@ -626,63 +576,63 @@ pub fn command_error_to_flatbuffer_struct(
                     e
                 ))
             })?;
-            moor_rpc::CommandErrorUnion::DatabaseError(Box::new(moor_rpc::DatabaseError {
+            rpc::CommandErrorUnion::DatabaseError(Box::new(rpc::DatabaseError {
                 error: Box::new(ws_error_fb),
             }))
         }
         CommandError::PermissionDenied => {
-            moor_rpc::CommandErrorUnion::PermissionDenied(Box::new(moor_rpc::PermissionDenied {}))
+            rpc::CommandErrorUnion::PermissionDenied(Box::new(rpc::PermissionDenied {}))
         }
     };
 
-    Ok(moor_rpc::CommandError { error: error_union })
+    Ok(rpc::CommandError { error: error_union })
 }
 
 /// Convert SchedulerError to FlatBuffer struct
 pub fn scheduler_error_to_flatbuffer_struct(
     error: &SchedulerError,
-) -> Result<moor_rpc::SchedulerError, moor_var::EncodingError> {
+) -> Result<rpc::SchedulerError, moor_var::EncodingError> {
     let error_union = match error {
-        SchedulerError::SchedulerNotResponding => SchedulerErrorUnion::SchedulerNotResponding(
-            Box::new(moor_rpc::SchedulerNotResponding {}),
+        SchedulerError::SchedulerNotResponding => rpc::SchedulerErrorUnion::SchedulerNotResponding(
+            Box::new(rpc::SchedulerNotResponding {}),
         ),
         SchedulerError::TaskNotFound(task_id) => {
-            SchedulerErrorUnion::TaskNotFound(Box::new(moor_rpc::TaskNotFound {
+            rpc::SchedulerErrorUnion::TaskNotFound(Box::new(rpc::TaskNotFound {
                 task_id: *task_id as u64,
             }))
         }
         SchedulerError::InputRequestNotFound(request_id) => {
-            SchedulerErrorUnion::InputRequestNotFound(Box::new(moor_rpc::InputRequestNotFound {
-                request_id: Box::new(moor_rpc::Uuid {
+            rpc::SchedulerErrorUnion::InputRequestNotFound(Box::new(rpc::InputRequestNotFound {
+                request_id: Box::new(rpc::Uuid {
                     data: request_id.to_be_bytes().to_vec(),
                 }),
             }))
         }
         SchedulerError::CouldNotStartTask => {
-            SchedulerErrorUnion::CouldNotStartTask(Box::new(moor_rpc::CouldNotStartTask {}))
+            rpc::SchedulerErrorUnion::CouldNotStartTask(Box::new(rpc::CouldNotStartTask {}))
         }
         SchedulerError::CompilationError(compile_error) => {
             let compile_error_fb = compilation_error_to_flatbuffer_struct(compile_error)
                 .map_err(moor_var::EncodingError::CouldNotEncode)?;
-            SchedulerErrorUnion::CompilationError(Box::new(moor_rpc::CompilationError {
+            rpc::SchedulerErrorUnion::CompilationError(Box::new(rpc::CompilationError {
                 error: Box::new(compile_error_fb),
             }))
         }
         SchedulerError::CommandExecutionError(command_error) => {
             let cmd_error = command_error_to_flatbuffer_struct(command_error)?;
-            SchedulerErrorUnion::CommandExecutionError(Box::new(moor_rpc::CommandExecutionError {
+            rpc::SchedulerErrorUnion::CommandExecutionError(Box::new(rpc::CommandExecutionError {
                 error: Box::new(cmd_error),
             }))
         }
         SchedulerError::TaskAbortedLimit(abort_reason) => {
             let (reason_enum, ticks, time_nanos) = match abort_reason {
-                AbortLimitReason::Ticks(t) => (moor_rpc::AbortLimitReason::Ticks, *t as u64, 0u64),
+                AbortLimitReason::Ticks(t) => (rpc::AbortLimitReason::Ticks, *t as u64, 0u64),
                 AbortLimitReason::Time(d) => {
-                    (moor_rpc::AbortLimitReason::Time, 0u64, d.as_nanos() as u64)
+                    (rpc::AbortLimitReason::Time, 0u64, d.as_nanos() as u64)
                 }
             };
-            SchedulerErrorUnion::TaskAbortedLimit(Box::new(moor_rpc::TaskAbortedLimit {
-                limit: Box::new(moor_rpc::AbortLimit {
+            rpc::SchedulerErrorUnion::TaskAbortedLimit(Box::new(rpc::TaskAbortedLimit {
+                limit: Box::new(rpc::AbortLimit {
                     reason: reason_enum,
                     ticks,
                     time_nanos,
@@ -690,7 +640,7 @@ pub fn scheduler_error_to_flatbuffer_struct(
             }))
         }
         SchedulerError::TaskAbortedError => {
-            SchedulerErrorUnion::TaskAbortedError(Box::new(moor_rpc::TaskAbortedError {}))
+            rpc::SchedulerErrorUnion::TaskAbortedError(Box::new(rpc::TaskAbortedError {}))
         }
         SchedulerError::TaskAbortedException(exception) => {
             // Serialize the exception
@@ -703,16 +653,16 @@ pub fn scheduler_error_to_flatbuffer_struct(
             let stack_bytes: Result<Vec<_>, _> = exception
                 .stack
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| moor_rpc::VarBytes { data }))
+                .map(|v| var_to_flatbuffer_bytes(v).map(|data| rpc::VarBytes { data }))
                 .collect();
             let backtrace_bytes: Result<Vec<_>, _> = exception
                 .backtrace
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| moor_rpc::VarBytes { data }))
+                .map(|v| var_to_flatbuffer_bytes(v).map(|data| rpc::VarBytes { data }))
                 .collect();
 
-            SchedulerErrorUnion::TaskAbortedException(Box::new(moor_rpc::TaskAbortedException {
-                exception: Box::new(moor_rpc::Exception {
+            rpc::SchedulerErrorUnion::TaskAbortedException(Box::new(rpc::TaskAbortedException {
+                exception: Box::new(rpc::Exception {
                     error: Box::new(error_bytes),
                     stack: stack_bytes?,
                     backtrace: backtrace_bytes?,
@@ -720,53 +670,55 @@ pub fn scheduler_error_to_flatbuffer_struct(
             }))
         }
         SchedulerError::TaskAbortedCancelled => {
-            SchedulerErrorUnion::TaskAbortedCancelled(Box::new(TaskAbortedCancelled {}))
+            rpc::SchedulerErrorUnion::TaskAbortedCancelled(Box::new(rpc::TaskAbortedCancelled {}))
         }
         SchedulerError::VerbProgramFailed(verb_error) => {
             let verb_error_fb = verb_program_error_to_flatbuffer_struct(verb_error)
                 .map_err(moor_var::EncodingError::CouldNotEncode)?;
-            SchedulerErrorUnion::VerbProgramFailed(Box::new(VerbProgramFailed {
+            rpc::SchedulerErrorUnion::VerbProgramFailed(Box::new(rpc::VerbProgramFailed {
                 error: Box::new(verb_error_fb),
             }))
         }
         SchedulerError::PropertyRetrievalFailed(ws_error) => {
             let ws_error_fb = world_state_error_to_flatbuffer_struct(ws_error)
                 .map_err(moor_var::EncodingError::CouldNotEncode)?;
-            SchedulerErrorUnion::PropertyRetrievalFailed(Box::new(PropertyRetrievalFailed {
-                error: Box::new(ws_error_fb),
-            }))
+            rpc::SchedulerErrorUnion::PropertyRetrievalFailed(Box::new(
+                rpc::PropertyRetrievalFailed {
+                    error: Box::new(ws_error_fb),
+                },
+            ))
         }
         SchedulerError::VerbRetrievalFailed(ws_error) => {
             let ws_error_fb = world_state_error_to_flatbuffer_struct(ws_error)
                 .map_err(moor_var::EncodingError::CouldNotEncode)?;
-            SchedulerErrorUnion::VerbRetrievalFailed(Box::new(moor_rpc::VerbRetrievalFailed {
+            rpc::SchedulerErrorUnion::VerbRetrievalFailed(Box::new(rpc::VerbRetrievalFailed {
                 error: Box::new(ws_error_fb),
             }))
         }
         SchedulerError::ObjectResolutionFailed(ws_error) => {
             let ws_error_fb = world_state_error_to_flatbuffer_struct(ws_error)
                 .map_err(moor_var::EncodingError::CouldNotEncode)?;
-            SchedulerErrorUnion::ObjectResolutionFailed(Box::new(
-                moor_rpc::ObjectResolutionFailed {
+            rpc::SchedulerErrorUnion::ObjectResolutionFailed(Box::new(
+                rpc::ObjectResolutionFailed {
                     error: Box::new(ws_error_fb),
                 },
             ))
         }
         SchedulerError::GarbageCollectionFailed(msg) => {
-            SchedulerErrorUnion::GarbageCollectionFailed(Box::new(
-                moor_rpc::GarbageCollectionFailed {
+            rpc::SchedulerErrorUnion::GarbageCollectionFailed(Box::new(
+                rpc::GarbageCollectionFailed {
                     message: msg.clone(),
                 },
             ))
         }
     };
 
-    Ok(moor_rpc::SchedulerError { error: error_union })
+    Ok(rpc::SchedulerError { error: error_union })
 }
 
 /// Convert from FlatBuffer CompileErrorRef to moor_common::model::CompileError
 pub fn compilation_error_from_ref(
-    error_ref: moor_rpc::CompileErrorRef<'_>,
+    error_ref: moor_common_schema::CompileErrorRef<'_>,
 ) -> Result<CompileError, String> {
     let error_union = error_ref.error().map_err(|_| "Missing error union")?;
 
@@ -837,8 +789,8 @@ pub fn compilation_error_from_ref(
                 ctx_ref.col().map_err(|_| "Missing col")? as usize,
             ));
             let var_ref = e.var_name().map_err(|_| "Missing var_name")?;
-            let var_struct =
-                moor_rpc::Symbol::try_from(var_ref).map_err(|_| "Failed to convert var_name")?;
+            let var_struct = moor_common_schema::Symbol::try_from(var_ref)
+                .map_err(|_| "Failed to convert var_name")?;
             let var_name = symbol_from_flatbuffer_struct(&var_struct);
             Ok(CompileError::DuplicateVariable(ctx, var_name))
         }
@@ -849,8 +801,8 @@ pub fn compilation_error_from_ref(
                 ctx_ref.col().map_err(|_| "Missing col")? as usize,
             ));
             let var_ref = e.var_name().map_err(|_| "Missing var_name")?;
-            let var_struct =
-                moor_rpc::Symbol::try_from(var_ref).map_err(|_| "Failed to convert var_name")?;
+            let var_struct = moor_common_schema::Symbol::try_from(var_ref)
+                .map_err(|_| "Failed to convert var_name")?;
             let var_name = symbol_from_flatbuffer_struct(&var_struct);
             Ok(CompileError::AssignToConst(ctx, var_name))
         }
@@ -886,11 +838,11 @@ pub fn compilation_error_from_ref(
 /// Convert from moor_common::model::CompileError to FlatBuffer CompileError
 pub fn compilation_error_to_flatbuffer_struct(
     error: &CompileError,
-) -> Result<moor_rpc::CompileError, String> {
+) -> Result<moor_common_schema::CompileError, String> {
     let error_union = match error {
         CompileError::StringLexError(ctx, msg) => {
-            CompileErrorUnion::StringLexError(Box::new(moor_rpc::StringLexError {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::StringLexError(Box::new(moor_common_schema::StringLexError {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -902,8 +854,8 @@ pub fn compilation_error_to_flatbuffer_struct(
             context,
             end_line_col,
             message,
-        } => CompileErrorUnion::ParseError(Box::new(moor_rpc::ParseError {
-            error_position: Box::new(moor_rpc::CompileContext {
+        } => CompileErrorUnion::ParseError(Box::new(moor_common_schema::ParseError {
+            error_position: Box::new(moor_common_schema::CompileContext {
                 line: error_position.line_col.0 as u64,
                 col: error_position.line_col.1 as u64,
             }),
@@ -914,26 +866,28 @@ pub fn compilation_error_to_flatbuffer_struct(
             message: message.clone(),
         })),
         CompileError::UnknownBuiltinFunction(ctx, name) => {
-            CompileErrorUnion::UnknownBuiltinFunction(Box::new(moor_rpc::UnknownBuiltinFunction {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::UnknownBuiltinFunction(Box::new(
+                moor_common_schema::UnknownBuiltinFunction {
+                    context: Box::new(moor_common_schema::CompileContext {
+                        line: ctx.line_col.0 as u64,
+                        col: ctx.line_col.1 as u64,
+                    }),
+                    name: name.clone(),
+                },
+            ))
+        }
+        CompileError::UnknownTypeConstant(ctx, name) => CompileErrorUnion::UnknownTypeConstant(
+            Box::new(moor_common_schema::UnknownTypeConstant {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
                 name: name.clone(),
-            }))
-        }
-        CompileError::UnknownTypeConstant(ctx, name) => {
-            CompileErrorUnion::UnknownTypeConstant(Box::new(moor_rpc::UnknownTypeConstant {
-                context: Box::new(moor_rpc::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                name: name.clone(),
-            }))
-        }
+            }),
+        ),
         CompileError::UnknownLoopLabel(ctx, label) => {
-            CompileErrorUnion::UnknownLoopLabel(Box::new(moor_rpc::UnknownLoopLabel {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::UnknownLoopLabel(Box::new(moor_common_schema::UnknownLoopLabel {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -941,8 +895,8 @@ pub fn compilation_error_to_flatbuffer_struct(
             }))
         }
         CompileError::DuplicateVariable(ctx, var_name) => {
-            CompileErrorUnion::DuplicateVariable(Box::new(moor_rpc::DuplicateVariable {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::DuplicateVariable(Box::new(moor_common_schema::DuplicateVariable {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -950,8 +904,8 @@ pub fn compilation_error_to_flatbuffer_struct(
             }))
         }
         CompileError::AssignToConst(ctx, var_name) => {
-            CompileErrorUnion::AssignToConst(Box::new(moor_rpc::AssignToConst {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::AssignToConst(Box::new(moor_common_schema::AssignToConst {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -959,8 +913,8 @@ pub fn compilation_error_to_flatbuffer_struct(
             }))
         }
         CompileError::DisabledFeature(ctx, feature) => {
-            CompileErrorUnion::DisabledFeature(Box::new(moor_rpc::DisabledFeature {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::DisabledFeature(Box::new(moor_common_schema::DisabledFeature {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -968,8 +922,8 @@ pub fn compilation_error_to_flatbuffer_struct(
             }))
         }
         CompileError::BadSlotName(ctx, slot) => {
-            CompileErrorUnion::BadSlotName(Box::new(moor_rpc::BadSlotName {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::BadSlotName(Box::new(moor_common_schema::BadSlotName {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -977,8 +931,8 @@ pub fn compilation_error_to_flatbuffer_struct(
             }))
         }
         CompileError::InvalidAssignemnt(ctx) => {
-            CompileErrorUnion::InvalidAssignment(Box::new(moor_rpc::InvalidAssignment {
-                context: Box::new(moor_rpc::CompileContext {
+            CompileErrorUnion::InvalidAssignment(Box::new(moor_common_schema::InvalidAssignment {
+                context: Box::new(moor_common_schema::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
@@ -986,12 +940,12 @@ pub fn compilation_error_to_flatbuffer_struct(
         }
     };
 
-    Ok(moor_rpc::CompileError { error: error_union })
+    Ok(moor_common_schema::CompileError { error: error_union })
 }
 
 /// Convert from FlatBuffer ExceptionRef to Exception
 pub(crate) fn exception_from_ref(
-    exception_ref: moor_rpc::ExceptionRef<'_>,
+    exception_ref: moor_common_schema::ExceptionRef<'_>,
 ) -> Result<moor_common::tasks::Exception, String> {
     let error_ref = exception_ref.error().map_err(|_| "Missing error")?;
     let error_value = error_from_ref(error_ref)?;

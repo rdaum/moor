@@ -1,0 +1,406 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// Common FlatBuffer types shared across mooR schemas
+//
+// This schema defines core domain types used by both RPC and persistence layers:
+// - Basic wrappers (VarBytes, Symbol, Uuid, Obj)
+// - Errors (Error, Exception)
+// - Narrative events and presentations
+// - World state and compilation errors
+
+namespace MoorCommon;
+
+// ============================================================================
+// Basic primitive wrappers
+// ============================================================================
+
+table VarBytes {
+    data: [uint8] (required);
+}
+
+table Symbol {
+    value: string (required);
+}
+
+table Uuid {
+    data: [uint8] (required);  // UUID as 16-byte array
+}
+
+// ============================================================================
+// Obj union type
+// ============================================================================
+
+union ObjUnion {
+    ObjId,
+    UuObjId,
+    AnonymousObjId
+}
+
+table ObjId {
+    id: int32;
+}
+
+table UuObjId {
+    // 62-bit packed: [autoincrement (16)] [rng (6)] [epoch_ms (40)]
+    packed_value: uint64;
+}
+
+table AnonymousObjId {
+    // 62-bit packed: [autoincrement (16)] [rng (6)] [epoch_ms (40)]
+    packed_value: uint64;
+}
+
+table Obj {
+    obj: ObjUnion (required);
+}
+
+// ============================================================================
+// Error type
+// ============================================================================
+
+enum ErrorCode: uint8 {
+    E_NONE = 0,
+    E_TYPE = 1,
+    E_DIV = 2,
+    E_PERM = 3,
+    E_PROPNF = 4,
+    E_VERBNF = 5,
+    E_VARNF = 6,
+    E_INVIND = 7,
+    E_RECMOVE = 8,
+    E_MAXREC = 9,
+    E_RANGE = 10,
+    E_ARGS = 11,
+    E_NACC = 12,
+    E_INVARG = 13,
+    E_QUOTA = 14,
+    E_FLOAT = 15,
+    E_FILE = 16,
+    E_EXEC = 17,
+    E_INTRPT = 18,
+    ErrCustom = 255  // Custom errors will need special handling
+}
+
+table Error {
+    err_type: ErrorCode;
+    msg: string;  // Optional
+    value: VarBytes;  // Optional
+    custom_symbol: Symbol;  // For ErrCustom variant
+}
+
+// ============================================================================
+// Narrative Events and Presentations
+// ============================================================================
+
+table NarrativeEvent {
+    event_id: Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
+    author: VarBytes (required);
+    event: Event (required);
+}
+
+union EventUnion {
+    NotifyEvent,
+    PresentEvent,
+    UnpresentEvent,
+    TracebackEvent
+}
+
+table NotifyEvent {
+    value: VarBytes (required);
+    content_type: Symbol;  // Optional
+    no_flush: bool;
+    no_newline: bool;
+}
+
+table PresentEvent {
+    presentation: Presentation (required);
+}
+
+table UnpresentEvent {
+    presentation_id: string (required);
+}
+
+table TracebackEvent {
+    exception: Exception (required);
+}
+
+table Event {
+    event: EventUnion (required);
+}
+
+table Presentation {
+    id: string (required);
+    content_type: string (required);
+    content: string (required);
+    target: string (required);
+    attributes: [PresentationAttribute] (required);
+}
+
+table PresentationAttribute {
+    key: string (required);
+    value: string (required);
+}
+
+table Exception {
+    error: Error (required);  // moor_var::Error
+    stack: [VarBytes] (required);
+    backtrace: [VarBytes] (required);
+}
+
+// ============================================================================
+// CompileError types
+// ============================================================================
+
+table CompileContext {
+    line: uint64;
+    col: uint64;
+}
+
+table StringLexError {
+    context: CompileContext (required);
+    message: string (required);
+}
+
+table ParseError {
+    error_position: CompileContext (required);
+    context: string (required);
+    end_line: uint64;
+    end_col: uint64;
+    has_end: bool;
+    message: string (required);
+}
+
+table UnknownBuiltinFunction {
+    context: CompileContext (required);
+    name: string (required);
+}
+
+table UnknownTypeConstant {
+    context: CompileContext (required);
+    name: string (required);
+}
+
+table UnknownLoopLabel {
+    context: CompileContext (required);
+    label: string (required);
+}
+
+table DuplicateVariable {
+    context: CompileContext (required);
+    var_name: Symbol (required);
+}
+
+table AssignToConst {
+    context: CompileContext (required);
+    var_name: Symbol (required);
+}
+
+table DisabledFeature {
+    context: CompileContext (required);
+    feature: string (required);
+}
+
+table BadSlotName {
+    context: CompileContext (required);
+    slot: string (required);
+}
+
+table InvalidAssignment {
+    context: CompileContext (required);
+}
+
+union CompileErrorUnion {
+    StringLexError,
+    ParseError,
+    UnknownBuiltinFunction,
+    UnknownTypeConstant,
+    UnknownLoopLabel,
+    DuplicateVariable,
+    AssignToConst,
+    DisabledFeature,
+    BadSlotName,
+    InvalidAssignment
+}
+
+table CompileError {
+    error: CompileErrorUnion (required);
+}
+
+// ============================================================================
+// Object References
+// ============================================================================
+
+union ObjectRefUnion {
+    ObjectRefId,
+    ObjectRefSysObj,
+    ObjectRefMatch
+}
+
+table ObjectRefId {
+    obj: Obj (required);
+}
+
+table ObjectRefSysObj {
+    symbols: [Symbol] (required);
+}
+
+table ObjectRefMatch {
+    match_string: string (required);
+}
+
+table ObjectRef {
+    ref: ObjectRefUnion (required);
+}
+
+// ============================================================================
+// WorldStateError types
+// ============================================================================
+
+union WorldStateErrorUnion {
+    ObjectNotFound,
+    ObjectAlreadyExists,
+    RecursiveMove,
+    ObjectPermissionDenied,
+    PropertyNotFound,
+    PropertyPermissionDenied,
+    PropertyDefinitionNotFound,
+    DuplicatePropertyDefinition,
+    ChparentPropertyNameConflict,
+    PropertyTypeMismatch,
+    VerbNotFound,
+    InvalidVerb,
+    VerbDecodeError,
+    VerbPermissionDenied,
+    DuplicateVerb,
+    FailedMatch,
+    AmbiguousMatch,
+    InvalidRenumber,
+    WorldStateDatabaseError,
+    RollbackRetry
+}
+
+table ObjectNotFound {
+    object_ref: ObjectRef (required);
+}
+
+table ObjectAlreadyExists {
+    obj: Obj (required);
+}
+
+table RecursiveMove {
+    from_obj: Obj (required);
+    to_obj: Obj (required);
+}
+
+table ObjectPermissionDenied {
+}
+
+table PropertyNotFound {
+    obj: Obj (required);
+    property: string (required);
+}
+
+table PropertyPermissionDenied {
+}
+
+table PropertyDefinitionNotFound {
+    obj: Obj (required);
+    property: string (required);
+}
+
+table DuplicatePropertyDefinition {
+    obj: Obj (required);
+    property: string (required);
+}
+
+table ChparentPropertyNameConflict {
+    descendant: Obj (required);
+    ancestor: Obj (required);
+    property: string (required);
+}
+
+table PropertyTypeMismatch {
+}
+
+table VerbNotFound {
+    obj: Obj (required);
+    verb: string (required);
+}
+
+table InvalidVerb {
+    vid: int64;
+}
+
+table VerbDecodeError {
+    obj: Obj (required);
+    verb: Symbol (required);
+}
+
+table VerbPermissionDenied {
+}
+
+table DuplicateVerb {
+    obj: Obj (required);
+    verb: Symbol (required);
+}
+
+table FailedMatch {
+    match_string: string (required);
+}
+
+table AmbiguousMatch {
+    match_string: string (required);
+}
+
+table InvalidRenumber {
+    message: string (required);
+}
+
+table WorldStateDatabaseError {
+    message: string (required);
+}
+
+table RollbackRetry {
+}
+
+table WorldStateError {
+    error: WorldStateErrorUnion (required);
+}
+
+// ============================================================================
+// Property and Verb Info
+// ============================================================================
+
+table PropInfo {
+    definer: Obj (required);
+    location: Obj (required);
+    name: Symbol (required);
+    owner: Obj (required);
+    r: bool;
+    w: bool;
+    chown: bool;
+}
+
+table VerbInfo {
+    location: Obj (required);
+    owner: Obj (required);
+    names: [Symbol] (required);
+    r: bool;
+    w: bool;
+    x: bool;
+    d: bool;
+    arg_spec: [Symbol] (required);
+}
+

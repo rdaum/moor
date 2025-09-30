@@ -27,14 +27,11 @@ use uuid::Uuid;
 use zmq::Socket;
 
 use super::message_handler::MessageHandler;
-use moor_common::tasks::NarrativeEvent;
+use moor_common::{schema::rpc as moor_rpc, tasks::NarrativeEvent};
 use moor_kernel::SchedulerClient;
 use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
 use moor_var::Obj;
-use rpc_common::{
-    CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError, flatbuffers_generated::moor_rpc,
-};
-
+use rpc_common::{CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError};
 /// Trait for the transport layer that handles communication between hosts and the daemon
 pub trait Transport: Send + Sync {
     /// Start the request processing loop with ZMQ proxy architecture

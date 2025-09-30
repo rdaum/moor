@@ -28,12 +28,13 @@ mod tests {
         tasks::task_monitor::TaskMonitor,
         testing::{MockEventLog, MockTransport},
     };
+    use moor_common::schema::rpc as moor_rpc;
     use moor_var::{Obj, SYSTEM_OBJECT};
     use planus::ReadAsRoot;
     use rpc_common::{
-        HostToken, flatbuffers_generated::moor_rpc, make_host_token, mk_client_pong_msg,
-        mk_command_msg, mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg,
-        mk_host_pong_msg, mk_login_command_msg, mk_properties_msg, mk_register_host_msg,
+        HostToken, make_host_token, mk_client_pong_msg, mk_command_msg,
+        mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_host_pong_msg,
+        mk_login_command_msg, mk_properties_msg, mk_register_host_msg,
         mk_request_performance_counters_msg, mk_request_sys_prop_msg, mk_requested_input_msg,
         mk_verbs_msg, obj_fb,
     };
@@ -739,7 +740,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(detach_result.is_ok(), "Client detach should succeed");
         assert!(matches!(
             detach_result.unwrap().reply,
-            rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::Disconnected(_)
+            moor_rpc::DaemonToClientReplyUnion::Disconnected(_)
         ));
 
         // Verify all client replies were captured correctly
@@ -1187,7 +1188,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         assert!(
             matches!(
                 login_reply.as_ref().map(|r| &r.reply),
-                Ok(rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(lr)) if lr.success
+                Ok(moor_rpc::DaemonToClientReplyUnion::LoginResult(lr)) if lr.success
             ),
             "Should have successful LoginResult with NormalOperation scenario: {login_reply:?}"
         );
@@ -1245,9 +1246,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With LoginFailures scenario (20% success rate), login should mostly fail
         let login_failed = match &login_result {
             Ok(reply) => {
-                if let rpc_common::flatbuffers_generated::moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) =
-                    &reply.reply
-                {
+                if let moor_rpc::DaemonToClientReplyUnion::LoginResult(lr) = &reply.reply {
                     !lr.success // Failed login
                 } else {
                     false

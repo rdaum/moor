@@ -19,17 +19,10 @@ use crate::rpc::{
     session::RpcSession,
 };
 use eyre::{Context, Error};
-use moor_common::{model::ObjectRef, util::parse_into_words};
+use moor_common::{model::ObjectRef, schema::rpc as moor_rpc, util::parse_into_words};
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
-use rpc_common::{
-    RpcMessageError,
-    flatbuffers_generated::{
-        moor_rpc,
-        moor_rpc::{DaemonToClientReply, DaemonToClientReplyUnion},
-    },
-    var_to_flatbuffer_bytes,
-};
+use rpc_common::{RpcMessageError, var_to_flatbuffer_bytes};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
@@ -106,7 +99,7 @@ impl RpcMessageHandler {
         handler_object: &Obj,
         player: &Obj,
         command: String,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
         // Get the connection object for activity tracking and session management
         let connection = self
             .connections
@@ -147,10 +140,12 @@ impl RpcMessageHandler {
         {
             error!(error = ?e, "Error adding task to monitor");
         }
-        Ok(DaemonToClientReply {
-            reply: DaemonToClientReplyUnion::TaskSubmitted(Box::new(moor_rpc::TaskSubmitted {
-                task_id: task_id as u64,
-            })),
+        Ok(moor_rpc::DaemonToClientReply {
+            reply: moor_rpc::DaemonToClientReplyUnion::TaskSubmitted(Box::new(
+                moor_rpc::TaskSubmitted {
+                    task_id: task_id as u64,
+                },
+            )),
         })
     }
 
@@ -161,7 +156,7 @@ impl RpcMessageHandler {
         player: &Obj,
         input_request_id: Uuid,
         input: Var,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
         // Get the connection object for activity tracking
         let connection = self
             .connections
@@ -184,8 +179,10 @@ impl RpcMessageHandler {
         }
 
         // TODO: do we need a new response for this? Maybe just a "Thanks"?
-        Ok(DaemonToClientReply {
-            reply: DaemonToClientReplyUnion::InputThanks(Box::new(moor_rpc::InputThanks {})),
+        Ok(moor_rpc::DaemonToClientReply {
+            reply: moor_rpc::DaemonToClientReplyUnion::InputThanks(Box::new(
+                moor_rpc::InputThanks {},
+            )),
         })
     }
 
@@ -196,7 +193,7 @@ impl RpcMessageHandler {
         client_id: Uuid,
         player: &Obj,
         command: String,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
         // Get the connection object for session management
         let connection = self
             .connections
@@ -231,10 +228,12 @@ impl RpcMessageHandler {
         // let the session run to completion on its own and output back to the client.
         // Maybe we should be returning a value from this for the future, but the way clients are
         // written right now, there's little point.
-        Ok(DaemonToClientReply {
-            reply: DaemonToClientReplyUnion::TaskSubmitted(Box::new(moor_rpc::TaskSubmitted {
-                task_id: task_handle.task_id() as u64,
-            })),
+        Ok(moor_rpc::DaemonToClientReply {
+            reply: moor_rpc::DaemonToClientReplyUnion::TaskSubmitted(Box::new(
+                moor_rpc::TaskSubmitted {
+                    task_id: task_handle.task_id() as u64,
+                },
+            )),
         })
     }
 
@@ -244,7 +243,7 @@ impl RpcMessageHandler {
         client_id: Uuid,
         player: &Obj,
         expression: String,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
         // Get the connection object for session management
         let connection = self
             .connections
@@ -283,8 +282,8 @@ impl RpcMessageHandler {
                     let result_bytes = var_to_flatbuffer_bytes(&v).map_err(|e| {
                         RpcMessageError::InternalError(format!("Failed to encode result: {}", e))
                     })?;
-                    break Ok(DaemonToClientReply {
-                        reply: DaemonToClientReplyUnion::EvalResult(Box::new(
+                    break Ok(moor_rpc::DaemonToClientReply {
+                        reply: moor_rpc::DaemonToClientReplyUnion::EvalResult(Box::new(
                             moor_rpc::EvalResult {
                                 result: Box::new(moor_rpc::VarBytes { data: result_bytes }),
                             },
@@ -309,7 +308,7 @@ impl RpcMessageHandler {
         object: &ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
         // Get the connection object for session management
         let connection = self
             .connections
@@ -346,10 +345,12 @@ impl RpcMessageHandler {
             error!(error = ?e, "Error adding task to monitor");
             return Err(RpcMessageError::InternalError(e.to_string()));
         }
-        Ok(DaemonToClientReply {
-            reply: DaemonToClientReplyUnion::TaskSubmitted(Box::new(moor_rpc::TaskSubmitted {
-                task_id: task_id as u64,
-            })),
+        Ok(moor_rpc::DaemonToClientReply {
+            reply: moor_rpc::DaemonToClientReplyUnion::TaskSubmitted(Box::new(
+                moor_rpc::TaskSubmitted {
+                    task_id: task_id as u64,
+                },
+            )),
         })
     }
 }

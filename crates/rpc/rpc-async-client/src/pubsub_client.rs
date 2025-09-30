@@ -16,12 +16,10 @@ use futures_util::StreamExt;
 use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
+use moor_common::schema::rpc;
 use moor_var::{Obj, Var};
 use planus::ReadAsRoot;
-use rpc_common::{
-    RpcError, WorkerToken, flatbuffers_generated::moor_rpc, obj_from_flatbuffer_struct,
-    var_from_flatbuffer_bytes,
-};
+use rpc_common::{RpcError, WorkerToken, obj_from_flatbuffer_struct, var_from_flatbuffer_bytes};
 use std::time::Duration;
 
 /// Type alias for the complex return type of worker request extraction
@@ -35,14 +33,14 @@ pub struct WorkerMessage {
 impl WorkerMessage {
     pub fn from_buffer(buffer: Vec<u8>) -> Result<Self, RpcError> {
         // Validate it's a valid flatbuffer by attempting to parse
-        let _msg = moor_rpc::DaemonToWorkerMessageRef::read_as_root(&buffer)
+        let _msg = rpc::DaemonToWorkerMessageRef::read_as_root(&buffer)
             .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e)))?;
         Ok(WorkerMessage { buffer })
     }
 
     /// Get zero-copy reference to the message union
-    pub fn message(&self) -> Result<moor_rpc::DaemonToWorkerMessageUnionRef<'_>, RpcError> {
-        let fb_msg = moor_rpc::DaemonToWorkerMessageRef::read_as_root(&self.buffer)
+    pub fn message(&self) -> Result<rpc::DaemonToWorkerMessageUnionRef<'_>, RpcError> {
+        let fb_msg = rpc::DaemonToWorkerMessageRef::read_as_root(&self.buffer)
             .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))?;
         fb_msg
             .message()
@@ -52,7 +50,7 @@ impl WorkerMessage {
     /// Extract WorkerRequest data with all business logic conversions
     pub fn extract_worker_request(&self) -> Result<WorkerRequestData, RpcError> {
         match self.message()? {
-            moor_rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
+            rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
                 let worker_id_data = req
                     .worker_id()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
@@ -83,7 +81,7 @@ impl WorkerMessage {
                 let perms_ref = req
                     .perms()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get perms: {e}")))?;
-                let perms_obj = moor_rpc::Obj::try_from(perms_ref).map_err(|e| {
+                let perms_obj = rpc::Obj::try_from(perms_ref).map_err(|e| {
                     RpcError::CouldNotDecode(format!("Failed to convert perms ref: {e}"))
                 })?;
                 let perms = obj_from_flatbuffer_struct(&perms_obj).map_err(|e| {
@@ -128,7 +126,7 @@ impl WorkerMessage {
     /// Extract PleaseDie data with all business logic conversions
     pub fn extract_please_die(&self) -> Result<(WorkerToken, Uuid), RpcError> {
         match self.message()? {
-            moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
+            rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
                 let token_str = die
                     .token()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {e}")))?
@@ -159,7 +157,7 @@ impl WorkerMessage {
     /// Check if this is a PingWorkers message
     pub fn is_ping_workers(&self) -> Result<bool, RpcError> {
         match self.message()? {
-            moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => Ok(true),
+            rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => Ok(true),
             _ => Ok(false),
         }
     }
@@ -171,8 +169,8 @@ pub struct ClientEventMessage {
 }
 
 impl ClientEventMessage {
-    pub fn event(&self) -> Result<moor_rpc::ClientEventRef<'_>, RpcError> {
-        moor_rpc::ClientEventRef::read_as_root(&self.buffer)
+    pub fn event(&self) -> Result<rpc::ClientEventRef<'_>, RpcError> {
+        rpc::ClientEventRef::read_as_root(&self.buffer)
             .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
     }
 }
@@ -210,7 +208,7 @@ pub async fn events_recv(
     }
 
     // Validate it's a valid flatbuffer
-    let _fb_event = moor_rpc::ClientEventRef::read_as_root(event.as_ref())
+    let _fb_event = rpc::ClientEventRef::read_as_root(event.as_ref())
         .map_err(|e| RpcError::CouldNotDecode(format!("Unable to parse FlatBuffer: {e:?}")))?;
 
     Ok(ClientEventMessage {
@@ -224,8 +222,8 @@ pub struct BroadcastEventMessage {
 }
 
 impl BroadcastEventMessage {
-    pub fn event(&self) -> Result<moor_rpc::ClientsBroadcastEventRef<'_>, RpcError> {
-        moor_rpc::ClientsBroadcastEventRef::read_as_root(&self.buffer)
+    pub fn event(&self) -> Result<rpc::ClientsBroadcastEventRef<'_>, RpcError> {
+        rpc::ClientsBroadcastEventRef::read_as_root(&self.buffer)
             .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
     }
 }
@@ -263,7 +261,7 @@ pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<BroadcastEventM
     };
 
     // Validate it's a valid flatbuffer
-    let _fb_event = moor_rpc::ClientsBroadcastEventRef::read_as_root(event.as_ref())
+    let _fb_event = rpc::ClientsBroadcastEventRef::read_as_root(event.as_ref())
         .map_err(|e| RpcError::CouldNotDecode(format!("Unable to parse FlatBuffer: {e:?}")))?;
 
     Ok(BroadcastEventMessage {
@@ -277,8 +275,8 @@ pub struct HostBroadcastMessage {
 }
 
 impl HostBroadcastMessage {
-    pub fn event(&self) -> Result<moor_rpc::HostBroadcastEventRef<'_>, RpcError> {
-        moor_rpc::HostBroadcastEventRef::read_as_root(&self.buffer)
+    pub fn event(&self) -> Result<rpc::HostBroadcastEventRef<'_>, RpcError> {
+        rpc::HostBroadcastEventRef::read_as_root(&self.buffer)
             .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
     }
 }
@@ -318,7 +316,7 @@ pub async fn hosts_events_recv(
     };
 
     // Validate it's a valid flatbuffer
-    let _fb_event = moor_rpc::HostBroadcastEventRef::read_as_root(event.as_ref())
+    let _fb_event = rpc::HostBroadcastEventRef::read_as_root(event.as_ref())
         .map_err(|e| RpcError::CouldNotDecode(format!("Unable to parse FlatBuffer: {e:?}")))?;
 
     Ok(HostBroadcastMessage {

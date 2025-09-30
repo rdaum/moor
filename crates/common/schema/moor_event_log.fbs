@@ -1,0 +1,39 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for event log persistence
+//
+// This schema defines types for persisting narrative events and presentations
+// in the event log database (replaces bincode serialization).
+
+include "common.fbs";
+
+namespace MoorEventLog;
+
+// ============================================================================
+// Event Log Persistence Types
+// ============================================================================
+
+// Wrapper for a narrative event with player information
+// Replaces the bincode-serialized LoggedNarrativeEvent
+table LoggedNarrativeEvent {
+    player: MoorCommon.Obj (required);
+    event: MoorCommon.NarrativeEvent (required);
+}
+
+// Current presentation state for a player
+// Replaces the bincode-serialized PlayerPresentations
+table PlayerPresentations {
+    player: MoorCommon.Obj (required);
+    presentations: [MoorCommon.Presentation] (required);
+}

@@ -18,17 +18,14 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_common::model::ObjectRef;
+use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
 use moor_var::Symbol;
 use planus::ReadAsRoot;
-use rpc_common::{
-    flatbuffers_generated::moor_rpc, mk_detach_msg, mk_properties_msg, mk_retrieve_msg,
-};
+use rpc_common::{mk_detach_msg, mk_properties_msg, mk_retrieve_msg};
 use serde::Deserialize;
 use serde_json::json;
 use std::net::SocketAddr;
 use tracing::{debug, error};
-
 #[derive(Deserialize)]
 pub struct PropertiesQuery {
     inherited: Option<bool>,

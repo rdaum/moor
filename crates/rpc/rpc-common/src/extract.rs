@@ -13,22 +13,19 @@
 
 //! Helper functions for extracting and converting FlatBuffer message fields
 
-use moor_common::model::ObjectRef;
+use moor_common::{model::ObjectRef, schema::rpc};
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
-use crate::{
-    convert::{
-        obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_bytes,
-    },
-    flatbuffers_generated::moor_rpc,
+use crate::convert::{
+    obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_bytes,
 };
 
 /// Extract a required field and convert it, handling errors uniformly
 pub fn extract_obj<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<moor_rpc::ObjRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<rpc::ObjRef, planus::Error>,
 ) -> Result<Obj, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
     obj_from_ref(field_ref).map_err(|e| e.to_string())
@@ -38,7 +35,7 @@ pub fn extract_obj<T>(
 pub fn extract_object_ref<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<moor_rpc::ObjectRefRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<rpc::ObjectRefRef, planus::Error>,
 ) -> Result<ObjectRef, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
     objectref_from_ref(field_ref).map_err(|e| e.to_string())
@@ -48,7 +45,7 @@ pub fn extract_object_ref<T>(
 pub fn extract_symbol<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<moor_rpc::SymbolRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<rpc::SymbolRef, planus::Error>,
 ) -> Result<Symbol, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
     symbol_from_ref(field_ref)
@@ -58,7 +55,7 @@ pub fn extract_symbol<T>(
 pub fn extract_var<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<moor_rpc::VarBytesRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<rpc::VarBytesRef, planus::Error>,
 ) -> Result<Var, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
     let data = field_ref
@@ -71,7 +68,7 @@ pub fn extract_var<T>(
 pub fn extract_uuid<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<moor_rpc::UuidRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<rpc::UuidRef, planus::Error>,
 ) -> Result<Uuid, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
     uuid_from_ref(field_ref).map_err(|e| e.to_string())
@@ -103,7 +100,7 @@ pub fn extract_symbol_list<T>(
     get_field: impl FnOnce(
         &T,
     ) -> Result<
-        Option<planus::Vector<Result<moor_rpc::SymbolRef, planus::Error>>>,
+        Option<planus::Vector<Result<rpc::SymbolRef, planus::Error>>>,
         planus::Error,
     >,
 ) -> Option<Vec<Symbol>> {
@@ -123,7 +120,7 @@ pub fn extract_var_list<T>(
     get_field: impl FnOnce(
         &T,
     ) -> Result<
-        Option<planus::Vector<Result<moor_rpc::VarBytesRef, planus::Error>>>,
+        Option<planus::Vector<Result<rpc::VarBytesRef, planus::Error>>>,
         planus::Error,
     >,
 ) -> Option<Vec<Var>> {

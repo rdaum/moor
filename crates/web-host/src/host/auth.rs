@@ -21,15 +21,13 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
+use moor_common::schema::rpc as moor_rpc;
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::{
-    AuthToken, ClientToken, flatbuffers_generated::moor_rpc, mk_detach_msg, mk_login_command_msg,
-};
+use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
-
 #[derive(Deserialize)]
 pub struct AuthRequest {
     player: String,

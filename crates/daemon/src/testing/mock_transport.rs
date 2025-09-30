@@ -17,11 +17,11 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 use crate::rpc::{MessageHandler, Transport};
-use moor_common::tasks::NarrativeEvent;
+use moor_common::{schema::rpc as moor_rpc, tasks::NarrativeEvent};
 use moor_kernel::SchedulerClient;
 use moor_var::Obj;
 use planus::ReadAsRoot;
-use rpc_common::{HostToken, RpcMessageError, flatbuffers_generated::moor_rpc};
+use rpc_common::{HostToken, RpcMessageError};
 
 /// Type alias for captured host reply tuples
 type HostReply = (

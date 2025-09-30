@@ -15,23 +15,23 @@
 //!
 //! This module handles conversion of narrative events, presentations, and related types.
 
-use crate::convert::{
-    symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct, var_to_flatbuffer_bytes,
-};
-// TODO: use crate::errors::error_from_ref; (after moving)
-#[allow(unused_imports)]
-use crate::flatbuffers_generated::moor_rpc;
 use crate::{
+    convert::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct, var_to_flatbuffer_bytes},
     errors::exception_from_ref,
-    flatbuffers_generated::moor_rpc::{EventUnion, EventUnionRef},
     var_from_ref,
 };
-use moor_common::tasks::{Event, NarrativeEvent, Presentation};
+use moor_common::{
+    schema::{
+        rpc,
+        rpc::{EventUnion, EventUnionRef},
+    },
+    tasks::{Event, NarrativeEvent, Presentation},
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Convert from FlatBuffer NarrativeEventRef to NarrativeEvent
 pub fn narrative_event_from_ref(
-    event_ref: moor_rpc::NarrativeEventRef<'_>,
+    event_ref: rpc::NarrativeEventRef<'_>,
 ) -> Result<NarrativeEvent, String> {
     let event_id = uuid_from_ref(event_ref.event_id().map_err(|_| "Missing event_id")?)?;
     let timestamp_nanos = event_ref.timestamp().map_err(|_| "Missing timestamp")?;
@@ -48,7 +48,7 @@ pub fn narrative_event_from_ref(
 }
 
 /// Convert from FlatBuffer EventRef to Event
-pub fn event_from_ref(event_ref: moor_rpc::EventRef<'_>) -> Result<Event, String> {
+pub fn event_from_ref(event_ref: rpc::EventRef<'_>) -> Result<Event, String> {
     match event_ref
         .event()
         .map_err(|_| "Failed to read Event union")?
@@ -90,9 +90,7 @@ pub fn event_from_ref(event_ref: moor_rpc::EventRef<'_>) -> Result<Event, String
 }
 
 /// Convert from FlatBuffer PresentationRef to Presentation
-pub fn presentation_from_ref(
-    pres_ref: moor_rpc::PresentationRef<'_>,
-) -> Result<Presentation, String> {
+pub fn presentation_from_ref(pres_ref: rpc::PresentationRef<'_>) -> Result<Presentation, String> {
     let id = pres_ref.id().map_err(|_| "Missing id")?.to_string();
     let content_type = pres_ref
         .content_type()
@@ -128,17 +126,17 @@ pub fn presentation_from_ref(
 /// Convert Presentation to FlatBuffer struct
 pub fn presentation_to_flatbuffer_struct(
     presentation: &Presentation,
-) -> Result<moor_rpc::Presentation, moor_var::EncodingError> {
+) -> Result<rpc::Presentation, moor_var::EncodingError> {
     let attributes = presentation
         .attributes
         .iter()
-        .map(|(k, v)| moor_rpc::PresentationAttribute {
+        .map(|(k, v)| rpc::PresentationAttribute {
             key: k.clone(),
             value: v.clone(),
         })
         .collect();
 
-    Ok(moor_rpc::Presentation {
+    Ok(rpc::Presentation {
         id: presentation.id.clone(),
         content_type: presentation.content_type.clone(),
         content: presentation.content.clone(),
@@ -148,9 +146,7 @@ pub fn presentation_to_flatbuffer_struct(
 }
 
 /// Convert Event to FlatBuffer struct
-pub fn event_to_flatbuffer_struct(
-    event: &Event,
-) -> Result<moor_rpc::Event, moor_var::EncodingError> {
+pub fn event_to_flatbuffer_struct(event: &Event) -> Result<rpc::Event, moor_var::EncodingError> {
     let event_union = match event {
         Event::Notify {
             value,
@@ -159,10 +155,10 @@ pub fn event_to_flatbuffer_struct(
             no_newline,
         } => {
             let value_bytes = var_to_flatbuffer_bytes(value)?;
-            EventUnion::NotifyEvent(Box::new(moor_rpc::NotifyEvent {
-                value: Box::new(moor_rpc::VarBytes { data: value_bytes }),
+            EventUnion::NotifyEvent(Box::new(rpc::NotifyEvent {
+                value: Box::new(rpc::VarBytes { data: value_bytes }),
                 content_type: content_type.as_ref().map(|s| {
-                    Box::new(moor_rpc::Symbol {
+                    Box::new(rpc::Symbol {
                         value: s.as_string(),
                     })
                 }),
@@ -172,11 +168,11 @@ pub fn event_to_flatbuffer_struct(
         }
         Event::Present(presentation) => {
             let fb_presentation = presentation_to_flatbuffer_struct(presentation)?;
-            EventUnion::PresentEvent(Box::new(moor_rpc::PresentEvent {
+            EventUnion::PresentEvent(Box::new(rpc::PresentEvent {
                 presentation: Box::new(fb_presentation),
             }))
         }
-        Event::Unpresent(id) => EventUnion::UnpresentEvent(Box::new(moor_rpc::UnpresentEvent {
+        Event::Unpresent(id) => EventUnion::UnpresentEvent(Box::new(rpc::UnpresentEvent {
             presentation_id: id.clone(),
         })),
         Event::Traceback(exception) => {
@@ -186,16 +182,16 @@ pub fn event_to_flatbuffer_struct(
             let stack_bytes: Result<Vec<_>, _> = exception
                 .stack
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| moor_rpc::VarBytes { data }))
+                .map(|v| var_to_flatbuffer_bytes(v).map(|data| rpc::VarBytes { data }))
                 .collect();
             let backtrace_bytes: Result<Vec<_>, _> = exception
                 .backtrace
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| moor_rpc::VarBytes { data }))
+                .map(|v| var_to_flatbuffer_bytes(v).map(|data| rpc::VarBytes { data }))
                 .collect();
 
-            EventUnion::TracebackEvent(Box::new(moor_rpc::TracebackEvent {
-                exception: Box::new(moor_rpc::Exception {
+            EventUnion::TracebackEvent(Box::new(rpc::TracebackEvent {
+                exception: Box::new(rpc::Exception {
                     error: Box::new(error_bytes),
                     stack: stack_bytes?,
                     backtrace: backtrace_bytes?,
@@ -204,13 +200,13 @@ pub fn event_to_flatbuffer_struct(
         }
     };
 
-    Ok(moor_rpc::Event { event: event_union })
+    Ok(rpc::Event { event: event_union })
 }
 
 /// Convert NarrativeEvent to FlatBuffer struct
 pub fn narrative_event_to_flatbuffer_struct(
     narrative_event: &NarrativeEvent,
-) -> Result<moor_rpc::NarrativeEvent, moor_var::EncodingError> {
+) -> Result<rpc::NarrativeEvent, moor_var::EncodingError> {
     let author_bytes = var_to_flatbuffer_bytes(&narrative_event.author)?;
     let event_fb = event_to_flatbuffer_struct(&narrative_event.event)?;
 
@@ -220,10 +216,10 @@ pub fn narrative_event_to_flatbuffer_struct(
         .unwrap_or_default()
         .as_nanos() as u64;
 
-    Ok(moor_rpc::NarrativeEvent {
+    Ok(rpc::NarrativeEvent {
         event_id: Box::new(uuid_to_flatbuffer_struct(&narrative_event.event_id)),
         timestamp: timestamp_nanos,
-        author: Box::new(moor_rpc::VarBytes { data: author_bytes }),
+        author: Box::new(rpc::VarBytes { data: author_bytes }),
         event: Box::new(event_fb),
     })
 }

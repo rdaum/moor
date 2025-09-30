@@ -12,9 +12,8 @@
 //
 
 use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcSendClient};
-use rpc_common::{
-    HOST_BROADCAST_TOPIC, HostToken, HostType, RpcError, flatbuffers_generated::moor_rpc,
-};
+use moor_common::schema::rpc as moor_rpc;
+use rpc_common::{HOST_BROADCAST_TOPIC, HostToken, HostType, RpcError};
 use std::{
     net::SocketAddr,
     sync::{Arc, atomic::AtomicBool},

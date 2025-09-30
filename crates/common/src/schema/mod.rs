@@ -11,20 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-extern crate core;
+//! FlatBuffer schema types organized by domain
+//!
+//! This module provides a clean, organized interface to all FlatBuffer types.
+//! The actual generated code is kept private and accessed through these
+//! domain-specific submodules.
 
-use shadow_rs::shadow;
+pub mod common;
+pub mod event_log;
+pub mod rpc;
 
-pub mod builtins;
-pub mod matching;
-pub mod model;
-pub mod schema;
-pub mod tasks;
-pub mod tracing;
-pub mod util;
-
-/// When encoding or decoding types to/from data or network, this is a version tag put into headers
-/// for validity / version checking.
-pub const DATA_LAYOUT_VERSION: u8 = 1;
-
-shadow!(build);
+// Generated schemas
+#[allow(dead_code, clippy::all)]
+pub mod schemas_generated;

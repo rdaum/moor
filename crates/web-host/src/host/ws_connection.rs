@@ -14,9 +14,12 @@
 use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt, stream::SplitSink};
-use moor_common::tasks::{
-    AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
-    VerbProgramError,
+use moor_common::{
+    schema::rpc as moor_rpc,
+    tasks::{
+        AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
+        VerbProgramError,
+    },
 };
 use moor_var::{Obj, Var, v_obj};
 use planus::ReadAsRoot;
@@ -25,8 +28,8 @@ use rpc_async_client::{
     rpc_client::RpcSendClient,
 };
 use rpc_common::{
-    AuthToken, ClientToken, extract_obj, flatbuffers_generated::moor_rpc, mk_client_pong_msg,
-    mk_command_msg, mk_detach_msg, mk_requested_input_msg,
+    AuthToken, ClientToken, extract_obj, mk_client_pong_msg, mk_command_msg, mk_detach_msg,
+    mk_requested_input_msg,
 };
 use serde_json::Value;
 use std::{

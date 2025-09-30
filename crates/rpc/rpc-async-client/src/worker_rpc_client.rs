@@ -11,13 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::tasks::WorkerError;
+use moor_common::{schema::rpc as moor_rpc, tasks::WorkerError};
 use moor_var::{Symbol, Var};
 use planus::{Builder, ReadAsRoot};
 use rpc_common::{
-    DaemonToWorkerReply, RpcError, WorkerToken, flatbuffers_generated::moor_rpc,
-    mk_attach_worker_msg, mk_request_error_msg, mk_request_result_msg, mk_worker_pong_msg,
-    var_to_flatbuffer_bytes,
+    DaemonToWorkerReply, RpcError, WorkerToken, mk_attach_worker_msg, mk_request_error_msg,
+    mk_request_result_msg, mk_worker_pong_msg, var_to_flatbuffer_bytes,
 };
 use tmq::{Multipart, request_reply::RequestSender};
 use tracing::error;

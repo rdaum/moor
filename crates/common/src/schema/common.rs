@@ -11,20 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-extern crate core;
+//! Common domain types
+//!
+//! Shared FlatBuffer types used across multiple schemas including:
+//! - Basic primitives (VarBytes, Symbol, Uuid, Obj)
+//! - Errors (Error, Exception, CompileError, WorldStateError)
+//! - Narrative events and presentations
+//! - Object references
+//! - Property and verb metadata
 
-use shadow_rs::shadow;
-
-pub mod builtins;
-pub mod matching;
-pub mod model;
-pub mod schema;
-pub mod tasks;
-pub mod tracing;
-pub mod util;
-
-/// When encoding or decoding types to/from data or network, this is a version tag put into headers
-/// for validity / version checking.
-pub const DATA_LAYOUT_VERSION: u8 = 1;
-
-shadow!(build);
+pub use crate::schema::schemas_generated::moor_common::*;

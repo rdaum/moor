@@ -15,7 +15,7 @@ use crate::{
     WorkerRpcSendClient, attach_worker,
     pubsub_client::{WorkerMessage, workers_events_recv},
 };
-use moor_common::tasks::WorkerError;
+use moor_common::{schema::rpc as moor_rpc, tasks::WorkerError};
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::{WORKER_BROADCAST_TOPIC, WorkerToken};
 use std::{
@@ -130,13 +130,13 @@ async fn process_fb<ProcessFunc, Fut>(
     };
 
     match message_union {
-        rpc_common::flatbuffers_generated::moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => {
+        moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => {
             rpc_client
                 .make_worker_rpc_call_fb_pong(&worker_token, my_id, worker_type)
                 .await
                 .expect("Unable to send pong to daemon");
         }
-        rpc_common::flatbuffers_generated::moor_rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
+        moor_rpc::DaemonToWorkerMessageUnionRef::WorkerRequest(req) => {
             // Extract data directly from flatbuffer references - only copying the minimal data we need
             let worker_id_data = match req.worker_id().and_then(|id| id.data()) {
                 Ok(data) => data,
@@ -188,15 +188,14 @@ async fn process_fb<ProcessFunc, Fut>(
                     return;
                 }
             };
-            let perms_obj = match rpc_common::flatbuffers_generated::moor_rpc::Obj::try_from(perms_ref) {
+            let perms_obj = match moor_rpc::Obj::try_from(perms_ref) {
                 Ok(obj) => obj,
                 Err(e) => {
                     info!("Failed to convert perms ref: {}", e);
                     return;
                 }
             };
-            let perms = match rpc_common::obj_from_flatbuffer_struct(&perms_obj)
-            {
+            let perms = match rpc_common::obj_from_flatbuffer_struct(&perms_obj) {
                 Ok(obj) => obj,
                 Err(e) => {
                     info!("Failed to decode perms: {}", e);
@@ -276,7 +275,7 @@ async fn process_fb<ProcessFunc, Fut>(
                 }
             }
         }
-        rpc_common::flatbuffers_generated::moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
+        moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
             let token_str = match die.token().and_then(|t| t.token()) {
                 Ok(token) => token,
                 Err(e) => {

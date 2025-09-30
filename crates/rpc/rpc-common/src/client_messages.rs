@@ -15,10 +15,9 @@
 
 use crate::{
     AuthToken, ClientToken,
-    flatbuffers_generated::moor_rpc,
     helpers::{auth_token_fb, client_token_fb, obj_fb, objectref_fb, symbol_fb, uuid_fb, var_fb},
 };
-use moor_common::model::ObjectRef;
+use moor_common::{model::ObjectRef, schema::rpc};
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
@@ -29,16 +28,14 @@ pub fn mk_login_command_msg(
     handler_object: &Obj,
     connect_args: Vec<String>,
     do_attach: bool,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::LoginCommand(Box::new(
-            moor_rpc::LoginCommand {
-                client_token: client_token_fb(client_token),
-                handler_object: obj_fb(handler_object),
-                connect_args,
-                do_attach,
-            },
-        )),
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::LoginCommand(Box::new(rpc::LoginCommand {
+            client_token: client_token_fb(client_token),
+            handler_object: obj_fb(handler_object),
+            connect_args,
+            do_attach,
+        })),
     }
 }
 
@@ -49,9 +46,9 @@ pub fn mk_command_msg(
     auth_token: &AuthToken,
     handler_object: &Obj,
     command: String,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Command(Box::new(moor_rpc::Command {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Command(Box::new(rpc::Command {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             handler_object: obj_fb(handler_object),
@@ -67,16 +64,14 @@ pub fn mk_out_of_band_msg(
     auth_token: &AuthToken,
     handler_object: &Obj,
     command: String,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::OutOfBand(Box::new(
-            moor_rpc::OutOfBand {
-                client_token: client_token_fb(client_token),
-                auth_token: auth_token_fb(auth_token),
-                handler_object: obj_fb(handler_object),
-                command,
-            },
-        )),
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::OutOfBand(Box::new(rpc::OutOfBand {
+            client_token: client_token_fb(client_token),
+            auth_token: auth_token_fb(auth_token),
+            handler_object: obj_fb(handler_object),
+            command,
+        })),
     }
 }
 
@@ -86,19 +81,17 @@ pub fn mk_client_pong_msg(
     client_token: &ClientToken,
     client_sys_time: u64,
     player: &Obj,
-    host_type: moor_rpc::HostType,
+    host_type: rpc::HostType,
     socket_addr: String,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::ClientPong(Box::new(
-            moor_rpc::ClientPong {
-                client_token: client_token_fb(client_token),
-                client_sys_time,
-                player: obj_fb(player),
-                host_type,
-                socket_addr,
-            },
-        )),
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::ClientPong(Box::new(rpc::ClientPong {
+            client_token: client_token_fb(client_token),
+            client_sys_time,
+            player: obj_fb(player),
+            host_type,
+            socket_addr,
+        })),
     }
 }
 
@@ -107,9 +100,9 @@ pub fn mk_client_pong_msg(
 pub fn mk_detach_msg(
     client_token: &ClientToken,
     disconnected: bool,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Detach(Box::new(moor_rpc::Detach {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Detach(Box::new(rpc::Detach {
             client_token: client_token_fb(client_token),
             disconnected,
         })),
@@ -123,10 +116,10 @@ pub fn mk_requested_input_msg(
     auth_token: &AuthToken,
     request_id: Uuid,
     input: &Var,
-) -> Option<moor_rpc::HostClientToDaemonMessage> {
-    Some(moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::RequestedInput(Box::new(
-            moor_rpc::RequestedInput {
+) -> Option<rpc::HostClientToDaemonMessage> {
+    Some(rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::RequestedInput(Box::new(
+            rpc::RequestedInput {
                 client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 request_id: uuid_fb(request_id),
@@ -144,9 +137,9 @@ pub fn mk_program_msg(
     object: &ObjectRef,
     verb: &Symbol,
     code: Vec<String>,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Program(Box::new(moor_rpc::Program {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Program(Box::new(rpc::Program {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             object: objectref_fb(object),
@@ -163,12 +156,12 @@ pub fn mk_set_client_attribute_msg(
     auth_token: &AuthToken,
     key: &Symbol,
     value: Option<&Var>,
-) -> Option<moor_rpc::HostClientToDaemonMessage> {
+) -> Option<rpc::HostClientToDaemonMessage> {
     let value_fb = value.and_then(var_fb);
 
-    Some(moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::SetClientAttribute(Box::new(
-            moor_rpc::SetClientAttribute {
+    Some(rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::SetClientAttribute(Box::new(
+            rpc::SetClientAttribute {
                 client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 key: symbol_fb(key),
@@ -184,10 +177,10 @@ pub fn mk_request_sys_prop_msg(
     client_token: &ClientToken,
     object: &ObjectRef,
     property: &Symbol,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::RequestSysProp(Box::new(
-            moor_rpc::RequestSysProp {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::RequestSysProp(Box::new(
+            rpc::RequestSysProp {
                 client_token: client_token_fb(client_token),
                 object: objectref_fb(object),
                 property: symbol_fb(property),
@@ -202,9 +195,9 @@ pub fn mk_eval_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
     expression: String,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Eval(Box::new(moor_rpc::Eval {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Eval(Box::new(rpc::Eval {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             expression,
@@ -218,12 +211,12 @@ pub fn mk_connection_establish_msg(
     peer_addr: String,
     local_port: u16,
     remote_port: u16,
-    acceptable_content_types: Option<Vec<moor_rpc::Symbol>>,
-    connection_attributes: Option<Vec<moor_rpc::ConnectionAttribute>>,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::ConnectionEstablish(Box::new(
-            moor_rpc::ConnectionEstablish {
+    acceptable_content_types: Option<Vec<rpc::Symbol>>,
+    connection_attributes: Option<Vec<rpc::ConnectionAttribute>>,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::ConnectionEstablish(Box::new(
+            rpc::ConnectionEstablish {
                 peer_addr,
                 local_port,
                 remote_port,
@@ -241,9 +234,9 @@ pub fn mk_verbs_msg(
     auth_token: &AuthToken,
     object: &ObjectRef,
     inherited: bool,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Verbs(Box::new(moor_rpc::Verbs {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Verbs(Box::new(rpc::Verbs {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             object: objectref_fb(object),
@@ -259,16 +252,14 @@ pub fn mk_properties_msg(
     auth_token: &AuthToken,
     object: &ObjectRef,
     inherited: bool,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Properties(Box::new(
-            moor_rpc::Properties {
-                client_token: client_token_fb(client_token),
-                auth_token: auth_token_fb(auth_token),
-                object: objectref_fb(object),
-                inherited,
-            },
-        )),
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Properties(Box::new(rpc::Properties {
+            client_token: client_token_fb(client_token),
+            auth_token: auth_token_fb(auth_token),
+            object: objectref_fb(object),
+            inherited,
+        })),
     }
 }
 
@@ -278,11 +269,11 @@ pub fn mk_retrieve_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
     object: &ObjectRef,
-    entity_type: moor_rpc::EntityType,
+    entity_type: rpc::EntityType,
     name: &Symbol,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Retrieve(Box::new(moor_rpc::Retrieve {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Retrieve(Box::new(rpc::Retrieve {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             object: objectref_fb(object),
@@ -296,17 +287,17 @@ pub fn mk_retrieve_msg(
 #[inline]
 pub fn mk_attach_msg(
     auth_token: &AuthToken,
-    connect_type: Option<moor_rpc::ConnectType>,
+    connect_type: Option<rpc::ConnectType>,
     handler_object: &Obj,
     peer_addr: String,
     local_port: u16,
     remote_port: u16,
-    acceptable_content_types: Option<Vec<moor_rpc::Symbol>>,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Attach(Box::new(moor_rpc::Attach {
+    acceptable_content_types: Option<Vec<rpc::Symbol>>,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Attach(Box::new(rpc::Attach {
             auth_token: auth_token_fb(auth_token),
-            connect_type: connect_type.unwrap_or(moor_rpc::ConnectType::Connected),
+            connect_type: connect_type.unwrap_or(rpc::ConnectType::Connected),
             handler_object: obj_fb(handler_object),
             peer_addr,
             local_port,
@@ -322,9 +313,9 @@ pub fn mk_resolve_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
     objref: &ObjectRef,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::Resolve(Box::new(moor_rpc::Resolve {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Resolve(Box::new(rpc::Resolve {
             client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             objref: objectref_fb(objref),
@@ -337,11 +328,11 @@ pub fn mk_resolve_msg(
 pub fn mk_request_history_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
-    history_recall: Box<moor_rpc::HistoryRecall>,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::RequestHistory(Box::new(
-            moor_rpc::RequestHistory {
+    history_recall: Box<rpc::HistoryRecall>,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::RequestHistory(Box::new(
+            rpc::RequestHistory {
                 client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 history_recall,
@@ -355,10 +346,10 @@ pub fn mk_request_history_msg(
 pub fn mk_request_current_presentations_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::RequestCurrentPresentations(Box::new(
-            moor_rpc::RequestCurrentPresentations {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::RequestCurrentPresentations(Box::new(
+            rpc::RequestCurrentPresentations {
                 client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
             },
@@ -372,10 +363,10 @@ pub fn mk_dismiss_presentation_msg(
     client_token: &ClientToken,
     auth_token: &AuthToken,
     presentation_id: String,
-) -> moor_rpc::HostClientToDaemonMessage {
-    moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::DismissPresentation(Box::new(
-            moor_rpc::DismissPresentation {
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::DismissPresentation(Box::new(
+            rpc::DismissPresentation {
                 client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 presentation_id,
@@ -392,23 +383,20 @@ pub fn mk_invoke_verb_msg(
     object: &ObjectRef,
     verb_name: &Symbol,
     args: Vec<&Var>,
-) -> Option<moor_rpc::HostClientToDaemonMessage> {
-    let args_fb: Vec<moor_rpc::VarBytes> =
-        args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
+) -> Option<rpc::HostClientToDaemonMessage> {
+    let args_fb: Vec<rpc::VarBytes> = args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
 
     if args_fb.len() != args.len() {
         return None;
     }
 
-    Some(moor_rpc::HostClientToDaemonMessage {
-        message: moor_rpc::HostClientToDaemonMessageUnion::InvokeVerb(Box::new(
-            moor_rpc::InvokeVerb {
-                client_token: client_token_fb(client_token),
-                auth_token: auth_token_fb(auth_token),
-                object: objectref_fb(object),
-                verb: symbol_fb(verb_name),
-                args: args_fb,
-            },
-        )),
+    Some(rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::InvokeVerb(Box::new(rpc::InvokeVerb {
+            client_token: client_token_fb(client_token),
+            auth_token: auth_token_fb(auth_token),
+            object: objectref_fb(object),
+            verb: symbol_fb(verb_name),
+            args: args_fb,
+        })),
     })
 }

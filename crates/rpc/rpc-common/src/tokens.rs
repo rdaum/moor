@@ -11,11 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{flatbuffers_generated::moor_rpc, host::HostType};
+use crate::host::HostType;
 use ed25519_dalek::{
     SigningKey, VerifyingKey,
     pkcs8::{DecodePrivateKey, DecodePublicKey},
 };
+use moor_common::schema::rpc;
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use std::path::Path;
 use thiserror::Error;
@@ -94,7 +95,7 @@ pub fn make_host_token(private_key: &Key<64>, host_type: HostType) -> HostToken 
 
 /// Convert from FlatBuffer ClientTokenRef to ClientToken
 pub fn client_token_from_ref(
-    token_ref: moor_rpc::ClientTokenRef<'_>,
+    token_ref: rpc::ClientTokenRef<'_>,
 ) -> Result<crate::ClientToken, String> {
     let token_string = token_ref
         .token()
@@ -103,9 +104,7 @@ pub fn client_token_from_ref(
 }
 
 /// Convert from FlatBuffer AuthTokenRef to AuthToken
-pub fn auth_token_from_ref(
-    token_ref: moor_rpc::AuthTokenRef<'_>,
-) -> Result<crate::AuthToken, String> {
+pub fn auth_token_from_ref(token_ref: rpc::AuthTokenRef<'_>) -> Result<crate::AuthToken, String> {
     let token_string = token_ref.token().map_err(|_| "Missing auth token string")?;
     Ok(crate::AuthToken(token_string.to_string()))
 }

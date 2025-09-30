@@ -12,16 +12,15 @@
 //
 
 use crate::rpc::{message_handler::RpcMessageHandler, session::RpcSession};
-use moor_common::model::ObjectRef;
+use moor_common::{
+    model::ObjectRef,
+    schema::{rpc as moor_rpc, rpc::DaemonToClientReply},
+};
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
 use moor_var::{Obj, SYSTEM_OBJECT, Variant, v_str};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
     MOOR_SESSION_TOKEN_FOOTER, RpcMessageError, auth_token_from_ref, client_token_from_ref,
-    flatbuffers_generated::{
-        moor_rpc,
-        moor_rpc::{DaemonToClientReply, DaemonToClientReplyUnion, LoginResult},
-    },
     obj_to_flatbuffer_struct,
 };
 use rusty_paseto::core::{
@@ -196,8 +195,8 @@ impl RpcMessageHandler {
                         Variant::Obj(o) => break *o,
                         _ => {
                             return Ok(DaemonToClientReply {
-                                reply: DaemonToClientReplyUnion::LoginResult(Box::new(
-                                    LoginResult {
+                                reply: moor_rpc::DaemonToClientReplyUnion::LoginResult(Box::new(
+                                    moor_rpc::LoginResult {
                                         success: false,
                                         auth_token: None,
                                         connect_type: moor_rpc::ConnectType::Connected,
@@ -249,14 +248,16 @@ impl RpcMessageHandler {
         let auth_token = self.make_auth_token(&player);
 
         Ok(DaemonToClientReply {
-            reply: DaemonToClientReplyUnion::LoginResult(Box::new(LoginResult {
-                success: true,
-                auth_token: Some(Box::new(moor_rpc::AuthToken {
-                    token: auth_token.0.clone(),
-                })),
-                connect_type,
-                player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
-            })),
+            reply: moor_rpc::DaemonToClientReplyUnion::LoginResult(Box::new(
+                moor_rpc::LoginResult {
+                    success: true,
+                    auth_token: Some(Box::new(moor_rpc::AuthToken {
+                        token: auth_token.0.clone(),
+                    })),
+                    connect_type,
+                    player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                },
+            )),
         })
     }
 

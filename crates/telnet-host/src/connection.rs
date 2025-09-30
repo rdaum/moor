@@ -26,6 +26,7 @@ use futures_util::{
 };
 use moor_common::{
     model::{CompileError, ObjectRef},
+    schema::rpc as moor_rpc,
     tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError},
     util::parse_into_words,
 };
@@ -36,10 +37,9 @@ use rpc_async_client::{
     rpc_client::RpcSendClient,
 };
 use rpc_common::{
-    AuthToken, ClientToken, extract_obj, extract_symbol, extract_var,
-    flatbuffers_generated::moor_rpc, mk_client_pong_msg, mk_command_msg, mk_detach_msg,
-    mk_login_command_msg, mk_out_of_band_msg, mk_program_msg, mk_requested_input_msg,
-    mk_set_client_attribute_msg,
+    AuthToken, ClientToken, extract_obj, extract_symbol, extract_var, mk_client_pong_msg,
+    mk_command_msg, mk_detach_msg, mk_login_command_msg, mk_out_of_band_msg, mk_program_msg,
+    mk_requested_input_msg, mk_set_client_attribute_msg,
 };
 use termimad::MadSkin;
 use tmq::subscribe::Subscribe;

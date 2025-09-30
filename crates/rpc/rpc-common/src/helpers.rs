@@ -21,66 +21,65 @@ use crate::{
         obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_to_flatbuffer_struct,
         var_to_flatbuffer_bytes,
     },
-    flatbuffers_generated::moor_rpc,
 };
-use moor_common::model::ObjectRef;
+use moor_common::{model::ObjectRef, schema::rpc};
 use moor_var::{Obj, Symbol, Var};
 
 /// Create a FlatBuffer ClientToken from a reference (avoids moving the token)
 #[inline]
-pub fn client_token_fb(token: &ClientToken) -> Box<moor_rpc::ClientToken> {
-    Box::new(moor_rpc::ClientToken {
+pub fn client_token_fb(token: &ClientToken) -> Box<rpc::ClientToken> {
+    Box::new(rpc::ClientToken {
         token: token.0.clone(),
     })
 }
 
 /// Create a FlatBuffer AuthToken from a reference (avoids moving the token)
 #[inline]
-pub fn auth_token_fb(token: &AuthToken) -> Box<moor_rpc::AuthToken> {
-    Box::new(moor_rpc::AuthToken {
+pub fn auth_token_fb(token: &AuthToken) -> Box<rpc::AuthToken> {
+    Box::new(rpc::AuthToken {
         token: token.0.clone(),
     })
 }
 
 /// Create a FlatBuffer WorkerToken from a reference (avoids moving the token)
 #[inline]
-pub fn mk_worker_token(token: &WorkerToken) -> Box<moor_rpc::WorkerToken> {
-    Box::new(moor_rpc::WorkerToken {
+pub fn mk_worker_token(token: &WorkerToken) -> Box<rpc::WorkerToken> {
+    Box::new(rpc::WorkerToken {
         token: token.0.clone(),
     })
 }
 
 /// Create a boxed FlatBuffer Obj struct from an Obj reference
 #[inline]
-pub fn obj_fb(obj: &Obj) -> Box<moor_rpc::Obj> {
+pub fn obj_fb(obj: &Obj) -> Box<rpc::Obj> {
     Box::new(obj_to_flatbuffer_struct(obj))
 }
 
 /// Create a boxed FlatBuffer Symbol struct from a Symbol reference
 #[inline]
-pub fn symbol_fb(symbol: &Symbol) -> Box<moor_rpc::Symbol> {
+pub fn symbol_fb(symbol: &Symbol) -> Box<rpc::Symbol> {
     Box::new(symbol_to_flatbuffer_struct(symbol))
 }
 
 /// Create a boxed FlatBuffer ObjectRef struct from an ObjectRef reference
 #[inline]
-pub fn objectref_fb(objref: &ObjectRef) -> Box<moor_rpc::ObjectRef> {
+pub fn objectref_fb(objref: &ObjectRef) -> Box<rpc::ObjectRef> {
     Box::new(objectref_to_flatbuffer_struct(objref))
 }
 
 /// Create a boxed FlatBuffer VarBytes from a Var reference
 /// Returns None if serialization fails
 #[inline]
-pub fn var_fb(var: &Var) -> Option<Box<moor_rpc::VarBytes>> {
-    Some(Box::new(moor_rpc::VarBytes {
+pub fn var_fb(var: &Var) -> Option<Box<rpc::VarBytes>> {
+    Some(Box::new(rpc::VarBytes {
         data: var_to_flatbuffer_bytes(var).ok()?,
     }))
 }
 
 /// Create a boxed FlatBuffer Uuid from a uuid::Uuid
 #[inline]
-pub fn uuid_fb(uuid: uuid::Uuid) -> Box<moor_rpc::Uuid> {
-    Box::new(moor_rpc::Uuid {
+pub fn uuid_fb(uuid: uuid::Uuid) -> Box<rpc::Uuid> {
+    Box::new(rpc::Uuid {
         data: uuid.as_bytes().to_vec(),
     })
 }
@@ -93,10 +92,10 @@ pub fn string_list_fb(strings: impl IntoIterator<Item = String>) -> Vec<String> 
 
 /// Create a FlatBuffer symbol list from an iterator of Symbols
 #[inline]
-pub fn symbol_list_fb(symbols: impl IntoIterator<Item = Symbol>) -> Vec<moor_rpc::Symbol> {
+pub fn symbol_list_fb(symbols: impl IntoIterator<Item = Symbol>) -> Vec<rpc::Symbol> {
     symbols
         .into_iter()
-        .map(|s| moor_rpc::Symbol {
+        .map(|s| rpc::Symbol {
             value: s.as_string(),
         })
         .collect()

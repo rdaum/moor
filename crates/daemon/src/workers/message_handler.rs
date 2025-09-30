@@ -14,15 +14,15 @@
 //! Message handler for workers business logic, separated from transport concerns
 
 use eyre::Context;
-use moor_common::tasks::WorkerError;
+use moor_common::{schema::rpc as moor_rpc, tasks::WorkerError};
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use moor_var::{Obj, Symbol, Var};
 use planus::Builder;
 use rpc_common::{
     MOOR_WORKER_TOKEN_FOOTER, RpcMessageError, WORKER_BROADCAST_TOPIC, WorkerToken,
-    flatbuffers_generated::moor_rpc, mk_ping_workers_msg, mk_worker_ack_reply,
-    mk_worker_attached_reply, mk_worker_rejected_reply, mk_worker_request_msg,
-    var_from_flatbuffer_bytes, var_to_flatbuffer_bytes, worker_error_from_flatbuffer_struct,
+    mk_ping_workers_msg, mk_worker_ack_reply, mk_worker_attached_reply, mk_worker_rejected_reply,
+    mk_worker_request_msg, var_from_flatbuffer_bytes, var_to_flatbuffer_bytes,
+    worker_error_from_flatbuffer_struct,
 };
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPublicKey, Public, V4};
 use std::{

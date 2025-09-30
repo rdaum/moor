@@ -17,9 +17,11 @@ use flume::Sender;
 use std::sync::Mutex;
 use uuid::Uuid;
 
-use moor_common::tasks::{ConnectionDetails, NarrativeEvent, Session, SessionError};
+use moor_common::{
+    schema::rpc as moor_rpc,
+    tasks::{ConnectionDetails, NarrativeEvent, Session, SessionError},
+};
 use moor_var::{Obj, Symbol, Var};
-use rpc_common::flatbuffers_generated::moor_rpc;
 
 use crate::event_log::EventLogOps;
 

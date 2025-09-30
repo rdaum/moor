@@ -17,8 +17,16 @@ use ahash::AHasher;
 use eyre::Error;
 use flume::Sender;
 use lazy_static::lazy_static;
+use moor_common::schema::{
+    common, rpc as moor_rpc,
+    rpc::{HostClientToDaemonMessageUnionRef, ListenerRef},
+};
+use moor_rpc::{
+    ClientEvent, ClientEventUnion, DaemonToClientReply, DaemonToClientReplyUnion, DaemonToHostAck,
+    DaemonToHostReply, DaemonToHostReplyUnion, HistoryResponseReply, HostClientToDaemonMessageRef,
+    VerbProgramResponseReply, VerbProgramResponseUnion,
+};
 use papaya::HashMap as PapayaHashMap;
-use rpc_common::flatbuffers_generated::moor_rpc::{HostClientToDaemonMessageUnionRef, ListenerRef};
 use std::{
     hash::BuildHasherDefault,
     net::SocketAddr,
@@ -44,19 +52,14 @@ use moor_db::db_counters;
 use moor_kernel::{
     SchedulerClient, config::Config, tasks::sched_counters, vm::builtins::bf_perf_counters,
 };
-use moor_rpc::{
-    ClientEvent, ClientEventUnion, DaemonToClientReply, DaemonToClientReplyUnion, DaemonToHostAck,
-    DaemonToHostReply, DaemonToHostReplyUnion, HostClientToDaemonMessageRef,
-    VerbProgramResponseReply, VerbProgramResponseUnion,
-};
+
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, RpcMessageError, auth_token_from_ref,
     extract_field, extract_obj, extract_object_ref, extract_string, extract_string_list,
-    extract_symbol, extract_uuid, extract_var,
-    flatbuffers_generated::{moor_rpc, moor_rpc::HostToDaemonMessageUnionRef},
-    obj_from_ref, obj_to_flatbuffer_struct, objectref_from_ref, presentation_to_flatbuffer_struct,
-    symbol_from_ref, uuid_to_flatbuffer_struct, var_from_ref, var_to_flatbuffer_bytes,
+    extract_symbol, extract_uuid, extract_var, obj_from_ref, obj_to_flatbuffer_struct,
+    objectref_from_ref, presentation_to_flatbuffer_struct, symbol_from_ref,
+    uuid_to_flatbuffer_struct, var_from_ref, var_to_flatbuffer_bytes,
     verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
@@ -188,7 +191,7 @@ impl MessageHandler for RpcMessageHandler {
         let response = match message.message().map_err(|e| {
             RpcMessageError::InvalidRequest(format!("missing host message union: {e:?}"))
         })? {
-            HostToDaemonMessageUnionRef::RegisterHost(reg) => {
+            moor_rpc::HostToDaemonMessageUnionRef::RegisterHost(reg) => {
                 let host_type = match reg.host_type().unwrap() {
                     moor_rpc::HostType::Tcp => HostType::TCP,
                     moor_rpc::HostType::WebSocket => HostType::WebSocket,
@@ -209,7 +212,7 @@ impl MessageHandler for RpcMessageHandler {
                     reply: DaemonToHostReplyUnion::DaemonToHostAck(Box::new(DaemonToHostAck {})),
                 }
             }
-            HostToDaemonMessageUnionRef::HostPong(pong) => {
+            moor_rpc::HostToDaemonMessageUnionRef::HostPong(pong) => {
                 let host_type = match pong.host_type().unwrap() {
                     moor_rpc::HostType::Tcp => HostType::TCP,
                     moor_rpc::HostType::WebSocket => HostType::WebSocket,
@@ -230,7 +233,7 @@ impl MessageHandler for RpcMessageHandler {
                     reply: DaemonToHostReplyUnion::DaemonToHostAck(Box::new(DaemonToHostAck {})),
                 }
             }
-            HostToDaemonMessageUnionRef::RequestPerformanceCounters(_) => {
+            moor_rpc::HostToDaemonMessageUnionRef::RequestPerformanceCounters(_) => {
                 let mut all_counters = vec![];
                 let mut sch = vec![];
                 for c in sched_counters().all_counters() {
@@ -299,7 +302,7 @@ impl MessageHandler for RpcMessageHandler {
                     )),
                 }
             }
-            HostToDaemonMessageUnionRef::DetachHost(_) => {
+            moor_rpc::HostToDaemonMessageUnionRef::DetachHost(_) => {
                 let mut hosts = self.hosts.write().unwrap();
                 hosts.unregister_host(&host_token);
                 DaemonToHostReply {
@@ -699,7 +702,7 @@ impl MessageHandler for RpcMessageHandler {
                         Ok(DaemonToClientReply {
                             reply: DaemonToClientReplyUnion::PropertyValue(Box::new(
                                 moor_rpc::PropertyValue {
-                                    prop_info: Box::new(moor_rpc::PropInfo {
+                                    prop_info: Box::new(common::PropInfo {
                                         definer: Box::new(obj_to_flatbuffer_struct(
                                             &propdef.definer(),
                                         )),
@@ -752,7 +755,7 @@ impl MessageHandler for RpcMessageHandler {
                         Ok(DaemonToClientReply {
                             reply: DaemonToClientReplyUnion::VerbValue(Box::new(
                                 moor_rpc::VerbValue {
-                                    verb_info: Box::new(moor_rpc::VerbInfo {
+                                    verb_info: Box::new(common::VerbInfo {
                                         location: Box::new(obj_to_flatbuffer_struct(
                                             &verbdef.location(),
                                         )),
@@ -832,7 +835,7 @@ impl MessageHandler for RpcMessageHandler {
 
                 let props = prop_list
                     .iter()
-                    .map(|(propdef, propperms)| moor_rpc::PropInfo {
+                    .map(|(propdef, propperms)| common::PropInfo {
                         definer: Box::new(obj_to_flatbuffer_struct(&propdef.definer())),
                         location: Box::new(obj_to_flatbuffer_struct(&propdef.location())),
                         name: Box::new(moor_rpc::Symbol {
@@ -897,7 +900,7 @@ impl MessageHandler for RpcMessageHandler {
                                 value: v.args().iobj.to_string().to_string(),
                             },
                         ];
-                        moor_rpc::VerbInfo {
+                        common::VerbInfo {
                             location: Box::new(obj_to_flatbuffer_struct(&v.location())),
                             owner: Box::new(obj_to_flatbuffer_struct(&v.owner())),
                             names,
@@ -925,7 +928,11 @@ impl MessageHandler for RpcMessageHandler {
                 let history_response = self.build_history_response(player, history_recall_ref)?;
 
                 Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::HistoryResponse(Box::new(history_response)),
+                    reply: DaemonToClientReplyUnion::HistoryResponseReply(Box::new(
+                        HistoryResponseReply {
+                            response: Box::new(history_response),
+                        },
+                    )),
                 })
             }
             HostClientToDaemonMessageUnionRef::RequestCurrentPresentations(req) => {
