@@ -24,12 +24,24 @@ use byteview::ByteView;
 use moor_var::AsByteBuffer;
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
-use zerocopy::{FromBytes, Immutable};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 #[derive(
-    Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Encode, Decode, FromBytes, Immutable,
+    Debug,
+    Clone,
+    Copy,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Encode,
+    Decode,
+    FromBytes,
+    Immutable,
+    IntoBytes,
 )]
-#[repr(C)]
+#[repr(transparent)]
 pub struct BitEnum<T: ToPrimitive> {
     value: u16,
     phantom: PhantomData<T>,

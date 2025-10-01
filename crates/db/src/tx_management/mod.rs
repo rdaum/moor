@@ -65,20 +65,21 @@ pub enum Error {
     EncodingFailure,
 }
 
-/// The `Provider` trait is a generic interface for a key-value store that back the transactional
-/// global cache.
-pub trait Provider<Domain, Codomain>: Clone {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
-    fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error>;
-    fn del(&self, timestamp: Timestamp, domain: &Domain) -> Result<(), Error>;
+/// Trait for handling persistence of a specific type T.
+/// Provider implementations implement this trait multiple times for different types,
+/// allowing per-type encoding and storage decisions.
+///
+/// This trait does NOT assume a universal byte representation - each type's impl
+/// can encode and persist however it wants.
+pub trait EncodeFor<T> {
+    /// Type representing the stored form - could be bytes, SQL row, etc.
+    type Stored;
 
-    /// Scan the database for all keys match the given predicate
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
-    where
-        F: Fn(&Domain, &Codomain) -> bool;
+    /// Encode a value to its stored representation
+    fn encode(&self, value: &T) -> Result<Self::Stored, Error>;
 
-    // Stop any background processing that is running on this provider.
-    fn stop(&self) -> Result<(), Error>;
+    /// Decode from stored representation
+    fn decode(&self, stored: Self::Stored) -> Result<T, Error>;
 }
 
 /// Represents a "canonical" source for some domain/codomain pair, to be supplied to a

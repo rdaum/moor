@@ -15,7 +15,6 @@ use crate::{
     AnonymousObjectMetadata, CommitSet, ObjAndUUIDHolder, StringHolder,
     config::DatabaseConfig,
     db_worldstate::db_counters,
-    fjall_provider::FjallProvider,
     prop_cache::PropResolutionCache,
     tx_management::{
         Canonical, CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
@@ -44,7 +43,11 @@ use std::{
 use tempfile::TempDir;
 use tracing::{error, warn};
 
-use crate::{relation_defs::define_relations, snapshot_loader::SnapshotLoader, utils::CachePadded};
+use crate::{
+    provider::{fjall_provider::FjallProvider, fjall_snapshot_loader::FjallSnapshotLoader},
+    relation_defs::define_relations,
+    utils::CachePadded,
+};
 
 define_relations! {
     object_location == Obj, Obj,
@@ -202,7 +205,7 @@ impl MoorDB {
         let sequences_snapshot = self.sequences_partition.snapshot_at(instant);
 
         // Return a custom SnapshotInterface implementation that uses these snapshots
-        Ok(Box::new(SnapshotLoader {
+        Ok(Box::new(FjallSnapshotLoader {
             object_location_snapshot,
             object_flags_snapshot,
             object_parent_snapshot,

@@ -154,6 +154,18 @@ impl PropPerms {
     }
 }
 
+impl AsRef<ByteView> for PropPerms {
+    fn as_ref(&self) -> &ByteView {
+        &self.0
+    }
+}
+
+impl From<ByteView> for PropPerms {
+    fn from(bytes: ByteView) -> Self {
+        Self(bytes)
+    }
+}
+
 impl AsByteBuffer for PropPerms {
     fn size_bytes(&self) -> usize {
         self.0.len()

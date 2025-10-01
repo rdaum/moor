@@ -34,6 +34,18 @@ lazy_static! {
 #[derive(Eq, PartialEq, Hash)]
 pub struct ObjSet(ByteView);
 
+impl AsRef<ByteView> for ObjSet {
+    fn as_ref(&self) -> &ByteView {
+        &self.0
+    }
+}
+
+impl From<ByteView> for ObjSet {
+    fn from(bytes: ByteView) -> Self {
+        Self(bytes)
+    }
+}
+
 impl Clone for ObjSet {
     fn clone(&self) -> Self {
         ObjSet(self.0.to_detached().clone())

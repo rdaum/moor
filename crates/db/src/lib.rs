@@ -30,7 +30,6 @@ pub type SnapshotCallback = Box<
 
 mod db_loader_client;
 pub mod db_worldstate;
-mod fjall_provider;
 #[cfg(test)]
 mod gc_tests;
 pub(crate) mod moor_db;
@@ -48,7 +47,7 @@ pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod gc;
 pub mod prop_cache;
-mod snapshot_loader;
+mod provider;
 mod tx_management;
 mod utils;
 pub mod verb_cache;
@@ -56,12 +55,11 @@ pub mod verb_cache;
 pub use db_worldstate::db_counters;
 use fast_counter::ConcurrentCounter;
 pub use gc::{GCError, GCInterface};
-pub use tx_management::{
-    Error, Provider, Relation, RelationTransaction, Timestamp, Tx, WorkingSet,
-};
+pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
 // Re-export sequence constants for use in VM
 pub use moor_db::SEQUENCE_MAX_OBJECT;
+pub use provider::Provider;
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;

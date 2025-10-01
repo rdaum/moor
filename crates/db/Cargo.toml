@@ -34,12 +34,14 @@ tempfile.workspace = true
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../common" }
+moor-compiler = { path = "../compiler" }
 moor-var = { path = "../var" }
 
 # Core Runtime & System
 gdt-cpus.workspace = true
 
 # Serialization & Data Formats
+planus.workspace = true
 serde.workspace = true
 
 # Database & Persistence

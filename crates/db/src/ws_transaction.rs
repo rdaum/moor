@@ -14,10 +14,11 @@
 use crate::{
     CommitSet, Error, ObjAndUUIDHolder, StringHolder,
     db_worldstate::db_counters,
-    fjall_provider::FjallProvider,
     moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction},
-    tx_management::{Relation, RelationTransaction},
+    provider::fjall_provider::FjallProvider,
+    tx_management::{EncodeFor, Relation, RelationTransaction},
 };
+use byteview::ByteView;
 use moor_common::{
     model::{
         CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectKind, ObjectRef, PropDef,
@@ -49,8 +50,10 @@ fn upsert<Domain, Codomain>(
     c: Codomain,
 ) -> Result<Option<Codomain>, Error>
 where
-    Domain: AsByteBuffer + Clone + Eq + Hash + Send + Sync + 'static,
-    Codomain: AsByteBuffer + Clone + PartialEq + Send + Sync + 'static,
+    Domain: Clone + Eq + Hash + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    FjallProvider<Domain, Codomain>:
+        EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {
     table.upsert(d, c)
 }
@@ -61,8 +64,10 @@ fn insert_guaranteed_unique<Domain, Codomain>(
     c: Codomain,
 ) -> Result<(), Error>
 where
-    Domain: AsByteBuffer + Clone + Eq + Hash + Send + Sync + 'static,
-    Codomain: AsByteBuffer + Clone + PartialEq + Send + Sync + 'static,
+    Domain: Clone + Eq + Hash + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    FjallProvider<Domain, Codomain>:
+        EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {
     table.insert_guaranteed_unique(d, c)
 }

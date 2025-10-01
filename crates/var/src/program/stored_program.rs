@@ -19,10 +19,8 @@
 //!
 //! Flow:
 //!   Disk → StoredProgram (ByteView) → decode → Program (runtime) → Execute
-//!                                               ↓
-//!                                            encode
+//!   (and same in reverse)
 
-use crate::AsByteBuffer;
 use byteview::ByteView;
 
 /// StoredProgram wraps a FlatBuffer representation of a program
@@ -44,29 +42,14 @@ impl StoredProgram {
     // Decoding happens in moor-compiler via the `stored_to_program` function.
 }
 
-impl AsByteBuffer for StoredProgram {
-    fn size_bytes(&self) -> usize {
-        self.0.len()
+impl AsRef<ByteView> for StoredProgram {
+    fn as_ref(&self) -> &ByteView {
+        &self.0
     }
+}
 
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(
-        &self,
-        mut f: F,
-    ) -> Result<R, crate::EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, crate::EncodingError> {
-        Ok(self.0.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, crate::DecodingError> {
-        // We don't validate the FlatBuffer here to avoid circular dependency.
-        // Validation happens during decoding in moor-compiler.
-        Ok(Self(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, crate::EncodingError> {
-        Ok(self.0.clone())
+impl From<ByteView> for StoredProgram {
+    fn from(bytes: ByteView) -> Self {
+        Self(bytes)
     }
 }

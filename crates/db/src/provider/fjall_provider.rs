@@ -11,16 +11,46 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Fjall-backed persistence provider with per-type encoding strategies.
+//!
+//! This module implements a `Provider` using Fjall (an embedded LSM-tree database) as the backing
+//! store. The key architectural feature is **per-type encoding**: each data type can use its own
+//! optimal serialization strategy via the `EncodeFor` trait.
+//!
+//! ## Encoding Strategies
+//!
+//! Different types use different encoding approaches for performance and efficiency:
+//!
+//! - **Zerocopy types** (`Obj`, `BitEnum`, etc.): Direct byte representation using the `zerocopy`
+//!   crate's `IntoBytes`/`FromBytes` traits. No serialization overhead.
+//!
+//! - **ByteView wrappers** (`ObjSet`, `PropPerms`): Zero-copy passthrough - these types already
+//!   hold a `ByteView` internally, so encoding just extracts the view via `AsRef<ByteView>` and
+//!   decoding uses `From<ByteView>`.
+//!
+//! - **FlatBuffer types** (`ProgramType`): Uses FlatBuffers via the `planus` crate for efficient
+//!   schema-based serialization with forward/backward compatibility.
+//!
+//! - **UTF-8 types** (`StringHolder`): Direct UTF-8 byte encoding without additional framing.
+//!
+//! - **Bincode types** (`Var`, `VerbDefs`, `PropDefs`): Complex types that need general-purpose
+//!   serialization via `bincode`.
+//!
+//! ## Background Writing
+//!
+//! Writes are performed asynchronously on a background thread to avoid blocking the main
+//! transaction path. The provider maintains pending operation tracking to ensure read-after-write
+//! consistency: reads check pending writes before hitting the backing store.
+
 use crate::{
     db_counters,
-    tx_management::{Error, Provider, Timestamp},
+    tx_management::{EncodeFor, Error, Timestamp},
 };
 use byteview::ByteView;
 use fjall::UserValue;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_common::util::PerfTimerGuard;
-use moor_var::AsByteBuffer;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, RwLock, atomic::AtomicBool},
@@ -28,16 +58,6 @@ use std::{
     time::Duration,
 };
 use tracing::error;
-
-enum WriteOp<
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
-    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
-> {
-    Insert(Timestamp, Domain, Codomain),
-    Delete(Domain),
-    /// Barrier marker for snapshot consistency - reply when all writes up to this timestamp are complete
-    Barrier(Timestamp, oneshot::Sender<()>),
-}
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
 struct PendingOperations<Domain, Codomain>
@@ -47,7 +67,7 @@ where
 {
     /// Keys that have been deleted but delete hasn't flushed to backing store yet
     pending_deletes: HashSet<Domain>,
-    /// Keys that have been written but write hasn't flushed to backing store yet  
+    /// Keys that have been written but write hasn't flushed to backing store yet
     pending_writes: HashMap<Domain, (Timestamp, Codomain)>,
 }
 
@@ -64,15 +84,28 @@ where
     }
 }
 
+// Background thread operations work with pre-encoded bytes
+enum WriteOp<Domain>
+where
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+{
+    /// Insert with pre-encoded key and value bytes
+    Insert(Vec<u8>, UserValue, Domain), // key_bytes, value_bytes, domain (for pending ops tracking)
+    /// Delete with pre-encoded key bytes
+    Delete(Vec<u8>, Domain), // key_bytes, domain (for pending ops tracking)
+    /// Barrier marker for snapshot consistency - reply when all writes up to this timestamp are complete
+    Barrier(Timestamp, oneshot::Sender<()>),
+}
+
 /// A backing persistence provider that fills the DB cache from a Fjall partition.
 #[derive(Clone)]
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
-    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
 {
     fjall_partition: fjall::PartitionHandle,
-    ops: Sender<WriteOp<Domain, Codomain>>,
+    ops: Sender<WriteOp<Domain>>,
     kill_switch: Arc<AtomicBool>,
     /// Shared state tracking operations in-flight to background thread
     pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
@@ -84,35 +117,46 @@ where
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
-fn decode<Codomain>(user_value: UserValue) -> Result<(Timestamp, Codomain), Error>
+fn decode_codomain_with_ts<P, Codomain>(
+    provider: &P,
+    user_value: UserValue,
+) -> Result<(Timestamp, Codomain), Error>
 where
-    Codomain: AsByteBuffer,
+    P: EncodeFor<Codomain, Stored = ByteView>,
 {
     let result: ByteView = user_value.into();
     let ts = Timestamp(u128::from_le_bytes(result[0..16].try_into().unwrap()));
-    let codomain = Codomain::from_bytes(result.slice(16..)).map_err(|_| Error::EncodingFailure)?;
+    let codomain_bytes = result.slice(16..);
+    let codomain = provider.decode(codomain_bytes)?;
     Ok((ts, codomain))
 }
 
-fn encode<Codomain>(ts: Timestamp, codomain: &Codomain) -> Result<UserValue, Error>
+fn encode_codomain_with_ts<P, Codomain>(
+    provider: &P,
+    ts: Timestamp,
+    codomain: &Codomain,
+) -> Result<UserValue, Error>
 where
-    Codomain: AsByteBuffer,
+    P: EncodeFor<Codomain, Stored = ByteView>,
 {
-    let as_bytes = codomain.as_bytes().map_err(|_| Error::EncodingFailure)?;
-    let mut result = Vec::with_capacity(16 + as_bytes.len());
+    let codomain_stored = provider.encode(codomain)?;
+    let mut result = Vec::with_capacity(16 + codomain_stored.len());
     result.extend_from_slice(&ts.0.to_le_bytes());
-    result.extend_from_slice(&as_bytes);
+    result.extend_from_slice(&codomain_stored);
     Ok(UserValue::from(ByteView::from(result)))
 }
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync + 'static,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
-    pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self {
+    pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self
+    where
+        Self: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
+    {
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain, Codomain>>();
+        let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain>>();
         let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
         let tombstones = Arc::new(RwLock::new(HashSet::new()));
         let completed_barrier = Arc::new(RwLock::new(0));
@@ -131,27 +175,10 @@ where
                         break;
                     }
                     match ops_rx.recv_timeout(Duration::from_millis(5)) {
-                        Ok(WriteOp::Insert(ts, domain, codomain)) => {
-                            let Ok(key) = domain.as_bytes().map_err(|_| {
-                                error!("failed to encode domain to database");
-                            }) else {
-                                // Remove from pending operations even on encoding error
-                                if let Ok(mut pending) = pending_ops_bg.write() {
-                                    pending.pending_writes.remove(&domain);
-                                }
-                                continue;
-                            };
-                            let Ok(value) = encode::<Codomain>(ts, &codomain) else {
-                                error!("failed to encode codomain to database");
-                                // Remove from pending operations even on encoding error
-                                if let Ok(mut pending) = pending_ops_bg.write() {
-                                    pending.pending_writes.remove(&domain);
-                                }
-                                continue;
-                            };
-
+                        Ok(WriteOp::Insert(key_bytes, value, domain)) => {
+                            // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual write
-                            let write_result = fj.insert(key, value);
+                            let write_result = fj.insert(ByteView::from(key_bytes), value);
 
                             // Remove from pending operations after completion (success or failure)
                             if let Ok(mut pending) = pending_ops_bg.write() {
@@ -162,19 +189,10 @@ where
                                 error!("failed to insert into database: {}", e);
                             }
                         }
-                        Ok(WriteOp::Delete(domain)) => {
-                            let Ok(key) = domain.as_bytes().map_err(|_| {
-                                error!("failed to encode domain to database for deletion");
-                            }) else {
-                                // Remove from pending operations even on encoding error
-                                if let Ok(mut pending) = pending_ops_bg.write() {
-                                    pending.pending_deletes.remove(&domain);
-                                }
-                                continue;
-                            };
-
+                        Ok(WriteOp::Delete(key_bytes, domain)) => {
+                            // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual delete
-                            let delete_result = fj.remove(key);
+                            let delete_result = fj.remove(ByteView::from(key_bytes));
 
                             // Remove from pending operations after completion (success or failure)
                             if let Ok(mut pending) = pending_ops_bg.write() {
@@ -270,8 +288,9 @@ const MAX_TOMBSTONE_COUNT: usize = 100_000;
 
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
-    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
+    Self: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         let _t = PerfTimerGuard::new(&db_counters().provider_tuple_check);
@@ -303,10 +322,10 @@ where
 
         // 2. Only hit backing store if not in pending ops or tombstones
         let _t = PerfTimerGuard::new(&db_counters().provider_tuple_load);
-        let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
+        let key_stored = <Self as EncodeFor<Domain>>::encode(self, domain)?;
         let Some(result) = self
             .fjall_partition
-            .get(key)
+            .get(key_stored)
             .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
             // Database miss - add to tombstones to avoid future lookups
@@ -322,7 +341,7 @@ where
 
             return Ok(None);
         };
-        let (ts, codomain) = decode::<Codomain>(result)?;
+        let (ts, codomain) = decode_codomain_with_ts::<Self, Codomain>(self, result)?;
         Ok(Some((ts, codomain)))
     }
 
@@ -345,10 +364,14 @@ where
             tombstones.remove(domain);
         }
 
-        // Send async operation
+        // Encode using per-type EncodeFor impl before sending to background thread
+        let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
+        let value = encode_codomain_with_ts::<Self, Codomain>(self, timestamp, codomain)?;
+
+        // Send pre-encoded bytes to async operation
         if let Err(e) = self
             .ops
-            .send(WriteOp::Insert(timestamp, domain.clone(), codomain.clone()))
+            .send(WriteOp::Insert(key_bytes.to_vec(), value, domain.clone()))
         {
             // If sending fails, remove from pending operations
             if let Ok(mut pending) = self.pending_ops.write() {
@@ -372,8 +395,14 @@ where
             pending.pending_writes.remove(domain);
         }
 
-        // Send async operation
-        if let Err(e) = self.ops.send(WriteOp::Delete(domain.clone())) {
+        // Encode using per-type EncodeFor impl before sending to background thread
+        let key_bytes = <Self as EncodeFor<Domain>>::encode(self, domain)?;
+
+        // Send pre-encoded bytes to async operation
+        if let Err(e) = self
+            .ops
+            .send(WriteOp::Delete(key_bytes.to_vec(), domain.clone()))
+        {
             // If sending fails, remove from pending operations
             if let Ok(mut pending) = self.pending_ops.write() {
                 pending.pending_deletes.remove(domain);
@@ -399,15 +428,14 @@ where
         // Scan backing store first
         for entry in self.fjall_partition.iter() {
             let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
-            let domain =
-                Domain::from_bytes(key.clone().into()).map_err(|_| Error::EncodingFailure)?;
+            let domain = <Self as EncodeFor<Domain>>::decode(self, key.clone().into())?;
 
             // Skip if this domain is pending deletion
             if pending.pending_deletes.contains(&domain) {
                 continue;
             }
 
-            let (ts, codomain) = decode::<Codomain>(value)?;
+            let (ts, codomain) = decode_codomain_with_ts::<Self, Codomain>(self, value)?;
             if predicate(&domain, &codomain) {
                 result.push((ts, domain, codomain));
             }
@@ -424,6 +452,17 @@ where
     }
 
     fn stop(&self) -> Result<(), Error> {
+        self.stop_internal()
+    }
+}
+
+// Non-trait impl for stop - doesn't require EncodeFor constraints
+impl<Domain, Codomain> FjallProvider<Domain, Codomain>
+where
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
+{
+    fn stop_internal(&self) -> Result<(), Error> {
         self.kill_switch
             .store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
@@ -432,14 +471,185 @@ where
 
 impl<Domain, Codomain> Drop for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
-    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
 {
     fn drop(&mut self) {
-        self.stop().unwrap();
+        self.stop_internal().unwrap();
         let mut jh = self.jh.lock().unwrap();
         if let Some(jh) = jh.take() {
             jh.join().unwrap();
         }
+    }
+}
+
+// ============================================================================
+// Fjall Codec - Shared encoding logic for FjallProvider and SnapshotLoader
+// ============================================================================
+
+/// Zero-sized type that provides encoding/decoding for all Fjall-stored types.
+/// This allows both FjallProvider and SnapshotLoader to share the same encoding logic.
+#[derive(Clone, Copy)]
+pub(crate) struct FjallCodec;
+
+// ============================================================================
+// Per-Type Encoding Implementations for FjallCodec
+// ============================================================================
+// Each type gets its own EncodeFor impl, allowing custom encoding logic
+
+use crate::{AnonymousObjectMetadata, ObjAndUUIDHolder, StringHolder, provider::Provider};
+use moor_common::{
+    model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
+    util::BitEnum,
+};
+use moor_var::{Obj, Var, program::ProgramType};
+// Per-type encoding implementations
+// Each type can be encoded regardless of whether it's used as Domain or Codomain
+// We use a blanket impl for all FjallProvider<Domain, Codomain> combinations
+
+/// Encoding for zerocopy types (IntoBytes + FromBytes) - zero-copy serialization
+macro_rules! impl_zerocopy_encode {
+    ($type:ty) => {
+        impl EncodeFor<$type> for FjallCodec {
+            type Stored = ByteView;
+
+            fn encode(&self, value: &$type) -> Result<Self::Stored, Error> {
+                use zerocopy::IntoBytes;
+                Ok(ByteView::from(IntoBytes::as_bytes(value)))
+            }
+
+            fn decode(&self, stored: Self::Stored) -> Result<$type, Error> {
+                use zerocopy::FromBytes;
+                let bytes = stored.as_ref();
+                if bytes.len() != std::mem::size_of::<$type>() {
+                    return Err(Error::EncodingFailure);
+                }
+
+                // Handle potentially unaligned data safely
+                let mut aligned_buffer = vec![0u8; std::mem::size_of::<$type>()];
+                aligned_buffer.copy_from_slice(bytes);
+
+                <$type>::read_from_bytes(&aligned_buffer).map_err(|_| Error::EncodingFailure)
+            }
+        }
+    };
+}
+
+/// Encoding for types that wrap ByteView - zero-copy passthrough
+macro_rules! impl_byteview_wrapper_encode {
+    ($type:ty) => {
+        impl EncodeFor<$type> for FjallCodec {
+            type Stored = ByteView;
+
+            fn encode(&self, value: &$type) -> Result<Self::Stored, Error> {
+                Ok(AsRef::<ByteView>::as_ref(value).clone())
+            }
+
+            fn decode(&self, stored: Self::Stored) -> Result<$type, Error> {
+                Ok(<$type>::from(stored))
+            }
+        }
+    };
+}
+
+/// Encoding for types using bincode (via AsByteBuffer) - for complex types
+macro_rules! impl_bincode_encode {
+    ($type:ty) => {
+        impl EncodeFor<$type> for FjallCodec {
+            type Stored = ByteView;
+
+            fn encode(&self, value: &$type) -> Result<Self::Stored, Error> {
+                use moor_var::AsByteBuffer;
+                value.as_bytes().map_err(|_| Error::EncodingFailure)
+            }
+
+            fn decode(&self, stored: Self::Stored) -> Result<$type, Error> {
+                use moor_var::AsByteBuffer;
+                <$type>::from_bytes(stored).map_err(|_| Error::EncodingFailure)
+            }
+        }
+    };
+}
+
+// Zerocopy types - direct byte access, no serialization overhead
+impl_zerocopy_encode!(Obj);
+impl_zerocopy_encode!(ObjAndUUIDHolder);
+impl_zerocopy_encode!(AnonymousObjectMetadata);
+impl_zerocopy_encode!(BitEnum<ObjFlag>);
+
+// ByteView wrappers - zero-copy passthrough
+impl_byteview_wrapper_encode!(ObjSet);
+impl_byteview_wrapper_encode!(PropPerms);
+
+// Bincode types - complex types that need serialization
+impl_bincode_encode!(Var);
+impl_bincode_encode!(VerbDefs);
+impl_bincode_encode!(PropDefs);
+
+// StringHolder - direct UTF-8 encoding
+impl EncodeFor<StringHolder> for FjallCodec {
+    type Stored = ByteView;
+
+    fn encode(&self, value: &StringHolder) -> Result<Self::Stored, Error> {
+        Ok(ByteView::from(value.0.as_bytes()))
+    }
+
+    fn decode(&self, stored: Self::Stored) -> Result<StringHolder, Error> {
+        let s = String::from_utf8(stored.to_vec()).map_err(|_| Error::EncodingFailure)?;
+        Ok(StringHolder(s))
+    }
+}
+
+// ProgramType uses flatbuffer encoding - see below
+
+// ============================================================================
+// ProgramType - uses FlatBuffer encoding via program_convert
+// ============================================================================
+
+impl EncodeFor<ProgramType> for FjallCodec {
+    type Stored = ByteView;
+
+    fn encode(&self, program: &ProgramType) -> Result<Self::Stored, Error> {
+        match program {
+            ProgramType::MooR(prog) => {
+                use moor_compiler::program_to_stored;
+                let stored = program_to_stored(prog).map_err(|e| {
+                    Error::StorageFailure(format!("Failed to encode program: {}", e))
+                })?;
+                // StoredProgram is a ByteView wrapper - extract the inner ByteView
+                Ok(AsRef::<ByteView>::as_ref(&stored).clone())
+            }
+        }
+    }
+
+    fn decode(&self, stored: Self::Stored) -> Result<ProgramType, Error> {
+        use moor_compiler::stored_to_program;
+        use moor_var::program::stored_program::StoredProgram;
+
+        let stored_program = StoredProgram::from(stored);
+        let program = stored_to_program(&stored_program)
+            .map_err(|e| Error::StorageFailure(format!("Failed to decode program: {}", e)))?;
+        Ok(ProgramType::MooR(program))
+    }
+}
+
+// ============================================================================
+// Blanket impl: FjallProvider delegates to FjallCodec for all types
+// ============================================================================
+
+impl<Domain, Codomain, T> EncodeFor<T> for FjallProvider<Domain, Codomain>
+where
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
+    FjallCodec: EncodeFor<T, Stored = ByteView>,
+{
+    type Stored = ByteView;
+
+    fn encode(&self, value: &T) -> Result<Self::Stored, Error> {
+        FjallCodec.encode(value)
+    }
+
+    fn decode(&self, stored: Self::Stored) -> Result<T, Error> {
+        FjallCodec.decode(stored)
     }
 }

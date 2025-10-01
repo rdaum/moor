@@ -13,10 +13,13 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::tx_management::{
-    Canonical, Error, Provider, Timestamp, Tx,
-    indexes::{HashRelationIndex, RelationIndex},
-    relation_tx::{OpType, RelationTransaction, WorkingSet},
+use crate::{
+    provider::Provider,
+    tx_management::{
+        Canonical, Error, Timestamp, Tx,
+        indexes::{HashRelationIndex, RelationIndex},
+        relation_tx::{OpType, RelationTransaction, WorkingSet},
+    },
 };
 use minstant::Instant;
 use moor_var::Symbol;
