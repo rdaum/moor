@@ -2858,11 +2858,13 @@ name = "moor-compiler"
 version = "0.9.0-alpha"
 dependencies = [
  "base64 0.21.7",
+ "byteview",
  "itertools 0.14.0",
  "moor-common",
  "moor-var",
  "pest",
  "pest_derive",
+ "planus",
  "pretty_assertions",
  "strum",
  "test-case",
@@ -3151,6 +3153,7 @@ dependencies = [
  "papaya",
  "paste",
  "perf-event2",
+ "planus",
  "rand 0.8.5",
  "serde",
  "serde_json",

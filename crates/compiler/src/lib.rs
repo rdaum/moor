@@ -18,7 +18,9 @@ pub use moor_var::program::names::Names;
 mod ast;
 mod codegen;
 mod decompile;
+mod opcode_stream;
 mod parse;
+mod program_convert;
 mod unparse;
 
 mod codegen_tests;
@@ -35,9 +37,12 @@ pub use crate::{
         ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef,
         ObjectDefinition, compile_object_definitions,
     },
+    opcode_stream::OpStream,
     parse::CompileOptions,
+    program_convert::{DecodeError, EncodeError, program_to_stored, stored_to_program},
     unparse::{to_literal, to_literal_objsub, unparse},
 };
+// Re-export from var
 pub use moor_common::builtins::{
     ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
 };
@@ -45,5 +50,6 @@ pub use moor_var::program::{
     labels::{JumpLabel, Label, Offset},
     opcode::{Op, ScatterLabel},
     program::{EMPTY_PROGRAM, Program},
+    stored_program::StoredProgram,
 };
 pub use var_scope::VarScope;

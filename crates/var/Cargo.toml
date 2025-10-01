@@ -29,6 +29,7 @@ harness = false
 # Serialization & Data Formats
 bincode.workspace = true
 serde.workspace = true
+planus.workspace = true
 
 # Async Runtime & Concurrency
 boxcar.workspace = true

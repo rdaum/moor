@@ -23,6 +23,8 @@ moor-var = { path = "../var" }
 
 # Serialization & Data Formats
 base64.workspace = true
+byteview.workspace = true
+planus.workspace = true
 
 # Compiler & Language Processing
 pest.workspace = true

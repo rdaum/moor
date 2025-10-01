@@ -19,8 +19,9 @@
 
 pub mod common;
 pub mod event_log;
+pub mod program;
 pub mod rpc;
 
 // Generated schemas
 #[allow(dead_code, clippy::all)]
-pub mod schemas_generated;
+mod schemas_generated;

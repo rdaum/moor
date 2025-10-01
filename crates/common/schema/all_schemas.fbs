@@ -17,3 +17,4 @@
 include "common.fbs";
 include "moor_rpc.fbs";
 include "moor_event_log.fbs";
+include "moor_program.fbs";

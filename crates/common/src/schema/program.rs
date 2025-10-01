@@ -1,4 +1,3 @@
-#![allow(clippy::module_inception)]
 // Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
 // software: you can redistribute it and/or modify it under the terms of the GNU
 // General Public License as published by the Free Software Foundation, version
@@ -12,8 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub(crate) use event_log::*;
-pub(crate) use event_log_conversions::*;
+//! Program domain types
+//!
+//! FlatBuffer types for compiled MOO program storage including:
+//! - Stored programs with opcode streams
+//! - Variable names and declarations
+//! - Jump labels and control flow metadata
+//! - Lambda programs and comprehensions
 
-mod event_log;
-mod event_log_conversions;
+pub use crate::schema::schemas_generated::moor_program::*;

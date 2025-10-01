@@ -1,0 +1,230 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for stored program representation
+//
+// This is the wire format for MOO programs, designed for:
+// - Version stability and migration
+// - Cross-platform compatibility
+// - Compact storage
+//
+// Flow:
+//   Disk → StoredProgram (FB) → decode → Program (runtime) → Execute
+//                                          ↓
+//                                       encode
+
+// Import common types
+include "common.fbs";
+
+namespace MoorProgram;
+
+// ============================================================================
+// Basic types
+// ============================================================================
+
+table StoredName {
+    offset: uint16;
+    scope_depth: uint8;
+    scope_id: uint16;
+}
+
+table StoredJumpLabel {
+    id: uint16;
+    position: uint16;
+    name: StoredName;  // Optional
+}
+
+// DeclType enum
+enum StoredDeclType: uint8 {
+    Global = 0,
+    Let = 1,
+    Assign = 2,
+    For = 3,
+    Unknown = 4,
+    Register = 5,
+    Except = 6,
+    WhileLabel = 7,
+    ForkLabel = 8
+}
+
+// VarName (either Named symbol or Register number)
+union StoredVarNameUnion {
+    StoredNamedVar,
+    StoredRegisterVar
+}
+
+table StoredNamedVar {
+    symbol: MoorCommon.Symbol (required);
+}
+
+table StoredRegisterVar {
+    register_num: uint16;
+}
+
+// Variable structure
+table StoredVariable {
+    id: uint16;
+    scope_id: uint16;
+    var_name: StoredVarNameUnion (required);
+}
+
+// Decl structure
+table StoredDecl {
+    decl_type: StoredDeclType;
+    identifier: StoredVariable (required);
+    depth: uint64;
+    constant: bool;
+    scope_id: uint16;
+}
+
+// Name -> Decl mapping entry
+table StoredNameDeclPair {
+    name: StoredName (required);
+    decl: StoredDecl (required);
+}
+
+table StoredNames {
+    global_width: uint64;
+    decls: [StoredNameDeclPair] (required);  // HashMap<Name, Decl> as vector of pairs
+}
+
+// ============================================================================
+// Scatter and comprehension types
+// ============================================================================
+
+union StoredScatterLabelUnion {
+    StoredScatterRequired,
+    StoredScatterOptional,
+    StoredScatterRest
+}
+
+table StoredScatterRequired {
+    name: StoredName (required);
+}
+
+table StoredScatterOptional {
+    name: StoredName (required);
+    default_label: uint16;  // Optional label
+    has_default: bool;
+}
+
+table StoredScatterRest {
+    name: StoredName (required);
+}
+
+table StoredScatterLabel {
+    label: StoredScatterLabelUnion (required);
+}
+
+table StoredScatterArgs {
+    labels: [StoredScatterLabel] (required);
+    done: uint16;
+}
+
+table StoredForSequenceOperand {
+    value_bind: StoredName (required);
+    key_bind: StoredName;  // Optional
+    end_label: uint16;
+    environment_width: uint16;
+}
+
+table StoredForRangeOperand {
+    loop_variable: StoredName (required);
+    end_label: uint16;
+    environment_width: uint16;
+}
+
+table StoredRangeComprehend {
+    position: StoredName (required);
+    end_of_range_register: StoredName (required);
+    end_label: uint16;
+}
+
+table StoredListComprehend {
+    position_register: StoredName (required);
+    list_register: StoredName (required);
+    item_variable: StoredName (required);
+    end_label: uint16;
+}
+
+// ============================================================================
+// Fork vectors
+// ============================================================================
+
+table ForkVector {
+    offset: uint64;             // Offset in main vector where fork occurs
+    opcodes: [uint16] (required); // Packed opcode stream for this fork
+}
+
+// ============================================================================
+// Main Program structure
+// ============================================================================
+
+table StoredProgram {
+    // Schema version for migrations
+    version: uint16;
+
+    // Opcode stream as packed u16 words
+    main_vector: [uint16] (required);
+
+    // Fork vectors
+    fork_vectors: [ForkVector] (required);
+
+    // Literals - each as VarBytes (Var serialized)
+    literals: [MoorCommon.VarBytes] (required);
+
+    // Jump labels
+    jump_labels: [StoredJumpLabel] (required);
+
+    // Variable names
+    var_names: StoredNames (required);
+
+    // Symbol table for interned symbols
+    symbol_table: [MoorCommon.Symbol] (required);
+
+    // Scatter tables
+    scatter_tables: [StoredScatterArgs] (required);
+
+    // For-sequence operands
+    for_sequence_operands: [StoredForSequenceOperand] (required);
+
+    // For-range operands
+    for_range_operands: [StoredForRangeOperand] (required);
+
+    // Range comprehensions
+    range_comprehensions: [StoredRangeComprehend] (required);
+
+    // List comprehensions
+    list_comprehensions: [StoredListComprehend] (required);
+
+    // Error operands (as u8 codes)
+    error_operands: [uint8] (required);
+
+    // Lambda programs (recursive)
+    lambda_programs: [StoredProgram] (required);
+
+    // Line number spans (offset, line_number)
+    line_number_spans: [LineSpan] (required);
+
+    // Fork line number spans
+    fork_line_number_spans: [ForkLineSpans] (required);
+}
+
+table LineSpan {
+    offset: uint64;
+    line_number: uint64;
+}
+
+table ForkLineSpans {
+    spans: [LineSpan] (required);
+}

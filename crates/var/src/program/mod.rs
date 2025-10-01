@@ -20,6 +20,7 @@ use bincode::{Decode, Encode};
 pub mod labels;
 pub mod names;
 pub mod opcode;
+pub mod stored_program;
 
 #[allow(clippy::module_inception)]
 pub mod program;

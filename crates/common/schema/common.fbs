@@ -404,3 +404,55 @@ table VerbInfo {
     arg_spec: [Symbol] (required);
 }
 
+// ============================================================================
+// Verb and Property Definitions
+// ============================================================================
+
+// ArgSpec enum for verb argument specifications
+enum ArgSpec: uint8 {
+    None = 0,
+    Any = 1,
+    This = 2
+}
+
+// PrepSpec for preposition specifications
+// Maps to: Any = -2, None = -1, Other(Preposition) = preposition value
+table PrepSpec {
+    value: int16;  // -2 = Any, -1 = None, >= 0 = preposition ID
+}
+
+// VerbArgsSpec packed as u32 for efficient storage
+// Layout: [iobj (8 bits)] [prep (16 bits)] [dobj (8 bits)]
+table VerbArgsSpec {
+    dobj: ArgSpec;
+    prep: int16;  // -2 = Any, -1 = None, >= 0 = preposition ID
+    iobj: ArgSpec;
+}
+
+// VerbDef - Complete verb definition with UUID
+table VerbDef {
+    uuid: Uuid (required);
+    location: Obj (required);
+    owner: Obj (required);
+    names: [Symbol] (required);
+    flags: uint16;  // BitEnum<VerbFlag>
+    args: VerbArgsSpec (required);
+}
+
+// PropDef - Property definition with UUID
+table PropDef {
+    uuid: Uuid (required);
+    definer: Obj (required);
+    location: Obj (required);
+    name: Symbol (required);
+}
+
+// ObjAttrs - Object attributes with variable-length name
+table ObjAttrs {
+    owner: Obj (required);
+    parent: Obj (required);
+    location: Obj (required);
+    flags: uint16;  // BitEnum<ObjFlag>
+    name: string;  // Optional, can be empty
+}
+
