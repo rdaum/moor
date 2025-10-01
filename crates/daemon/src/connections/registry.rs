@@ -18,10 +18,7 @@ use std::{
 
 use uuid::Uuid;
 
-use crate::connections::{
-    fjall_persistence::FjallPersistence, in_memory::ConnectionRegistryMemory,
-    persistence::NullPersistence,
-};
+use crate::connections::fjall_registry::FjallConnectionRegistry;
 use eyre::Report as Error;
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol, Var};
@@ -107,47 +104,23 @@ pub trait ConnectionRegistry {
     fn get_client_attributes(&self, obj: Obj) -> Result<HashMap<Symbol, Var>, SessionError>;
 }
 
-pub enum ConnectionRegistryConfig {
-    /// In-memory only, no persistence
-    InMemoryOnly,
-    /// In-memory with Fjall persistence  
-    WithFjallPersistence { path: Option<Box<Path>> },
-}
-
 /// Factory for creating connections database instances
 pub struct ConnectionRegistryFactory;
 
 impl ConnectionRegistryFactory {
-    /// Create a connections database based on configuration
-    pub fn create(
-        config: ConnectionRegistryConfig,
-    ) -> Result<Box<dyn ConnectionRegistry + Send + Sync>, Error> {
-        match config {
-            ConnectionRegistryConfig::InMemoryOnly => {
-                let persistence = NullPersistence::new();
-                let db = ConnectionRegistryMemory::new(persistence)?;
-                Ok(Box::new(db))
-            }
-
-            ConnectionRegistryConfig::WithFjallPersistence { path } => {
-                let persistence = FjallPersistence::open(path.as_deref())?;
-                let db = ConnectionRegistryMemory::new(persistence)?;
-                Ok(Box::new(db))
-            }
-        }
-    }
-
     /// Create in-memory only database (useful for testing)
     pub fn in_memory_only() -> Result<Box<dyn ConnectionRegistry + Send + Sync>, Error> {
-        Self::create(ConnectionRegistryConfig::InMemoryOnly)
+        let db = FjallConnectionRegistry::open(None)?;
+        Ok(Box::new(db))
     }
 
-    /// Create in-memory database with Fjall persistence
+    /// Create database with Fjall persistence
     pub fn with_fjall_persistence<P: AsRef<Path>>(
         path: Option<P>,
     ) -> Result<Box<dyn ConnectionRegistry + Send + Sync>, Error> {
-        let path = path.map(|p| p.as_ref().to_path_buf().into_boxed_path());
-        Self::create(ConnectionRegistryConfig::WithFjallPersistence { path })
+        let path = path.as_ref().map(|p| p.as_ref());
+        let db = FjallConnectionRegistry::open(path)?;
+        Ok(Box::new(db))
     }
 }
 

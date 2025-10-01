@@ -13,20 +13,20 @@
 
 //! Shared data types for connections management
 
-use bincode::{Decode, Encode};
 use moor_var::{Symbol, Var};
 use std::{collections::HashMap, time::SystemTime};
 
-mod fjall_persistence;
-mod in_memory;
-mod persistence;
+mod connections_generated;
+mod conversions;
+mod fjall_registry;
 mod registry;
 
 pub const FIRST_CONNECTION_ID: i32 = -4;
 
 pub use registry::{ConnectionRegistry, ConnectionRegistryFactory, NewConnectionParams};
 
-#[derive(Debug, Clone, Encode, Decode)]
+/// In-memory representation of a connection record
+#[derive(Debug, Clone)]
 pub struct ConnectionRecord {
     pub client_id: u128,
     pub connected_time: SystemTime,
@@ -39,7 +39,8 @@ pub struct ConnectionRecord {
     pub client_attributes: HashMap<Symbol, Var>,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+/// In-memory representation of a collection of connection records
+#[derive(Debug, Clone)]
 pub struct ConnectionsRecords {
     pub connections: Vec<ConnectionRecord>,
 }

@@ -1,0 +1,61 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for connection records persistence
+//
+// This schema defines types for persisting connection state in the daemon's
+// connection registry database (replaces bincode serialization).
+//
+// Note: This schema is daemon-specific and doesn't need to be shared with
+// other crates since connection records are an internal daemon concern.
+
+namespace MoorConnections;
+
+// ============================================================================
+// Connection Registry Persistence Types
+// ============================================================================
+
+// Wrapper for a byte array (used for Symbol and Var serialization)
+table ByteArray {
+    data: [uint8] (required);
+}
+
+// Key-value pair for client attributes
+table ClientAttribute {
+    key: ByteArray (required);    // Symbol as bytes
+    value: ByteArray (required);  // Var as bincode bytes
+}
+
+// A single connection record containing client information
+table ConnectionRecord {
+    client_id_high: uint64;  // High 64 bits of u128 client_id
+    client_id_low: uint64;   // Low 64 bits of u128 client_id
+    connected_secs: uint64;  // SystemTime as seconds since UNIX_EPOCH
+    connected_nanos: uint32; // Nanoseconds component
+    last_activity_secs: uint64;
+    last_activity_nanos: uint32;
+    last_ping_secs: uint64;
+    last_ping_nanos: uint32;
+    hostname: string (required);
+    local_port: uint16;
+    remote_port: uint16;
+    // acceptable_content_types stored as Symbol bytes
+    acceptable_content_types: [ByteArray] (required);
+    // client_attributes as key-value pairs
+    client_attributes: [ClientAttribute] (required);
+}
+
+// Collection of connection records
+table ConnectionsRecords {
+    connections: [ConnectionRecord] (required);
+}
