@@ -252,7 +252,7 @@ fn prop_cache_lookup_hits(
         let prop_idx = i % ctx.test_props.len();
 
         // Only lookup entries that should be cache hits
-        if (obj_idx + prop_idx) % 3 == 0 {
+        if (obj_idx + prop_idx).is_multiple_of(3) {
             let result = ctx
                 .prop_cache
                 .lookup(&ctx.test_objs[obj_idx], &ctx.test_props[prop_idx]);

@@ -297,7 +297,7 @@ pub fn mk_attach_msg(
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::Attach(Box::new(rpc::Attach {
             auth_token: auth_token_fb(auth_token),
-            connect_type: connect_type.unwrap_or(rpc::ConnectType::Connected),
+            connect_type: connect_type.unwrap_or(rpc::ConnectType::NoConnect),
             handler_object: obj_fb(handler_object),
             peer_addr,
             local_port,

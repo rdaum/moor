@@ -23,7 +23,7 @@ use moor_common::{
 };
 use moor_var::{Obj, Symbol, Var};
 
-use crate::event_log::EventLogOps;
+use crate::event_log::{EventLogOps, logged_narrative_event_to_flatbuffer};
 
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {
@@ -94,7 +94,10 @@ impl Session for RpcSession {
 
         // First, persist all events to the shared EventLog
         for (player, event) in &events {
-            self.event_log.append(*player, event.clone());
+            // Convert to FlatBuffer LoggedNarrativeEvent
+            if let Ok(logged_event) = logged_narrative_event_to_flatbuffer(*player, event.clone()) {
+                self.event_log.append(logged_event);
+            }
         }
 
         // Then, publish them to connected clients

@@ -81,7 +81,7 @@ impl WorkersTransport {
 
             // First argument should be a WorkerToken
             // Second argument is a Uuid
-            // Third argument is either a flatbuffer or bincoded WorkerToDaemonMessage
+            // Third argument is a flatbuffer RPC message
             let (worker_token, worker_id, request) = (&msg[0], &msg[1], &msg[2]);
 
             let Ok(fb_msg) = moor_rpc::WorkerToDaemonMessageRef::read_as_root(request) else {

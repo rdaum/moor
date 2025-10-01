@@ -329,7 +329,7 @@ fn verb_cache_lookup_hits(ctx: &mut PopulatedCacheContext, chunk_size: usize, _c
         let verb_idx = i % ctx.test_verbs.len();
 
         // Only lookup entries that should be cache hits
-        if (obj_idx + verb_idx) % 3 == 0 {
+        if (obj_idx + verb_idx).is_multiple_of(3) {
             let result = ctx
                 .verb_cache
                 .lookup(&ctx.test_objs[obj_idx], &ctx.test_verbs[verb_idx]);

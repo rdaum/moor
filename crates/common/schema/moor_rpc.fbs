@@ -294,7 +294,8 @@ enum HostType: uint8 {
 enum ConnectType: uint8 {
     Connected = 0,
     Reconnected = 1,
-    Created = 2
+    Created = 2,
+    NoConnect = 255  // For transient/non-connection sessions (history retrieval, etc.)
 }
 
 enum EntityType: uint8 {

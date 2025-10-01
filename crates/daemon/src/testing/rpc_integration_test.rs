@@ -23,7 +23,7 @@ mod tests {
 
     use crate::{
         connections::ConnectionRegistryFactory,
-        event_log::EventLogOps,
+        event_log::{EventLogOps, logged_narrative_event_to_flatbuffer},
         rpc::{MessageHandler, hosts::Hosts, message_handler::RpcMessageHandler},
         tasks::task_monitor::TaskMonitor,
         testing::{MockEventLog, MockTransport},
@@ -862,21 +862,22 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         });
 
         // Test event logging
-        let event_id = event_log.append(player, test_event);
+        let logged_event = logged_narrative_event_to_flatbuffer(player, test_event).unwrap();
+        let event_id = event_log.append(logged_event);
         assert!(!event_id.is_nil(), "Should return valid event ID");
 
         // Test event retrieval
         let events = event_log.events_for_player_since(player, None);
         assert_eq!(events.len(), 1, "Should have one event");
-        assert_eq!(
-            events[0].player, player,
-            "Event should be for correct player"
-        );
-        assert_eq!(
-            events[0].event.event_id(),
-            event_id,
-            "Event ID should match"
-        );
+        // Events are now FlatBuffer types, so convert for comparison
+        let event_player = rpc_common::obj_from_flatbuffer_struct(&events[0].player).unwrap();
+        assert_eq!(event_player, player, "Event should be for correct player");
+        // event_id is now a field, not a method, and is a FlatBuffer UUID
+        let event_uuid_bytes = events[0].event.event_id.data.as_slice();
+        let mut uuid_bytes = [0u8; 16];
+        uuid_bytes.copy_from_slice(event_uuid_bytes);
+        let event_event_id = Uuid::from_bytes(uuid_bytes);
+        assert_eq!(event_event_id, event_id, "Event ID should match");
     }
 
     #[test]
@@ -900,16 +901,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             event: moor_common::tasks::Event::Present(presentation.clone()),
         });
 
-        event_log.append(player, present_event);
+        let logged_event = logged_narrative_event_to_flatbuffer(player, present_event).unwrap();
+        event_log.append(logged_event);
 
-        // Check current presentations
+        // Check current presentations - now returns Vec<Presentation> instead of HashMap
         let presentations = event_log.current_presentations(player);
         assert_eq!(presentations.len(), 1, "Should have one presentation");
-        assert!(
-            presentations.contains_key("test_widget"),
-            "Should contain test widget"
-        );
-        assert_eq!(presentations["test_widget"].content, "Hello World");
+        let test_widget = presentations.iter().find(|p| p.id == "test_widget");
+        assert!(test_widget.is_some(), "Should contain test widget");
+        assert_eq!(test_widget.unwrap().content, "Hello World");
 
         // Test presentation dismissal
         event_log.dismiss_presentation(player, "test_widget".to_string());

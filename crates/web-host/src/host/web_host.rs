@@ -612,7 +612,7 @@ async fn attach(
     host: &WebHost,
     auth_token: String,
 ) -> impl IntoResponse + use<> {
-    info!("Connection from {}", addr);
+    debug!("Connection from {}", addr);
 
     let auth_token = AuthToken(auth_token);
 

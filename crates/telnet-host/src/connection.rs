@@ -310,6 +310,9 @@ impl TelnetConnection {
             moor_rpc::ConnectType::Connected => "*** Connected ***",
             moor_rpc::ConnectType::Reconnected => "*** Reconnected ***",
             moor_rpc::ConnectType::Created => "*** Created ***",
+            moor_rpc::ConnectType::NoConnect => {
+                unreachable!("NoConnect should not reach telnet connection handler")
+            }
         };
         self.send_line(connect_message).await?;
         self.flush().await?;

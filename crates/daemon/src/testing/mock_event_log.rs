@@ -16,20 +16,27 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
 
-use moor_common::tasks::{NarrativeEvent, Presentation};
+use moor_common::{
+    schema::{
+        common::{EventUnion, ObjUnion},
+        event_log::LoggedNarrativeEvent,
+    },
+    tasks::Presentation,
+};
 use moor_var::Obj;
 
-use crate::event_log::{EventLogOps, LoggedNarrativeEvent};
+use crate::event_log::{EventLogOps, presentation_from_flatbuffer};
 
 /// Mock event log implementation for testing
 pub struct MockEventLog {
     /// Stored narrative events by event ID
     narrative_events: Arc<Mutex<HashMap<Uuid, LoggedNarrativeEvent>>>,
-    /// Current presentations by player
-    presentations: Arc<Mutex<HashMap<Obj, HashMap<String, Presentation>>>>,
+    /// Current presentations by player (Vec instead of HashMap to match new API)
+    presentations: Arc<Mutex<HashMap<Obj, Vec<Presentation>>>>,
 }
 
 impl MockEventLog {
@@ -37,6 +44,33 @@ impl MockEventLog {
         Self {
             narrative_events: Arc::new(Mutex::new(HashMap::new())),
             presentations: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Helper to extract UUID from FlatBuffer event
+    fn extract_event_id(event: &LoggedNarrativeEvent) -> Uuid {
+        let uuid_bytes = event.event.event_id.data.as_slice();
+        if uuid_bytes.len() == 16 {
+            let mut bytes = [0u8; 16];
+            bytes.copy_from_slice(uuid_bytes);
+            Uuid::from_bytes(bytes)
+        } else {
+            Uuid::nil()
+        }
+    }
+
+    /// Helper to compare FlatBuffer Obj with domain Obj
+    fn obj_matches(
+        player_fb: &moor_common::schema::common::Obj,
+        event_player: &moor_common::schema::common::Obj,
+    ) -> bool {
+        match (&player_fb.obj, &event_player.obj) {
+            (ObjUnion::ObjId(a), ObjUnion::ObjId(b)) => a.id == b.id,
+            (ObjUnion::UuObjId(a), ObjUnion::UuObjId(b)) => a.packed_value == b.packed_value,
+            (ObjUnion::AnonymousObjId(a), ObjUnion::AnonymousObjId(b)) => {
+                a.packed_value == b.packed_value
+            }
+            _ => false,
         }
     }
 
@@ -52,7 +86,7 @@ impl MockEventLog {
 
     /// Get all presentations for all players (for testing)
     #[allow(dead_code)]
-    pub fn get_all_presentations(&self) -> HashMap<Obj, HashMap<String, Presentation>> {
+    pub fn get_all_presentations(&self) -> HashMap<Obj, Vec<Presentation>> {
         self.presentations.lock().unwrap().clone()
     }
 
@@ -72,11 +106,12 @@ impl MockEventLog {
     /// Get count of events for a specific player
     #[allow(dead_code)]
     pub fn event_count_for_player(&self, player: Obj) -> usize {
+        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
         self.narrative_events
             .lock()
             .unwrap()
             .values()
-            .filter(|event| event.player == player)
+            .filter(|event| Self::obj_matches(&player_fb, &event.player))
             .count()
     }
 
@@ -139,43 +174,53 @@ impl Default for MockEventLog {
 }
 
 impl EventLogOps for MockEventLog {
-    fn append(&self, player: Obj, event: Box<NarrativeEvent>) -> Uuid {
-        let event_id = event.event_id();
+    fn append(&self, event: LoggedNarrativeEvent) -> Uuid {
+        // Extract event_id from FlatBuffer event
+        let event_id_bytes = event.event.event_id.data.as_slice();
+        let event_id = if event_id_bytes.len() == 16 {
+            let mut bytes = [0u8; 16];
+            bytes.copy_from_slice(event_id_bytes);
+            Uuid::from_bytes(bytes)
+        } else {
+            Uuid::nil()
+        };
 
-        match &event.event {
-            moor_common::tasks::Event::Notify {
-                value: _,
-                content_type: _,
-                no_flush: _,
-                no_newline: _,
-            }
-            | moor_common::tasks::Event::Traceback(_) => {
-                // Store narrative events
-                let logged_event = LoggedNarrativeEvent { player, event };
-                self.narrative_events
-                    .lock()
-                    .unwrap()
-                    .insert(event_id, logged_event);
-            }
-            moor_common::tasks::Event::Present(presentation) => {
-                // Update current presentation state
-                let mut presentations = self.presentations.lock().unwrap();
-                let player_presentations = presentations.entry(player).or_default();
-                player_presentations.insert(presentation.id.clone(), presentation.clone());
-            }
-            moor_common::tasks::Event::Unpresent(presentation_id) => {
-                // Remove presentation from current state
-                let mut presentations = self.presentations.lock().unwrap();
-                if let Some(player_presentations) = presentations.get_mut(&player) {
-                    player_presentations.remove(presentation_id);
+        // Check if this is a Present or Unpresent event and update presentation state
+        match &event.event.event.event {
+            EventUnion::PresentEvent(present_ref) => {
+                // Add presentation to player's current presentations
+                if let Ok(presentation) = presentation_from_flatbuffer(&present_ref.presentation) {
+                    let player_obj = rpc_common::convert::obj_from_flatbuffer_struct(&event.player)
+                        .expect("Failed to convert player obj");
+                    let mut presentations = self.presentations.lock().unwrap();
+                    presentations
+                        .entry(player_obj)
+                        .or_default()
+                        .push(presentation);
                 }
             }
+            EventUnion::UnpresentEvent(unpresent_ref) => {
+                // Remove presentation from player's current presentations
+                let player_obj = rpc_common::convert::obj_from_flatbuffer_struct(&event.player)
+                    .expect("Failed to convert player obj");
+                let mut presentations = self.presentations.lock().unwrap();
+                if let Some(player_presentations) = presentations.get_mut(&player_obj) {
+                    player_presentations.retain(|p| p.id != unpresent_ref.presentation_id);
+                }
+            }
+            _ => {}
         }
+
+        // Store the event
+        self.narrative_events
+            .lock()
+            .unwrap()
+            .insert(event_id, event);
 
         event_id
     }
 
-    fn current_presentations(&self, player: Obj) -> HashMap<String, Presentation> {
+    fn current_presentations(&self, player: Obj) -> Vec<Presentation> {
         let presentations = self.presentations.lock().unwrap();
         presentations.get(&player).cloned().unwrap_or_default()
     }
@@ -183,7 +228,7 @@ impl EventLogOps for MockEventLog {
     fn dismiss_presentation(&self, player: Obj, presentation_id: String) {
         let mut presentations = self.presentations.lock().unwrap();
         if let Some(player_presentations) = presentations.get_mut(&player) {
-            player_presentations.remove(&presentation_id);
+            player_presentations.retain(|p| p.id != presentation_id);
         }
     }
 
@@ -192,21 +237,22 @@ impl EventLogOps for MockEventLog {
         player: Obj,
         since: Option<Uuid>,
     ) -> Vec<LoggedNarrativeEvent> {
+        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
         let events = self.narrative_events.lock().unwrap();
         let mut player_events: Vec<_> = events
             .values()
-            .filter(|event| event.player == player)
+            .filter(|event| Self::obj_matches(&player_fb, &event.player))
             .cloned()
             .collect();
 
         // Sort by event ID (chronological for UUID v7)
-        player_events.sort_by_key(|event| event.event.event_id());
+        player_events.sort_by_key(Self::extract_event_id);
 
         if let Some(since_id) = since {
             // Return events after the given ID
             player_events
                 .into_iter()
-                .filter(|event| event.event.event_id() > since_id)
+                .filter(|event| Self::extract_event_id(event) > since_id)
                 .collect()
         } else {
             player_events
@@ -218,21 +264,22 @@ impl EventLogOps for MockEventLog {
         player: Obj,
         until: Option<Uuid>,
     ) -> Vec<LoggedNarrativeEvent> {
+        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
         let events = self.narrative_events.lock().unwrap();
         let mut player_events: Vec<_> = events
             .values()
-            .filter(|event| event.player == player)
+            .filter(|event| Self::obj_matches(&player_fb, &event.player))
             .cloned()
             .collect();
 
         // Sort by event ID (chronological for UUID v7)
-        player_events.sort_by_key(|event| event.event.event_id());
+        player_events.sort_by_key(Self::extract_event_id);
 
         if let Some(until_id) = until {
             // Return events before the given ID
             player_events
                 .into_iter()
-                .filter(|event| event.event.event_id() < until_id)
+                .filter(|event| Self::extract_event_id(event) < until_id)
                 .collect()
         } else {
             player_events
@@ -244,21 +291,27 @@ impl EventLogOps for MockEventLog {
         player: Obj,
         seconds_ago: u64,
     ) -> Vec<LoggedNarrativeEvent> {
-        use std::time::{Duration, SystemTime};
-
         let cutoff_time = SystemTime::now()
             .checked_sub(Duration::from_secs(seconds_ago))
-            .unwrap_or(SystemTime::UNIX_EPOCH);
+            .unwrap_or(UNIX_EPOCH);
 
+        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
         let events = self.narrative_events.lock().unwrap();
         let mut player_events: Vec<_> = events
             .values()
-            .filter(|event| event.player == player && event.event.timestamp() >= cutoff_time)
+            .filter(|event| {
+                if !Self::obj_matches(&player_fb, &event.player) {
+                    return false;
+                }
+                // Check timestamp (FlatBuffer timestamp is in nanoseconds)
+                let event_time = UNIX_EPOCH + Duration::from_nanos(event.event.timestamp);
+                event_time >= cutoff_time
+            })
             .cloned()
             .collect();
 
         // Sort by event ID (chronological for UUID v7)
-        player_events.sort_by_key(|event| event.event.event_id());
+        player_events.sort_by_key(Self::extract_event_id);
         player_events
     }
 }

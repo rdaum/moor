@@ -14,12 +14,10 @@
 use crate::rpc::message_handler::RpcMessageHandler;
 use moor_common::schema::rpc as moor_rpc;
 use moor_var::Obj;
-use rpc_common::{
-    RpcMessageError, narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct, uuid_from_ref,
-    uuid_to_flatbuffer_struct,
-};
-use std::time::SystemTime;
+use rpc_common::{RpcMessageError, uuid_from_ref, uuid_to_flatbuffer_struct};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::debug;
+use uuid::Uuid;
 
 impl RpcMessageHandler {
     pub(crate) fn build_history_response(
@@ -132,8 +130,8 @@ impl RpcMessageHandler {
             (SystemTime::now(), SystemTime::now())
         } else {
             (
-                events.first().unwrap().event.timestamp(),
-                events.last().unwrap().event.timestamp(),
+                UNIX_EPOCH + Duration::from_nanos(events.first().unwrap().event.timestamp),
+                UNIX_EPOCH + Duration::from_nanos(events.last().unwrap().event.timestamp),
             )
         };
 
@@ -151,27 +149,34 @@ impl RpcMessageHandler {
         let (earliest_event_id, latest_event_id) = if events.is_empty() {
             (None, None)
         } else {
-            let mut event_ids: Vec<_> = events.iter().map(|e| e.event.event_id()).collect();
+            let mut event_ids: Vec<_> = events
+                .iter()
+                .map(|e| {
+                    // Convert FlatBuffer UUID to Uuid
+                    let uuid_bytes = e.event.event_id.data.as_slice();
+                    if uuid_bytes.len() == 16 {
+                        let mut bytes = [0u8; 16];
+                        bytes.copy_from_slice(uuid_bytes);
+                        Uuid::from_bytes(bytes)
+                    } else {
+                        Uuid::nil()
+                    }
+                })
+                .collect();
             event_ids.sort(); // UUIDs sort chronologically
             (Some(event_ids[0]), Some(event_ids[event_ids.len() - 1]))
         };
 
         // Convert to FlatBuffer structs
-        let fb_events: Result<Vec<_>, _> = events
+        let fb_events: Vec<_> = events
             .iter()
             .map(|logged_event| {
-                let narrative_fb = narrative_event_to_flatbuffer_struct(&logged_event.event)
-                    .map_err(|e| {
-                        RpcMessageError::InternalError(format!(
-                            "Failed to convert narrative event: {}",
-                            e
-                        ))
-                    })?;
-                Ok(moor_rpc::HistoricalNarrativeEvent {
-                    event: Box::new(narrative_fb),
+                // LoggedNarrativeEvent already has FlatBuffer types, use them directly
+                moor_rpc::HistoricalNarrativeEvent {
+                    event: logged_event.event.clone(),
                     is_historical: true,
-                    player: Box::new(obj_to_flatbuffer_struct(&logged_event.player)),
-                })
+                    player: logged_event.player.clone(),
+                }
             })
             .collect();
 
@@ -185,7 +190,7 @@ impl RpcMessageHandler {
             .as_nanos() as u64;
 
         Ok(moor_rpc::HistoryResponse {
-            events: fb_events?,
+            events: fb_events,
             time_range_start,
             time_range_end,
             total_events: total_events_available as u64,

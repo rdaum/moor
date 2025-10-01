@@ -87,7 +87,7 @@ pub mod client_args;
 
 // Private domain-organized modules
 mod client_messages;
-mod convert;
+pub mod convert; // Made public for event_log usage
 mod errors;
 mod events;
 mod extract;

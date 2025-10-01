@@ -48,6 +48,9 @@ impl RpcMessageHandler {
             moor_rpc::ConnectType::Connected => *USER_CONNECTED_SYM,
             moor_rpc::ConnectType::Reconnected => *USER_RECONNECTED_SYM,
             moor_rpc::ConnectType::Created => *USER_CREATED_SYM,
+            moor_rpc::ConnectType::NoConnect => {
+                unreachable!("NoConnect should never call submit_connected_task")
+            }
         };
         scheduler_client
             .submit_verb_task(

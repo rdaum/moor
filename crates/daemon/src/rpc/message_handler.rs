@@ -491,10 +491,9 @@ impl MessageHandler for RpcMessageHandler {
                             })
                         });
 
-                let connect_type_val = attach_msg.connect_type().map_err(|_| {
+                let connect_type = attach_msg.connect_type().map_err(|_| {
                     RpcMessageError::InvalidRequest("Missing connect_type".to_string())
                 })?;
-                let connect_type = Some(connect_type_val);
 
                 self.connections.new_connection(NewConnectionParams {
                     client_id,
@@ -507,7 +506,8 @@ impl MessageHandler for RpcMessageHandler {
                 })?;
                 let client_token = self.make_client_token(client_id);
 
-                if let Some(connect_type) = connect_type {
+                // Only submit user_connected task for actual connection types, not transient sessions
+                if connect_type != moor_rpc::ConnectType::NoConnect {
                     let connection = self
                         .connections
                         .connection_object_for_client(client_id)
@@ -940,8 +940,8 @@ impl MessageHandler for RpcMessageHandler {
 
                 let presentations = self.event_log.current_presentations(player);
                 let presentation_list: Result<Vec<_>, _> = presentations
-                    .into_values()
-                    .map(|p| presentation_to_flatbuffer_struct(&p))
+                    .iter()
+                    .map(presentation_to_flatbuffer_struct)
                     .collect();
 
                 Ok(DaemonToClientReply {

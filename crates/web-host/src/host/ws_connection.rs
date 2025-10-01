@@ -140,6 +140,9 @@ impl WebSocketConnection {
             moor_rpc::ConnectType::Connected => "*** Connected ***",
             moor_rpc::ConnectType::Reconnected => "*** Reconnected ***",
             moor_rpc::ConnectType::Created => "*** Created ***",
+            moor_rpc::ConnectType::NoConnect => {
+                unreachable!("NoConnect should not reach WebSocket handler")
+            }
         };
         Self::emit_narrative_sys_msg(
             &mut ws_sender,
