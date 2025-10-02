@@ -1,0 +1,104 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for MOO Var type representation
+// Used for RPC serialization where external languages need access
+
+include "common.fbs";
+
+namespace MoorVar;
+
+// ============================================================================
+// Var union and variants
+// ============================================================================
+
+union VarUnion {
+    VarNone,
+    VarBool,
+    VarInt,
+    VarFloat,
+    VarStr,
+    VarObj,
+    VarErr,
+    VarList,
+    VarMap,
+    VarSym,
+    VarBinary,
+    VarFlyweight
+    // Note: Lambda is intentionally excluded - not transmittable over RPC
+}
+
+table VarNone {
+}
+
+table VarBool {
+    value: bool;
+}
+
+table VarInt {
+    value: int64;
+}
+
+table VarFloat {
+    value: float64;
+}
+
+table VarStr {
+    value: string (required);
+}
+
+table VarObj {
+    obj: MoorCommon.Obj (required);
+}
+
+table VarErr {
+    error: MoorCommon.Error (required);
+}
+
+table VarSym {
+    symbol: MoorCommon.Symbol (required);
+}
+
+table VarBinary {
+    data: [uint8] (required);
+}
+
+table VarList {
+    elements: [Var] (required);
+}
+
+table VarMapPair {
+    key: Var (required);
+    value: Var (required);
+}
+
+table VarMap {
+    pairs: [VarMapPair] (required);
+}
+
+table FlyweightSlot {
+    name: MoorCommon.Symbol (required);
+    value: Var (required);
+}
+
+table VarFlyweight {
+    delegate: MoorCommon.Obj (required);
+    slots: [FlyweightSlot] (required);
+    contents: VarList (required);  // Reuse VarList for contents
+}
+
+table Var {
+    variant: VarUnion (required);
+}
+
+root_type Var;

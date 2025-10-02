@@ -11,11 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Master schema file that includes all moor FlatBuffer schemas
-// Generate with: planus rust -o ../src/schemas_generated.rs all_schemas.fbs
+//! Var FlatBuffer types
+//!
+//! FlatBuffer representation of moor_var::Var for RPC serialization
 
-include "common.fbs";
-include "var.fbs";
-include "moor_rpc.fbs";
-include "moor_event_log.fbs";
-include "moor_program.fbs";
+pub use crate::schema::schemas_generated::moor_var::*;

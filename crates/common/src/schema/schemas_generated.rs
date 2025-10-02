@@ -21602,6 +21602,4501 @@ mod root {
             }
         }
     }
+    /// The namespace `MoorVar`
+    ///
+    /// Generated from these locations:
+    /// * File `crates/common/schema/var.fbs`
+    pub mod moor_var {
+        /// The union `VarUnion` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Union `VarUnion` in the file `crates/common/schema/var.fbs:25`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub enum VarUnion {
+            /// The variant of type `VarNone` in the union `VarUnion`
+            VarNone(::planus::alloc::boxed::Box<self::VarNone>),
+
+            /// The variant of type `VarBool` in the union `VarUnion`
+            VarBool(::planus::alloc::boxed::Box<self::VarBool>),
+
+            /// The variant of type `VarInt` in the union `VarUnion`
+            VarInt(::planus::alloc::boxed::Box<self::VarInt>),
+
+            /// The variant of type `VarFloat` in the union `VarUnion`
+            VarFloat(::planus::alloc::boxed::Box<self::VarFloat>),
+
+            /// The variant of type `VarStr` in the union `VarUnion`
+            VarStr(::planus::alloc::boxed::Box<self::VarStr>),
+
+            /// The variant of type `VarObj` in the union `VarUnion`
+            VarObj(::planus::alloc::boxed::Box<self::VarObj>),
+
+            /// The variant of type `VarErr` in the union `VarUnion`
+            VarErr(::planus::alloc::boxed::Box<self::VarErr>),
+
+            /// The variant of type `VarList` in the union `VarUnion`
+            VarList(::planus::alloc::boxed::Box<self::VarList>),
+
+            /// The variant of type `VarMap` in the union `VarUnion`
+            VarMap(::planus::alloc::boxed::Box<self::VarMap>),
+
+            /// The variant of type `VarSym` in the union `VarUnion`
+            VarSym(::planus::alloc::boxed::Box<self::VarSym>),
+
+            /// The variant of type `VarBinary` in the union `VarUnion`
+            VarBinary(::planus::alloc::boxed::Box<self::VarBinary>),
+
+            /// The variant of type `VarFlyweight` in the union `VarUnion`
+            VarFlyweight(::planus::alloc::boxed::Box<self::VarFlyweight>),
+        }
+
+        impl VarUnion {
+            /// Creates a [VarUnionBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarUnionBuilder<::planus::Uninitialized> {
+                VarUnionBuilder(::planus::Uninitialized)
+            }
+
+            #[inline]
+            pub fn create_var_none(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarNone>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(1, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_bool(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarBool>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(2, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_int(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarInt>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(3, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_float(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarFloat>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(4, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_str(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarStr>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(5, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_obj(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarObj>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(6, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_err(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarErr>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(7, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_list(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarList>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(8, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_map(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarMap>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(9, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_sym(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarSym>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(10, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_binary(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarBinary>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(11, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_var_flyweight(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarFlyweight>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(12, value.prepare(builder).downcast())
+            }
+        }
+
+        impl ::planus::WriteAsUnion<VarUnion> for VarUnion {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<Self> {
+                match self {
+                    Self::VarNone(value) => Self::create_var_none(builder, value),
+                    Self::VarBool(value) => Self::create_var_bool(builder, value),
+                    Self::VarInt(value) => Self::create_var_int(builder, value),
+                    Self::VarFloat(value) => Self::create_var_float(builder, value),
+                    Self::VarStr(value) => Self::create_var_str(builder, value),
+                    Self::VarObj(value) => Self::create_var_obj(builder, value),
+                    Self::VarErr(value) => Self::create_var_err(builder, value),
+                    Self::VarList(value) => Self::create_var_list(builder, value),
+                    Self::VarMap(value) => Self::create_var_map(builder, value),
+                    Self::VarSym(value) => Self::create_var_sym(builder, value),
+                    Self::VarBinary(value) => Self::create_var_binary(builder, value),
+                    Self::VarFlyweight(value) => Self::create_var_flyweight(builder, value),
+                }
+            }
+        }
+
+        impl ::planus::WriteAsOptionalUnion<VarUnion> for VarUnion {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<Self>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarUnion] type.
+        ///
+        /// Can be created using the [VarUnion::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarUnionBuilder<T>(T);
+
+        impl VarUnionBuilder<::planus::Uninitialized> {
+            /// Creates an instance of the [`VarNone` variant](VarUnion#variant.VarNone).
+            #[inline]
+            pub fn var_none<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<1, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarNone>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarBool` variant](VarUnion#variant.VarBool).
+            #[inline]
+            pub fn var_bool<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<2, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarBool>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarInt` variant](VarUnion#variant.VarInt).
+            #[inline]
+            pub fn var_int<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<3, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarInt>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarFloat` variant](VarUnion#variant.VarFloat).
+            #[inline]
+            pub fn var_float<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<4, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarFloat>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarStr` variant](VarUnion#variant.VarStr).
+            #[inline]
+            pub fn var_str<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<5, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarStr>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarObj` variant](VarUnion#variant.VarObj).
+            #[inline]
+            pub fn var_obj<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<6, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarObj>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarErr` variant](VarUnion#variant.VarErr).
+            #[inline]
+            pub fn var_err<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<7, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarErr>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarList` variant](VarUnion#variant.VarList).
+            #[inline]
+            pub fn var_list<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<8, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarList>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarMap` variant](VarUnion#variant.VarMap).
+            #[inline]
+            pub fn var_map<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<9, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarMap>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarSym` variant](VarUnion#variant.VarSym).
+            #[inline]
+            pub fn var_sym<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<10, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarSym>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarBinary` variant](VarUnion#variant.VarBinary).
+            #[inline]
+            pub fn var_binary<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<11, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarBinary>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarFlyweight` variant](VarUnion#variant.VarFlyweight).
+            #[inline]
+            pub fn var_flyweight<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<12, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarFlyweight>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+        }
+
+        impl<const N: u8, T> VarUnionBuilder<::planus::Initialized<N, T>> {
+            /// Finish writing the builder to get an [UnionOffset](::planus::UnionOffset) to a serialized [VarUnion].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion>
+            where
+                Self: ::planus::WriteAsUnion<VarUnion>,
+            {
+                ::planus::WriteAsUnion::prepare(&self, builder)
+            }
+        }
+
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<1, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarNone>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(1, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<1, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarNone>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<2, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarBool>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(2, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<2, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarBool>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<3, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarInt>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(3, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<3, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarInt>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<4, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarFloat>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(4, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<4, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarFloat>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<5, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarStr>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(5, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<5, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarStr>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<6, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarObj>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(6, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<6, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarObj>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<7, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarErr>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(7, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<7, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarErr>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<8, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarList>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(8, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<8, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarList>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<9, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarMap>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(9, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<9, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarMap>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<10, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarSym>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(10, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<10, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarSym>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<11, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarBinary>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(11, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<11, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarBinary>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<12, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarFlyweight>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(12, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<12, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarFlyweight>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+
+        /// Reference to a deserialized [VarUnion].
+        #[derive(Copy, Clone, Debug)]
+        pub enum VarUnionRef<'a> {
+            VarNone(self::VarNoneRef<'a>),
+            VarBool(self::VarBoolRef<'a>),
+            VarInt(self::VarIntRef<'a>),
+            VarFloat(self::VarFloatRef<'a>),
+            VarStr(self::VarStrRef<'a>),
+            VarObj(self::VarObjRef<'a>),
+            VarErr(self::VarErrRef<'a>),
+            VarList(self::VarListRef<'a>),
+            VarMap(self::VarMapRef<'a>),
+            VarSym(self::VarSymRef<'a>),
+            VarBinary(self::VarBinaryRef<'a>),
+            VarFlyweight(self::VarFlyweightRef<'a>),
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarUnionRef<'a>> for VarUnion {
+            type Error = ::planus::Error;
+
+            fn try_from(value: VarUnionRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(match value {
+                    VarUnionRef::VarNone(value) => Self::VarNone(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarBool(value) => Self::VarBool(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarInt(value) => Self::VarInt(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarFloat(value) => {
+                        Self::VarFloat(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+
+                    VarUnionRef::VarStr(value) => Self::VarStr(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarObj(value) => Self::VarObj(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarErr(value) => Self::VarErr(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarList(value) => Self::VarList(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarMap(value) => Self::VarMap(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarSym(value) => Self::VarSym(::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryFrom::try_from(value)?,
+                    )),
+
+                    VarUnionRef::VarBinary(value) => {
+                        Self::VarBinary(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+
+                    VarUnionRef::VarFlyweight(value) => {
+                        Self::VarFlyweight(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableReadUnion<'a> for VarUnionRef<'a> {
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                tag: u8,
+                field_offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                match tag {
+                    1 => ::core::result::Result::Ok(Self::VarNone(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    2 => ::core::result::Result::Ok(Self::VarBool(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    3 => ::core::result::Result::Ok(Self::VarInt(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    4 => ::core::result::Result::Ok(Self::VarFloat(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    5 => ::core::result::Result::Ok(Self::VarStr(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    6 => ::core::result::Result::Ok(Self::VarObj(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    7 => ::core::result::Result::Ok(Self::VarErr(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    8 => ::core::result::Result::Ok(Self::VarList(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    9 => ::core::result::Result::Ok(Self::VarMap(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    10 => ::core::result::Result::Ok(Self::VarSym(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    11 => ::core::result::Result::Ok(Self::VarBinary(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    12 => ::core::result::Result::Ok(Self::VarFlyweight(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    _ => {
+                        ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
+                            tag,
+                        })
+                    }
+                }
+            }
+        }
+
+        impl<'a> ::planus::VectorReadUnion<'a> for VarUnionRef<'a> {
+            const VECTOR_NAME: &'static str = "[VarUnionRef]";
+        }
+
+        /// The table `VarNone` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarNone` in the file `crates/common/schema/var.fbs:41`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarNone {}
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarNone {
+            fn default() -> Self {
+                Self {}
+            }
+        }
+
+        impl VarNone {
+            /// Creates a [VarNoneBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarNoneBuilder<()> {
+                VarNoneBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(builder: &mut ::planus::Builder) -> ::planus::Offset<Self> {
+                let table_writer: ::planus::table_writer::TableWriter<4> =
+                    ::core::default::Default::default();
+                unsafe {
+                    table_writer.finish(builder, |_table_writer| {});
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarNone>> for VarNone {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarNone> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarNone>> for VarNone {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarNone>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarNone> for VarNone {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarNone> {
+                VarNone::create(builder)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarNone] type.
+        ///
+        /// Can be created using the [VarNone::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarNoneBuilder<State>(State);
+
+        impl VarNoneBuilder<()> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarNone].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarNone>
+            where
+                Self: ::planus::WriteAsOffset<VarNone>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarNone>> for VarNoneBuilder<()> {
+            type Prepared = ::planus::Offset<VarNone>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarNone> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarNone>> for VarNoneBuilder<()> {
+            type Prepared = ::planus::Offset<VarNone>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarNone>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarNone> for VarNoneBuilder<()> {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarNone> {
+                VarNone::create(builder)
+            }
+        }
+
+        /// Reference to a deserialized [VarNone].
+        #[derive(Copy, Clone)]
+        pub struct VarNoneRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarNoneRef<'a> {}
+
+        impl<'a> ::core::fmt::Debug for VarNoneRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarNoneRef");
+
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarNoneRef<'a>> for VarNone {
+            type Error = ::planus::Error;
+
+            fn try_from(_value: VarNoneRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {})
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarNoneRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarNoneRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarNoneRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarNone>> for VarNone {
+            type Value = ::planus::Offset<VarNone>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarNone>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarNoneRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarNoneRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarBool` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarBool` in the file `crates/common/schema/var.fbs:44`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarBool {
+            /// The field `value` in the table `VarBool`
+            pub value: bool,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarBool {
+            fn default() -> Self {
+                Self { value: false }
+            }
+        }
+
+        impl VarBool {
+            /// Creates a [VarBoolBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarBoolBuilder<()> {
+                VarBoolBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_value: impl ::planus::WriteAsDefault<bool, bool>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_value = field_value.prepare(builder, &false);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                if prepared_value.is_some() {
+                    table_writer.write_entry::<bool>(0);
+                }
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                            object_writer.write::<_, _, 1>(&prepared_value);
+                        }
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarBool>> for VarBool {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBool> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarBool>> for VarBool {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarBool>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarBool> for VarBool {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBool> {
+                VarBool::create(builder, self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarBool] type.
+        ///
+        /// Can be created using the [VarBool::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarBoolBuilder<State>(State);
+
+        impl VarBoolBuilder<()> {
+            /// Setter for the [`value` field](VarBool#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T0>(self, value: T0) -> VarBoolBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsDefault<bool, bool>,
+            {
+                VarBoolBuilder((value,))
+            }
+
+            /// Sets the [`value` field](VarBool#structfield.value) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value_as_default(self) -> VarBoolBuilder<(::planus::DefaultValue,)> {
+                self.value(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0> VarBoolBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarBool].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBool>
+            where
+                Self: ::planus::WriteAsOffset<VarBool>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<bool, bool>> ::planus::WriteAs<::planus::Offset<VarBool>>
+            for VarBoolBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarBool>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBool> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<bool, bool>>
+            ::planus::WriteAsOptional<::planus::Offset<VarBool>> for VarBoolBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarBool>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarBool>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<bool, bool>> ::planus::WriteAsOffset<VarBool>
+            for VarBoolBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBool> {
+                let (v0,) = &self.0;
+                VarBool::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarBool].
+        #[derive(Copy, Clone)]
+        pub struct VarBoolRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarBoolRef<'a> {
+            /// Getter for the [`value` field](VarBool#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<bool> {
+                ::core::result::Result::Ok(self.0.access(0, "VarBool", "value")?.unwrap_or(false))
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarBoolRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarBoolRef");
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarBoolRef<'a>> for VarBool {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarBoolRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    value: ::core::convert::TryInto::try_into(value.value()?)?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarBoolRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarBoolRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarBoolRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarBool>> for VarBool {
+            type Value = ::planus::Offset<VarBool>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarBool>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarBoolRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarBoolRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarInt` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarInt` in the file `crates/common/schema/var.fbs:48`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarInt {
+            /// The field `value` in the table `VarInt`
+            pub value: i64,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarInt {
+            fn default() -> Self {
+                Self { value: 0 }
+            }
+        }
+
+        impl VarInt {
+            /// Creates a [VarIntBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarIntBuilder<()> {
+                VarIntBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_value: impl ::planus::WriteAsDefault<i64, i64>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_value = field_value.prepare(builder, &0);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                if prepared_value.is_some() {
+                    table_writer.write_entry::<i64>(0);
+                }
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                            object_writer.write::<_, _, 8>(&prepared_value);
+                        }
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarInt>> for VarInt {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarInt> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarInt>> for VarInt {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarInt>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarInt> for VarInt {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarInt> {
+                VarInt::create(builder, self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarInt] type.
+        ///
+        /// Can be created using the [VarInt::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarIntBuilder<State>(State);
+
+        impl VarIntBuilder<()> {
+            /// Setter for the [`value` field](VarInt#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T0>(self, value: T0) -> VarIntBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsDefault<i64, i64>,
+            {
+                VarIntBuilder((value,))
+            }
+
+            /// Sets the [`value` field](VarInt#structfield.value) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value_as_default(self) -> VarIntBuilder<(::planus::DefaultValue,)> {
+                self.value(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0> VarIntBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarInt].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarInt>
+            where
+                Self: ::planus::WriteAsOffset<VarInt>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<i64, i64>> ::planus::WriteAs<::planus::Offset<VarInt>>
+            for VarIntBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarInt>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarInt> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<i64, i64>>
+            ::planus::WriteAsOptional<::planus::Offset<VarInt>> for VarIntBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarInt>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarInt>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<i64, i64>> ::planus::WriteAsOffset<VarInt>
+            for VarIntBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarInt> {
+                let (v0,) = &self.0;
+                VarInt::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarInt].
+        #[derive(Copy, Clone)]
+        pub struct VarIntRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarIntRef<'a> {
+            /// Getter for the [`value` field](VarInt#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<i64> {
+                ::core::result::Result::Ok(self.0.access(0, "VarInt", "value")?.unwrap_or(0))
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarIntRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarIntRef");
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarIntRef<'a>> for VarInt {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarIntRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    value: ::core::convert::TryInto::try_into(value.value()?)?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarIntRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarIntRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarIntRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarInt>> for VarInt {
+            type Value = ::planus::Offset<VarInt>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarInt>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarIntRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarIntRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarFloat` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarFloat` in the file `crates/common/schema/var.fbs:52`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct VarFloat {
+            /// The field `value` in the table `VarFloat`
+            pub value: f64,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarFloat {
+            fn default() -> Self {
+                Self { value: 0.0 }
+            }
+        }
+
+        impl VarFloat {
+            /// Creates a [VarFloatBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarFloatBuilder<()> {
+                VarFloatBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_value: impl ::planus::WriteAsDefault<f64, f64>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_value = field_value.prepare(builder, &0.0);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                if prepared_value.is_some() {
+                    table_writer.write_entry::<f64>(0);
+                }
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                            object_writer.write::<_, _, 8>(&prepared_value);
+                        }
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarFloat>> for VarFloat {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFloat> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarFloat>> for VarFloat {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarFloat>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarFloat> for VarFloat {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFloat> {
+                VarFloat::create(builder, self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarFloat] type.
+        ///
+        /// Can be created using the [VarFloat::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarFloatBuilder<State>(State);
+
+        impl VarFloatBuilder<()> {
+            /// Setter for the [`value` field](VarFloat#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T0>(self, value: T0) -> VarFloatBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsDefault<f64, f64>,
+            {
+                VarFloatBuilder((value,))
+            }
+
+            /// Sets the [`value` field](VarFloat#structfield.value) to the default value.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value_as_default(self) -> VarFloatBuilder<(::planus::DefaultValue,)> {
+                self.value(::planus::DefaultValue)
+            }
+        }
+
+        impl<T0> VarFloatBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarFloat].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFloat>
+            where
+                Self: ::planus::WriteAsOffset<VarFloat>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<f64, f64>> ::planus::WriteAs<::planus::Offset<VarFloat>>
+            for VarFloatBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarFloat>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFloat> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<f64, f64>>
+            ::planus::WriteAsOptional<::planus::Offset<VarFloat>> for VarFloatBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarFloat>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarFloat>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAsDefault<f64, f64>> ::planus::WriteAsOffset<VarFloat>
+            for VarFloatBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFloat> {
+                let (v0,) = &self.0;
+                VarFloat::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarFloat].
+        #[derive(Copy, Clone)]
+        pub struct VarFloatRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarFloatRef<'a> {
+            /// Getter for the [`value` field](VarFloat#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<f64> {
+                ::core::result::Result::Ok(self.0.access(0, "VarFloat", "value")?.unwrap_or(0.0))
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarFloatRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarFloatRef");
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarFloatRef<'a>> for VarFloat {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarFloatRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    value: ::core::convert::TryInto::try_into(value.value()?)?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarFloatRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarFloatRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarFloatRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarFloat>> for VarFloat {
+            type Value = ::planus::Offset<VarFloat>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarFloat>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarFloatRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarFloatRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarStr` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarStr` in the file `crates/common/schema/var.fbs:56`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarStr {
+            /// The field `value` in the table `VarStr`
+            pub value: ::planus::alloc::string::String,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarStr {
+            fn default() -> Self {
+                Self {
+                    value: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarStr {
+            /// Creates a [VarStrBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarStrBuilder<()> {
+                VarStrBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_value: impl ::planus::WriteAs<::planus::Offset<str>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_value = field_value.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<str>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_value);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarStr>> for VarStr {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarStr> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarStr>> for VarStr {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarStr>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarStr> for VarStr {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarStr> {
+                VarStr::create(builder, &self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarStr] type.
+        ///
+        /// Can be created using the [VarStr::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarStrBuilder<State>(State);
+
+        impl VarStrBuilder<()> {
+            /// Setter for the [`value` field](VarStr#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T0>(self, value: T0) -> VarStrBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+            {
+                VarStrBuilder((value,))
+            }
+        }
+
+        impl<T0> VarStrBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarStr].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarStr>
+            where
+                Self: ::planus::WriteAsOffset<VarStr>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAs<::planus::Offset<VarStr>> for VarStrBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarStr>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarStr> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarStr>> for VarStrBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarStr>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarStr>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>> ::planus::WriteAsOffset<VarStr>
+            for VarStrBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarStr> {
+                let (v0,) = &self.0;
+                VarStr::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarStr].
+        #[derive(Copy, Clone)]
+        pub struct VarStrRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarStrRef<'a> {
+            /// Getter for the [`value` field](VarStr#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<&'a ::core::primitive::str> {
+                self.0.access_required(0, "VarStr", "value")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarStrRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarStrRef");
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarStrRef<'a>> for VarStr {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarStrRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    value: ::core::convert::Into::into(value.value()?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarStrRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarStrRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarStrRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarStr>> for VarStr {
+            type Value = ::planus::Offset<VarStr>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarStr>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarStrRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarStrRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarObj` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarObj` in the file `crates/common/schema/var.fbs:60`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarObj {
+            /// The field `obj` in the table `VarObj`
+            pub obj: ::planus::alloc::boxed::Box<super::moor_common::Obj>,
+        }
+
+        impl VarObj {
+            /// Creates a [VarObjBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarObjBuilder<()> {
+                VarObjBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_obj: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_obj = field_obj.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Obj>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_obj);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarObj>> for VarObj {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarObj> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarObj>> for VarObj {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarObj>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarObj> for VarObj {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarObj> {
+                VarObj::create(builder, &self.obj)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarObj] type.
+        ///
+        /// Can be created using the [VarObj::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarObjBuilder<State>(State);
+
+        impl VarObjBuilder<()> {
+            /// Setter for the [`obj` field](VarObj#structfield.obj).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn obj<T0>(self, value: T0) -> VarObjBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            {
+                VarObjBuilder((value,))
+            }
+        }
+
+        impl<T0> VarObjBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarObj].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarObj>
+            where
+                Self: ::planus::WriteAsOffset<VarObj>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>>
+            ::planus::WriteAs<::planus::Offset<VarObj>> for VarObjBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarObj>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarObj> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarObj>> for VarObjBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarObj>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarObj>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>>
+            ::planus::WriteAsOffset<VarObj> for VarObjBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarObj> {
+                let (v0,) = &self.0;
+                VarObj::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarObj].
+        #[derive(Copy, Clone)]
+        pub struct VarObjRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarObjRef<'a> {
+            /// Getter for the [`obj` field](VarObj#structfield.obj).
+            #[inline]
+            pub fn obj(&self) -> ::planus::Result<super::moor_common::ObjRef<'a>> {
+                self.0.access_required(0, "VarObj", "obj")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarObjRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarObjRef");
+                f.field("obj", &self.obj());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarObjRef<'a>> for VarObj {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarObjRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    obj: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.obj()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarObjRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarObjRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarObjRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarObj>> for VarObj {
+            type Value = ::planus::Offset<VarObj>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarObj>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarObjRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarObjRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarErr` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarErr` in the file `crates/common/schema/var.fbs:64`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarErr {
+            /// The field `error` in the table `VarErr`
+            pub error: ::planus::alloc::boxed::Box<super::moor_common::Error>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarErr {
+            fn default() -> Self {
+                Self {
+                    error: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarErr {
+            /// Creates a [VarErrBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarErrBuilder<()> {
+                VarErrBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_error: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Error>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_error = field_error.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Error>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_error);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarErr>> for VarErr {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarErr> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarErr>> for VarErr {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarErr>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarErr> for VarErr {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarErr> {
+                VarErr::create(builder, &self.error)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarErr] type.
+        ///
+        /// Can be created using the [VarErr::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarErrBuilder<State>(State);
+
+        impl VarErrBuilder<()> {
+            /// Setter for the [`error` field](VarErr#structfield.error).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn error<T0>(self, value: T0) -> VarErrBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Error>>,
+            {
+                VarErrBuilder((value,))
+            }
+        }
+
+        impl<T0> VarErrBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarErr].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarErr>
+            where
+                Self: ::planus::WriteAsOffset<VarErr>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Error>>>
+            ::planus::WriteAs<::planus::Offset<VarErr>> for VarErrBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarErr>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarErr> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Error>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarErr>> for VarErrBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarErr>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarErr>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Error>>>
+            ::planus::WriteAsOffset<VarErr> for VarErrBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarErr> {
+                let (v0,) = &self.0;
+                VarErr::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarErr].
+        #[derive(Copy, Clone)]
+        pub struct VarErrRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarErrRef<'a> {
+            /// Getter for the [`error` field](VarErr#structfield.error).
+            #[inline]
+            pub fn error(&self) -> ::planus::Result<super::moor_common::ErrorRef<'a>> {
+                self.0.access_required(0, "VarErr", "error")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarErrRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarErrRef");
+                f.field("error", &self.error());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarErrRef<'a>> for VarErr {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarErrRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    error: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.error()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarErrRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarErrRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarErrRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarErr>> for VarErr {
+            type Value = ::planus::Offset<VarErr>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarErr>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarErrRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarErrRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarSym` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarSym` in the file `crates/common/schema/var.fbs:68`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarSym {
+            /// The field `symbol` in the table `VarSym`
+            pub symbol: ::planus::alloc::boxed::Box<super::moor_common::Symbol>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarSym {
+            fn default() -> Self {
+                Self {
+                    symbol: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarSym {
+            /// Creates a [VarSymBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarSymBuilder<()> {
+                VarSymBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_symbol: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_symbol = field_symbol.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Symbol>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_symbol);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarSym>> for VarSym {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarSym> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarSym>> for VarSym {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarSym>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarSym> for VarSym {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarSym> {
+                VarSym::create(builder, &self.symbol)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarSym] type.
+        ///
+        /// Can be created using the [VarSym::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarSymBuilder<State>(State);
+
+        impl VarSymBuilder<()> {
+            /// Setter for the [`symbol` field](VarSym#structfield.symbol).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn symbol<T0>(self, value: T0) -> VarSymBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            {
+                VarSymBuilder((value,))
+            }
+        }
+
+        impl<T0> VarSymBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarSym].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarSym>
+            where
+                Self: ::planus::WriteAsOffset<VarSym>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>>
+            ::planus::WriteAs<::planus::Offset<VarSym>> for VarSymBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarSym>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarSym> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarSym>> for VarSymBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarSym>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarSym>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>>
+            ::planus::WriteAsOffset<VarSym> for VarSymBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarSym> {
+                let (v0,) = &self.0;
+                VarSym::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarSym].
+        #[derive(Copy, Clone)]
+        pub struct VarSymRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarSymRef<'a> {
+            /// Getter for the [`symbol` field](VarSym#structfield.symbol).
+            #[inline]
+            pub fn symbol(&self) -> ::planus::Result<super::moor_common::SymbolRef<'a>> {
+                self.0.access_required(0, "VarSym", "symbol")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarSymRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarSymRef");
+                f.field("symbol", &self.symbol());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarSymRef<'a>> for VarSym {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarSymRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    symbol: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.symbol()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarSymRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarSymRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarSymRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarSym>> for VarSym {
+            type Value = ::planus::Offset<VarSym>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarSym>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarSymRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarSymRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarBinary` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarBinary` in the file `crates/common/schema/var.fbs:72`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VarBinary {
+            /// The field `data` in the table `VarBinary`
+            pub data: ::planus::alloc::vec::Vec<u8>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarBinary {
+            fn default() -> Self {
+                Self {
+                    data: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarBinary {
+            /// Creates a [VarBinaryBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarBinaryBuilder<()> {
+                VarBinaryBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_data: impl ::planus::WriteAs<::planus::Offset<[u8]>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_data = field_data.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<[u8]>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_data);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarBinary>> for VarBinary {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBinary> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarBinary>> for VarBinary {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarBinary>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarBinary> for VarBinary {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBinary> {
+                VarBinary::create(builder, &self.data)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarBinary] type.
+        ///
+        /// Can be created using the [VarBinary::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarBinaryBuilder<State>(State);
+
+        impl VarBinaryBuilder<()> {
+            /// Setter for the [`data` field](VarBinary#structfield.data).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn data<T0>(self, value: T0) -> VarBinaryBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
+            {
+                VarBinaryBuilder((value,))
+            }
+        }
+
+        impl<T0> VarBinaryBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarBinary].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBinary>
+            where
+                Self: ::planus::WriteAsOffset<VarBinary>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[u8]>>>
+            ::planus::WriteAs<::planus::Offset<VarBinary>> for VarBinaryBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarBinary>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBinary> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[u8]>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarBinary>> for VarBinaryBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarBinary>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarBinary>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[u8]>>> ::planus::WriteAsOffset<VarBinary>
+            for VarBinaryBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarBinary> {
+                let (v0,) = &self.0;
+                VarBinary::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarBinary].
+        #[derive(Copy, Clone)]
+        pub struct VarBinaryRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarBinaryRef<'a> {
+            /// Getter for the [`data` field](VarBinary#structfield.data).
+            #[inline]
+            pub fn data(&self) -> ::planus::Result<&'a [u8]> {
+                self.0.access_required(0, "VarBinary", "data")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarBinaryRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarBinaryRef");
+                f.field("data", &self.data());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarBinaryRef<'a>> for VarBinary {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarBinaryRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    data: value.data()?.to_vec(),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarBinaryRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarBinaryRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[VarBinaryRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarBinary>> for VarBinary {
+            type Value = ::planus::Offset<VarBinary>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarBinary>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarBinaryRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarBinaryRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarList` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarList` in the file `crates/common/schema/var.fbs:76`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct VarList {
+            /// The field `elements` in the table `VarList`
+            pub elements: ::planus::alloc::vec::Vec<self::Var>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarList {
+            fn default() -> Self {
+                Self {
+                    elements: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarList {
+            /// Creates a [VarListBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarListBuilder<()> {
+                VarListBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_elements: impl ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Var>]>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_elements = field_elements.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::Var>]>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_elements);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarList>> for VarList {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarList> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarList>> for VarList {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarList>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarList> for VarList {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarList> {
+                VarList::create(builder, &self.elements)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarList] type.
+        ///
+        /// Can be created using the [VarList::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarListBuilder<State>(State);
+
+        impl VarListBuilder<()> {
+            /// Setter for the [`elements` field](VarList#structfield.elements).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn elements<T0>(self, value: T0) -> VarListBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Var>]>>,
+            {
+                VarListBuilder((value,))
+            }
+        }
+
+        impl<T0> VarListBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarList].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarList>
+            where
+                Self: ::planus::WriteAsOffset<VarList>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Var>]>>>
+            ::planus::WriteAs<::planus::Offset<VarList>> for VarListBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarList>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarList> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Var>]>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarList>> for VarListBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarList>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarList>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Var>]>>>
+            ::planus::WriteAsOffset<VarList> for VarListBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarList> {
+                let (v0,) = &self.0;
+                VarList::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarList].
+        #[derive(Copy, Clone)]
+        pub struct VarListRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarListRef<'a> {
+            /// Getter for the [`elements` field](VarList#structfield.elements).
+            #[inline]
+            pub fn elements(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::VarRef<'a>>>>
+            {
+                self.0.access_required(0, "VarList", "elements")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarListRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarListRef");
+                f.field("elements", &self.elements());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarListRef<'a>> for VarList {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarListRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    elements: value.elements()?.to_vec_result()?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarListRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarListRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarListRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarList>> for VarList {
+            type Value = ::planus::Offset<VarList>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarList>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarListRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarListRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarMapPair` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarMapPair` in the file `crates/common/schema/var.fbs:80`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct VarMapPair {
+            /// The field `key` in the table `VarMapPair`
+            pub key: ::planus::alloc::boxed::Box<self::Var>,
+            /// The field `value` in the table `VarMapPair`
+            pub value: ::planus::alloc::boxed::Box<self::Var>,
+        }
+
+        impl VarMapPair {
+            /// Creates a [VarMapPairBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarMapPairBuilder<()> {
+                VarMapPairBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_key: impl ::planus::WriteAs<::planus::Offset<self::Var>>,
+                field_value: impl ::planus::WriteAs<::planus::Offset<self::Var>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_key = field_key.prepare(builder);
+                let prepared_value = field_value.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::Var>>(0);
+                table_writer.write_entry::<::planus::Offset<self::Var>>(1);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_key);
+                        object_writer.write::<_, _, 4>(&prepared_value);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarMapPair>> for VarMapPair {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarMapPair>> for VarMapPair {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarMapPair>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarMapPair> for VarMapPair {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair> {
+                VarMapPair::create(builder, &self.key, &self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarMapPair] type.
+        ///
+        /// Can be created using the [VarMapPair::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarMapPairBuilder<State>(State);
+
+        impl VarMapPairBuilder<()> {
+            /// Setter for the [`key` field](VarMapPair#structfield.key).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn key<T0>(self, value: T0) -> VarMapPairBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            {
+                VarMapPairBuilder((value,))
+            }
+        }
+
+        impl<T0> VarMapPairBuilder<(T0,)> {
+            /// Setter for the [`value` field](VarMapPair#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T1>(self, value: T1) -> VarMapPairBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            {
+                let (v0,) = self.0;
+                VarMapPairBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> VarMapPairBuilder<(T0, T1)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarMapPair].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair>
+            where
+                Self: ::planus::WriteAsOffset<VarMapPair>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+        > ::planus::WriteAs<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<VarMapPair>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+        > ::planus::WriteAsOptional<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<VarMapPair>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarMapPair>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+        > ::planus::WriteAsOffset<VarMapPair> for VarMapPairBuilder<(T0, T1)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair> {
+                let (v0, v1) = &self.0;
+                VarMapPair::create(builder, v0, v1)
+            }
+        }
+
+        /// Reference to a deserialized [VarMapPair].
+        #[derive(Copy, Clone)]
+        pub struct VarMapPairRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarMapPairRef<'a> {
+            /// Getter for the [`key` field](VarMapPair#structfield.key).
+            #[inline]
+            pub fn key(&self) -> ::planus::Result<self::VarRef<'a>> {
+                self.0.access_required(0, "VarMapPair", "key")
+            }
+
+            /// Getter for the [`value` field](VarMapPair#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<self::VarRef<'a>> {
+                self.0.access_required(1, "VarMapPair", "value")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarMapPairRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarMapPairRef");
+                f.field("key", &self.key());
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarMapPairRef<'a>> for VarMapPair {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarMapPairRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    key: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.key()?,
+                    )?),
+                    value: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.value()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarMapPairRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarMapPairRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[VarMapPairRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarMapPair>> for VarMapPair {
+            type Value = ::planus::Offset<VarMapPair>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarMapPair>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarMapPairRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarMapPairRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarMap` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarMap` in the file `crates/common/schema/var.fbs:85`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct VarMap {
+            /// The field `pairs` in the table `VarMap`
+            pub pairs: ::planus::alloc::vec::Vec<self::VarMapPair>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarMap {
+            fn default() -> Self {
+                Self {
+                    pairs: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarMap {
+            /// Creates a [VarMapBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarMapBuilder<()> {
+                VarMapBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_pairs: impl ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::VarMapPair>]>,
+                >,
+            ) -> ::planus::Offset<Self> {
+                let prepared_pairs = field_pairs.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer
+                    .write_entry::<::planus::Offset<[::planus::Offset<self::VarMapPair>]>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_pairs);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarMap>> for VarMap {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMap> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarMap>> for VarMap {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarMap>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarMap> for VarMap {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMap> {
+                VarMap::create(builder, &self.pairs)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarMap] type.
+        ///
+        /// Can be created using the [VarMap::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarMapBuilder<State>(State);
+
+        impl VarMapBuilder<()> {
+            /// Setter for the [`pairs` field](VarMap#structfield.pairs).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn pairs<T0>(self, value: T0) -> VarMapBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarMapPair>]>>,
+            {
+                VarMapBuilder((value,))
+            }
+        }
+
+        impl<T0> VarMapBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarMap].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMap>
+            where
+                Self: ::planus::WriteAsOffset<VarMap>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarMapPair>]>>>
+            ::planus::WriteAs<::planus::Offset<VarMap>> for VarMapBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarMap>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMap> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarMapPair>]>>>
+            ::planus::WriteAsOptional<::planus::Offset<VarMap>> for VarMapBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VarMap>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarMap>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarMapPair>]>>>
+            ::planus::WriteAsOffset<VarMap> for VarMapBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMap> {
+                let (v0,) = &self.0;
+                VarMap::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VarMap].
+        #[derive(Copy, Clone)]
+        pub struct VarMapRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarMapRef<'a> {
+            /// Getter for the [`pairs` field](VarMap#structfield.pairs).
+            #[inline]
+            pub fn pairs(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::VarMapPairRef<'a>>>>
+            {
+                self.0.access_required(0, "VarMap", "pairs")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarMapRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarMapRef");
+                f.field("pairs", &self.pairs());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarMapRef<'a>> for VarMap {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarMapRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    pairs: value.pairs()?.to_vec_result()?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarMapRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarMapRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarMapRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarMap>> for VarMap {
+            type Value = ::planus::Offset<VarMap>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarMap>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarMapRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarMapRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `FlyweightSlot` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `FlyweightSlot` in the file `crates/common/schema/var.fbs:89`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct FlyweightSlot {
+            /// The field `name` in the table `FlyweightSlot`
+            pub name: ::planus::alloc::boxed::Box<super::moor_common::Symbol>,
+            /// The field `value` in the table `FlyweightSlot`
+            pub value: ::planus::alloc::boxed::Box<self::Var>,
+        }
+
+        impl FlyweightSlot {
+            /// Creates a [FlyweightSlotBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> FlyweightSlotBuilder<()> {
+                FlyweightSlotBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_name: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                field_value: impl ::planus::WriteAs<::planus::Offset<self::Var>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_name = field_name.prepare(builder);
+                let prepared_value = field_value.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Symbol>>(0);
+                table_writer.write_entry::<::planus::Offset<self::Var>>(1);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_name);
+                        object_writer.write::<_, _, 4>(&prepared_value);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<FlyweightSlot>> for FlyweightSlot {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<FlyweightSlot>> for FlyweightSlot {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<FlyweightSlot>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<FlyweightSlot> for FlyweightSlot {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot> {
+                FlyweightSlot::create(builder, &self.name, &self.value)
+            }
+        }
+
+        /// Builder for serializing an instance of the [FlyweightSlot] type.
+        ///
+        /// Can be created using the [FlyweightSlot::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct FlyweightSlotBuilder<State>(State);
+
+        impl FlyweightSlotBuilder<()> {
+            /// Setter for the [`name` field](FlyweightSlot#structfield.name).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn name<T0>(self, value: T0) -> FlyweightSlotBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            {
+                FlyweightSlotBuilder((value,))
+            }
+        }
+
+        impl<T0> FlyweightSlotBuilder<(T0,)> {
+            /// Setter for the [`value` field](FlyweightSlot#structfield.value).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn value<T1>(self, value: T1) -> FlyweightSlotBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            {
+                let (v0,) = self.0;
+                FlyweightSlotBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> FlyweightSlotBuilder<(T0, T1)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [FlyweightSlot].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot>
+            where
+                Self: ::planus::WriteAsOffset<FlyweightSlot>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+        > ::planus::WriteAs<::planus::Offset<FlyweightSlot>> for FlyweightSlotBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<FlyweightSlot>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+        > ::planus::WriteAsOptional<::planus::Offset<FlyweightSlot>>
+            for FlyweightSlotBuilder<(T0, T1)>
+        {
+            type Prepared = ::planus::Offset<FlyweightSlot>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<FlyweightSlot>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+        > ::planus::WriteAsOffset<FlyweightSlot> for FlyweightSlotBuilder<(T0, T1)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot> {
+                let (v0, v1) = &self.0;
+                FlyweightSlot::create(builder, v0, v1)
+            }
+        }
+
+        /// Reference to a deserialized [FlyweightSlot].
+        #[derive(Copy, Clone)]
+        pub struct FlyweightSlotRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> FlyweightSlotRef<'a> {
+            /// Getter for the [`name` field](FlyweightSlot#structfield.name).
+            #[inline]
+            pub fn name(&self) -> ::planus::Result<super::moor_common::SymbolRef<'a>> {
+                self.0.access_required(0, "FlyweightSlot", "name")
+            }
+
+            /// Getter for the [`value` field](FlyweightSlot#structfield.value).
+            #[inline]
+            pub fn value(&self) -> ::planus::Result<self::VarRef<'a>> {
+                self.0.access_required(1, "FlyweightSlot", "value")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for FlyweightSlotRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("FlyweightSlotRef");
+                f.field("name", &self.name());
+                f.field("value", &self.value());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<FlyweightSlotRef<'a>> for FlyweightSlot {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: FlyweightSlotRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    name: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.name()?,
+                    )?),
+                    value: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.value()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for FlyweightSlotRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for FlyweightSlotRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[FlyweightSlotRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<FlyweightSlot>> for FlyweightSlot {
+            type Value = ::planus::Offset<FlyweightSlot>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<FlyweightSlot>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for FlyweightSlotRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[FlyweightSlotRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `VarFlyweight` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarFlyweight` in the file `crates/common/schema/var.fbs:94`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct VarFlyweight {
+            /// The field `delegate` in the table `VarFlyweight`
+            pub delegate: ::planus::alloc::boxed::Box<super::moor_common::Obj>,
+            /// The field `slots` in the table `VarFlyweight`
+            pub slots: ::planus::alloc::vec::Vec<self::FlyweightSlot>,
+            /// The field `contents` in the table `VarFlyweight`
+            pub contents: ::planus::alloc::boxed::Box<self::VarList>,
+        }
+
+        impl VarFlyweight {
+            /// Creates a [VarFlyweightBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarFlyweightBuilder<()> {
+                VarFlyweightBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_delegate: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                field_slots: impl ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>,
+                >,
+                field_contents: impl ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_delegate = field_delegate.prepare(builder);
+                let prepared_slots = field_slots.prepare(builder);
+                let prepared_contents = field_contents.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<10> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Obj>>(0);
+                table_writer
+                    .write_entry::<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>(1);
+                table_writer.write_entry::<::planus::Offset<self::VarList>>(2);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_delegate);
+                        object_writer.write::<_, _, 4>(&prepared_slots);
+                        object_writer.write::<_, _, 4>(&prepared_contents);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarFlyweight>> for VarFlyweight {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarFlyweight>> for VarFlyweight {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarFlyweight>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarFlyweight> for VarFlyweight {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight> {
+                VarFlyweight::create(builder, &self.delegate, &self.slots, &self.contents)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarFlyweight] type.
+        ///
+        /// Can be created using the [VarFlyweight::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarFlyweightBuilder<State>(State);
+
+        impl VarFlyweightBuilder<()> {
+            /// Setter for the [`delegate` field](VarFlyweight#structfield.delegate).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn delegate<T0>(self, value: T0) -> VarFlyweightBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            {
+                VarFlyweightBuilder((value,))
+            }
+        }
+
+        impl<T0> VarFlyweightBuilder<(T0,)> {
+            /// Setter for the [`slots` field](VarFlyweight#structfield.slots).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn slots<T1>(self, value: T1) -> VarFlyweightBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+            {
+                let (v0,) = self.0;
+                VarFlyweightBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> VarFlyweightBuilder<(T0, T1)> {
+            /// Setter for the [`contents` field](VarFlyweight#structfield.contents).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn contents<T2>(self, value: T2) -> VarFlyweightBuilder<(T0, T1, T2)>
+            where
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            {
+                let (v0, v1) = self.0;
+                VarFlyweightBuilder((v0, v1, value))
+            }
+        }
+
+        impl<T0, T1, T2> VarFlyweightBuilder<(T0, T1, T2)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarFlyweight].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight>
+            where
+                Self: ::planus::WriteAsOffset<VarFlyweight>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+        > ::planus::WriteAs<::planus::Offset<VarFlyweight>> for VarFlyweightBuilder<(T0, T1, T2)>
+        {
+            type Prepared = ::planus::Offset<VarFlyweight>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+        > ::planus::WriteAsOptional<::planus::Offset<VarFlyweight>>
+            for VarFlyweightBuilder<(T0, T1, T2)>
+        {
+            type Prepared = ::planus::Offset<VarFlyweight>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarFlyweight>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+        > ::planus::WriteAsOffset<VarFlyweight> for VarFlyweightBuilder<(T0, T1, T2)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight> {
+                let (v0, v1, v2) = &self.0;
+                VarFlyweight::create(builder, v0, v1, v2)
+            }
+        }
+
+        /// Reference to a deserialized [VarFlyweight].
+        #[derive(Copy, Clone)]
+        pub struct VarFlyweightRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarFlyweightRef<'a> {
+            /// Getter for the [`delegate` field](VarFlyweight#structfield.delegate).
+            #[inline]
+            pub fn delegate(&self) -> ::planus::Result<super::moor_common::ObjRef<'a>> {
+                self.0.access_required(0, "VarFlyweight", "delegate")
+            }
+
+            /// Getter for the [`slots` field](VarFlyweight#structfield.slots).
+            #[inline]
+            pub fn slots(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::FlyweightSlotRef<'a>>>>
+            {
+                self.0.access_required(1, "VarFlyweight", "slots")
+            }
+
+            /// Getter for the [`contents` field](VarFlyweight#structfield.contents).
+            #[inline]
+            pub fn contents(&self) -> ::planus::Result<self::VarListRef<'a>> {
+                self.0.access_required(2, "VarFlyweight", "contents")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarFlyweightRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarFlyweightRef");
+                f.field("delegate", &self.delegate());
+                f.field("slots", &self.slots());
+                f.field("contents", &self.contents());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarFlyweightRef<'a>> for VarFlyweight {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarFlyweightRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    delegate: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.delegate()?,
+                    )?),
+                    slots: value.slots()?.to_vec_result()?,
+                    contents: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.contents()?,
+                    )?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarFlyweightRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarFlyweightRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[VarFlyweightRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarFlyweight>> for VarFlyweight {
+            type Value = ::planus::Offset<VarFlyweight>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarFlyweight>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarFlyweightRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarFlyweightRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `Var` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `Var` in the file `crates/common/schema/var.fbs:100`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct Var {
+            /// The field `variant` in the table `Var`
+            pub variant: self::VarUnion,
+        }
+
+        impl Var {
+            /// Creates a [VarBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarBuilder<()> {
+                VarBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_variant: impl ::planus::WriteAsUnion<self::VarUnion>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_variant = field_variant.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<8> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<self::VarUnion>>(1);
+                table_writer.write_entry::<u8>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_variant.offset());
+                        object_writer.write::<_, _, 1>(&prepared_variant.tag());
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<Var>> for Var {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Var> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<Var>> for Var {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<Var>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<Var> for Var {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Var> {
+                Var::create(builder, &self.variant)
+            }
+        }
+
+        /// Builder for serializing an instance of the [Var] type.
+        ///
+        /// Can be created using the [Var::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarBuilder<State>(State);
+
+        impl VarBuilder<()> {
+            /// Setter for the [`variant` field](Var#structfield.variant).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn variant<T0>(self, value: T0) -> VarBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsUnion<self::VarUnion>,
+            {
+                VarBuilder((value,))
+            }
+        }
+
+        impl<T0> VarBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [Var].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<Var>
+            where
+                Self: ::planus::WriteAsOffset<Var>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsUnion<self::VarUnion>> ::planus::WriteAs<::planus::Offset<Var>>
+            for VarBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<Var>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Var> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAsUnion<self::VarUnion>>
+            ::planus::WriteAsOptional<::planus::Offset<Var>> for VarBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<Var>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<Var>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAsUnion<self::VarUnion>> ::planus::WriteAsOffset<Var>
+            for VarBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Var> {
+                let (v0,) = &self.0;
+                Var::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [Var].
+        #[derive(Copy, Clone)]
+        pub struct VarRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarRef<'a> {
+            /// Getter for the [`variant` field](Var#structfield.variant).
+            #[inline]
+            pub fn variant(&self) -> ::planus::Result<self::VarUnionRef<'a>> {
+                self.0.access_union_required(0, "Var", "variant")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarRef");
+                f.field("variant", &self.variant());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarRef<'a>> for Var {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    variant: ::core::convert::TryInto::try_into(value.variant()?)?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VarRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<Var>> for Var {
+            type Value = ::planus::Offset<Var>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<Var>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| error_kind.with_error_location("[VarRef]", "read_as_root", 0))
+            }
+        }
+    }
     /// The namespace `MoorRpc`
     ///
     /// Generated from these locations:
