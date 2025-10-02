@@ -356,7 +356,7 @@ pub async fn initialization_session(
         }
         moor_rpc::ReplyResultUnionRef::Failure(failure) => {
             let error_ref = failure.error().expect("Missing error");
-            panic!("RPC failure in eval: {:?}", error_ref);
+            panic!("RPC failure in eval: {error_ref:?}");
         }
         _ => {
             panic!("Unexpected response type from RPC server");

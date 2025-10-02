@@ -77,7 +77,7 @@ impl MockTransport {
 
         let message_ref =
             moor_rpc::HostToDaemonMessageRef::read_as_root(&message_bytes).map_err(|e| {
-                RpcMessageError::InvalidRequest(format!("Failed to parse message: {}", e))
+                RpcMessageError::InvalidRequest(format!("Failed to parse message: {e}"))
             })?;
 
         let result = message_handler.handle_host_message(host_token.clone(), message_ref);
@@ -102,7 +102,7 @@ impl MockTransport {
 
         let message_ref = moor_rpc::HostClientToDaemonMessageRef::read_as_root(&message_bytes)
             .map_err(|e| {
-                RpcMessageError::InvalidRequest(format!("Failed to parse message: {}", e))
+                RpcMessageError::InvalidRequest(format!("Failed to parse message: {e}"))
             })?;
 
         let result =

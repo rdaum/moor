@@ -378,7 +378,7 @@ impl EventLog {
             Ok(p) => Arc::new(Mutex::new(p)),
             Err(e) => {
                 error!("Failed to open event log persistence: {}", e);
-                panic!("Failed to open event log: {}", e);
+                panic!("Failed to open event log: {e}");
             }
         };
 

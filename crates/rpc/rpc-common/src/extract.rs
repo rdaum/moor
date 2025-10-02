@@ -30,7 +30,7 @@ pub fn extract_obj<T>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<rpc::ObjRef, planus::Error>,
 ) -> Result<Obj, String> {
-    let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
+    let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
     obj_from_ref(field_ref).map_err(|e| e.to_string())
 }
 
@@ -40,7 +40,7 @@ pub fn extract_object_ref<T>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<rpc::ObjectRefRef, planus::Error>,
 ) -> Result<ObjectRef, String> {
-    let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
+    let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
     objectref_from_ref(field_ref).map_err(|e| e.to_string())
 }
 
@@ -50,7 +50,7 @@ pub fn extract_symbol<T>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<rpc::SymbolRef, planus::Error>,
 ) -> Result<Symbol, String> {
-    let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
+    let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
     symbol_from_ref(field_ref)
 }
 
@@ -60,10 +60,10 @@ pub fn extract_var<T>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<rpc::VarBytesRef, planus::Error>,
 ) -> Result<Var, String> {
-    let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
+    let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
     let data = field_ref
         .data()
-        .map_err(|_| format!("Invalid {} data", field_name))?;
+        .map_err(|_| format!("Invalid {field_name} data"))?;
     var_from_flatbuffer_bytes(data).map_err(|e| e.to_string())
 }
 
@@ -73,7 +73,7 @@ pub fn extract_uuid<T>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<rpc::UuidRef, planus::Error>,
 ) -> Result<Uuid, String> {
-    let field_ref = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
+    let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
     uuid_from_ref(field_ref).map_err(|e| e.to_string())
 }
 
@@ -85,7 +85,7 @@ pub fn extract_string<T>(
 ) -> Result<String, String> {
     get_field(msg)
         .map(|s| s.to_string())
-        .map_err(|_| format!("Missing {}", field_name))
+        .map_err(|_| format!("Missing {field_name}"))
 }
 
 /// Extract a required primitive field (u16, bool, etc.)
@@ -94,7 +94,7 @@ pub fn extract_field<T, F>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<F, planus::Error>,
 ) -> Result<F, String> {
-    get_field(msg).map_err(|_| format!("Missing {}", field_name))
+    get_field(msg).map_err(|_| format!("Missing {field_name}"))
 }
 
 /// Extract an optional list of symbols
@@ -148,7 +148,7 @@ pub fn extract_string_list<T>(
     field_name: &str,
     get_field: impl FnOnce(&T) -> Result<planus::Vector<Result<&str, planus::Error>>, planus::Error>,
 ) -> Result<Vec<String>, String> {
-    let items = get_field(msg).map_err(|_| format!("Missing {}", field_name))?;
+    let items = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
     Ok(items
         .iter()
         .filter_map(|s| s.ok().map(|s| s.to_string()))

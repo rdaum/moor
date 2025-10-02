@@ -416,7 +416,7 @@ pub fn error_from_ref(
     let value = if let Ok(Some(value_bytes_ref)) = error_ref.value() {
         let value_data = value_bytes_ref.data().map_err(|_| "Missing value data")?;
         Some(Box::new(var_from_flatbuffer_bytes(value_data).map_err(
-            |e| format!("Failed to decode error value: {}", e),
+            |e| format!("Failed to decode error value: {e}"),
         )?))
     } else {
         None
@@ -572,8 +572,7 @@ pub fn command_error_to_flatbuffer_struct(
         CommandError::DatabaseError(ws_error) => {
             let ws_error_fb = world_state_error_to_flatbuffer_struct(ws_error).map_err(|e| {
                 moor_var::EncodingError::CouldNotEncode(format!(
-                    "Failed to encode WorldStateError: {}",
-                    e
+                    "Failed to encode WorldStateError: {e}"
                 ))
             })?;
             rpc::CommandErrorUnion::DatabaseError(Box::new(rpc::DatabaseError {
@@ -646,8 +645,7 @@ pub fn scheduler_error_to_flatbuffer_struct(
             // Serialize the exception
             let error_bytes = error_to_flatbuffer_struct(&exception.error).map_err(|e| {
                 moor_var::EncodingError::CouldNotEncode(format!(
-                    "Failed to encode exception error: {}",
-                    e
+                    "Failed to encode exception error: {e}"
                 ))
             })?;
             let stack_bytes: Result<Vec<_>, _> = exception
@@ -954,12 +952,12 @@ pub(crate) fn exception_from_ref(
     let stack: Result<Vec<_>, String> = stack_vec
         .iter()
         .map(|vb_result| -> Result<Var, String> {
-            let vb = vb_result.map_err(|e| format!("Failed to get stack item: {}", e))?;
+            let vb = vb_result.map_err(|e| format!("Failed to get stack item: {e}"))?;
             let data = vb
                 .data()
-                .map_err(|e| format!("Missing stack item data: {}", e))?;
+                .map_err(|e| format!("Missing stack item data: {e}"))?;
             var_from_flatbuffer_bytes(data)
-                .map_err(|e| format!("Failed to decode stack var: {}", e))
+                .map_err(|e| format!("Failed to decode stack var: {e}"))
         })
         .collect();
     let stack = stack?;
@@ -968,12 +966,12 @@ pub(crate) fn exception_from_ref(
     let backtrace: Result<Vec<_>, String> = backtrace_vec
         .iter()
         .map(|vb_result| -> Result<Var, String> {
-            let vb = vb_result.map_err(|e| format!("Failed to get backtrace item: {}", e))?;
+            let vb = vb_result.map_err(|e| format!("Failed to get backtrace item: {e}"))?;
             let data = vb
                 .data()
-                .map_err(|e| format!("Missing backtrace item data: {}", e))?;
+                .map_err(|e| format!("Missing backtrace item data: {e}"))?;
             var_from_flatbuffer_bytes(data)
-                .map_err(|e| format!("Failed to decode backtrace var: {}", e))
+                .map_err(|e| format!("Failed to decode backtrace var: {e}"))
         })
         .collect();
     let backtrace = backtrace?;

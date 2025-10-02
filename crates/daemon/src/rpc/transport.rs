@@ -275,7 +275,7 @@ impl RpcTransport {
                 let mut builder = planus::Builder::new();
                 let error_fb = moor_rpc::RpcMessageError {
                     error_code: moor_rpc::RpcMessageErrorCode::InternalError,
-                    message: Some(format!("{:?}", e)),
+                    message: Some(format!("{e:?}")),
                     scheduler_error: None,
                 };
                 let reply_result = moor_rpc::ReplyResult {
@@ -310,7 +310,7 @@ impl RpcTransport {
                 let mut builder = planus::Builder::new();
                 let error_fb = moor_rpc::RpcMessageError {
                     error_code: moor_rpc::RpcMessageErrorCode::InternalError,
-                    message: Some(format!("{:?}", e)),
+                    message: Some(format!("{e:?}")),
                     scheduler_error: None,
                 };
                 let reply_result = moor_rpc::ReplyResult {

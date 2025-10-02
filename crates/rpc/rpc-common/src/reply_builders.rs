@@ -87,5 +87,5 @@ pub fn mk_thanks_pong_reply(timestamp: u64) -> rpc::DaemonToClientReply {
 /// Convert Var to flatbuffer bytes with RpcMessageError
 pub fn var_to_flatbuffer_bytes_rpc(var: &Var) -> Result<Vec<u8>, RpcMessageError> {
     var_to_flatbuffer_bytes(var)
-        .map_err(|e| RpcMessageError::InternalError(format!("Failed to encode var: {}", e)))
+        .map_err(|e| RpcMessageError::InternalError(format!("Failed to encode var: {e}")))
 }

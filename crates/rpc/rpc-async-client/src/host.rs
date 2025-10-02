@@ -55,7 +55,7 @@ pub async fn start_host_session(
         info!("Registering host with daemon via {}...", rpc_address);
         let timestamp = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {}", e)))?
+            .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {e}")))?
             .as_nanos() as u64;
 
         let host_type_fb = moor_rpc::HostType::Tcp;
@@ -87,18 +87,18 @@ pub async fn start_host_session(
             Ok(bytes) => {
                 use planus::ReadAsRoot;
                 let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&bytes)
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e)))?;
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}")))?;
 
                 match reply_ref
                     .result()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing result: {}", e)))?
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing result: {e}")))?
                 {
                     moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
                         let daemon_reply = host_success.reply().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing reply: {}", e))
+                            RpcError::CouldNotDecode(format!("Missing reply: {e}"))
                         })?;
                         match daemon_reply.reply().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing reply union: {}", e))
+                            RpcError::CouldNotDecode(format!("Missing reply union: {e}"))
                         })? {
                             moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostAck(_) => {
                                 info!("Host token accepted by daemon.");
@@ -108,7 +108,7 @@ pub async fn start_host_session(
                                 let reason = reject
                                     .reason()
                                     .map_err(|e| {
-                                        RpcError::CouldNotDecode(format!("Missing reason: {}", e))
+                                        RpcError::CouldNotDecode(format!("Missing reason: {e}"))
                                     })?
                                     .to_string();
                                 error!("Daemon has rejected this host: {}. Shutting down.", reason);
@@ -126,14 +126,13 @@ pub async fn start_host_session(
                     }
                     moor_rpc::ReplyResultUnionRef::Failure(failure) => {
                         let error_ref = failure.error().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing error: {}", e))
+                            RpcError::CouldNotDecode(format!("Missing error: {e}"))
                         })?;
                         let error_code = error_ref.error_code().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing error code: {}", e))
+                            RpcError::CouldNotDecode(format!("Missing error code: {e}"))
                         })?;
                         return Err(RpcError::CouldNotSend(format!(
-                            "Daemon error: {:?}",
-                            error_code
+                            "Daemon error: {error_code:?}"
                         )));
                     }
                     _ => {
@@ -180,13 +179,13 @@ pub async fn process_hosts_events(
         use planus::ReadAsRoot;
         match event
             .event()
-            .map_err(|e| RpcError::CouldNotDecode(format!("Missing event: {}", e)))?
+            .map_err(|e| RpcError::CouldNotDecode(format!("Missing event: {e}")))?
         {
             moor_rpc::HostBroadcastEventUnionRef::HostBroadcastPingPong(_) => {
                 // Respond with a HostPong
                 let timestamp = SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {}", e)))?
+                    .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {e}")))?
                     .as_nanos() as u64;
 
                 let host_type_fb = match our_host_type {
@@ -222,18 +221,18 @@ pub async fn process_hosts_events(
                     Ok(bytes) => {
                         let reply_ref =
                             moor_rpc::ReplyResultRef::read_as_root(&bytes).map_err(|e| {
-                                RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e))
+                                RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}"))
                             })?;
 
                         match reply_ref.result().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing result: {}", e))
+                            RpcError::CouldNotDecode(format!("Missing result: {e}"))
                         })? {
                             moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
                                 let daemon_reply = host_success.reply().map_err(|e| {
-                                    RpcError::CouldNotDecode(format!("Missing reply: {}", e))
+                                    RpcError::CouldNotDecode(format!("Missing reply: {e}"))
                                 })?;
                                 match daemon_reply.reply().map_err(|e| {
-                                    RpcError::CouldNotDecode(format!("Missing reply union: {}", e))
+                                    RpcError::CouldNotDecode(format!("Missing reply union: {e}"))
                                 })? {
                                     moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostAck(_) => {
                                         // All good
@@ -245,8 +244,7 @@ pub async fn process_hosts_events(
                                             .reason()
                                             .map_err(|e| {
                                                 RpcError::CouldNotDecode(format!(
-                                                    "Missing reason: {}",
-                                                    e
+                                                    "Missing reason: {e}"
                                                 ))
                                             })?
                                             .to_string();
@@ -266,10 +264,10 @@ pub async fn process_hosts_events(
                             }
                             moor_rpc::ReplyResultUnionRef::Failure(failure) => {
                                 let error_ref = failure.error().map_err(|e| {
-                                    RpcError::CouldNotDecode(format!("Missing error: {}", e))
+                                    RpcError::CouldNotDecode(format!("Missing error: {e}"))
                                 })?;
                                 let error_code = error_ref.error_code().map_err(|e| {
-                                    RpcError::CouldNotDecode(format!("Missing error code: {}", e))
+                                    RpcError::CouldNotDecode(format!("Missing error code: {e}"))
                                 })?;
                                 warn!("Daemon error responding to ping: {:?}", error_code);
                             }
@@ -290,20 +288,20 @@ pub async fn process_hosts_events(
             }
             moor_rpc::HostBroadcastEventUnionRef::HostBroadcastListen(listen) => {
                 let handler_object_ref = listen.handler_object().map_err(|e| {
-                    RpcError::CouldNotDecode(format!("Missing handler_object: {}", e))
+                    RpcError::CouldNotDecode(format!("Missing handler_object: {e}"))
                 })?;
                 let handler_object_struct =
                     moor_rpc::Obj::try_from(handler_object_ref).map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to convert handler_object: {}", e))
+                        RpcError::CouldNotDecode(format!("Failed to convert handler_object: {e}"))
                     })?;
                 let handler_object = rpc_common::obj_from_flatbuffer_struct(&handler_object_struct)
                     .map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to decode handler_object: {}", e))
+                        RpcError::CouldNotDecode(format!("Failed to decode handler_object: {e}"))
                     })?;
 
                 let host_type_fb = listen
                     .host_type()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing host_type: {}", e)))?;
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing host_type: {e}")))?;
                 let host_type = match host_type_fb {
                     moor_rpc::HostType::Tcp => HostType::TCP,
                     moor_rpc::HostType::WebSocket => HostType::WebSocket,
@@ -311,7 +309,7 @@ pub async fn process_hosts_events(
 
                 let port = listen
                     .port()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {}", e)))?;
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {e}")))?;
 
                 if host_type == our_host_type {
                     let listen_addr = format!("{listen_address}:{port}");
@@ -338,7 +336,7 @@ pub async fn process_hosts_events(
             moor_rpc::HostBroadcastEventUnionRef::HostBroadcastUnlisten(unlisten) => {
                 let host_type_fb = unlisten
                     .host_type()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing host_type: {}", e)))?;
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing host_type: {e}")))?;
                 let host_type = match host_type_fb {
                     moor_rpc::HostType::Tcp => HostType::TCP,
                     moor_rpc::HostType::WebSocket => HostType::WebSocket,
@@ -346,7 +344,7 @@ pub async fn process_hosts_events(
 
                 let port = unlisten
                     .port()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {}", e)))?;
+                    .map_err(|e| RpcError::CouldNotDecode(format!("Missing port: {e}")))?;
 
                 if host_type == our_host_type {
                     // Stop listening on the given port, on `listen_address`.

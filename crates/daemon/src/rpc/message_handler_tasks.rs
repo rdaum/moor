@@ -283,7 +283,7 @@ impl RpcMessageHandler {
                 }
                 Ok((_, Ok(TaskResult::Result(v)))) => {
                     let result_bytes = var_to_flatbuffer_bytes(&v).map_err(|e| {
-                        RpcMessageError::InternalError(format!("Failed to encode result: {}", e))
+                        RpcMessageError::InternalError(format!("Failed to encode result: {e}"))
                     })?;
                     break Ok(moor_rpc::DaemonToClientReply {
                         reply: moor_rpc::DaemonToClientReplyUnion::EvalResult(Box::new(

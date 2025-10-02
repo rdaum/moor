@@ -34,17 +34,17 @@ impl WorkerMessage {
     pub fn from_buffer(buffer: Vec<u8>) -> Result<Self, RpcError> {
         // Validate it's a valid flatbuffer by attempting to parse
         let _msg = rpc::DaemonToWorkerMessageRef::read_as_root(&buffer)
-            .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {}", e)))?;
+            .map_err(|e| RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}")))?;
         Ok(WorkerMessage { buffer })
     }
 
     /// Get zero-copy reference to the message union
     pub fn message(&self) -> Result<rpc::DaemonToWorkerMessageUnionRef<'_>, RpcError> {
         let fb_msg = rpc::DaemonToWorkerMessageRef::read_as_root(&self.buffer)
-            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))?;
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {e}")))?;
         fb_msg
             .message()
-            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to access message: {}", e)))
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to access message: {e}")))
     }
 
     /// Extract WorkerRequest data with all business logic conversions
@@ -171,7 +171,7 @@ pub struct ClientEventMessage {
 impl ClientEventMessage {
     pub fn event(&self) -> Result<rpc::ClientEventRef<'_>, RpcError> {
         rpc::ClientEventRef::read_as_root(&self.buffer)
-            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {e}")))
     }
 }
 
@@ -224,7 +224,7 @@ pub struct BroadcastEventMessage {
 impl BroadcastEventMessage {
     pub fn event(&self) -> Result<rpc::ClientsBroadcastEventRef<'_>, RpcError> {
         rpc::ClientsBroadcastEventRef::read_as_root(&self.buffer)
-            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {e}")))
     }
 }
 
@@ -277,7 +277,7 @@ pub struct HostBroadcastMessage {
 impl HostBroadcastMessage {
     pub fn event(&self) -> Result<rpc::HostBroadcastEventRef<'_>, RpcError> {
         rpc::HostBroadcastEventRef::read_as_root(&self.buffer)
-            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {}", e)))
+            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {e}")))
     }
 }
 

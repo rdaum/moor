@@ -177,7 +177,7 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<rpc::Event, moor_var:
         })),
         Event::Traceback(exception) => {
             let error_bytes = crate::error_to_flatbuffer_struct(&exception.error).map_err(|e| {
-                moor_var::EncodingError::CouldNotEncode(format!("Failed to encode error: {}", e))
+                moor_var::EncodingError::CouldNotEncode(format!("Failed to encode error: {e}"))
             })?;
             let stack_bytes: Result<Vec<_>, _> = exception
                 .stack

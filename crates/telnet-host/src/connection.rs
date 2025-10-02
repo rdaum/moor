@@ -707,7 +707,7 @@ impl TelnetConnection {
                                                     comp_err.error().map_err(|e| eyre::eyre!("Missing error: {}", e))?
                                                 ).map_err(|e| eyre::eyre!("Failed to convert compilation error: {}", e))?;
                                                 let error_str = describe_compile_error(compile_error);
-                                                self.send_line(&format!("Compilation error: {}", error_str)).await?;
+                                                self.send_line(&format!("Compilation error: {error_str}")).await?;
                                             }
                                             moor_rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => {
                                                 self.send_line("That object does not have that verb.")

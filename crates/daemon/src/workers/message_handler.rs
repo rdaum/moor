@@ -368,7 +368,7 @@ fn extract_worker_error(
     let error_obj = moor_rpc::WorkerError::try_from(error)
         .map_err(|_| "Failed to convert error reference".to_string())?;
     worker_error_from_flatbuffer_struct(&error_obj)
-        .map_err(|e| format!("Failed to deserialize error: {}", e))
+        .map_err(|e| format!("Failed to deserialize error: {e}"))
 }
 
 impl WorkersMessageHandlerImpl {

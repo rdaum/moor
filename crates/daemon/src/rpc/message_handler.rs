@@ -1269,8 +1269,7 @@ impl RpcMessageHandler {
                 moor_rpc::CurrentPresentations {
                     presentations: presentation_list.map_err(|e| {
                         RpcMessageError::InternalError(format!(
-                            "Failed to convert presentation: {}",
-                            e
+                            "Failed to convert presentation: {e}"
                         ))
                     })?,
                 },
@@ -1623,8 +1622,7 @@ impl RpcMessageHandler {
             Err(SchedulerError::VerbProgramFailed(f)) => {
                 let verb_error = verb_program_error_to_flatbuffer_struct(&f).map_err(|e| {
                     RpcMessageError::InternalError(format!(
-                        "Failed to convert VerbProgramError: {}",
-                        e
+                        "Failed to convert VerbProgramError: {e}"
                     ))
                 })?;
                 Ok(DaemonToClientReply {

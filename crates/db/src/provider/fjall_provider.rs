@@ -614,7 +614,7 @@ impl EncodeFor<ProgramType> for FjallCodec {
             ProgramType::MooR(prog) => {
                 use moor_compiler::program_to_stored;
                 let stored = program_to_stored(prog).map_err(|e| {
-                    Error::StorageFailure(format!("Failed to encode program: {}", e))
+                    Error::StorageFailure(format!("Failed to encode program: {e}"))
                 })?;
                 // StoredProgram is a ByteView wrapper - extract the inner ByteView
                 Ok(AsRef::<ByteView>::as_ref(&stored).clone())
@@ -628,7 +628,7 @@ impl EncodeFor<ProgramType> for FjallCodec {
 
         let stored_program = StoredProgram::from(stored);
         let program = stored_to_program(&stored_program)
-            .map_err(|e| Error::StorageFailure(format!("Failed to decode program: {}", e)))?;
+            .map_err(|e| Error::StorageFailure(format!("Failed to decode program: {e}")))?;
         Ok(ProgramType::MooR(program))
     }
 }

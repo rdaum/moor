@@ -125,7 +125,7 @@ pub fn uuid_to_flatbuffer_struct(uuid: &uuid::Uuid) -> rpc::Uuid {
 /// Convert from FlatBuffer UuidRef to uuid::Uuid
 pub fn uuid_from_ref(uuid_ref: rpc::UuidRef<'_>) -> Result<uuid::Uuid, String> {
     let data = uuid_ref.data().map_err(|_| "Missing UUID data")?;
-    uuid::Uuid::from_slice(data).map_err(|e| format!("Invalid UUID data: {}", e))
+    uuid::Uuid::from_slice(data).map_err(|e| format!("Invalid UUID data: {e}"))
 }
 
 /// Convert from FlatBuffer SymbolRef to moor_var::Symbol
@@ -137,7 +137,7 @@ pub fn symbol_from_ref(symbol_ref: rpc::SymbolRef<'_>) -> Result<Symbol, String>
 /// Convert from FlatBuffer VarBytesRef to moor_var::Var
 pub fn var_from_ref(var_ref: rpc::VarBytesRef<'_>) -> Result<Var, String> {
     let data = var_ref.data().map_err(|_| "Missing var data")?;
-    var_from_flatbuffer_bytes(data).map_err(|e| format!("Failed to decode var: {}", e))
+    var_from_flatbuffer_bytes(data).map_err(|e| format!("Failed to decode var: {e}"))
 }
 
 /// Convert from FlatBuffer ObjRef to moor_var::Obj
