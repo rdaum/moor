@@ -22,7 +22,7 @@ use moor_common::schema::{
     rpc::{HostClientToDaemonMessageUnionRef, ListenerRef},
 };
 use moor_rpc::{
-    ClientEvent, ClientEventUnion, DaemonToClientReply, DaemonToClientReplyUnion, DaemonToHostAck,
+    ClientEvent, ClientEventUnion, DaemonToClientReply, DaemonToClientReplyUnion,
     DaemonToHostReply, DaemonToHostReplyUnion, HistoryResponseReply, HostClientToDaemonMessageRef,
     VerbProgramResponseReply, VerbProgramResponseUnion,
 };
@@ -56,11 +56,13 @@ use moor_kernel::{
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, RpcMessageError, auth_token_from_ref,
-    extract_field, extract_obj, extract_object_ref, extract_string, extract_string_list,
-    extract_symbol, extract_uuid, extract_var, obj_from_ref, obj_to_flatbuffer_struct,
-    objectref_from_ref, presentation_to_flatbuffer_struct, symbol_from_ref,
-    uuid_to_flatbuffer_struct, var_from_ref, var_to_flatbuffer_bytes,
-    verb_program_error_to_flatbuffer_struct,
+    client_token_from_ref, extract_field_rpc, extract_host_type, extract_obj_rpc,
+    extract_object_ref_rpc, extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc,
+    extract_uuid_rpc, extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack,
+    mk_disconnected_reply, mk_new_connection_reply, mk_presentation_dismissed_reply,
+    mk_thanks_pong_reply, obj_from_ref, obj_to_flatbuffer_struct,
+    presentation_to_flatbuffer_struct, uuid_to_flatbuffer_struct, var_from_ref,
+    var_to_flatbuffer_bytes_rpc, verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
 use tracing::{error, info, warn};
@@ -192,10 +194,7 @@ impl MessageHandler for RpcMessageHandler {
             RpcMessageError::InvalidRequest(format!("missing host message union: {e:?}"))
         })? {
             moor_rpc::HostToDaemonMessageUnionRef::RegisterHost(reg) => {
-                let host_type = match reg.host_type().unwrap() {
-                    moor_rpc::HostType::Tcp => HostType::TCP,
-                    moor_rpc::HostType::WebSocket => HostType::WebSocket,
-                };
+                let host_type = extract_host_type(&reg, "host_type", |r| r.host_type())?;
 
                 // Convert listeners from FlatBuffer to Vec<(Obj, SocketAddr)>
                 let listeners: Vec<(Obj, SocketAddr)> = convert_listeners(reg.listeners().ok());
@@ -208,15 +207,10 @@ impl MessageHandler for RpcMessageHandler {
                 let mut hosts = self.hosts.write().unwrap();
                 hosts.receive_ping(host_token, host_type, listeners);
 
-                DaemonToHostReply {
-                    reply: DaemonToHostReplyUnion::DaemonToHostAck(Box::new(DaemonToHostAck {})),
-                }
+                mk_daemon_to_host_ack()
             }
             moor_rpc::HostToDaemonMessageUnionRef::HostPong(pong) => {
-                let host_type = match pong.host_type().unwrap() {
-                    moor_rpc::HostType::Tcp => HostType::TCP,
-                    moor_rpc::HostType::WebSocket => HostType::WebSocket,
-                };
+                let host_type = extract_host_type(&pong, "host_type", |p| p.host_type())?;
 
                 let listeners: Vec<(Obj, SocketAddr)> = convert_listeners(pong.listeners().ok());
 
@@ -229,9 +223,7 @@ impl MessageHandler for RpcMessageHandler {
                     );
                 }
 
-                DaemonToHostReply {
-                    reply: DaemonToHostReplyUnion::DaemonToHostAck(Box::new(DaemonToHostAck {})),
-                }
+                mk_daemon_to_host_ack()
             }
             moor_rpc::HostToDaemonMessageUnionRef::RequestPerformanceCounters(_) => {
                 let mut all_counters = vec![];
@@ -305,9 +297,7 @@ impl MessageHandler for RpcMessageHandler {
             moor_rpc::HostToDaemonMessageUnionRef::DetachHost(_) => {
                 let mut hosts = self.hosts.write().unwrap();
                 hosts.unregister_host(&host_token);
-                DaemonToHostReply {
-                    reply: DaemonToHostReplyUnion::DaemonToHostAck(Box::new(DaemonToHostAck {})),
-                }
+                mk_daemon_to_host_ack()
             }
         };
 
@@ -325,711 +315,64 @@ impl MessageHandler for RpcMessageHandler {
             .map_err(|_| RpcMessageError::InvalidRequest("Missing message union".to_string()))?
         {
             HostClientToDaemonMessageUnionRef::ConnectionEstablish(conn_est) => {
-                let hostname = conn_est
-                    .peer_addr()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing peer_addr".to_string()))?
-                    .to_string();
-                let local_port = conn_est.local_port().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing local_port".to_string())
-                })?;
-                let remote_port = conn_est.remote_port().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing remote_port".to_string())
-                })?;
-
-                // Convert acceptable_content_types
-                let acceptable_content_types =
-                    conn_est
-                        .acceptable_content_types()
-                        .ok()
-                        .and_then(|types_opt| {
-                            types_opt.map(|types| {
-                                types
-                                    .iter()
-                                    .filter_map(|s| {
-                                        let s = s.ok()?;
-                                        symbol_from_ref(s).ok()
-                                    })
-                                    .collect()
-                            })
-                        });
-
-                // Convert connection_attributes
-                let connection_attributes =
-                    conn_est.connection_attributes().ok().and_then(|attrs_opt| {
-                        attrs_opt.map(|attrs| {
-                            attrs
-                                .iter()
-                                .filter_map(|attr| {
-                                    let attr = attr.ok()?;
-                                    let key = symbol_from_ref(attr.key().ok()?).ok()?;
-                                    let value = var_from_ref(attr.value().ok()?).ok()?;
-                                    Some((key, value))
-                                })
-                                .collect()
-                        })
-                    });
-
-                let oid = self.connections.new_connection(NewConnectionParams {
-                    client_id,
-                    hostname,
-                    local_port,
-                    remote_port,
-                    player: None,
-                    acceptable_content_types,
-                    connection_attributes,
-                })?;
-                let token = self.make_client_token(client_id);
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::NewConnection(Box::new(
-                        moor_rpc::NewConnection {
-                            client_token: Box::new(moor_rpc::ClientToken {
-                                token: token.0.clone(),
-                            }),
-                            connection_obj: Box::new(obj_to_flatbuffer_struct(&oid)),
-                        },
-                    )),
-                })
+                self.handle_connection_establish(client_id, conn_est)
             }
             HostClientToDaemonMessageUnionRef::ClientPong(pong) => {
-                // Always respond with a ThanksPong
-                let timestamp = SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as u64;
-                let response = Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::ThanksPong(Box::new(moor_rpc::ThanksPong {
-                        timestamp,
-                    })),
-                });
-
-                // Extract and validate client token
-                let token_ref = pong.client_token().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing client_token".to_string())
-                })?;
-                let token_string = token_ref
-                    .token()
-                    .map_err(|_| {
-                        RpcMessageError::InvalidRequest("Missing token string".to_string())
-                    })?
-                    .to_string();
-                let token = ClientToken(token_string);
-
-                let connection = self.client_auth(token, client_id)?;
-                // Let 'connections' know that the connection is still alive.
-                let Ok(_) = self.connections.notify_is_alive(client_id, connection) else {
-                    warn!("Unable to notify connection is alive: {}", client_id);
-                    return response;
-                };
-                response
+                self.handle_client_pong(client_id, pong)
             }
             HostClientToDaemonMessageUnionRef::RequestSysProp(req) => {
-                let connection =
-                    self.extract_client_token(&req, client_id, |r| r.client_token())?;
-
-                let object = extract_object_ref(&req, "object", |r| r.object())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let property = extract_symbol(&req, "property", |r| r.property())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                self.request_sys_prop(scheduler_client, connection, object, property)
+                self.handle_request_sys_prop(scheduler_client, client_id, req)
             }
             HostClientToDaemonMessageUnionRef::LoginCommand(login) => {
-                let connection =
-                    self.extract_client_token(&login, client_id, |l| l.client_token())?;
-
-                let handler_object = extract_obj(&login, "handler_object", |l| l.handler_object())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let args = extract_string_list(&login, "connect_args", |l| l.connect_args())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let attach = extract_field(&login, "do_attach", |l| l.do_attach())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                self.perform_login(
-                    &handler_object,
-                    scheduler_client,
-                    client_id,
-                    &connection,
-                    args,
-                    attach,
-                )
+                self.handle_login_command(scheduler_client, client_id, login)
             }
             HostClientToDaemonMessageUnionRef::Attach(attach_msg) => {
-                let auth_token_ref = attach_msg.auth_token().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing auth_token".to_string())
-                })?;
-                let auth_token = auth_token_from_ref(auth_token_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-                let player = self.validate_auth_token(auth_token, None)?;
-
-                let handler_object_ref = attach_msg.handler_object().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing handler_object".to_string())
-                })?;
-                let handler_object = obj_from_ref(handler_object_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-
-                let hostname = attach_msg
-                    .peer_addr()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing peer_addr".to_string()))?
-                    .to_string();
-                let local_port = attach_msg.local_port().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing local_port".to_string())
-                })?;
-                let remote_port = attach_msg.remote_port().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing remote_port".to_string())
-                })?;
-
-                let acceptable_content_types =
-                    attach_msg
-                        .acceptable_content_types()
-                        .ok()
-                        .and_then(|types_opt| {
-                            types_opt.map(|types| {
-                                types
-                                    .iter()
-                                    .filter_map(|s| s.ok().and_then(|s| symbol_from_ref(s).ok()))
-                                    .collect()
-                            })
-                        });
-
-                let connect_type = attach_msg.connect_type().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing connect_type".to_string())
-                })?;
-
-                self.connections.new_connection(NewConnectionParams {
-                    client_id,
-                    hostname,
-                    local_port,
-                    remote_port,
-                    player: Some(player),
-                    acceptable_content_types,
-                    connection_attributes: None,
-                })?;
-                let client_token = self.make_client_token(client_id);
-
-                // Only submit user_connected task for actual connection types, not transient sessions
-                if connect_type != moor_rpc::ConnectType::NoConnect {
-                    let connection = self
-                        .connections
-                        .connection_object_for_client(client_id)
-                        .ok_or(RpcMessageError::InternalError(
-                            "Connection not found".to_string(),
-                        ))?;
-
-                    if let Err(e) = self.submit_connected_task(
-                        &handler_object,
-                        scheduler_client,
-                        client_id,
-                        &player,
-                        &connection,
-                        connect_type,
-                    ) {
-                        error!(error = ?e, "Error submitting user_connected task");
-                    }
-                }
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::AttachResult(Box::new(
-                        moor_rpc::AttachResult {
-                            success: true,
-                            client_token: Some(Box::new(moor_rpc::ClientToken {
-                                token: client_token.0.clone(),
-                            })),
-                            player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
-                        },
-                    )),
-                })
+                self.handle_attach(scheduler_client, client_id, attach_msg)
             }
             HostClientToDaemonMessageUnionRef::Command(cmd) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &cmd,
-                    client_id,
-                    |c| c.client_token(),
-                    |c| c.auth_token(),
-                )?;
-
-                let handler_object = extract_obj(&cmd, "handler_object", |c| c.handler_object())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let command = extract_string(&cmd, "command", |c| c.command())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                self.submit_command_task(
-                    scheduler_client,
-                    client_id,
-                    &handler_object,
-                    &player,
-                    command,
-                )
+                self.handle_command(scheduler_client, client_id, cmd)
             }
             HostClientToDaemonMessageUnionRef::Detach(detach) => {
-                let connection =
-                    self.extract_client_token(&detach, client_id, |d| d.client_token())?;
-
-                let disconnected = detach.disconnected().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing disconnected".to_string())
-                })?;
-
-                if disconnected
-                    && let Some(player) = self.connections.player_object_for_client(client_id)
-                    && let Err(e) = self.submit_disconnected_task(
-                        &SYSTEM_OBJECT,
-                        scheduler_client,
-                        client_id,
-                        &player,
-                        &connection,
-                    )
-                {
-                    error!(error = ?e, "Error submitting user_disconnected task");
-                }
-
-                let Ok(_) = self.connections.remove_client_connection(client_id) else {
-                    return Err(RpcMessageError::InternalError(
-                        "Unable to remove client connection".to_string(),
-                    ));
-                };
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::Disconnected(Box::new(
-                        moor_rpc::Disconnected {},
-                    )),
-                })
+                self.handle_detach(scheduler_client, client_id, detach)
             }
             HostClientToDaemonMessageUnionRef::RequestedInput(input) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &input,
-                    client_id,
-                    |i| i.client_token(),
-                    |i| i.auth_token(),
-                )?;
-
-                let request_id = extract_uuid(&input, "request_id", |i| i.request_id())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let input_var = extract_var(&input, "input", |i| i.input())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                self.respond_input(scheduler_client, client_id, &player, request_id, input_var)
+                self.handle_requested_input(scheduler_client, client_id, input)
             }
             HostClientToDaemonMessageUnionRef::OutOfBand(oob) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &oob,
-                    client_id,
-                    |o| o.client_token(),
-                    |o| o.auth_token(),
-                )?;
-
-                let handler_object = extract_obj(&oob, "handler_object", |o| o.handler_object())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let command = extract_string(&oob, "command", |o| o.command())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                self.submit_out_of_bound_task(
-                    scheduler_client,
-                    &handler_object,
-                    client_id,
-                    &player,
-                    command,
-                )
+                self.handle_out_of_band(scheduler_client, client_id, oob)
             }
             HostClientToDaemonMessageUnionRef::Eval(eval) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &eval,
-                    client_id,
-                    |e| e.client_token(),
-                    |e| e.auth_token(),
-                )?;
-
-                let evalstr = extract_string(&eval, "expression", |e| e.expression())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                self.submit_eval_task(scheduler_client, client_id, &player, evalstr)
+                self.handle_eval(scheduler_client, client_id, eval)
             }
             HostClientToDaemonMessageUnionRef::InvokeVerb(invoke) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &invoke,
-                    client_id,
-                    |i| i.client_token(),
-                    |i| i.auth_token(),
-                )?;
-
-                let object = extract_object_ref(&invoke, "object", |i| i.object())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let verb = extract_symbol(&invoke, "verb", |i| i.verb())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                let args_vec = invoke
-                    .args()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing args".to_string()))?;
-                let args: Vec<Var> = args_vec
-                    .iter()
-                    .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))
-                    .collect();
-
-                self.submit_invoke_verb_task(
-                    scheduler_client,
-                    client_id,
-                    &player,
-                    &object,
-                    verb,
-                    args,
-                )
+                self.handle_invoke_verb(scheduler_client, client_id, invoke)
             }
             HostClientToDaemonMessageUnionRef::Retrieve(retr) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &retr,
-                    client_id,
-                    |r| r.client_token(),
-                    |r| r.auth_token(),
-                )?;
-
-                let who = extract_object_ref(&retr, "object", |r| r.object())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let retr_type = extract_field(&retr, "entity_type", |r| r.entity_type())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-                let what = extract_symbol(&retr, "name", |r| r.name())
-                    .map_err(RpcMessageError::InvalidRequest)?;
-
-                match retr_type {
-                    moor_rpc::EntityType::Property => {
-                        let (propdef, propperms, value) = scheduler_client
-                            .request_property(&player, &player, &who, what)
-                            .map_err(|e| {
-                                error!(error = ?e, "Error requesting property");
-                                RpcMessageError::EntityRetrievalError(
-                                    "error requesting property".to_string(),
-                                )
-                            })?;
-                        let value_bytes = var_to_flatbuffer_bytes(&value).map_err(|e| {
-                            RpcMessageError::InternalError(format!("Failed to encode var: {}", e))
-                        })?;
-                        Ok(DaemonToClientReply {
-                            reply: DaemonToClientReplyUnion::PropertyValue(Box::new(
-                                moor_rpc::PropertyValue {
-                                    prop_info: Box::new(common::PropInfo {
-                                        definer: Box::new(obj_to_flatbuffer_struct(
-                                            &propdef.definer(),
-                                        )),
-                                        location: Box::new(obj_to_flatbuffer_struct(
-                                            &propdef.location(),
-                                        )),
-                                        name: Box::new(moor_rpc::Symbol {
-                                            value: propdef.name().as_string(),
-                                        }),
-                                        owner: Box::new(obj_to_flatbuffer_struct(
-                                            &propperms.owner(),
-                                        )),
-                                        r: propperms.flags().contains(PropFlag::Read),
-                                        w: propperms.flags().contains(PropFlag::Write),
-                                        chown: propperms.flags().contains(PropFlag::Chown),
-                                    }),
-                                    value: Box::new(moor_rpc::VarBytes { data: value_bytes }),
-                                },
-                            )),
-                        })
-                    }
-                    moor_rpc::EntityType::Verb => {
-                        let (verbdef, code) = scheduler_client
-                            .request_verb(&player, &player, &who, what)
-                            .map_err(|e| {
-                                error!(error = ?e, "Error requesting verb");
-                                RpcMessageError::EntityRetrievalError(
-                                    "error requesting verb".to_string(),
-                                )
-                            })?;
-                        let argspec = verbdef.args();
-                        let arg_spec = vec![
-                            moor_rpc::Symbol {
-                                value: argspec.dobj.to_string().to_string(),
-                            },
-                            moor_rpc::Symbol {
-                                value: preposition_to_string(&argspec.prep).to_string(),
-                            },
-                            moor_rpc::Symbol {
-                                value: argspec.iobj.to_string().to_string(),
-                            },
-                        ];
-                        let names = verbdef
-                            .names()
-                            .iter()
-                            .map(|n| moor_rpc::Symbol {
-                                value: n.as_string(),
-                            })
-                            .collect();
-                        Ok(DaemonToClientReply {
-                            reply: DaemonToClientReplyUnion::VerbValue(Box::new(
-                                moor_rpc::VerbValue {
-                                    verb_info: Box::new(common::VerbInfo {
-                                        location: Box::new(obj_to_flatbuffer_struct(
-                                            &verbdef.location(),
-                                        )),
-                                        owner: Box::new(obj_to_flatbuffer_struct(&verbdef.owner())),
-                                        names,
-                                        r: verbdef.flags().contains(VerbFlag::Read),
-                                        w: verbdef.flags().contains(VerbFlag::Write),
-                                        x: verbdef.flags().contains(VerbFlag::Exec),
-                                        d: verbdef.flags().contains(VerbFlag::Debug),
-                                        arg_spec,
-                                    }),
-                                    code,
-                                },
-                            )),
-                        })
-                    }
-                }
+                self.handle_retrieve(scheduler_client, client_id, retr)
             }
             HostClientToDaemonMessageUnionRef::Resolve(resolve) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &resolve,
-                    client_id,
-                    |r| r.client_token(),
-                    |r| r.auth_token(),
-                )?;
-
-                let objref_ref = resolve
-                    .objref()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing objref".to_string()))?;
-                let objref = objectref_from_ref(objref_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-
-                let resolved = scheduler_client
-                    .resolve_object(player, objref)
-                    .map_err(|e| {
-                        error!(error = ?e, "Error resolving object");
-                        RpcMessageError::EntityRetrievalError("error resolving object".to_string())
-                    })?;
-
-                let result_bytes = var_to_flatbuffer_bytes(&resolved).map_err(|e| {
-                    RpcMessageError::InternalError(format!("Failed to encode result: {}", e))
-                })?;
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::ResolveResult(Box::new(
-                        moor_rpc::ResolveResult {
-                            result: Box::new(moor_rpc::VarBytes { data: result_bytes }),
-                        },
-                    )),
-                })
+                self.handle_resolve(scheduler_client, client_id, resolve)
             }
             HostClientToDaemonMessageUnionRef::Properties(props) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &props,
-                    client_id,
-                    |p| p.client_token(),
-                    |p| p.auth_token(),
-                )?;
-
-                let obj_ref = props
-                    .object()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing object".to_string()))?;
-                let obj = objectref_from_ref(obj_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-
-                let inherited = props.inherited().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing inherited".to_string())
-                })?;
-
-                let prop_list = scheduler_client
-                    .request_properties(&player, &player, &obj, inherited)
-                    .map_err(|e| {
-                        error!(error = ?e, "Error requesting properties");
-                        RpcMessageError::EntityRetrievalError(
-                            "error requesting properties".to_string(),
-                        )
-                    })?;
-
-                let props = prop_list
-                    .iter()
-                    .map(|(propdef, propperms)| common::PropInfo {
-                        definer: Box::new(obj_to_flatbuffer_struct(&propdef.definer())),
-                        location: Box::new(obj_to_flatbuffer_struct(&propdef.location())),
-                        name: Box::new(moor_rpc::Symbol {
-                            value: propdef.name().as_string(),
-                        }),
-                        owner: Box::new(obj_to_flatbuffer_struct(&propperms.owner())),
-                        r: propperms.flags().contains(PropFlag::Read),
-                        w: propperms.flags().contains(PropFlag::Write),
-                        chown: propperms.flags().contains(PropFlag::Chown),
-                    })
-                    .collect();
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::PropertiesReply(Box::new(
-                        moor_rpc::PropertiesReply { properties: props },
-                    )),
-                })
+                self.handle_properties(scheduler_client, client_id, props)
             }
             HostClientToDaemonMessageUnionRef::Verbs(verbs) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &verbs,
-                    client_id,
-                    |v| v.client_token(),
-                    |v| v.auth_token(),
-                )?;
-
-                let obj_ref = verbs
-                    .object()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing object".to_string()))?;
-                let obj = objectref_from_ref(obj_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-
-                let inherited = verbs.inherited().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing inherited".to_string())
-                })?;
-
-                let verb_list = scheduler_client
-                    .request_verbs(&player, &player, &obj, inherited)
-                    .map_err(|e| {
-                        error!(error = ?e, "Error requesting verbs");
-                        RpcMessageError::EntityRetrievalError("error requesting verbs".to_string())
-                    })?;
-
-                let verbs = verb_list
-                    .iter()
-                    .map(|v| {
-                        let names = v
-                            .names()
-                            .iter()
-                            .map(|n| moor_rpc::Symbol {
-                                value: n.as_string(),
-                            })
-                            .collect();
-                        let arg_spec = vec![
-                            moor_rpc::Symbol {
-                                value: v.args().dobj.to_string().to_string(),
-                            },
-                            moor_rpc::Symbol {
-                                value: preposition_to_string(&v.args().prep).to_string(),
-                            },
-                            moor_rpc::Symbol {
-                                value: v.args().iobj.to_string().to_string(),
-                            },
-                        ];
-                        common::VerbInfo {
-                            location: Box::new(obj_to_flatbuffer_struct(&v.location())),
-                            owner: Box::new(obj_to_flatbuffer_struct(&v.owner())),
-                            names,
-                            r: v.flags().contains(VerbFlag::Read),
-                            w: v.flags().contains(VerbFlag::Write),
-                            x: v.flags().contains(VerbFlag::Exec),
-                            d: v.flags().contains(VerbFlag::Debug),
-                            arg_spec,
-                        }
-                    })
-                    .collect();
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::VerbsReply(Box::new(moor_rpc::VerbsReply {
-                        verbs,
-                    })),
-                })
+                self.handle_verbs(scheduler_client, client_id, verbs)
             }
             HostClientToDaemonMessageUnionRef::RequestHistory(hist) => {
-                let player = self.extract_auth_token(&hist, |h| h.auth_token())?;
-
-                let history_recall_ref = hist.history_recall().map_err(|_| {
-                    RpcMessageError::InvalidRequest("Missing history_recall".to_string())
-                })?;
-                let history_response = self.build_history_response(player, history_recall_ref)?;
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::HistoryResponseReply(Box::new(
-                        HistoryResponseReply {
-                            response: Box::new(history_response),
-                        },
-                    )),
-                })
+                self.handle_request_history(hist)
             }
             HostClientToDaemonMessageUnionRef::RequestCurrentPresentations(req) => {
-                let player = self.extract_auth_token(&req, |r| r.auth_token())?;
-
-                let presentations = self.event_log.current_presentations(player);
-                let presentation_list: Result<Vec<_>, _> = presentations
-                    .iter()
-                    .map(presentation_to_flatbuffer_struct)
-                    .collect();
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::CurrentPresentations(Box::new(
-                        moor_rpc::CurrentPresentations {
-                            presentations: presentation_list.map_err(|e| {
-                                RpcMessageError::InternalError(format!(
-                                    "Failed to convert presentation: {}",
-                                    e
-                                ))
-                            })?,
-                        },
-                    )),
-                })
+                self.handle_request_current_presentations(req)
             }
             HostClientToDaemonMessageUnionRef::DismissPresentation(dismiss) => {
-                let player = self.extract_auth_token(&dismiss, |d| d.auth_token())?;
-
-                let presentation_id = dismiss
-                    .presentation_id()
-                    .map_err(|_| {
-                        RpcMessageError::InvalidRequest("Missing presentation_id".to_string())
-                    })?
-                    .to_string();
-
-                self.event_log.dismiss_presentation(player, presentation_id);
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::PresentationDismissed(Box::new(
-                        moor_rpc::PresentationDismissed {},
-                    )),
-                })
+                self.handle_dismiss_presentation(dismiss)
             }
             HostClientToDaemonMessageUnionRef::SetClientAttribute(set_attr) => {
-                let (_connection, _player) = self.extract_and_verify_tokens(
-                    &set_attr,
-                    client_id,
-                    |s| s.client_token(),
-                    |s| s.auth_token(),
-                )?;
-
-                let key_ref = set_attr
-                    .key()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing key".to_string()))?;
-                let key = symbol_from_ref(key_ref).map_err(RpcMessageError::InvalidRequest)?;
-
-                let value = set_attr
-                    .value()
-                    .ok()
-                    .and_then(|v_opt| v_opt.and_then(|v_ref| var_from_ref(v_ref).ok()));
-
-                self.connections
-                    .set_client_attribute(client_id, key, value)?;
-
-                Ok(DaemonToClientReply {
-                    reply: DaemonToClientReplyUnion::ClientAttributeSet(Box::new(
-                        moor_rpc::ClientAttributeSet {},
-                    )),
-                })
+                self.handle_set_client_attribute(client_id, set_attr)
             }
             HostClientToDaemonMessageUnionRef::Program(prog) => {
-                let (_connection, player) = self.extract_and_verify_tokens(
-                    &prog,
-                    client_id,
-                    |p| p.client_token(),
-                    |p| p.auth_token(),
-                )?;
-
-                let object_ref = prog
-                    .object()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing object".to_string()))?;
-                let object = objectref_from_ref(object_ref)
-                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-
-                let verb_ref = prog
-                    .verb()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing verb".to_string()))?;
-                let verb = symbol_from_ref(verb_ref).map_err(RpcMessageError::InvalidRequest)?;
-
-                let code_vec = prog
-                    .code()
-                    .map_err(|_| RpcMessageError::InvalidRequest("Missing code".to_string()))?;
-                let code: Vec<String> = code_vec
-                    .iter()
-                    .filter_map(|s| s.ok().map(|s| s.to_string()))
-                    .collect();
-
-                self.program_verb(scheduler_client, client_id, &player, &object, verb, code)
+                self.handle_program(scheduler_client, client_id, prog)
             }
         }
     }
@@ -1339,6 +682,671 @@ impl MessageHandler for RpcMessageHandler {
 }
 
 impl RpcMessageHandler {
+    // Client message handlers - extracted from handle_client_message for clarity
+
+    fn handle_connection_establish(
+        &self,
+        client_id: Uuid,
+        conn_est: moor_rpc::ConnectionEstablishRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (hostname, local_port, remote_port) = self.extract_connection_params(
+            &conn_est,
+            |c| c.peer_addr(),
+            |c| c.local_port(),
+            |c| c.remote_port(),
+        )?;
+
+        let acceptable_content_types =
+            self.extract_acceptable_content_types(&conn_est, |c| c.acceptable_content_types());
+
+        let connection_attributes =
+            self.extract_connection_attributes(&conn_est, |c| c.connection_attributes());
+
+        let oid = self.connections.new_connection(NewConnectionParams {
+            client_id,
+            hostname,
+            local_port,
+            remote_port,
+            player: None,
+            acceptable_content_types,
+            connection_attributes,
+        })?;
+
+        let token = self.make_client_token(client_id);
+        Ok(mk_new_connection_reply(token, &oid))
+    }
+
+    fn handle_client_pong(
+        &self,
+        client_id: Uuid,
+        pong: moor_rpc::ClientPongRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let timestamp = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
+        let token = pong
+            .client_token()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+
+        let connection = self.client_auth(token, client_id)?;
+
+        if self
+            .connections
+            .notify_is_alive(client_id, connection)
+            .is_err()
+        {
+            warn!("Unable to notify connection is alive: {}", client_id);
+        }
+
+        Ok(mk_thanks_pong_reply(timestamp))
+    }
+
+    fn handle_request_sys_prop(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        req: moor_rpc::RequestSysPropRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let connection = self.extract_client_token(&req, client_id, |r| r.client_token())?;
+
+        let object = extract_object_ref_rpc(&req, "object", |r| r.object())?;
+        let property = extract_symbol_rpc(&req, "property", |r| r.property())?;
+
+        self.request_sys_prop(scheduler_client, connection, object, property)
+    }
+
+    fn handle_login_command(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        login: moor_rpc::LoginCommandRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let connection = self.extract_client_token(&login, client_id, |l| l.client_token())?;
+
+        let handler_object = extract_obj_rpc(&login, "handler_object", |l| l.handler_object())?;
+        let args = extract_string_list_rpc(&login, "connect_args", |l| l.connect_args())?;
+        let attach = extract_field_rpc(&login, "do_attach", |l| l.do_attach())?;
+
+        self.perform_login(
+            &handler_object,
+            scheduler_client,
+            client_id,
+            &connection,
+            args,
+            attach,
+        )
+    }
+
+    fn handle_attach(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        attach_msg: moor_rpc::AttachRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let auth_token = attach_msg
+            .auth_token()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+        let player = self.validate_auth_token(auth_token, None)?;
+
+        let handler_object =
+            extract_obj_rpc(&attach_msg, "handler_object", |a| a.handler_object())?;
+
+        let (hostname, local_port, remote_port) = self.extract_connection_params(
+            &attach_msg,
+            |a| a.peer_addr(),
+            |a| a.local_port(),
+            |a| a.remote_port(),
+        )?;
+
+        let acceptable_content_types =
+            self.extract_acceptable_content_types(&attach_msg, |a| a.acceptable_content_types());
+
+        let connect_type = attach_msg
+            .connect_type()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+
+        self.connections.new_connection(NewConnectionParams {
+            client_id,
+            hostname,
+            local_port,
+            remote_port,
+            player: Some(player),
+            acceptable_content_types,
+            connection_attributes: None,
+        })?;
+        let client_token = self.make_client_token(client_id);
+
+        // Only submit user_connected task for actual connection types, not transient sessions
+        if connect_type != moor_rpc::ConnectType::NoConnect {
+            let connection = self
+                .connections
+                .connection_object_for_client(client_id)
+                .ok_or(RpcMessageError::InternalError(
+                    "Connection not found".to_string(),
+                ))?;
+
+            if let Err(e) = self.submit_connected_task(
+                &handler_object,
+                scheduler_client,
+                client_id,
+                &player,
+                &connection,
+                connect_type,
+            ) {
+                error!(error = ?e, "Error submitting user_connected task");
+            }
+        }
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::AttachResult(Box::new(moor_rpc::AttachResult {
+                success: true,
+                client_token: Some(Box::new(moor_rpc::ClientToken {
+                    token: client_token.0.clone(),
+                })),
+                player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+            })),
+        })
+    }
+
+    fn handle_command(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        cmd: moor_rpc::CommandRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &cmd,
+            client_id,
+            |c| c.client_token(),
+            |c| c.auth_token(),
+        )?;
+
+        let handler_object = extract_obj_rpc(&cmd, "handler_object", |c| c.handler_object())?;
+        let command = extract_string_rpc(&cmd, "command", |c| c.command())?;
+
+        self.submit_command_task(
+            scheduler_client,
+            client_id,
+            &handler_object,
+            &player,
+            command,
+        )
+    }
+
+    fn handle_detach(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        detach: moor_rpc::DetachRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let connection = self.extract_client_token(&detach, client_id, |d| d.client_token())?;
+
+        let disconnected = detach
+            .disconnected()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+
+        if disconnected
+            && let Some(player) = self.connections.player_object_for_client(client_id)
+            && let Err(e) = self.submit_disconnected_task(
+                &SYSTEM_OBJECT,
+                scheduler_client,
+                client_id,
+                &player,
+                &connection,
+            )
+        {
+            error!(error = ?e, "Error submitting user_disconnected task");
+        }
+
+        let Ok(_) = self.connections.remove_client_connection(client_id) else {
+            return Err(RpcMessageError::InternalError(
+                "Unable to remove client connection".to_string(),
+            ));
+        };
+
+        Ok(mk_disconnected_reply())
+    }
+
+    fn handle_requested_input(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        input: moor_rpc::RequestedInputRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &input,
+            client_id,
+            |i| i.client_token(),
+            |i| i.auth_token(),
+        )?;
+
+        let request_id = extract_uuid_rpc(&input, "request_id", |i| i.request_id())?;
+        let input_var = extract_var_rpc(&input, "input", |i| i.input())?;
+
+        self.respond_input(scheduler_client, client_id, &player, request_id, input_var)
+    }
+
+    fn handle_out_of_band(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        oob: moor_rpc::OutOfBandRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &oob,
+            client_id,
+            |o| o.client_token(),
+            |o| o.auth_token(),
+        )?;
+
+        let handler_object = extract_obj_rpc(&oob, "handler_object", |o| o.handler_object())?;
+        let command = extract_string_rpc(&oob, "command", |o| o.command())?;
+
+        self.submit_out_of_bound_task(
+            scheduler_client,
+            &handler_object,
+            client_id,
+            &player,
+            command,
+        )
+    }
+
+    fn handle_eval(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        eval: moor_rpc::EvalRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &eval,
+            client_id,
+            |e| e.client_token(),
+            |e| e.auth_token(),
+        )?;
+
+        let evalstr = extract_string_rpc(&eval, "expression", |e| e.expression())?;
+
+        self.submit_eval_task(scheduler_client, client_id, &player, evalstr)
+    }
+
+    fn handle_invoke_verb(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        invoke: moor_rpc::InvokeVerbRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &invoke,
+            client_id,
+            |i| i.client_token(),
+            |i| i.auth_token(),
+        )?;
+
+        let object = extract_object_ref_rpc(&invoke, "object", |i| i.object())?;
+        let verb = extract_symbol_rpc(&invoke, "verb", |i| i.verb())?;
+
+        let args_vec = invoke
+            .args()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let args: Vec<Var> = args_vec
+            .iter()
+            .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))
+            .collect();
+
+        self.submit_invoke_verb_task(scheduler_client, client_id, &player, &object, verb, args)
+    }
+
+    fn handle_retrieve(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        retr: moor_rpc::RetrieveRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &retr,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        let who = extract_object_ref_rpc(&retr, "object", |r| r.object())?;
+        let retr_type = extract_field_rpc(&retr, "entity_type", |r| r.entity_type())?;
+        let what = extract_symbol_rpc(&retr, "name", |r| r.name())?;
+
+        match retr_type {
+            moor_rpc::EntityType::Property => {
+                let (propdef, propperms, value) = scheduler_client
+                    .request_property(&player, &player, &who, what)
+                    .map_err(|e| {
+                        error!(error = ?e, "Error requesting property");
+                        RpcMessageError::EntityRetrievalError(
+                            "error requesting property".to_string(),
+                        )
+                    })?;
+                let value_bytes = var_to_flatbuffer_bytes_rpc(&value)?;
+                Ok(DaemonToClientReply {
+                    reply: DaemonToClientReplyUnion::PropertyValue(Box::new(
+                        moor_rpc::PropertyValue {
+                            prop_info: Box::new(common::PropInfo {
+                                definer: Box::new(obj_to_flatbuffer_struct(&propdef.definer())),
+                                location: Box::new(obj_to_flatbuffer_struct(&propdef.location())),
+                                name: Box::new(moor_rpc::Symbol {
+                                    value: propdef.name().as_string(),
+                                }),
+                                owner: Box::new(obj_to_flatbuffer_struct(&propperms.owner())),
+                                r: propperms.flags().contains(PropFlag::Read),
+                                w: propperms.flags().contains(PropFlag::Write),
+                                chown: propperms.flags().contains(PropFlag::Chown),
+                            }),
+                            value: Box::new(moor_rpc::VarBytes { data: value_bytes }),
+                        },
+                    )),
+                })
+            }
+            moor_rpc::EntityType::Verb => {
+                let (verbdef, code) = scheduler_client
+                    .request_verb(&player, &player, &who, what)
+                    .map_err(|e| {
+                        error!(error = ?e, "Error requesting verb");
+                        RpcMessageError::EntityRetrievalError("error requesting verb".to_string())
+                    })?;
+                let argspec = verbdef.args();
+                let arg_spec = vec![
+                    moor_rpc::Symbol {
+                        value: argspec.dobj.to_string().to_string(),
+                    },
+                    moor_rpc::Symbol {
+                        value: preposition_to_string(&argspec.prep).to_string(),
+                    },
+                    moor_rpc::Symbol {
+                        value: argspec.iobj.to_string().to_string(),
+                    },
+                ];
+                let names = verbdef
+                    .names()
+                    .iter()
+                    .map(|n| moor_rpc::Symbol {
+                        value: n.as_string(),
+                    })
+                    .collect();
+                Ok(DaemonToClientReply {
+                    reply: DaemonToClientReplyUnion::VerbValue(Box::new(moor_rpc::VerbValue {
+                        verb_info: Box::new(common::VerbInfo {
+                            location: Box::new(obj_to_flatbuffer_struct(&verbdef.location())),
+                            owner: Box::new(obj_to_flatbuffer_struct(&verbdef.owner())),
+                            names,
+                            r: verbdef.flags().contains(VerbFlag::Read),
+                            w: verbdef.flags().contains(VerbFlag::Write),
+                            x: verbdef.flags().contains(VerbFlag::Exec),
+                            d: verbdef.flags().contains(VerbFlag::Debug),
+                            arg_spec,
+                        }),
+                        code,
+                    })),
+                })
+            }
+        }
+    }
+
+    fn handle_resolve(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        resolve: moor_rpc::ResolveRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &resolve,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        let objref = extract_object_ref_rpc(&resolve, "objref", |r| r.objref())?;
+
+        let resolved = scheduler_client
+            .resolve_object(player, objref)
+            .map_err(|e| {
+                error!(error = ?e, "Error resolving object");
+                RpcMessageError::EntityRetrievalError("error resolving object".to_string())
+            })?;
+
+        let result_bytes = var_to_flatbuffer_bytes_rpc(&resolved)?;
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::ResolveResult(Box::new(moor_rpc::ResolveResult {
+                result: Box::new(moor_rpc::VarBytes { data: result_bytes }),
+            })),
+        })
+    }
+
+    fn handle_properties(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        props: moor_rpc::PropertiesRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &props,
+            client_id,
+            |p| p.client_token(),
+            |p| p.auth_token(),
+        )?;
+
+        let obj = extract_object_ref_rpc(&props, "object", |p| p.object())?;
+
+        let inherited = props
+            .inherited()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+
+        let prop_list = scheduler_client
+            .request_properties(&player, &player, &obj, inherited)
+            .map_err(|e| {
+                error!(error = ?e, "Error requesting properties");
+                RpcMessageError::EntityRetrievalError("error requesting properties".to_string())
+            })?;
+
+        let props = prop_list
+            .iter()
+            .map(|(propdef, propperms)| common::PropInfo {
+                definer: Box::new(obj_to_flatbuffer_struct(&propdef.definer())),
+                location: Box::new(obj_to_flatbuffer_struct(&propdef.location())),
+                name: Box::new(moor_rpc::Symbol {
+                    value: propdef.name().as_string(),
+                }),
+                owner: Box::new(obj_to_flatbuffer_struct(&propperms.owner())),
+                r: propperms.flags().contains(PropFlag::Read),
+                w: propperms.flags().contains(PropFlag::Write),
+                chown: propperms.flags().contains(PropFlag::Chown),
+            })
+            .collect();
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::PropertiesReply(Box::new(moor_rpc::PropertiesReply {
+                properties: props,
+            })),
+        })
+    }
+
+    fn handle_verbs(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        verbs: moor_rpc::VerbsRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &verbs,
+            client_id,
+            |v| v.client_token(),
+            |v| v.auth_token(),
+        )?;
+
+        let obj = extract_object_ref_rpc(&verbs, "object", |v| v.object())?;
+
+        let inherited = verbs
+            .inherited()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+
+        let verb_list = scheduler_client
+            .request_verbs(&player, &player, &obj, inherited)
+            .map_err(|e| {
+                error!(error = ?e, "Error requesting verbs");
+                RpcMessageError::EntityRetrievalError("error requesting verbs".to_string())
+            })?;
+
+        let verbs = verb_list
+            .iter()
+            .map(|v| {
+                let names = v
+                    .names()
+                    .iter()
+                    .map(|n| moor_rpc::Symbol {
+                        value: n.as_string(),
+                    })
+                    .collect();
+                let arg_spec = vec![
+                    moor_rpc::Symbol {
+                        value: v.args().dobj.to_string().to_string(),
+                    },
+                    moor_rpc::Symbol {
+                        value: preposition_to_string(&v.args().prep).to_string(),
+                    },
+                    moor_rpc::Symbol {
+                        value: v.args().iobj.to_string().to_string(),
+                    },
+                ];
+                common::VerbInfo {
+                    location: Box::new(obj_to_flatbuffer_struct(&v.location())),
+                    owner: Box::new(obj_to_flatbuffer_struct(&v.owner())),
+                    names,
+                    r: v.flags().contains(VerbFlag::Read),
+                    w: v.flags().contains(VerbFlag::Write),
+                    x: v.flags().contains(VerbFlag::Exec),
+                    d: v.flags().contains(VerbFlag::Debug),
+                    arg_spec,
+                }
+            })
+            .collect();
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::VerbsReply(Box::new(moor_rpc::VerbsReply { verbs })),
+        })
+    }
+
+    fn handle_request_history(
+        &self,
+        hist: moor_rpc::RequestHistoryRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let player = self.extract_auth_token(&hist, |h| h.auth_token())?;
+
+        let history_recall = hist
+            .history_recall()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let history_response = self.build_history_response(player, history_recall)?;
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::HistoryResponseReply(Box::new(HistoryResponseReply {
+                response: Box::new(history_response),
+            })),
+        })
+    }
+
+    fn handle_request_current_presentations(
+        &self,
+        req: moor_rpc::RequestCurrentPresentationsRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let player = self.extract_auth_token(&req, |r| r.auth_token())?;
+
+        let presentations = self.event_log.current_presentations(player);
+        let presentation_list: Result<Vec<_>, _> = presentations
+            .iter()
+            .map(presentation_to_flatbuffer_struct)
+            .collect();
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::CurrentPresentations(Box::new(
+                moor_rpc::CurrentPresentations {
+                    presentations: presentation_list.map_err(|e| {
+                        RpcMessageError::InternalError(format!(
+                            "Failed to convert presentation: {}",
+                            e
+                        ))
+                    })?,
+                },
+            )),
+        })
+    }
+
+    fn handle_dismiss_presentation(
+        &self,
+        dismiss: moor_rpc::DismissPresentationRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let player = self.extract_auth_token(&dismiss, |d| d.auth_token())?;
+
+        let presentation_id = dismiss
+            .presentation_id()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?
+            .to_string();
+
+        self.event_log.dismiss_presentation(player, presentation_id);
+
+        Ok(mk_presentation_dismissed_reply())
+    }
+
+    fn handle_set_client_attribute(
+        &self,
+        client_id: Uuid,
+        set_attr: moor_rpc::SetClientAttributeRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, _player) = self.extract_and_verify_tokens(
+            &set_attr,
+            client_id,
+            |s| s.client_token(),
+            |s| s.auth_token(),
+        )?;
+
+        let key = extract_symbol_rpc(&set_attr, "key", |s| s.key())?;
+
+        let value = set_attr
+            .value()
+            .ok()
+            .and_then(|v_opt| v_opt.and_then(|v_ref| var_from_ref(v_ref).ok()));
+
+        self.connections
+            .set_client_attribute(client_id, key, value)?;
+
+        Ok(mk_client_attribute_set_reply())
+    }
+
+    fn handle_program(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        prog: moor_rpc::ProgramRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &prog,
+            client_id,
+            |p| p.client_token(),
+            |p| p.auth_token(),
+        )?;
+
+        let object = extract_object_ref_rpc(&prog, "object", |p| p.object())?;
+
+        let verb = extract_symbol_rpc(&prog, "verb", |p| p.verb())?;
+
+        let code_vec = prog
+            .code()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let code: Vec<String> = code_vec
+            .iter()
+            .filter_map(|s| s.ok().map(|s| s.to_string()))
+            .collect();
+
+        self.program_verb(scheduler_client, client_id, &player, &object, verb, code)
+    }
+
     fn publish_narrative_events(&self, events: &[(Obj, Box<NarrativeEvent>)]) -> Result<(), Error> {
         self.transport
             .publish_narrative_events(events, self.connections.as_ref())
@@ -1562,7 +1570,7 @@ impl RpcMessageHandler {
             .set_client_attribute(client_id, key, Some(value.clone()))?;
 
         // Send SetConnectionOption event to the host
-        let value_bytes = var_to_flatbuffer_bytes(&value)
+        let value_bytes = var_to_flatbuffer_bytes_rpc(&value)
             .map_err(|e| eyre::eyre!("Failed to encode var: {}", e))?;
         self.transport.publish_client_event(
             client_id,
@@ -1661,8 +1669,7 @@ impl RpcMessageHandler {
             }
         };
 
-        let pv_bytes = var_to_flatbuffer_bytes(&pv)
-            .map_err(|e| RpcMessageError::InternalError(format!("Failed to encode var: {}", e)))?;
+        let pv_bytes = var_to_flatbuffer_bytes_rpc(&pv)?;
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::SysPropValue(Box::new(moor_rpc::SysPropValue {
                 value: Some(Box::new(moor_rpc::VarBytes { data: pv_bytes })),

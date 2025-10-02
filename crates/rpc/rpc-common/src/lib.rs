@@ -20,7 +20,7 @@ use moor_common::tasks::SchedulerError;
 use thiserror::Error;
 
 // Re-export domain types
-pub use host::HostType;
+pub use host::{HostType, extract_host_type};
 pub use tokens::{
     AuthToken, ClientToken, HostToken, KeyError, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
     MOOR_SESSION_TOKEN_FOOTER, MOOR_WORKER_TOKEN_FOOTER, WorkerToken, load_keypair,
@@ -40,8 +40,10 @@ pub use tokens::{auth_token_from_ref, client_token_from_ref};
 
 // Re-export extraction helpers
 pub use extract::{
-    extract_field, extract_obj, extract_object_ref, extract_string, extract_string_list,
-    extract_symbol, extract_symbol_list, extract_uuid, extract_var, extract_var_list,
+    extract_field, extract_field_rpc, extract_obj, extract_obj_rpc, extract_object_ref,
+    extract_object_ref_rpc, extract_string, extract_string_list, extract_string_list_rpc,
+    extract_string_rpc, extract_symbol, extract_symbol_list, extract_symbol_rpc, extract_uuid,
+    extract_uuid_rpc, extract_var, extract_var_list, extract_var_rpc,
 };
 
 // Re-export FlatBuffer construction helpers
@@ -82,6 +84,13 @@ pub use worker_messages::{
     mk_worker_unknown_request_reply,
 };
 
+// Re-export reply builders
+pub use reply_builders::{
+    mk_client_attribute_set_reply, mk_daemon_to_host_ack, mk_disconnected_reply,
+    mk_new_connection_reply, mk_presentation_dismissed_reply, mk_thanks_pong_reply,
+    var_to_flatbuffer_bytes_rpc,
+};
+
 // Public modules - allow direct access to generated types and client args
 pub mod client_args;
 
@@ -94,6 +103,7 @@ mod extract;
 mod helpers;
 mod host;
 mod host_messages;
+mod reply_builders;
 mod tokens;
 mod worker;
 mod worker_messages;

@@ -17,17 +17,17 @@ use moor_common::{
     schema::{rpc as moor_rpc, rpc::DaemonToClientReply},
 };
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
-use moor_var::{Obj, SYSTEM_OBJECT, Variant, v_str};
+use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
     MOOR_SESSION_TOKEN_FOOTER, RpcMessageError, auth_token_from_ref, client_token_from_ref,
-    obj_to_flatbuffer_struct,
+    obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
 };
 use serde_json::json;
-use std::{sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -368,10 +368,9 @@ impl RpcMessageHandler {
         client_id: Uuid,
         get_token: impl FnOnce(&T) -> Result<moor_rpc::ClientTokenRef, planus::Error>,
     ) -> Result<Obj, RpcMessageError> {
-        let token_ref = get_token(msg)
-            .map_err(|_| RpcMessageError::InvalidRequest("Missing client_token".to_string()))?;
-        let token = client_token_from_ref(token_ref)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let token = get_token(msg)
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
         self.client_auth(token, client_id)
     }
 
@@ -386,17 +385,15 @@ impl RpcMessageHandler {
         get_auth_token: impl FnOnce(&T) -> Result<moor_rpc::AuthTokenRef, planus::Error>,
     ) -> Result<(Obj, Obj), RpcMessageError> {
         // Extract and validate client token
-        let token_ref = get_client_token(msg)
-            .map_err(|_| RpcMessageError::InvalidRequest("Missing client_token".to_string()))?;
-        let _token = client_token_from_ref(token_ref)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
-        let connection = self.client_auth(_token, client_id)?;
+        let client_token = get_client_token(msg)
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+        let connection = self.client_auth(client_token, client_id)?;
 
         // Extract and validate auth token
-        let auth_token_ref = get_auth_token(msg)
-            .map_err(|_| RpcMessageError::InvalidRequest("Missing auth_token".to_string()))?;
-        let auth_token = auth_token_from_ref(auth_token_ref)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let auth_token = get_auth_token(msg)
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
         let player = self.validate_auth_token(auth_token, None)?;
 
         // Verify player matches logged-in player
@@ -417,10 +414,9 @@ impl RpcMessageHandler {
         msg: &T,
         get_token: impl FnOnce(&T) -> Result<moor_rpc::AuthTokenRef, planus::Error>,
     ) -> Result<Obj, RpcMessageError> {
-        let auth_token_ref = get_token(msg)
-            .map_err(|_| RpcMessageError::InvalidRequest("Missing auth_token".to_string()))?;
-        let auth_token = auth_token_from_ref(auth_token_ref)
-            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let auth_token = get_token(msg)
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
         self.validate_auth_token(auth_token, None)
     }
 
@@ -431,5 +427,66 @@ impl RpcMessageHandler {
 
         self.validate_client_token_impl(token, client_id)?;
         Ok(connection)
+    }
+
+    /// Extract connection parameters (hostname, ports) from a FlatBuffer message
+    pub(crate) fn extract_connection_params<T>(
+        &self,
+        msg: &T,
+        get_peer_addr: impl FnOnce(&T) -> Result<&str, planus::Error>,
+        get_local_port: impl FnOnce(&T) -> Result<u16, planus::Error>,
+        get_remote_port: impl FnOnce(&T) -> Result<u16, planus::Error>,
+    ) -> Result<(String, u16, u16), RpcMessageError> {
+        let hostname = get_peer_addr(msg)
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?
+            .to_string();
+        let local_port =
+            get_local_port(msg).map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let remote_port =
+            get_remote_port(msg).map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        Ok((hostname, local_port, remote_port))
+    }
+
+    /// Extract optional acceptable_content_types from a FlatBuffer message
+    pub(crate) fn extract_acceptable_content_types<T>(
+        &self,
+        msg: &T,
+        get_types: impl FnOnce(
+            &T,
+        ) -> Result<
+            Option<planus::Vector<'_, Result<moor_rpc::SymbolRef<'_>, planus::Error>>>,
+            planus::Error,
+        >,
+    ) -> Option<Vec<Symbol>> {
+        get_types(msg).ok()?.map(|types| {
+            types
+                .iter()
+                .filter_map(|s| s.ok().and_then(|s| symbol_from_ref(s).ok()))
+                .collect()
+        })
+    }
+
+    /// Extract optional connection_attributes from a FlatBuffer message
+    pub(crate) fn extract_connection_attributes<T>(
+        &self,
+        msg: &T,
+        get_attrs: impl FnOnce(
+            &T,
+        ) -> Result<
+            Option<planus::Vector<'_, Result<moor_rpc::ConnectionAttributeRef<'_>, planus::Error>>>,
+            planus::Error,
+        >,
+    ) -> Option<HashMap<Symbol, Var>> {
+        get_attrs(msg).ok()?.map(|attrs| {
+            attrs
+                .iter()
+                .filter_map(|attr| {
+                    let attr = attr.ok()?;
+                    let key = symbol_from_ref(attr.key().ok()?).ok()?;
+                    let value = var_from_ref(attr.value().ok()?).ok()?;
+                    Some((key, value))
+                })
+                .collect()
+        })
     }
 }

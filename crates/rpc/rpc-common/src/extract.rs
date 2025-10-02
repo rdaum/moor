@@ -17,8 +17,11 @@ use moor_common::{model::ObjectRef, schema::rpc};
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
-use crate::convert::{
-    obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_bytes,
+use crate::{
+    RpcMessageError,
+    convert::{
+        obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_bytes,
+    },
 };
 
 /// Extract a required field and convert it, handling errors uniformly
@@ -150,4 +153,80 @@ pub fn extract_string_list<T>(
         .iter()
         .filter_map(|s| s.ok().map(|s| s.to_string()))
         .collect())
+}
+
+// ============================================================================
+// RpcMessageError-returning variants for use in RPC handlers
+// ============================================================================
+
+/// Extract a required Obj field, returning RpcMessageError
+pub fn extract_obj_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<rpc::ObjRef, planus::Error>,
+) -> Result<Obj, RpcMessageError> {
+    extract_obj(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required ObjectRef field, returning RpcMessageError
+pub fn extract_object_ref_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<rpc::ObjectRefRef, planus::Error>,
+) -> Result<ObjectRef, RpcMessageError> {
+    extract_object_ref(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required Symbol field, returning RpcMessageError
+pub fn extract_symbol_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<rpc::SymbolRef, planus::Error>,
+) -> Result<Symbol, RpcMessageError> {
+    extract_symbol(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required Var field, returning RpcMessageError
+pub fn extract_var_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<rpc::VarBytesRef, planus::Error>,
+) -> Result<Var, RpcMessageError> {
+    extract_var(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required UUID field, returning RpcMessageError
+pub fn extract_uuid_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<rpc::UuidRef, planus::Error>,
+) -> Result<Uuid, RpcMessageError> {
+    extract_uuid(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required string field, returning RpcMessageError
+pub fn extract_string_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<&str, planus::Error>,
+) -> Result<String, RpcMessageError> {
+    extract_string(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required primitive field, returning RpcMessageError
+pub fn extract_field_rpc<T, F>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<F, planus::Error>,
+) -> Result<F, RpcMessageError> {
+    extract_field(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
+}
+
+/// Extract a required list of strings, returning RpcMessageError
+pub fn extract_string_list_rpc<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<planus::Vector<Result<&str, planus::Error>>, planus::Error>,
+) -> Result<Vec<String>, RpcMessageError> {
+    extract_string_list(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
 }

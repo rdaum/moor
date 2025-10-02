@@ -11,6 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_common::schema::rpc;
+
+use crate::RpcMessageError;
+
 /// Types of hosts that can listen.
 #[derive(Copy, Debug, Eq, PartialEq, Clone)]
 pub enum HostType {
@@ -35,4 +39,31 @@ impl HostType {
             _ => None,
         }
     }
+
+    /// Convert from FlatBuffer HostType enum
+    pub fn from_flatbuffer(fb_type: rpc::HostType) -> Self {
+        match fb_type {
+            rpc::HostType::Tcp => HostType::TCP,
+            rpc::HostType::WebSocket => HostType::WebSocket,
+        }
+    }
+
+    /// Convert to FlatBuffer HostType enum
+    pub fn to_flatbuffer(&self) -> rpc::HostType {
+        match self {
+            HostType::TCP => rpc::HostType::Tcp,
+            HostType::WebSocket => rpc::HostType::WebSocket,
+        }
+    }
+}
+
+/// Extract and convert a HostType from a FlatBuffer message
+pub fn extract_host_type<T>(
+    msg: &T,
+    field_name: &str,
+    get_field: impl FnOnce(&T) -> Result<rpc::HostType, planus::Error>,
+) -> Result<HostType, RpcMessageError> {
+    get_field(msg)
+        .map(HostType::from_flatbuffer)
+        .map_err(|e| RpcMessageError::InvalidRequest(format!("Missing {}: {}", field_name, e)))
 }
