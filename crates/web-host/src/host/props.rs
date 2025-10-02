@@ -21,10 +21,8 @@ use axum::{
 use moor_common::{
     model::ObjectRef,
     schema::{
-        convert::{
-            obj_from_flatbuffer_struct, symbol_from_flatbuffer_struct, var_from_flatbuffer_bytes,
-        },
-        rpc as moor_rpc,
+        convert::{obj_from_flatbuffer_struct, symbol_from_flatbuffer_struct, var_from_flatbuffer},
+        rpc as moor_rpc, var as moor_var_schema,
     },
 };
 use moor_var::Symbol;
@@ -216,9 +214,9 @@ pub async fn property_retrieval_handler(
                         obj_from_flatbuffer_struct(&owner_struct).expect("Failed to decode owner");
 
                     let value_ref = prop_value.value().expect("Missing value");
-                    let value_bytes = value_ref.data().expect("Missing value data");
-                    let value =
-                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
+                    let value_struct =
+                        moor_var_schema::Var::try_from(value_ref).expect("Failed to convert value");
+                    let value = var_from_flatbuffer(&value_struct).expect("Failed to decode value");
 
                     debug!("Property value: {:?}", value);
                     Json(json!({

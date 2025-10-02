@@ -21,9 +21,9 @@ use moor_common::{
     schema::{
         convert::{
             obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_to_flatbuffer_struct,
-            var_to_flatbuffer_bytes,
+            var_to_flatbuffer,
         },
-        rpc,
+        rpc, var,
     },
 };
 use moor_var::{Obj, Symbol, Var};
@@ -70,13 +70,11 @@ pub fn objectref_fb(objref: &ObjectRef) -> Box<rpc::ObjectRef> {
     Box::new(objectref_to_flatbuffer_struct(objref))
 }
 
-/// Create a boxed FlatBuffer VarBytes from a Var reference
+/// Create a boxed FlatBuffer Var from a Var reference
 /// Returns None if serialization fails
 #[inline]
-pub fn var_fb(var: &Var) -> Option<Box<rpc::VarBytes>> {
-    Some(Box::new(rpc::VarBytes {
-        data: var_to_flatbuffer_bytes(var).ok()?,
-    }))
+pub fn var_fb(var: &Var) -> Option<Box<var::Var>> {
+    Some(Box::new(var_to_flatbuffer(var).ok()?))
 }
 
 /// Create a boxed FlatBuffer Uuid from a uuid::Uuid

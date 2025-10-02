@@ -16,7 +16,7 @@
 use eyre::Context;
 use moor_common::{
     schema::{
-        convert::{symbol_from_ref, uuid_from_ref, var_from_ref, var_to_flatbuffer_bytes},
+        convert::{symbol_from_ref, uuid_from_ref, var_from_ref, var_to_flatbuffer},
         rpc as moor_rpc,
     },
     tasks::WorkerError,
@@ -259,26 +259,19 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 };
 
                 // Then send the message out on the workers broadcast channel
-                // Convert request parameters to flatbuffer VarBytes
-                let request_var_bytes: Result<Vec<Vec<u8>>, _> =
-                    request.iter().map(var_to_flatbuffer_bytes).collect();
-                let request_bytes = request_var_bytes
-                    .context("Failed to serialize request variables to flatbuffer")?;
+                // Convert request parameters to flatbuffer Var
+                let request_fb: Result<Vec<_>, _> = request.iter().map(var_to_flatbuffer).collect();
+                let request_vars =
+                    request_fb.context("Failed to serialize request variables to flatbuffer")?;
 
                 let timeout_ms = timeout.map(|d| d.as_millis() as u64).unwrap_or(0);
-
-                // Create flatbuffer WorkerRequest message using builder
-                let request_varbytes: Vec<moor_rpc::VarBytes> = request_bytes
-                    .into_iter()
-                    .map(|bytes| moor_rpc::VarBytes { data: bytes })
-                    .collect();
 
                 let fb_message = mk_worker_request_msg(
                     worker.id,
                     &worker.token,
                     request_id,
                     &perms,
-                    request_varbytes,
+                    request_vars,
                     timeout_ms,
                 );
 

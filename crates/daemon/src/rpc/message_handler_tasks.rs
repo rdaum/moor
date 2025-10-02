@@ -21,7 +21,7 @@ use crate::rpc::{
 use eyre::{Context, Error};
 use moor_common::{
     model::ObjectRef,
-    schema::{convert::var_to_flatbuffer_bytes, rpc as moor_rpc},
+    schema::{convert::var_to_flatbuffer, rpc as moor_rpc},
     util::parse_into_words,
 };
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
@@ -286,13 +286,13 @@ impl RpcMessageHandler {
                     continue;
                 }
                 Ok((_, Ok(TaskResult::Result(v)))) => {
-                    let result_bytes = var_to_flatbuffer_bytes(&v).map_err(|e| {
+                    let result_fb = var_to_flatbuffer(&v).map_err(|e| {
                         RpcMessageError::InternalError(format!("Failed to encode result: {e}"))
                     })?;
                     break Ok(moor_rpc::DaemonToClientReply {
                         reply: moor_rpc::DaemonToClientReplyUnion::EvalResult(Box::new(
                             moor_rpc::EvalResult {
-                                result: Box::new(moor_rpc::VarBytes { data: result_bytes }),
+                                result: Box::new(result_fb),
                             },
                         )),
                     });

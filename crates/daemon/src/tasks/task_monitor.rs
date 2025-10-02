@@ -25,7 +25,7 @@ use uuid::Uuid;
 use crate::rpc::SessionActions;
 use flume::Sender;
 use moor_common::{
-    schema::{convert::var_to_flatbuffer_bytes, rpc as moor_rpc},
+    schema::{convert::var_to_flatbuffer, rpc as moor_rpc},
     tasks::{SchedulerError, TaskId},
 };
 use moor_kernel::tasks::TaskHandle;
@@ -139,17 +139,32 @@ impl TaskMonitor {
         match result {
             Ok((task_id, r)) => {
                 let result = match r {
-                    Ok(moor_kernel::tasks::TaskResult::Result(v)) => {
-                        let value_bytes = var_to_flatbuffer_bytes(&v).unwrap_or_default();
-                        moor_rpc::ClientEvent {
+                    Ok(moor_kernel::tasks::TaskResult::Result(v)) => match var_to_flatbuffer(&v) {
+                        Ok(value_fb) => moor_rpc::ClientEvent {
                             event: moor_rpc::ClientEventUnion::TaskSuccessEvent(Box::new(
                                 moor_rpc::TaskSuccessEvent {
                                     task_id: task_id as u64,
-                                    result: Box::new(moor_rpc::VarBytes { data: value_bytes }),
+                                    result: Box::new(value_fb),
                                 },
                             )),
+                        },
+                        Err(e) => {
+                            tracing::error!(?task_id, ?client_id, error = ?e, "Failed to encode task result - likely contains lambda or anonymous object");
+                            let error_event = moor_rpc::SchedulerError {
+                                error: moor_rpc::SchedulerErrorUnion::SchedulerNotResponding(
+                                    Box::new(moor_rpc::SchedulerNotResponding {}),
+                                ),
+                            };
+                            moor_rpc::ClientEvent {
+                                event: moor_rpc::ClientEventUnion::TaskErrorEvent(Box::new(
+                                    moor_rpc::TaskErrorEvent {
+                                        task_id: task_id as u64,
+                                        error: Box::new(error_event),
+                                    },
+                                )),
+                            }
                         }
-                    }
+                    },
                     Ok(moor_kernel::tasks::TaskResult::Replaced(th)) => {
                         info!(?client_id, ?task_id, "Task restarted");
                         self.task_handles.insert(task_id, (client_id, th), &guard);

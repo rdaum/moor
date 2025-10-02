@@ -12,7 +12,7 @@
 //
 
 use moor_common::{
-    schema::{convert::var_to_flatbuffer_bytes, rpc as moor_rpc},
+    schema::{convert::var_to_flatbuffer, rpc as moor_rpc},
     tasks::WorkerError,
 };
 use moor_var::{Symbol, Var};
@@ -89,10 +89,10 @@ impl WorkerRpcSendClient {
         request_id: Uuid,
         result: Var,
     ) -> Result<(), RpcError> {
-        let result_bytes = var_to_flatbuffer_bytes(&result)
+        let result_fb = var_to_flatbuffer(&result)
             .map_err(|e| RpcError::CouldNotSend(format!("Failed to serialize result: {e}")))?;
 
-        let fb_message = mk_request_result_msg(worker_token, request_id, result_bytes);
+        let fb_message = mk_request_result_msg(worker_token, request_id, result_fb);
 
         let worker_token_bytes = worker_token.0.as_bytes().to_vec();
         let worker_id_bytes = worker_id.as_bytes().to_vec();

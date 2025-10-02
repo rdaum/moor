@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_float_roundtrip() {
-        let var = v_float(3.14);
+        let var = v_float(42.5);
         let fb = var_to_flatbuffer(&var).unwrap();
         let decoded = var_from_flatbuffer(&fb).unwrap();
         assert_eq!(var, decoded);

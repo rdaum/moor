@@ -19,7 +19,7 @@ use moor_common::{
             compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
             obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct,
             symbol_from_flatbuffer_struct, symbol_to_flatbuffer_struct, uuid_from_ref,
-            var_to_flatbuffer_bytes,
+            var_to_flatbuffer,
         },
         rpc,
     },
@@ -463,22 +463,34 @@ pub fn scheduler_error_to_flatbuffer_struct(
                     "Failed to encode exception error: {e}"
                 ))
             })?;
-            let stack_bytes: Result<Vec<_>, _> = exception
+            let stack_fb: Result<Vec<_>, _> = exception
                 .stack
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| rpc::VarBytes { data }))
+                .map(|v| {
+                    var_to_flatbuffer(v).map_err(|e| {
+                        moor_var::EncodingError::CouldNotEncode(format!(
+                            "Failed to encode stack item: {e}"
+                        ))
+                    })
+                })
                 .collect();
-            let backtrace_bytes: Result<Vec<_>, _> = exception
+            let backtrace_fb: Result<Vec<_>, _> = exception
                 .backtrace
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| rpc::VarBytes { data }))
+                .map(|v| {
+                    var_to_flatbuffer(v).map_err(|e| {
+                        moor_var::EncodingError::CouldNotEncode(format!(
+                            "Failed to encode backtrace item: {e}"
+                        ))
+                    })
+                })
                 .collect();
 
             rpc::SchedulerErrorUnion::TaskAbortedException(Box::new(rpc::TaskAbortedException {
                 exception: Box::new(rpc::Exception {
                     error: Box::new(error_bytes),
-                    stack: stack_bytes?,
-                    backtrace: backtrace_bytes?,
+                    stack: stack_fb?,
+                    backtrace: backtrace_fb?,
                 }),
             }))
         }

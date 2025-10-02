@@ -14,6 +14,7 @@
 // FlatBuffer schema for the mooR RPC system
 
 include "common.fbs";
+include "var.fbs";
 
 namespace MoorRpc;
 
@@ -331,7 +332,7 @@ table VerbProgramResponse {
 
 table ConnectionAttribute {
     key: MoorCommon.Symbol (required);
-    value: MoorCommon.VarBytes (required);
+    value: MoorVar.Var (required);
 }
 
 // ============================================================================
@@ -516,7 +517,7 @@ table InvokeVerb {
     auth_token: AuthToken (required);
     object: MoorCommon.ObjectRef (required);
     verb: MoorCommon.Symbol (required);
-    args: [MoorCommon.VarBytes] (required);
+    args: [MoorVar.Var] (required);
 }
 
 table Properties {
@@ -546,7 +547,7 @@ table RequestedInput {
     client_token: ClientToken (required);
     auth_token: AuthToken (required);
     request_id: MoorCommon.Uuid (required);
-    input: MoorCommon.VarBytes (required);
+    input: MoorVar.Var (required);
 }
 
 table OutOfBand {
@@ -597,7 +598,7 @@ table SetClientAttribute {
     client_token: ClientToken (required);
     auth_token: AuthToken (required);
     key: MoorCommon.Symbol (required);
-    value: MoorCommon.VarBytes;  // Optional, null means remove
+    value: MoorVar.Var;  // Optional, null means remove
 }
 
 table Detach {
@@ -654,7 +655,7 @@ table AttachResult {
 }
 
 table SysPropValue {
-    value: MoorCommon.VarBytes;  // Optional
+    value: MoorVar.Var;  // Optional
 }
 
 table TaskSubmitted {
@@ -665,7 +666,7 @@ table InputThanks {
 }
 
 table EvalResult {
-    result: MoorCommon.VarBytes (required);
+    result: MoorVar.Var (required);
 }
 
 table ThanksPong {
@@ -686,7 +687,7 @@ table VerbProgramResponseReply {
 
 table PropertyValue {
     prop_info: MoorCommon.PropInfo (required);
-    value: MoorCommon.VarBytes (required);
+    value: MoorVar.Var (required);
 }
 
 table VerbValue {
@@ -695,7 +696,7 @@ table VerbValue {
 }
 
 table ResolveResult {
-    result: MoorCommon.VarBytes (required);
+    result: MoorVar.Var (required);
 }
 
 table HistoryResponseReply {
@@ -758,7 +759,7 @@ table TaskErrorEvent {
 
 table TaskSuccessEvent {
     task_id: uint64;
-    result: MoorCommon.VarBytes (required);
+    result: MoorVar.Var (required);
 }
 
 table PlayerSwitchedEvent {
@@ -769,7 +770,7 @@ table PlayerSwitchedEvent {
 table SetConnectionOptionEvent {
     connection_obj: MoorCommon.Obj (required);
     option_name: MoorCommon.Symbol (required);
-    value: MoorCommon.VarBytes (required);
+    value: MoorVar.Var (required);
 }
 
 table ClientEvent {
@@ -810,7 +811,7 @@ table WorkerRequest {
     token: WorkerToken (required);
     id: MoorCommon.Uuid (required);
     perms: MoorCommon.Obj (required);
-    request: [MoorCommon.VarBytes] (required);
+    request: [MoorVar.Var] (required);
     timeout_ms: uint64;  // Optional timeout in milliseconds, 0 means no timeout
 }
 
@@ -848,7 +849,7 @@ table DetachWorker {
 table RequestResult {
     token: WorkerToken (required);
     id: MoorCommon.Uuid (required);
-    result: MoorCommon.VarBytes (required);
+    result: MoorVar.Var (required);
 }
 
 table RequestError {

@@ -29,9 +29,9 @@ use moor_common::{
     schema::{
         convert::{
             narrative_event_from_ref, obj_from_flatbuffer_struct, presentation_from_ref,
-            var_from_flatbuffer_bytes,
+            var_from_flatbuffer,
         },
-        rpc as moor_rpc,
+        rpc as moor_rpc, var as moor_var_schema,
     },
     tasks::Event,
 };
@@ -442,9 +442,10 @@ pub async fn system_property_handler(
             match daemon_reply.reply().expect("Missing reply union") {
                 moor_rpc::DaemonToClientReplyUnionRef::SysPropValue(sysprop) => {
                     if let Ok(Some(value_ref)) = sysprop.value() {
-                        let value_bytes = value_ref.data().expect("Missing value data");
+                        let value_struct = moor_var_schema::Var::try_from(value_ref)
+                            .expect("Failed to convert value");
                         let value =
-                            var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
+                            var_from_flatbuffer(&value_struct).expect("Failed to decode value");
                         Json(var_as_json(&value)).into_response()
                     } else {
                         StatusCode::NOT_FOUND.into_response()
@@ -510,9 +511,9 @@ pub async fn eval_handler(
             match daemon_reply.reply().expect("Missing reply union") {
                 moor_rpc::DaemonToClientReplyUnionRef::EvalResult(eval_result) => {
                     let value_ref = eval_result.result().expect("Missing value");
-                    let value_bytes = value_ref.data().expect("Missing value data");
-                    let value =
-                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
+                    let value_struct =
+                        moor_var_schema::Var::try_from(value_ref).expect("Failed to convert value");
+                    let value = var_from_flatbuffer(&value_struct).expect("Failed to decode value");
                     debug!("Eval result: {:?}", value);
                     Json(var_as_json(&value)).into_response()
                 }
@@ -581,9 +582,9 @@ pub async fn resolve_objref_handler(
             match daemon_reply.reply().expect("Missing reply union") {
                 moor_rpc::DaemonToClientReplyUnionRef::ResolveResult(resolve_result) => {
                     let value_ref = resolve_result.result().expect("Missing value");
-                    let value_bytes = value_ref.data().expect("Missing value data");
-                    let obj =
-                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
+                    let value_struct =
+                        moor_var_schema::Var::try_from(value_ref).expect("Failed to convert value");
+                    let obj = var_from_flatbuffer(&value_struct).expect("Failed to decode value");
                     if obj == v_err(E_INVIND) {
                         StatusCode::NOT_FOUND.into_response()
                     } else {
@@ -1106,9 +1107,10 @@ pub async fn invoke_verb_handler(
             match daemon_reply.reply().expect("Missing reply union") {
                 moor_rpc::DaemonToClientReplyUnionRef::EvalResult(eval_result) => {
                     let value_ref = eval_result.result().expect("Missing value");
-                    let value_bytes = value_ref.data().expect("Missing value data");
+                    let value_struct =
+                        moor_var_schema::Var::try_from(value_ref).expect("Failed to convert value");
                     let result =
-                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
+                        var_from_flatbuffer(&value_struct).expect("Failed to decode value");
                     Json(var_as_json(&result)).into_response()
                 }
                 moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {

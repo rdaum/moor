@@ -64,7 +64,7 @@ use rpc_common::{
     extract_object_ref_rpc, extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc,
     extract_uuid_rpc, extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack,
     mk_disconnected_reply, mk_new_connection_reply, mk_presentation_dismissed_reply,
-    mk_thanks_pong_reply, var_to_flatbuffer_bytes_rpc, verb_program_error_to_flatbuffer_struct,
+    mk_thanks_pong_reply, var_to_flatbuffer_rpc, verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
 use tracing::{error, info, warn};
@@ -1028,7 +1028,7 @@ impl RpcMessageHandler {
                             "error requesting property".to_string(),
                         )
                     })?;
-                let value_bytes = var_to_flatbuffer_bytes_rpc(&value)?;
+                let value_fb = var_to_flatbuffer_rpc(&value)?;
                 Ok(DaemonToClientReply {
                     reply: DaemonToClientReplyUnion::PropertyValue(Box::new(
                         moor_rpc::PropertyValue {
@@ -1043,7 +1043,7 @@ impl RpcMessageHandler {
                                 w: propperms.flags().contains(PropFlag::Write),
                                 chown: propperms.flags().contains(PropFlag::Chown),
                             }),
-                            value: Box::new(moor_rpc::VarBytes { data: value_bytes }),
+                            value: Box::new(value_fb),
                         },
                     )),
                 })
@@ -1115,10 +1115,10 @@ impl RpcMessageHandler {
                 RpcMessageError::EntityRetrievalError("error resolving object".to_string())
             })?;
 
-        let result_bytes = var_to_flatbuffer_bytes_rpc(&resolved)?;
+        let result_fb = var_to_flatbuffer_rpc(&resolved)?;
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::ResolveResult(Box::new(moor_rpc::ResolveResult {
-                result: Box::new(moor_rpc::VarBytes { data: result_bytes }),
+                result: Box::new(result_fb),
             })),
         })
     }
@@ -1571,7 +1571,7 @@ impl RpcMessageHandler {
             .set_client_attribute(client_id, key, Some(value.clone()))?;
 
         // Send SetConnectionOption event to the host
-        let value_bytes = var_to_flatbuffer_bytes_rpc(&value)
+        let value_fb = var_to_flatbuffer_rpc(&value)
             .map_err(|e| eyre::eyre!("Failed to encode var: {}", e))?;
         self.transport.publish_client_event(
             client_id,
@@ -1582,7 +1582,7 @@ impl RpcMessageHandler {
                         option_name: Box::new(moor_rpc::Symbol {
                             value: key.as_string(),
                         }),
-                        value: Box::new(moor_rpc::VarBytes { data: value_bytes }),
+                        value: Box::new(value_fb),
                     },
                 )),
             },
@@ -1669,10 +1669,10 @@ impl RpcMessageHandler {
             }
         };
 
-        let pv_bytes = var_to_flatbuffer_bytes_rpc(&pv)?;
+        let pv_fb = var_to_flatbuffer_rpc(&pv)?;
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::SysPropValue(Box::new(moor_rpc::SysPropValue {
-                value: Some(Box::new(moor_rpc::VarBytes { data: pv_bytes })),
+                value: Some(Box::new(pv_fb)),
             })),
         })
     }

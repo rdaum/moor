@@ -18,10 +18,9 @@ use moor_common::{
     model::ObjectRef,
     schema::{
         convert::{
-            obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref,
-            var_from_flatbuffer_bytes,
+            obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer,
         },
-        rpc,
+        rpc, var,
     },
 };
 use moor_var::{Obj, Symbol, Var};
@@ -57,17 +56,16 @@ pub fn extract_symbol<T>(
     symbol_from_ref(field_ref)
 }
 
-/// Extract a required Var field (encoded as VarBytes)
+/// Extract a required Var field
 pub fn extract_var<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<rpc::VarBytesRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<var::VarRef, planus::Error>,
 ) -> Result<Var, String> {
     let field_ref = get_field(msg).map_err(|_| format!("Missing {field_name}"))?;
-    let data = field_ref
-        .data()
-        .map_err(|_| format!("Invalid {field_name} data"))?;
-    var_from_flatbuffer_bytes(data).map_err(|e| e.to_string())
+    let var_struct =
+        var::Var::try_from(field_ref).map_err(|_| format!("Invalid {field_name} conversion"))?;
+    var_from_flatbuffer(&var_struct).map_err(|e| e.to_string())
 }
 
 /// Extract a required UUID field
@@ -126,7 +124,7 @@ pub fn extract_var_list<T>(
     get_field: impl FnOnce(
         &T,
     ) -> Result<
-        Option<planus::Vector<Result<rpc::VarBytesRef, planus::Error>>>,
+        Option<planus::Vector<Result<var::VarRef, planus::Error>>>,
         planus::Error,
     >,
 ) -> Option<Vec<Var>> {
@@ -135,9 +133,9 @@ pub fn extract_var_list<T>(
             items
                 .iter()
                 .filter_map(|item| {
-                    item.ok().and_then(|vb| {
-                        let data = vb.data().ok()?;
-                        var_from_flatbuffer_bytes(data).ok()
+                    item.ok().and_then(|var_ref| {
+                        let var_struct = var::Var::try_from(var_ref).ok()?;
+                        var_from_flatbuffer(&var_struct).ok()
                     })
                 })
                 .collect()
@@ -193,7 +191,7 @@ pub fn extract_symbol_rpc<T>(
 pub fn extract_var_rpc<T>(
     msg: &T,
     field_name: &str,
-    get_field: impl FnOnce(&T) -> Result<rpc::VarBytesRef, planus::Error>,
+    get_field: impl FnOnce(&T) -> Result<var::VarRef, planus::Error>,
 ) -> Result<Var, RpcMessageError> {
     extract_var(msg, field_name, get_field).map_err(RpcMessageError::InvalidRequest)
 }

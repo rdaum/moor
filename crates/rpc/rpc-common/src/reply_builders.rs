@@ -14,8 +14,8 @@
 //! Helper functions for constructing RPC reply messages
 
 use moor_common::schema::{
-    convert::{obj_to_flatbuffer_struct, var_to_flatbuffer_bytes},
-    rpc,
+    convert::{obj_to_flatbuffer_struct, var_to_flatbuffer, var_to_flatbuffer_bytes},
+    rpc, var,
 };
 use moor_var::{Obj, Var};
 
@@ -87,8 +87,8 @@ pub fn mk_thanks_pong_reply(timestamp: u64) -> rpc::DaemonToClientReply {
 // Conversion helpers with RpcMessageError
 // ============================================================================
 
-/// Convert Var to flatbuffer bytes with RpcMessageError
-pub fn var_to_flatbuffer_bytes_rpc(var: &Var) -> Result<Vec<u8>, RpcMessageError> {
-    var_to_flatbuffer_bytes(var)
+/// Convert Var to flatbuffer Var struct with RpcMessageError
+pub fn var_to_flatbuffer_rpc(var: &Var) -> Result<var::Var, RpcMessageError> {
+    var_to_flatbuffer(var)
         .map_err(|e| RpcMessageError::InternalError(format!("Failed to encode var: {e}")))
 }

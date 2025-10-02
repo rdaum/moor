@@ -17,8 +17,8 @@ use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
 use moor_common::schema::{
-    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_bytes},
-    rpc,
+    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
+    rpc, var as moor_var_schema,
 };
 use moor_var::{Obj, Var};
 use planus::ReadAsRoot;
@@ -96,14 +96,14 @@ impl WorkerMessage {
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get request: {e}")))?;
                 let request = request_vec
                     .iter()
-                    .map(|var_bytes_result| {
-                        let var_bytes = var_bytes_result.map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Failed to get var_bytes: {e}"))
+                    .map(|var_ref_result| {
+                        let var_ref = var_ref_result.map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Failed to get var: {e}"))
                         })?;
-                        let data = var_bytes.data().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Failed to get var_bytes data: {e}"))
+                        let var_struct = moor_var_schema::Var::try_from(var_ref).map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Failed to convert var ref: {e}"))
                         })?;
-                        var_from_flatbuffer_bytes(data).map_err(|e| {
+                        var_from_flatbuffer(&var_struct).map_err(|e| {
                             RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
                         })
                     })

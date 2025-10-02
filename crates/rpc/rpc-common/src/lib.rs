@@ -71,7 +71,7 @@ pub use worker_messages::{
 pub use reply_builders::{
     mk_client_attribute_set_reply, mk_daemon_to_host_ack, mk_disconnected_reply,
     mk_new_connection_reply, mk_presentation_dismissed_reply, mk_thanks_pong_reply,
-    var_to_flatbuffer_bytes_rpc,
+    var_to_flatbuffer_rpc,
 };
 
 // Public modules - allow direct access to generated types and client args

@@ -384,7 +384,8 @@ pub fn mk_invoke_verb_msg(
     verb_name: &Symbol,
     args: Vec<&Var>,
 ) -> Option<rpc::HostClientToDaemonMessage> {
-    let args_fb: Vec<rpc::VarBytes> = args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
+    let args_fb: Vec<moor_common::schema::var::Var> =
+        args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
 
     if args_fb.len() != args.len() {
         return None;

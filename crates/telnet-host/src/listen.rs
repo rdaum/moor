@@ -15,7 +15,7 @@ use crate::{connection::TelnetConnection, connection_codec::ConnectionCodec};
 use eyre::bail;
 use futures_util::StreamExt;
 use hickory_resolver::TokioResolver;
-use moor_common::schema::{convert::var_to_flatbuffer_bytes, rpc as moor_rpc};
+use moor_common::schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use rpc_async_client::{ListenersClient, ListenersMessage, rpc_client::RpcSendClient};
 use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg};
@@ -253,13 +253,14 @@ impl Listener {
 
             let connection_attrs_fb: Vec<moor_rpc::ConnectionAttribute> = connection_attributes
                 .iter()
-                .map(|(k, v)| moor_rpc::ConnectionAttribute {
-                    key: Box::new(moor_rpc::Symbol {
-                        value: k.as_string(),
-                    }),
-                    value: Box::new(moor_rpc::VarBytes {
-                        data: var_to_flatbuffer_bytes(v).unwrap_or_default(),
-                    }),
+                .filter_map(|(k, v)| {
+                    let var_fb = var_to_flatbuffer(v).ok()?;
+                    Some(moor_rpc::ConnectionAttribute {
+                        key: Box::new(moor_rpc::Symbol {
+                            value: k.as_string(),
+                        }),
+                        value: Box::new(var_fb),
+                    })
                 })
                 .collect();
 

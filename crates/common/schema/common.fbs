@@ -19,6 +19,8 @@
 // - Narrative events and presentations
 // - World state and compilation errors
 
+include "var.fbs";
+
 namespace MoorCommon;
 
 // ============================================================================
@@ -95,7 +97,7 @@ enum ErrorCode: uint8 {
 table Error {
     err_type: ErrorCode;
     msg: string;  // Optional
-    value: VarBytes;  // Optional
+    value: MoorVar.Var;  // Optional
     custom_symbol: Symbol;  // For ErrCustom variant
 }
 
@@ -106,7 +108,7 @@ table Error {
 table NarrativeEvent {
     event_id: Uuid (required);
     timestamp: uint64;  // SystemTime as nanos since epoch
-    author: VarBytes (required);
+    author: MoorVar.Var (required);
     event: Event (required);
 }
 
@@ -118,7 +120,7 @@ union EventUnion {
 }
 
 table NotifyEvent {
-    value: VarBytes (required);
+    value: MoorVar.Var (required);
     content_type: Symbol;  // Optional
     no_flush: bool;
     no_newline: bool;
@@ -155,8 +157,8 @@ table PresentationAttribute {
 
 table Exception {
     error: Error (required);  // moor_var::Error
-    stack: [VarBytes] (required);
-    backtrace: [VarBytes] (required);
+    stack: [MoorVar.Var] (required);
+    backtrace: [MoorVar.Var] (required);
 }
 
 // ============================================================================

@@ -23,8 +23,8 @@ use crate::{
         common::CompileErrorUnionRef,
         convert_common::{
             symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct,
-            var_from_flatbuffer_bytes, var_to_flatbuffer_bytes,
         },
+        convert_var::{var_from_flatbuffer, var_to_flatbuffer},
     },
 };
 use moor_var::Var;
@@ -60,9 +60,7 @@ pub fn error_to_flatbuffer_struct(
 
     let msg = error.msg.as_ref().map(|m| m.as_str().to_string());
     let value = match &error.value {
-        Some(v) => var_to_flatbuffer_bytes(v)
-            .ok()
-            .map(|data| Box::new(common::VarBytes { data })),
+        Some(v) => Some(Box::new(var_to_flatbuffer(v).map_err(|e| e.to_string())?)),
         None => None,
     };
     let custom_symbol = match &error.err_type {
@@ -115,7 +113,7 @@ pub fn error_from_flatbuffer_struct(
 
     let msg = fb_error.msg.clone();
     let value = match &fb_error.value {
-        Some(v) => Some(var_from_flatbuffer_bytes(&v.data)?),
+        Some(v) => Some(var_from_flatbuffer(v).map_err(|e| e.to_string())?),
         None => None,
     };
 
@@ -165,10 +163,11 @@ pub fn error_from_ref(error_ref: common::ErrorRef<'_>) -> Result<moor_var::Error
         .flatten()
         .map(|s| Box::new(s.to_string()));
 
-    let value = if let Ok(Some(value_bytes_ref)) = error_ref.value() {
-        let value_data = value_bytes_ref.data().map_err(|_| "Missing value data")?;
+    let value = if let Ok(Some(value_var_ref)) = error_ref.value() {
+        let var_struct = crate::schema::var::Var::try_from(value_var_ref)
+            .map_err(|e| format!("Failed to convert value ref: {e}"))?;
         Some(Box::new(
-            var_from_flatbuffer_bytes(value_data)
+            var_from_flatbuffer(&var_struct)
                 .map_err(|e| format!("Failed to decode error value: {e}"))?,
         ))
     } else {
@@ -192,12 +191,11 @@ pub fn exception_from_ref(
     let stack_vec = exception_ref.stack().map_err(|_| "Missing stack")?;
     let stack: Result<Vec<_>, String> = stack_vec
         .iter()
-        .map(|vb_result| -> Result<Var, String> {
-            let vb = vb_result.map_err(|e| format!("Failed to get stack item: {e}"))?;
-            let data = vb
-                .data()
-                .map_err(|e| format!("Missing stack item data: {e}"))?;
-            var_from_flatbuffer_bytes(data).map_err(|e| format!("Failed to decode stack var: {e}"))
+        .map(|var_ref_result| -> Result<Var, String> {
+            let var_ref = var_ref_result.map_err(|e| format!("Failed to get stack item: {e}"))?;
+            let var_struct = crate::schema::var::Var::try_from(var_ref)
+                .map_err(|e| format!("Failed to convert stack item: {e}"))?;
+            var_from_flatbuffer(&var_struct).map_err(|e| format!("Failed to decode stack var: {e}"))
         })
         .collect();
     let stack = stack?;
@@ -205,12 +203,12 @@ pub fn exception_from_ref(
     let backtrace_vec = exception_ref.backtrace().map_err(|_| "Missing backtrace")?;
     let backtrace: Result<Vec<_>, String> = backtrace_vec
         .iter()
-        .map(|vb_result| -> Result<Var, String> {
-            let vb = vb_result.map_err(|e| format!("Failed to get backtrace item: {e}"))?;
-            let data = vb
-                .data()
-                .map_err(|e| format!("Missing backtrace item data: {e}"))?;
-            var_from_flatbuffer_bytes(data)
+        .map(|var_ref_result| -> Result<Var, String> {
+            let var_ref =
+                var_ref_result.map_err(|e| format!("Failed to get backtrace item: {e}"))?;
+            let var_struct = crate::schema::var::Var::try_from(var_ref)
+                .map_err(|e| format!("Failed to convert backtrace item: {e}"))?;
+            var_from_flatbuffer(&var_struct)
                 .map_err(|e| format!("Failed to decode backtrace var: {e}"))
         })
         .collect();

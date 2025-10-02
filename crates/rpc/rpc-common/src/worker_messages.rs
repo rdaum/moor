@@ -40,7 +40,7 @@ pub fn mk_worker_request_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
     perms: &Obj,
-    request: Vec<rpc::VarBytes>,
+    request: Vec<moor_common::schema::var::Var>,
     timeout_ms: u64,
 ) -> rpc::DaemonToWorkerMessage {
     rpc::DaemonToWorkerMessage {
@@ -184,13 +184,13 @@ pub fn mk_detach_worker_msg(worker_token: &WorkerToken) -> rpc::WorkerToDaemonMe
 pub fn mk_request_result_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
-    result_bytes: Vec<u8>,
+    result: moor_common::schema::var::Var,
 ) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::RequestResult(Box::new(rpc::RequestResult {
             token: mk_worker_token(worker_token),
             id: uuid_fb(request_id),
-            result: Box::new(rpc::VarBytes { data: result_bytes }),
+            result: Box::new(result),
         })),
     }
 }

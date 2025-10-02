@@ -19,11 +19,9 @@ use crate::{
     schema::{
         common,
         common::EventUnionRef,
-        convert_common::{
-            symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct, var_from_ref,
-            var_to_flatbuffer_bytes,
-        },
+        convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct},
         convert_errors::{error_to_flatbuffer_struct, exception_from_ref},
+        convert_var::{var_from_flatbuffer, var_to_flatbuffer},
     },
     tasks::{Event, NarrativeEvent, Presentation},
 };
@@ -36,7 +34,10 @@ pub fn narrative_event_from_ref(
     let event_id = uuid_from_ref(event_ref.event_id().map_err(|_| "Missing event_id")?)?;
     let timestamp_nanos = event_ref.timestamp().map_err(|_| "Missing timestamp")?;
     let timestamp = UNIX_EPOCH + Duration::from_nanos(timestamp_nanos);
-    let author = var_from_ref(event_ref.author().map_err(|_| "Missing author")?)?;
+    let author_ref = event_ref.author().map_err(|_| "Missing author")?;
+    let author_struct =
+        crate::schema::var::Var::try_from(author_ref).map_err(|_| "Failed to convert author")?;
+    let author = var_from_flatbuffer(&author_struct).map_err(|e| e.to_string())?;
     let event = event_from_ref(event_ref.event().map_err(|_| "Missing event")?)?;
 
     Ok(NarrativeEvent {
@@ -54,7 +55,10 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
         .map_err(|_| "Failed to read Event union")?
     {
         EventUnionRef::NotifyEvent(notify) => {
-            let value = var_from_ref(notify.value().map_err(|_| "Missing value")?)?;
+            let value_ref = notify.value().map_err(|_| "Missing value")?;
+            let value_struct = crate::schema::var::Var::try_from(value_ref)
+                .map_err(|_| "Failed to convert value")?;
+            let value = var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
             let content_type = notify
                 .content_type()
                 .ok()
@@ -156,9 +160,11 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
             no_flush,
             no_newline,
         } => {
-            let value_bytes = var_to_flatbuffer_bytes(value)?;
+            let value_fb = var_to_flatbuffer(value).map_err(|e| {
+                moor_var::EncodingError::CouldNotEncode(format!("Failed to encode value: {e}"))
+            })?;
             common::EventUnion::NotifyEvent(Box::new(common::NotifyEvent {
-                value: Box::new(common::VarBytes { data: value_bytes }),
+                value: Box::new(value_fb),
                 content_type: content_type.as_ref().map(|s| {
                     Box::new(common::Symbol {
                         value: s.as_string(),
@@ -180,25 +186,37 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
             }))
         }
         Event::Traceback(exception) => {
-            let error_bytes = error_to_flatbuffer_struct(&exception.error).map_err(|e| {
+            let error_fb = error_to_flatbuffer_struct(&exception.error).map_err(|e| {
                 moor_var::EncodingError::CouldNotEncode(format!("Failed to encode error: {e}"))
             })?;
-            let stack_bytes: Result<Vec<_>, _> = exception
+            let stack_fb: Result<Vec<_>, _> = exception
                 .stack
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| common::VarBytes { data }))
+                .map(|v| {
+                    var_to_flatbuffer(v).map_err(|e| {
+                        moor_var::EncodingError::CouldNotEncode(format!(
+                            "Failed to encode stack item: {e}"
+                        ))
+                    })
+                })
                 .collect();
-            let backtrace_bytes: Result<Vec<_>, _> = exception
+            let backtrace_fb: Result<Vec<_>, _> = exception
                 .backtrace
                 .iter()
-                .map(|v| var_to_flatbuffer_bytes(v).map(|data| common::VarBytes { data }))
+                .map(|v| {
+                    var_to_flatbuffer(v).map_err(|e| {
+                        moor_var::EncodingError::CouldNotEncode(format!(
+                            "Failed to encode backtrace item: {e}"
+                        ))
+                    })
+                })
                 .collect();
 
             common::EventUnion::TracebackEvent(Box::new(common::TracebackEvent {
                 exception: Box::new(common::Exception {
-                    error: Box::new(error_bytes),
-                    stack: stack_bytes?,
-                    backtrace: backtrace_bytes?,
+                    error: Box::new(error_fb),
+                    stack: stack_fb?,
+                    backtrace: backtrace_fb?,
                 }),
             }))
         }
@@ -211,7 +229,9 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
 pub fn narrative_event_to_flatbuffer_struct(
     narrative_event: &NarrativeEvent,
 ) -> Result<common::NarrativeEvent, moor_var::EncodingError> {
-    let author_bytes = var_to_flatbuffer_bytes(&narrative_event.author)?;
+    let author_fb = var_to_flatbuffer(&narrative_event.author).map_err(|e| {
+        moor_var::EncodingError::CouldNotEncode(format!("Failed to encode author: {e}"))
+    })?;
     let event_fb = event_to_flatbuffer_struct(&narrative_event.event)?;
 
     let timestamp_nanos = narrative_event
@@ -223,7 +243,7 @@ pub fn narrative_event_to_flatbuffer_struct(
     Ok(common::NarrativeEvent {
         event_id: Box::new(uuid_to_flatbuffer_struct(&narrative_event.event_id)),
         timestamp: timestamp_nanos,
-        author: Box::new(common::VarBytes { data: author_bytes }),
+        author: Box::new(author_fb),
         event: Box::new(event_fb),
     })
 }

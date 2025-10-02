@@ -17,8 +17,8 @@ use crate::{
 };
 use moor_common::{
     schema::{
-        convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_bytes},
-        rpc as moor_rpc,
+        convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
+        rpc as moor_rpc, var as moor_var_schema,
     },
     tasks::WorkerError,
 };
@@ -218,18 +218,16 @@ async fn process_fb<ProcessFunc, Fut>(
             };
             let request = match request_vec
                 .iter()
-                .map(|var_bytes_result| {
-                    let var_bytes = var_bytes_result.map_err(|e| {
+                .map(|var_ref_result| {
+                    let var_ref = var_ref_result.map_err(|e| {
+                        rpc_common::RpcError::CouldNotDecode(format!("Failed to get var: {e}"))
+                    })?;
+                    let var_struct = moor_var_schema::Var::try_from(var_ref).map_err(|e| {
                         rpc_common::RpcError::CouldNotDecode(format!(
-                            "Failed to get var_bytes: {e}"
+                            "Failed to convert var ref: {e}"
                         ))
                     })?;
-                    let data = var_bytes.data().map_err(|e| {
-                        rpc_common::RpcError::CouldNotDecode(format!(
-                            "Failed to get var_bytes data: {e}"
-                        ))
-                    })?;
-                    var_from_flatbuffer_bytes(data).map_err(|e| {
+                    var_from_flatbuffer(&var_struct).map_err(|e| {
                         rpc_common::RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
                     })
                 })
