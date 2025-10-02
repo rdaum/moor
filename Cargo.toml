@@ -95,8 +95,8 @@ figment = { version = "0.10", features = ["yaml", "json"] }
 bincode = { version = "2.0", features = ["serde"] }
 csv = "1.3"
 edn-format = "3.3"
-planus = "1.2.0"
 humantime = "2.2"
+planus = "1.2.0"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_derive = "1.0"
 serde_json = "1.0"

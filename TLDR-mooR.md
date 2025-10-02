@@ -8,7 +8,8 @@
   - a prototype object model with "properties" and "verbs" (methods & commands)
   - a simple command parser that breaks commands into pieces to execute verbs
   - a scheduler which manages task / verb / command executions
-  - a ZeroMQ "RPC" server which submits to said scheduler, using bincoded Rust structs over ZMQ
+  - a ZeroMQ "RPC" server which submits to said scheduler, using FlatBuffers for serialization over
+    ZMQ
   - various "host" processes which turn inbound network protocols into RPC calls
 
 - It is written in Rust

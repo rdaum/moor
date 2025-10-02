@@ -177,8 +177,9 @@ on objects, independent of user commands.
 #### RPC
 
 The system uses ZeroMQ for inter-process communication. The daemon process listens on a ZeroMQ socket for RPC requests
-from the host processes. The host processes use ZeroMQ to send requests to the daemon process. Each request is a
-simple `bincode`-serialized message which is dispatched to the RPC handler in the daemon process.
+from the host processes. The host processes use ZeroMQ to send requests to the daemon process. Each request is
+serialized using [FlatBuffers](https://flatbuffers.dev/), which provides zero-copy deserialization, schema evolution,
+and language interoperability for building polyglot clients.
 
 mooR uses a simple request-response model for RPC. The host process sends a request, and the daemon process sends a
 response.

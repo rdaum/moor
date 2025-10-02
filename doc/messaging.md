@@ -121,6 +121,29 @@ Clients are user connections, managed by hosts:
 - They send commands to be executed
 - They receive narrative and system events from the daemon
 
+## Serialization
+
+All RPC messages in the mooR messaging layer are serialized using
+[FlatBuffers](https://flatbuffers.dev/). FlatBuffers provides several key benefits for the mooR
+architecture:
+
+- **Zero-copy deserialization**: Messages can be read directly from network buffers without parsing,
+  improving performance
+- **Schema evolution**: Fields can be added or deprecated while maintaining backward/forward
+  compatibility
+- **Language interoperability**: Generated bindings for multiple languages enable building clients
+  in languages other than Rust (C++, Python, JavaScript, etc.)
+- **Efficient random access**: Specific fields can be accessed without deserializing the entire
+  message
+
+The FlatBuffer schemas are located in `crates/common/schema/` and include:
+
+- `common.fbs`: Core types (Var, Obj, Symbol, UUID, errors, events)
+- `moor_rpc.fbs`: RPC message types for all communication
+- `db.fbs`: Database persistence types
+
+For more details, see `crates/common/schema/README.md`.
+
 ## Communication Protocols
 
 The messaging layer primarily uses ZeroMQ (zmq) for inter-process communication through:
