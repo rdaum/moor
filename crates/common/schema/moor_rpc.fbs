@@ -875,10 +875,27 @@ table WorkerAck {
 }
 
 table WorkerRejected {
+    reason: string;
 }
 
 table WorkerAttached {
     token: WorkerToken (required);
+    worker_id: MoorCommon.Uuid (required);
+}
+
+table WorkerAuthFailed {
+    reason: string (required);
+}
+
+table WorkerInvalidPayload {
+    reason: string (required);
+}
+
+table WorkerUnknownRequest {
+    request_id: MoorCommon.Uuid (required);
+}
+
+table WorkerNotRegistered {
     worker_id: MoorCommon.Uuid (required);
 }
 

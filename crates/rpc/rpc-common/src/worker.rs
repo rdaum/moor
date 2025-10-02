@@ -17,7 +17,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DaemonToWorkerReply {
     Ack,
-    Rejected,
+    Rejected(String),
     /// Let the worker know that it is attached to the daemon.
     Attached(WorkerToken, Uuid),
     AuthFailed(String),

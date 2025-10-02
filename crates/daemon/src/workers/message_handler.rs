@@ -20,9 +20,10 @@ use moor_var::{Obj, Symbol, Var};
 use planus::Builder;
 use rpc_common::{
     MOOR_WORKER_TOKEN_FOOTER, RpcMessageError, WORKER_BROADCAST_TOPIC, WorkerToken,
-    mk_ping_workers_msg, mk_worker_ack_reply, mk_worker_attached_reply, mk_worker_rejected_reply,
-    mk_worker_request_msg, var_from_flatbuffer_bytes, var_to_flatbuffer_bytes,
-    worker_error_from_flatbuffer_struct,
+    mk_ping_workers_msg, mk_worker_ack_reply, mk_worker_attached_reply,
+    mk_worker_auth_failed_reply, mk_worker_invalid_payload_reply, mk_worker_not_registered_reply,
+    mk_worker_request_msg, mk_worker_unknown_request_reply, symbol_from_ref, uuid_from_ref,
+    var_from_ref, var_to_flatbuffer_bytes, worker_error_from_flatbuffer_struct,
 };
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPublicKey, Public, V4};
 use std::{
@@ -107,42 +108,6 @@ impl WorkersMessageHandlerImpl {
             workers_publish,
         })
     }
-
-    fn validate_worker_token(&self, token: &WorkerToken) -> Result<Uuid, RpcMessageError> {
-        // Check cache first
-        {
-            let worker_tokens = self.token_cache.read().unwrap();
-            if let Some((t, worker_id)) = worker_tokens.get(token)
-                && t.elapsed().as_secs() <= 60
-            {
-                return Ok(*worker_id);
-            }
-        }
-
-        let pk: PasetoAsymmetricPublicKey<V4, Public> =
-            PasetoAsymmetricPublicKey::from(&self.public_key);
-        let worker_id = Paseto::<V4, Public>::try_verify(
-            token.0.as_str(),
-            &pk,
-            Footer::from(MOOR_WORKER_TOKEN_FOOTER),
-            None,
-        )
-        .map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
-            RpcMessageError::PermissionDenied
-        })?;
-
-        let worker_id = Uuid::parse_str(worker_id.as_str()).map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
-            RpcMessageError::PermissionDenied
-        })?;
-
-        // Cache the result
-        let mut tokens = self.token_cache.write().unwrap();
-        tokens.insert(token.clone(), (Instant::now(), worker_id));
-
-        Ok(worker_id)
-    }
 }
 
 impl WorkersMessageHandler for WorkersMessageHandlerImpl {
@@ -205,7 +170,12 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
             moor_rpc::WorkerToDaemonMessageUnionRef::RequestError(error) => {
                 self.handle_request_error(worker_id, error)
             }
-        }
+        };
+
+        result.unwrap_or_else(|e| {
+            error!("Error handling worker message: {}", e);
+            mk_worker_invalid_payload_reply(e)
+        })
     }
 
     fn check_expired_workers(&self) {
@@ -378,5 +348,240 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 },
             )
             .collect()
+    }
+}
+
+/// Helper to safely extract WorkerToken from flatbuffer
+fn extract_worker_token(
+    token_ref: Result<moor_rpc::WorkerTokenRef, planus::Error>,
+) -> Result<WorkerToken, String> {
+    let token = token_ref.map_err(|_| "Failed to read token field")?;
+    let token_str = token.token().map_err(|_| "Failed to read token string")?;
+    Ok(WorkerToken(token_str.to_owned()))
+}
+
+/// Helper to extract WorkerError from flatbuffer
+fn extract_worker_error(
+    error_ref: Result<moor_rpc::WorkerErrorRef, planus::Error>,
+) -> Result<WorkerError, String> {
+    let error = error_ref.map_err(|_| "Failed to read error field".to_string())?;
+    let error_obj = moor_rpc::WorkerError::try_from(error)
+        .map_err(|_| "Failed to convert error reference".to_string())?;
+    worker_error_from_flatbuffer_struct(&error_obj)
+        .map_err(|e| format!("Failed to deserialize error: {}", e))
+}
+
+impl WorkersMessageHandlerImpl {
+    fn validate_worker_token(&self, token: &WorkerToken) -> Result<Uuid, RpcMessageError> {
+        // Check cache first
+        {
+            let worker_tokens = self.token_cache.read().unwrap();
+            if let Some((t, worker_id)) = worker_tokens.get(token)
+                && t.elapsed().as_secs() <= 60
+            {
+                return Ok(*worker_id);
+            }
+        }
+
+        let pk: PasetoAsymmetricPublicKey<V4, Public> =
+            PasetoAsymmetricPublicKey::from(&self.public_key);
+        let worker_id = Paseto::<V4, Public>::try_verify(
+            token.0.as_str(),
+            &pk,
+            Footer::from(MOOR_WORKER_TOKEN_FOOTER),
+            None,
+        )
+        .map_err(|e| {
+            warn!(error = ?e, "Unable to parse/validate token");
+            RpcMessageError::PermissionDenied
+        })?;
+
+        let worker_id = Uuid::parse_str(worker_id.as_str()).map_err(|e| {
+            warn!(error = ?e, "Unable to parse/validate token");
+            RpcMessageError::PermissionDenied
+        })?;
+
+        // Cache the result
+        let mut tokens = self.token_cache.write().unwrap();
+        tokens.insert(token.clone(), (Instant::now(), worker_id));
+
+        Ok(worker_id)
+    }
+
+    /// Handle AttachWorker message
+    fn handle_attach_worker(
+        &self,
+        worker_id: Uuid,
+        attach: moor_rpc::AttachWorkerRef,
+    ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
+        let token = extract_worker_token(attach.token())?;
+        let worker_type = attach
+            .worker_type()
+            .map_err(|e| e.to_string())
+            .and_then(symbol_from_ref)?;
+
+        let mut workers = self.workers.write().unwrap();
+        workers.insert(
+            worker_id,
+            Worker {
+                token: token.clone(),
+                last_ping_time: Instant::now(),
+                worker_type,
+                id: worker_id,
+                requests: vec![],
+            },
+        );
+        info!("Worker {} of type {} attached", worker_id, worker_type);
+
+        Ok(mk_worker_attached_reply(&token, worker_id))
+    }
+
+    /// Handle WorkerPong message
+    fn handle_worker_pong(
+        &self,
+        worker_id: Uuid,
+        pong: moor_rpc::WorkerPongRef,
+    ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
+        let token = extract_worker_token(pong.token())?;
+        let worker_type = pong
+            .worker_type()
+            .map_err(|e| e.to_string())
+            .and_then(symbol_from_ref)?;
+
+        let mut workers = self.workers.write().unwrap();
+        if let Some(worker) = workers.get_mut(&worker_id) {
+            worker.last_ping_time = Instant::now();
+            Ok(mk_worker_ack_reply())
+        } else {
+            warn!("Received pong from unknown or old worker (did we restart?); re-establishing...");
+            workers.insert(
+                worker_id,
+                Worker {
+                    token: token.clone(),
+                    last_ping_time: Instant::now(),
+                    worker_type,
+                    id: worker_id,
+                    requests: vec![],
+                },
+            );
+            info!("Worker {} of type {} re-attached", worker_id, worker_type);
+
+            Ok(mk_worker_attached_reply(&token, worker_id))
+        }
+    }
+
+    /// Handle DetachWorker message
+    fn handle_detach_worker(
+        &self,
+        worker_id: Uuid,
+    ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
+        let mut workers = self.workers.write().unwrap();
+        if let Some(worker) = workers.remove(&worker_id) {
+            for (id, _, _) in worker.requests {
+                self.scheduler_send
+                    .send(WorkerResponse::Error {
+                        request_id: id,
+                        error: WorkerError::WorkerDetached(format!(
+                            "{} worker {} detached",
+                            worker.worker_type, worker_id
+                        )),
+                    })
+                    .ok();
+            }
+        } else {
+            error!("Received detach from unknown or old worker");
+        }
+
+        Ok(mk_worker_ack_reply())
+    }
+
+    /// Handle RequestResult message
+    fn handle_request_result(
+        &self,
+        result: moor_rpc::RequestResultRef,
+    ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
+        let token = extract_worker_token(result.token())?;
+        let request_id = result
+            .id()
+            .map_err(|e| e.to_string())
+            .and_then(uuid_from_ref)?;
+        let worker_id = self
+            .validate_worker_token(&token)
+            .map_err(|_| "Unable to validate worker token".to_string())?;
+
+        let result_var = result
+            .result()
+            .map_err(|e| e.to_string())
+            .and_then(var_from_ref)?;
+
+        let mut workers = self.workers.write().unwrap();
+        let Some(worker) = workers.get_mut(&worker_id) else {
+            error!(
+                "Received result from unknown or old worker ({}), ignoring",
+                worker_id
+            );
+            return Ok(mk_worker_not_registered_reply(worker_id));
+        };
+
+        let found_request_idx = worker
+            .requests
+            .iter()
+            .position(|(pending_request_id, _, _)| request_id == *pending_request_id);
+
+        let Some(idx) = found_request_idx else {
+            error!("Received result from unknown or old request");
+            return Ok(mk_worker_unknown_request_reply(request_id));
+        };
+
+        worker.requests.remove(idx);
+
+        // Send back the result
+        self.scheduler_send
+            .send(WorkerResponse::Response {
+                request_id,
+                response: result_var,
+            })
+            .ok();
+        Ok(mk_worker_ack_reply())
+    }
+
+    /// Handle RequestError message
+    fn handle_request_error(
+        &self,
+        worker_id: Uuid,
+        error: moor_rpc::RequestErrorRef,
+    ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
+        let request_id = error
+            .id()
+            .map_err(|e| e.to_string())
+            .and_then(uuid_from_ref)?;
+        let worker_error = extract_worker_error(error.error())?;
+
+        let mut workers = self.workers.write().unwrap();
+        let Some(worker) = workers.get_mut(&worker_id) else {
+            error!("Received error from unknown or old worker");
+            return Ok(mk_worker_not_registered_reply(worker_id));
+        };
+
+        // Search for the request corresponding to the given request_id
+        let found_request_idx = worker
+            .requests
+            .iter()
+            .position(|(worker_request_id, _, _)| request_id == *worker_request_id);
+
+        let Some(idx) = found_request_idx else {
+            error!("Received error for an unknown or old request");
+            return Ok(mk_worker_unknown_request_reply(request_id));
+        };
+
+        worker.requests.remove(idx);
+
+        self.scheduler_send
+            .send(WorkerResponse::Error {
+                request_id,
+                error: worker_error,
+            })
+            .ok();
+        Ok(mk_worker_ack_reply())
     }
 }

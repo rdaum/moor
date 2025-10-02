@@ -83,9 +83,57 @@ pub fn mk_worker_ack_reply() -> rpc::DaemonToWorkerReply {
 
 /// Build a WorkerRejected reply
 #[inline]
-pub fn mk_worker_rejected_reply() -> rpc::DaemonToWorkerReply {
+pub fn mk_worker_rejected_reply(reason: impl Into<String>) -> rpc::DaemonToWorkerReply {
     rpc::DaemonToWorkerReply {
-        reply: rpc::DaemonToWorkerReplyUnion::WorkerRejected(Box::new(rpc::WorkerRejected {})),
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerRejected(Box::new(rpc::WorkerRejected {
+            reason: Some(reason.into()),
+        })),
+    }
+}
+
+/// Build a WorkerAuthFailed reply
+#[inline]
+pub fn mk_worker_auth_failed_reply(reason: impl Into<String>) -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerAuthFailed(Box::new(rpc::WorkerAuthFailed {
+            reason: reason.into(),
+        })),
+    }
+}
+
+/// Build a WorkerInvalidPayload reply
+#[inline]
+pub fn mk_worker_invalid_payload_reply(reason: impl Into<String>) -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerInvalidPayload(Box::new(
+            rpc::WorkerInvalidPayload {
+                reason: reason.into(),
+            },
+        )),
+    }
+}
+
+/// Build a WorkerUnknownRequest reply
+#[inline]
+pub fn mk_worker_unknown_request_reply(request_id: Uuid) -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerUnknownRequest(Box::new(
+            rpc::WorkerUnknownRequest {
+                request_id: uuid_fb(request_id),
+            },
+        )),
+    }
+}
+
+/// Build a WorkerNotRegistered reply
+#[inline]
+pub fn mk_worker_not_registered_reply(worker_id: Uuid) -> rpc::DaemonToWorkerReply {
+    rpc::DaemonToWorkerReply {
+        reply: rpc::DaemonToWorkerReplyUnion::WorkerNotRegistered(Box::new(
+            rpc::WorkerNotRegistered {
+                worker_id: uuid_fb(worker_id),
+            },
+        )),
     }
 }
 

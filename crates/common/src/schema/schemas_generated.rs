@@ -18,19 +18,19 @@ const _: () = ::planus::check_version_compatibility("planus-1.2.0");
 /// The root namespace
 ///
 /// Generated from these locations:
-/// * File `all_schemas.fbs`
+/// * File `crates/common/schema/all_schemas.fbs`
 #[no_implicit_prelude]
 #[allow(dead_code, clippy::needless_lifetimes)]
 mod root {
     /// The namespace `MoorCommon`
     ///
     /// Generated from these locations:
-    /// * File `common.fbs`
+    /// * File `crates/common/schema/common.fbs`
     pub mod moor_common {
         /// The table `VarBytes` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VarBytes` in the file `common.fbs:28`
+        /// * Table `VarBytes` in the file `crates/common/schema/common.fbs:28`
         #[derive(
             Clone,
             Debug,
@@ -279,7 +279,7 @@ mod root {
         /// The table `Symbol` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Symbol` in the file `common.fbs:32`
+        /// * Table `Symbol` in the file `crates/common/schema/common.fbs:32`
         #[derive(
             Clone,
             Debug,
@@ -528,7 +528,7 @@ mod root {
         /// The table `Uuid` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Uuid` in the file `common.fbs:36`
+        /// * Table `Uuid` in the file `crates/common/schema/common.fbs:36`
         #[derive(
             Clone,
             Debug,
@@ -777,7 +777,7 @@ mod root {
         /// The union `ObjUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `ObjUnion` in the file `common.fbs:44`
+        /// * Union `ObjUnion` in the file `crates/common/schema/common.fbs:44`
         #[derive(
             Clone,
             Debug,
@@ -1033,7 +1033,7 @@ mod root {
         /// The table `ObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjId` in the file `common.fbs:50`
+        /// * Table `ObjId` in the file `crates/common/schema/common.fbs:50`
         #[derive(
             Clone,
             Debug,
@@ -1291,7 +1291,7 @@ mod root {
         /// The table `UuObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UuObjId` in the file `common.fbs:54`
+        /// * Table `UuObjId` in the file `crates/common/schema/common.fbs:54`
         #[derive(
             Clone,
             Debug,
@@ -1553,7 +1553,7 @@ mod root {
         /// The table `AnonymousObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AnonymousObjId` in the file `common.fbs:59`
+        /// * Table `AnonymousObjId` in the file `crates/common/schema/common.fbs:59`
         #[derive(
             Clone,
             Debug,
@@ -1824,7 +1824,7 @@ mod root {
         /// The table `Obj` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Obj` in the file `common.fbs:64`
+        /// * Table `Obj` in the file `crates/common/schema/common.fbs:64`
         #[derive(
             Clone,
             Debug,
@@ -2064,7 +2064,7 @@ mod root {
         /// The enum `ErrorCode` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Enum `ErrorCode` in the file `common.fbs:72`
+        /// * Enum `ErrorCode` in the file `crates/common/schema/common.fbs:72`
         #[derive(
             Copy,
             Clone,
@@ -2326,7 +2326,7 @@ mod root {
         /// The table `Error` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Error` in the file `common.fbs:95`
+        /// * Table `Error` in the file `crates/common/schema/common.fbs:95`
         #[derive(
             Clone,
             Debug,
@@ -2753,7 +2753,7 @@ mod root {
         /// The table `NarrativeEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `NarrativeEvent` in the file `common.fbs:106`
+        /// * Table `NarrativeEvent` in the file `crates/common/schema/common.fbs:106`
         #[derive(
             Clone,
             Debug,
@@ -3122,7 +3122,7 @@ mod root {
         /// The union `EventUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `EventUnion` in the file `common.fbs:113`
+        /// * Union `EventUnion` in the file `crates/common/schema/common.fbs:113`
         #[derive(
             Clone,
             Debug,
@@ -3459,7 +3459,7 @@ mod root {
         /// The table `NotifyEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `NotifyEvent` in the file `common.fbs:120`
+        /// * Table `NotifyEvent` in the file `crates/common/schema/common.fbs:120`
         #[derive(
             Clone,
             Debug,
@@ -3881,7 +3881,7 @@ mod root {
         /// The table `PresentEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PresentEvent` in the file `common.fbs:127`
+        /// * Table `PresentEvent` in the file `crates/common/schema/common.fbs:127`
         #[derive(
             Clone,
             Debug,
@@ -4137,7 +4137,7 @@ mod root {
         /// The table `UnpresentEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnpresentEvent` in the file `common.fbs:131`
+        /// * Table `UnpresentEvent` in the file `crates/common/schema/common.fbs:131`
         #[derive(
             Clone,
             Debug,
@@ -4392,7 +4392,7 @@ mod root {
         /// The table `TracebackEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `TracebackEvent` in the file `common.fbs:135`
+        /// * Table `TracebackEvent` in the file `crates/common/schema/common.fbs:135`
         #[derive(
             Clone,
             Debug,
@@ -4648,7 +4648,7 @@ mod root {
         /// The table `Event` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Event` in the file `common.fbs:139`
+        /// * Table `Event` in the file `crates/common/schema/common.fbs:139`
         #[derive(
             Clone,
             Debug,
@@ -4890,7 +4890,7 @@ mod root {
         /// The table `Presentation` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Presentation` in the file `common.fbs:143`
+        /// * Table `Presentation` in the file `crates/common/schema/common.fbs:143`
         #[derive(
             Clone,
             Debug,
@@ -5287,7 +5287,7 @@ mod root {
         /// The table `PresentationAttribute` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PresentationAttribute` in the file `common.fbs:151`
+        /// * Table `PresentationAttribute` in the file `crates/common/schema/common.fbs:151`
         #[derive(
             Clone,
             Debug,
@@ -5594,7 +5594,7 @@ mod root {
         /// The table `Exception` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Exception` in the file `common.fbs:156`
+        /// * Table `Exception` in the file `crates/common/schema/common.fbs:156`
         #[derive(
             Clone,
             Debug,
@@ -5925,7 +5925,7 @@ mod root {
         /// The table `CompileContext` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `CompileContext` in the file `common.fbs:166`
+        /// * Table `CompileContext` in the file `crates/common/schema/common.fbs:166`
         #[derive(
             Clone,
             Debug,
@@ -6227,7 +6227,7 @@ mod root {
         /// The table `StringLexError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `StringLexError` in the file `common.fbs:171`
+        /// * Table `StringLexError` in the file `crates/common/schema/common.fbs:171`
         #[derive(
             Clone,
             Debug,
@@ -6517,7 +6517,7 @@ mod root {
         /// The table `ParseError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ParseError` in the file `common.fbs:176`
+        /// * Table `ParseError` in the file `crates/common/schema/common.fbs:176`
         #[derive(
             Clone,
             Debug,
@@ -6981,7 +6981,7 @@ mod root {
         /// The table `UnknownBuiltinFunction` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownBuiltinFunction` in the file `common.fbs:185`
+        /// * Table `UnknownBuiltinFunction` in the file `crates/common/schema/common.fbs:185`
         #[derive(
             Clone,
             Debug,
@@ -7293,7 +7293,7 @@ mod root {
         /// The table `UnknownTypeConstant` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownTypeConstant` in the file `common.fbs:190`
+        /// * Table `UnknownTypeConstant` in the file `crates/common/schema/common.fbs:190`
         #[derive(
             Clone,
             Debug,
@@ -7599,7 +7599,7 @@ mod root {
         /// The table `UnknownLoopLabel` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownLoopLabel` in the file `common.fbs:195`
+        /// * Table `UnknownLoopLabel` in the file `crates/common/schema/common.fbs:195`
         #[derive(
             Clone,
             Debug,
@@ -7905,7 +7905,7 @@ mod root {
         /// The table `DuplicateVariable` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVariable` in the file `common.fbs:200`
+        /// * Table `DuplicateVariable` in the file `crates/common/schema/common.fbs:200`
         #[derive(
             Clone,
             Debug,
@@ -8213,7 +8213,7 @@ mod root {
         /// The table `AssignToConst` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AssignToConst` in the file `common.fbs:205`
+        /// * Table `AssignToConst` in the file `crates/common/schema/common.fbs:205`
         #[derive(
             Clone,
             Debug,
@@ -8505,7 +8505,7 @@ mod root {
         /// The table `DisabledFeature` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DisabledFeature` in the file `common.fbs:210`
+        /// * Table `DisabledFeature` in the file `crates/common/schema/common.fbs:210`
         #[derive(
             Clone,
             Debug,
@@ -8811,7 +8811,7 @@ mod root {
         /// The table `BadSlotName` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `BadSlotName` in the file `common.fbs:215`
+        /// * Table `BadSlotName` in the file `crates/common/schema/common.fbs:215`
         #[derive(
             Clone,
             Debug,
@@ -9101,7 +9101,7 @@ mod root {
         /// The table `InvalidAssignment` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidAssignment` in the file `common.fbs:220`
+        /// * Table `InvalidAssignment` in the file `crates/common/schema/common.fbs:220`
         #[derive(
             Clone,
             Debug,
@@ -9373,7 +9373,7 @@ mod root {
         /// The union `CompileErrorUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `CompileErrorUnion` in the file `common.fbs:224`
+        /// * Union `CompileErrorUnion` in the file `crates/common/schema/common.fbs:224`
         #[derive(
             Clone,
             Debug,
@@ -10093,7 +10093,7 @@ mod root {
         /// The table `CompileError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `CompileError` in the file `common.fbs:237`
+        /// * Table `CompileError` in the file `crates/common/schema/common.fbs:237`
         #[derive(
             Clone,
             Debug,
@@ -10340,7 +10340,7 @@ mod root {
         /// The union `ObjectRefUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `ObjectRefUnion` in the file `common.fbs:245`
+        /// * Union `ObjectRefUnion` in the file `crates/common/schema/common.fbs:245`
         #[derive(
             Clone,
             Debug,
@@ -10623,7 +10623,7 @@ mod root {
         /// The table `ObjectRefId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefId` in the file `common.fbs:251`
+        /// * Table `ObjectRefId` in the file `crates/common/schema/common.fbs:251`
         #[derive(
             Clone,
             Debug,
@@ -10869,7 +10869,7 @@ mod root {
         /// The table `ObjectRefSysObj` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefSysObj` in the file `common.fbs:255`
+        /// * Table `ObjectRefSysObj` in the file `crates/common/schema/common.fbs:255`
         #[derive(
             Clone,
             Debug,
@@ -11143,7 +11143,7 @@ mod root {
         /// The table `ObjectRefMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefMatch` in the file `common.fbs:259`
+        /// * Table `ObjectRefMatch` in the file `crates/common/schema/common.fbs:259`
         #[derive(
             Clone,
             Debug,
@@ -11397,7 +11397,7 @@ mod root {
         /// The table `ObjectRef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRef` in the file `common.fbs:263`
+        /// * Table `ObjectRef` in the file `crates/common/schema/common.fbs:263`
         #[derive(
             Clone,
             Debug,
@@ -11643,7 +11643,7 @@ mod root {
         /// The union `WorldStateErrorUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `WorldStateErrorUnion` in the file `common.fbs:271`
+        /// * Union `WorldStateErrorUnion` in the file `crates/common/schema/common.fbs:271`
         #[derive(
             Clone,
             Debug,
@@ -12989,7 +12989,7 @@ mod root {
         /// The table `ObjectNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectNotFound` in the file `common.fbs:294`
+        /// * Table `ObjectNotFound` in the file `crates/common/schema/common.fbs:294`
         #[derive(
             Clone,
             Debug,
@@ -13236,7 +13236,7 @@ mod root {
         /// The table `ObjectAlreadyExists` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectAlreadyExists` in the file `common.fbs:298`
+        /// * Table `ObjectAlreadyExists` in the file `crates/common/schema/common.fbs:298`
         #[derive(
             Clone,
             Debug,
@@ -13499,7 +13499,7 @@ mod root {
         /// The table `RecursiveMove` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `RecursiveMove` in the file `common.fbs:302`
+        /// * Table `RecursiveMove` in the file `crates/common/schema/common.fbs:302`
         #[derive(
             Clone,
             Debug,
@@ -13781,7 +13781,7 @@ mod root {
         /// The table `ObjectPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectPermissionDenied` in the file `common.fbs:307`
+        /// * Table `ObjectPermissionDenied` in the file `crates/common/schema/common.fbs:307`
         #[derive(
             Clone,
             Debug,
@@ -14015,7 +14015,7 @@ mod root {
         /// The table `PropertyNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyNotFound` in the file `common.fbs:310`
+        /// * Table `PropertyNotFound` in the file `crates/common/schema/common.fbs:310`
         #[derive(
             Clone,
             Debug,
@@ -14311,7 +14311,7 @@ mod root {
         /// The table `PropertyPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyPermissionDenied` in the file `common.fbs:315`
+        /// * Table `PropertyPermissionDenied` in the file `crates/common/schema/common.fbs:315`
         #[derive(
             Clone,
             Debug,
@@ -14549,7 +14549,7 @@ mod root {
         /// The table `PropertyDefinitionNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyDefinitionNotFound` in the file `common.fbs:318`
+        /// * Table `PropertyDefinitionNotFound` in the file `crates/common/schema/common.fbs:318`
         #[derive(
             Clone,
             Debug,
@@ -14860,7 +14860,7 @@ mod root {
         /// The table `DuplicatePropertyDefinition` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicatePropertyDefinition` in the file `common.fbs:323`
+        /// * Table `DuplicatePropertyDefinition` in the file `crates/common/schema/common.fbs:323`
         #[derive(
             Clone,
             Debug,
@@ -15171,7 +15171,7 @@ mod root {
         /// The table `ChparentPropertyNameConflict` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ChparentPropertyNameConflict` in the file `common.fbs:328`
+        /// * Table `ChparentPropertyNameConflict` in the file `crates/common/schema/common.fbs:328`
         #[derive(
             Clone,
             Debug,
@@ -15525,7 +15525,7 @@ mod root {
         /// The table `PropertyTypeMismatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyTypeMismatch` in the file `common.fbs:334`
+        /// * Table `PropertyTypeMismatch` in the file `crates/common/schema/common.fbs:334`
         #[derive(
             Clone,
             Debug,
@@ -15753,7 +15753,7 @@ mod root {
         /// The table `VerbNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbNotFound` in the file `common.fbs:337`
+        /// * Table `VerbNotFound` in the file `crates/common/schema/common.fbs:337`
         #[derive(
             Clone,
             Debug,
@@ -16033,7 +16033,7 @@ mod root {
         /// The table `InvalidVerb` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidVerb` in the file `common.fbs:342`
+        /// * Table `InvalidVerb` in the file `crates/common/schema/common.fbs:342`
         #[derive(
             Clone,
             Debug,
@@ -16295,7 +16295,7 @@ mod root {
         /// The table `VerbDecodeError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDecodeError` in the file `common.fbs:346`
+        /// * Table `VerbDecodeError` in the file `crates/common/schema/common.fbs:346`
         #[derive(
             Clone,
             Debug,
@@ -16593,7 +16593,7 @@ mod root {
         /// The table `VerbPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbPermissionDenied` in the file `common.fbs:351`
+        /// * Table `VerbPermissionDenied` in the file `crates/common/schema/common.fbs:351`
         #[derive(
             Clone,
             Debug,
@@ -16821,7 +16821,7 @@ mod root {
         /// The table `DuplicateVerb` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVerb` in the file `common.fbs:354`
+        /// * Table `DuplicateVerb` in the file `crates/common/schema/common.fbs:354`
         #[derive(
             Clone,
             Debug,
@@ -17103,7 +17103,7 @@ mod root {
         /// The table `FailedMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `FailedMatch` in the file `common.fbs:359`
+        /// * Table `FailedMatch` in the file `crates/common/schema/common.fbs:359`
         #[derive(
             Clone,
             Debug,
@@ -17356,7 +17356,7 @@ mod root {
         /// The table `AmbiguousMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AmbiguousMatch` in the file `common.fbs:363`
+        /// * Table `AmbiguousMatch` in the file `crates/common/schema/common.fbs:363`
         #[derive(
             Clone,
             Debug,
@@ -17610,7 +17610,7 @@ mod root {
         /// The table `InvalidRenumber` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidRenumber` in the file `common.fbs:367`
+        /// * Table `InvalidRenumber` in the file `crates/common/schema/common.fbs:367`
         #[derive(
             Clone,
             Debug,
@@ -17879,7 +17879,7 @@ mod root {
         /// The table `WorldStateDatabaseError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `WorldStateDatabaseError` in the file `common.fbs:371`
+        /// * Table `WorldStateDatabaseError` in the file `crates/common/schema/common.fbs:371`
         #[derive(
             Clone,
             Debug,
@@ -18159,7 +18159,7 @@ mod root {
         /// The table `RollbackRetry` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `RollbackRetry` in the file `common.fbs:375`
+        /// * Table `RollbackRetry` in the file `crates/common/schema/common.fbs:375`
         #[derive(
             Clone,
             Debug,
@@ -18370,7 +18370,7 @@ mod root {
         /// The table `WorldStateError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `WorldStateError` in the file `common.fbs:378`
+        /// * Table `WorldStateError` in the file `crates/common/schema/common.fbs:378`
         #[derive(
             Clone,
             Debug,
@@ -18632,7 +18632,7 @@ mod root {
         /// The table `PropInfo` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropInfo` in the file `common.fbs:386`
+        /// * Table `PropInfo` in the file `crates/common/schema/common.fbs:386`
         #[derive(
             Clone,
             Debug,
@@ -19111,7 +19111,7 @@ mod root {
         /// The table `VerbInfo` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbInfo` in the file `common.fbs:396`
+        /// * Table `VerbInfo` in the file `crates/common/schema/common.fbs:396`
         #[derive(
             Clone,
             Debug,
@@ -19639,7 +19639,7 @@ mod root {
         /// The enum `ArgSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Enum `ArgSpec` in the file `common.fbs:412`
+        /// * Enum `ArgSpec` in the file `crates/common/schema/common.fbs:412`
         #[derive(
             Copy,
             Clone,
@@ -19809,7 +19809,7 @@ mod root {
         /// The table `PrepSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PrepSpec` in the file `common.fbs:420`
+        /// * Table `PrepSpec` in the file `crates/common/schema/common.fbs:420`
         #[derive(
             Clone,
             Debug,
@@ -20067,7 +20067,7 @@ mod root {
         /// The table `VerbArgsSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbArgsSpec` in the file `common.fbs:426`
+        /// * Table `VerbArgsSpec` in the file `crates/common/schema/common.fbs:426`
         #[derive(
             Clone,
             Debug,
@@ -20427,7 +20427,7 @@ mod root {
         /// The table `VerbDef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDef` in the file `common.fbs:433`
+        /// * Table `VerbDef` in the file `crates/common/schema/common.fbs:433`
         #[derive(
             Clone,
             Debug,
@@ -20854,7 +20854,7 @@ mod root {
         /// The table `PropDef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropDef` in the file `common.fbs:443`
+        /// * Table `PropDef` in the file `crates/common/schema/common.fbs:443`
         #[derive(
             Clone,
             Debug,
@@ -21202,7 +21202,7 @@ mod root {
         /// The table `ObjAttrs` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjAttrs` in the file `common.fbs:451`
+        /// * Table `ObjAttrs` in the file `crates/common/schema/common.fbs:451`
         #[derive(
             Clone,
             Debug,
@@ -21605,12 +21605,12 @@ mod root {
     /// The namespace `MoorRpc`
     ///
     /// Generated from these locations:
-    /// * File `moor_rpc.fbs`
+    /// * File `crates/common/schema/moor_rpc.fbs`
     pub mod moor_rpc {
         /// The table `HostToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostToken` in the file `moor_rpc.fbs:24`
+        /// * Table `HostToken` in the file `crates/common/schema/moor_rpc.fbs:24`
         #[derive(
             Clone,
             Debug,
@@ -21863,7 +21863,7 @@ mod root {
         /// The table `ClientToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientToken` in the file `moor_rpc.fbs:28`
+        /// * Table `ClientToken` in the file `crates/common/schema/moor_rpc.fbs:28`
         #[derive(
             Clone,
             Debug,
@@ -22116,7 +22116,7 @@ mod root {
         /// The table `AuthToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AuthToken` in the file `moor_rpc.fbs:32`
+        /// * Table `AuthToken` in the file `crates/common/schema/moor_rpc.fbs:32`
         #[derive(
             Clone,
             Debug,
@@ -22369,7 +22369,7 @@ mod root {
         /// The table `WorkerToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerToken` in the file `moor_rpc.fbs:36`
+        /// * Table `WorkerToken` in the file `crates/common/schema/moor_rpc.fbs:36`
         #[derive(
             Clone,
             Debug,
@@ -22622,7 +22622,7 @@ mod root {
         /// The enum `AbortLimitReason` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `AbortLimitReason` in the file `moor_rpc.fbs:44`
+        /// * Enum `AbortLimitReason` in the file `crates/common/schema/moor_rpc.fbs:44`
         #[derive(
             Copy,
             Clone,
@@ -22791,7 +22791,7 @@ mod root {
         /// The table `AbortLimit` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AbortLimit` in the file `moor_rpc.fbs:49`
+        /// * Table `AbortLimit` in the file `crates/common/schema/moor_rpc.fbs:49`
         #[derive(
             Clone,
             Debug,
@@ -23156,7 +23156,7 @@ mod root {
         /// The union `SchedulerErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `SchedulerErrorUnion` in the file `moor_rpc.fbs:55`
+        /// * Union `SchedulerErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:55`
         #[derive(
             Clone,
             Debug,
@@ -24197,7 +24197,7 @@ mod root {
         /// The table `SchedulerNotResponding` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SchedulerNotResponding` in the file `moor_rpc.fbs:73`
+        /// * Table `SchedulerNotResponding` in the file `crates/common/schema/moor_rpc.fbs:73`
         #[derive(
             Clone,
             Debug,
@@ -24431,7 +24431,7 @@ mod root {
         /// The table `TaskNotFound` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskNotFound` in the file `moor_rpc.fbs:76`
+        /// * Table `TaskNotFound` in the file `crates/common/schema/moor_rpc.fbs:76`
         #[derive(
             Clone,
             Debug,
@@ -24696,7 +24696,7 @@ mod root {
         /// The table `InputRequestNotFound` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InputRequestNotFound` in the file `moor_rpc.fbs:80`
+        /// * Table `InputRequestNotFound` in the file `crates/common/schema/moor_rpc.fbs:80`
         #[derive(
             Clone,
             Debug,
@@ -24969,7 +24969,7 @@ mod root {
         /// The table `CouldNotStartTask` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CouldNotStartTask` in the file `moor_rpc.fbs:84`
+        /// * Table `CouldNotStartTask` in the file `crates/common/schema/moor_rpc.fbs:84`
         #[derive(
             Clone,
             Debug,
@@ -25197,7 +25197,7 @@ mod root {
         /// The table `CompilationError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CompilationError` in the file `moor_rpc.fbs:87`
+        /// * Table `CompilationError` in the file `crates/common/schema/moor_rpc.fbs:87`
         #[derive(
             Clone,
             Debug,
@@ -25460,7 +25460,7 @@ mod root {
         /// The table `CommandExecutionError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CommandExecutionError` in the file `moor_rpc.fbs:91`
+        /// * Table `CommandExecutionError` in the file `crates/common/schema/moor_rpc.fbs:91`
         #[derive(
             Clone,
             Debug,
@@ -25725,7 +25725,7 @@ mod root {
         /// The table `TaskAbortedLimit` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedLimit` in the file `moor_rpc.fbs:95`
+        /// * Table `TaskAbortedLimit` in the file `crates/common/schema/moor_rpc.fbs:95`
         #[derive(
             Clone,
             Debug,
@@ -25997,7 +25997,7 @@ mod root {
         /// The table `TaskAbortedError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedError` in the file `moor_rpc.fbs:99`
+        /// * Table `TaskAbortedError` in the file `crates/common/schema/moor_rpc.fbs:99`
         #[derive(
             Clone,
             Debug,
@@ -26223,7 +26223,7 @@ mod root {
         /// The table `TaskAbortedException` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedException` in the file `moor_rpc.fbs:102`
+        /// * Table `TaskAbortedException` in the file `crates/common/schema/moor_rpc.fbs:102`
         #[derive(
             Clone,
             Debug,
@@ -26496,7 +26496,7 @@ mod root {
         /// The table `TaskAbortedCancelled` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedCancelled` in the file `moor_rpc.fbs:106`
+        /// * Table `TaskAbortedCancelled` in the file `crates/common/schema/moor_rpc.fbs:106`
         #[derive(
             Clone,
             Debug,
@@ -26724,7 +26724,7 @@ mod root {
         /// The table `VerbProgramFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramFailed` in the file `moor_rpc.fbs:109`
+        /// * Table `VerbProgramFailed` in the file `crates/common/schema/moor_rpc.fbs:109`
         #[derive(
             Clone,
             Debug,
@@ -26987,7 +26987,7 @@ mod root {
         /// The table `PropertyRetrievalFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyRetrievalFailed` in the file `moor_rpc.fbs:113`
+        /// * Table `PropertyRetrievalFailed` in the file `crates/common/schema/moor_rpc.fbs:113`
         #[derive(
             Clone,
             Debug,
@@ -27263,7 +27263,7 @@ mod root {
         /// The table `VerbRetrievalFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbRetrievalFailed` in the file `moor_rpc.fbs:117`
+        /// * Table `VerbRetrievalFailed` in the file `crates/common/schema/moor_rpc.fbs:117`
         #[derive(
             Clone,
             Debug,
@@ -27529,7 +27529,7 @@ mod root {
         /// The table `ObjectResolutionFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectResolutionFailed` in the file `moor_rpc.fbs:121`
+        /// * Table `ObjectResolutionFailed` in the file `crates/common/schema/moor_rpc.fbs:121`
         #[derive(
             Clone,
             Debug,
@@ -27800,7 +27800,7 @@ mod root {
         /// The table `GarbageCollectionFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `GarbageCollectionFailed` in the file `moor_rpc.fbs:125`
+        /// * Table `GarbageCollectionFailed` in the file `crates/common/schema/moor_rpc.fbs:125`
         #[derive(
             Clone,
             Debug,
@@ -28080,7 +28080,7 @@ mod root {
         /// The table `SchedulerError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SchedulerError` in the file `moor_rpc.fbs:129`
+        /// * Table `SchedulerError` in the file `crates/common/schema/moor_rpc.fbs:129`
         #[derive(
             Clone,
             Debug,
@@ -28327,7 +28327,7 @@ mod root {
         /// The union `CommandErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `CommandErrorUnion` in the file `moor_rpc.fbs:134`
+        /// * Union `CommandErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:134`
         #[derive(
             Clone,
             Debug,
@@ -28734,7 +28734,7 @@ mod root {
         /// The table `CouldNotParseCommand` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CouldNotParseCommand` in the file `moor_rpc.fbs:142`
+        /// * Table `CouldNotParseCommand` in the file `crates/common/schema/moor_rpc.fbs:142`
         #[derive(
             Clone,
             Debug,
@@ -28962,7 +28962,7 @@ mod root {
         /// The table `NoObjectMatch` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoObjectMatch` in the file `moor_rpc.fbs:145`
+        /// * Table `NoObjectMatch` in the file `crates/common/schema/moor_rpc.fbs:145`
         #[derive(
             Clone,
             Debug,
@@ -29173,7 +29173,7 @@ mod root {
         /// The table `NoCommandMatch` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoCommandMatch` in the file `moor_rpc.fbs:148`
+        /// * Table `NoCommandMatch` in the file `crates/common/schema/moor_rpc.fbs:148`
         #[derive(
             Clone,
             Debug,
@@ -29384,7 +29384,7 @@ mod root {
         /// The table `DatabaseError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DatabaseError` in the file `moor_rpc.fbs:151`
+        /// * Table `DatabaseError` in the file `crates/common/schema/moor_rpc.fbs:151`
         #[derive(
             Clone,
             Debug,
@@ -29634,7 +29634,7 @@ mod root {
         /// The table `PermissionDenied` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PermissionDenied` in the file `moor_rpc.fbs:155`
+        /// * Table `PermissionDenied` in the file `crates/common/schema/moor_rpc.fbs:155`
         #[derive(
             Clone,
             Debug,
@@ -29860,7 +29860,7 @@ mod root {
         /// The table `CommandError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CommandError` in the file `moor_rpc.fbs:158`
+        /// * Table `CommandError` in the file `crates/common/schema/moor_rpc.fbs:158`
         #[derive(
             Clone,
             Debug,
@@ -30107,7 +30107,7 @@ mod root {
         /// The union `VerbProgramErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `VerbProgramErrorUnion` in the file `moor_rpc.fbs:163`
+        /// * Union `VerbProgramErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:163`
         #[derive(
             Clone,
             Debug,
@@ -30394,7 +30394,7 @@ mod root {
         /// The table `NoVerbToProgram` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoVerbToProgram` in the file `moor_rpc.fbs:169`
+        /// * Table `NoVerbToProgram` in the file `crates/common/schema/moor_rpc.fbs:169`
         #[derive(
             Clone,
             Debug,
@@ -30620,7 +30620,7 @@ mod root {
         /// The table `VerbCompilationError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbCompilationError` in the file `moor_rpc.fbs:172`
+        /// * Table `VerbCompilationError` in the file `crates/common/schema/moor_rpc.fbs:172`
         #[derive(
             Clone,
             Debug,
@@ -30883,7 +30883,7 @@ mod root {
         /// The table `VerbDatabaseError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDatabaseError` in the file `moor_rpc.fbs:176`
+        /// * Table `VerbDatabaseError` in the file `crates/common/schema/moor_rpc.fbs:176`
         #[derive(
             Clone,
             Debug,
@@ -31111,7 +31111,7 @@ mod root {
         /// The table `VerbProgramError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramError` in the file `moor_rpc.fbs:179`
+        /// * Table `VerbProgramError` in the file `crates/common/schema/moor_rpc.fbs:179`
         #[derive(
             Clone,
             Debug,
@@ -31374,7 +31374,7 @@ mod root {
         /// The union `WorkerErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `WorkerErrorUnion` in the file `moor_rpc.fbs:184`
+        /// * Union `WorkerErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:184`
         #[derive(
             Clone,
             Debug,
@@ -31913,7 +31913,7 @@ mod root {
         /// The table `WorkerPermissionDenied` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerPermissionDenied` in the file `moor_rpc.fbs:194`
+        /// * Table `WorkerPermissionDenied` in the file `crates/common/schema/moor_rpc.fbs:194`
         #[derive(
             Clone,
             Debug,
@@ -32189,7 +32189,7 @@ mod root {
         /// The table `WorkerInvalidRequest` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerInvalidRequest` in the file `moor_rpc.fbs:198`
+        /// * Table `WorkerInvalidRequest` in the file `crates/common/schema/moor_rpc.fbs:198`
         #[derive(
             Clone,
             Debug,
@@ -32459,7 +32459,7 @@ mod root {
         /// The table `WorkerInternalError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerInternalError` in the file `moor_rpc.fbs:202`
+        /// * Table `WorkerInternalError` in the file `crates/common/schema/moor_rpc.fbs:202`
         #[derive(
             Clone,
             Debug,
@@ -32729,7 +32729,7 @@ mod root {
         /// The table `WorkerRequestTimedOut` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRequestTimedOut` in the file `moor_rpc.fbs:206`
+        /// * Table `WorkerRequestTimedOut` in the file `crates/common/schema/moor_rpc.fbs:206`
         #[derive(
             Clone,
             Debug,
@@ -33002,7 +33002,7 @@ mod root {
         /// The table `WorkerRequestError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRequestError` in the file `moor_rpc.fbs:210`
+        /// * Table `WorkerRequestError` in the file `crates/common/schema/moor_rpc.fbs:210`
         #[derive(
             Clone,
             Debug,
@@ -33272,7 +33272,7 @@ mod root {
         /// The table `WorkerDetached` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerDetached` in the file `moor_rpc.fbs:214`
+        /// * Table `WorkerDetached` in the file `crates/common/schema/moor_rpc.fbs:214`
         #[derive(
             Clone,
             Debug,
@@ -33526,7 +33526,7 @@ mod root {
         /// The table `NoWorkerAvailable` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoWorkerAvailable` in the file `moor_rpc.fbs:218`
+        /// * Table `NoWorkerAvailable` in the file `crates/common/schema/moor_rpc.fbs:218`
         #[derive(
             Clone,
             Debug,
@@ -33799,7 +33799,7 @@ mod root {
         /// The table `WorkerError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerError` in the file `moor_rpc.fbs:222`
+        /// * Table `WorkerError` in the file `crates/common/schema/moor_rpc.fbs:222`
         #[derive(
             Clone,
             Debug,
@@ -34045,7 +34045,7 @@ mod root {
         /// The table `CompileContext` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CompileContext` in the file `moor_rpc.fbs:227`
+        /// * Table `CompileContext` in the file `crates/common/schema/moor_rpc.fbs:227`
         #[derive(
             Clone,
             Debug,
@@ -34347,7 +34347,7 @@ mod root {
         /// The table `StringLexError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `StringLexError` in the file `moor_rpc.fbs:232`
+        /// * Table `StringLexError` in the file `crates/common/schema/moor_rpc.fbs:232`
         #[derive(
             Clone,
             Debug,
@@ -34637,7 +34637,7 @@ mod root {
         /// The table `ParseError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ParseError` in the file `moor_rpc.fbs:237`
+        /// * Table `ParseError` in the file `crates/common/schema/moor_rpc.fbs:237`
         #[derive(
             Clone,
             Debug,
@@ -35101,7 +35101,7 @@ mod root {
         /// The table `UnknownBuiltinFunction` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownBuiltinFunction` in the file `moor_rpc.fbs:246`
+        /// * Table `UnknownBuiltinFunction` in the file `crates/common/schema/moor_rpc.fbs:246`
         #[derive(
             Clone,
             Debug,
@@ -35413,7 +35413,7 @@ mod root {
         /// The table `UnknownTypeConstant` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownTypeConstant` in the file `moor_rpc.fbs:251`
+        /// * Table `UnknownTypeConstant` in the file `crates/common/schema/moor_rpc.fbs:251`
         #[derive(
             Clone,
             Debug,
@@ -35719,7 +35719,7 @@ mod root {
         /// The table `UnknownLoopLabel` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownLoopLabel` in the file `moor_rpc.fbs:256`
+        /// * Table `UnknownLoopLabel` in the file `crates/common/schema/moor_rpc.fbs:256`
         #[derive(
             Clone,
             Debug,
@@ -36025,7 +36025,7 @@ mod root {
         /// The table `DuplicateVariable` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVariable` in the file `moor_rpc.fbs:261`
+        /// * Table `DuplicateVariable` in the file `crates/common/schema/moor_rpc.fbs:261`
         #[derive(
             Clone,
             Debug,
@@ -36333,7 +36333,7 @@ mod root {
         /// The table `AssignToConst` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AssignToConst` in the file `moor_rpc.fbs:266`
+        /// * Table `AssignToConst` in the file `crates/common/schema/moor_rpc.fbs:266`
         #[derive(
             Clone,
             Debug,
@@ -36625,7 +36625,7 @@ mod root {
         /// The table `DisabledFeature` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DisabledFeature` in the file `moor_rpc.fbs:271`
+        /// * Table `DisabledFeature` in the file `crates/common/schema/moor_rpc.fbs:271`
         #[derive(
             Clone,
             Debug,
@@ -36931,7 +36931,7 @@ mod root {
         /// The table `BadSlotName` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `BadSlotName` in the file `moor_rpc.fbs:276`
+        /// * Table `BadSlotName` in the file `crates/common/schema/moor_rpc.fbs:276`
         #[derive(
             Clone,
             Debug,
@@ -37221,7 +37221,7 @@ mod root {
         /// The table `InvalidAssignment` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidAssignment` in the file `moor_rpc.fbs:281`
+        /// * Table `InvalidAssignment` in the file `crates/common/schema/moor_rpc.fbs:281`
         #[derive(
             Clone,
             Debug,
@@ -37493,7 +37493,7 @@ mod root {
         /// The enum `HostType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `HostType` in the file `moor_rpc.fbs:289`
+        /// * Enum `HostType` in the file `crates/common/schema/moor_rpc.fbs:289`
         #[derive(
             Copy,
             Clone,
@@ -37662,7 +37662,7 @@ mod root {
         /// The enum `ConnectType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `ConnectType` in the file `moor_rpc.fbs:294`
+        /// * Enum `ConnectType` in the file `crates/common/schema/moor_rpc.fbs:294`
         #[derive(
             Copy,
             Clone,
@@ -37844,7 +37844,7 @@ mod root {
         /// The enum `EntityType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `EntityType` in the file `moor_rpc.fbs:301`
+        /// * Enum `EntityType` in the file `crates/common/schema/moor_rpc.fbs:301`
         #[derive(
             Copy,
             Clone,
@@ -38013,7 +38013,7 @@ mod root {
         /// The union `VerbProgramResponseUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `VerbProgramResponseUnion` in the file `moor_rpc.fbs:310`
+        /// * Union `VerbProgramResponseUnion` in the file `crates/common/schema/moor_rpc.fbs:310`
         #[derive(
             Clone,
             Debug,
@@ -38241,7 +38241,7 @@ mod root {
         /// The table `VerbProgramSuccess` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramSuccess` in the file `moor_rpc.fbs:315`
+        /// * Table `VerbProgramSuccess` in the file `crates/common/schema/moor_rpc.fbs:315`
         #[derive(
             Clone,
             Debug,
@@ -38537,7 +38537,7 @@ mod root {
         /// The table `VerbProgramFailure` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramFailure` in the file `moor_rpc.fbs:320`
+        /// * Table `VerbProgramFailure` in the file `crates/common/schema/moor_rpc.fbs:320`
         #[derive(
             Clone,
             Debug,
@@ -38800,7 +38800,7 @@ mod root {
         /// The table `VerbProgramResponse` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramResponse` in the file `moor_rpc.fbs:324`
+        /// * Table `VerbProgramResponse` in the file `crates/common/schema/moor_rpc.fbs:324`
         #[derive(
             Clone,
             Debug,
@@ -39064,7 +39064,7 @@ mod root {
         /// The table `ConnectionAttribute` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ConnectionAttribute` in the file `moor_rpc.fbs:332`
+        /// * Table `ConnectionAttribute` in the file `crates/common/schema/moor_rpc.fbs:332`
         #[derive(
             Clone,
             Debug,
@@ -39372,7 +39372,7 @@ mod root {
         /// The union `HostToDaemonMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HostToDaemonMessageUnion` in the file `moor_rpc.fbs:341`
+        /// * Union `HostToDaemonMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:341`
         #[derive(
             Clone,
             Debug,
@@ -39724,7 +39724,7 @@ mod root {
         /// The table `RegisterHost` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RegisterHost` in the file `moor_rpc.fbs:348`
+        /// * Table `RegisterHost` in the file `crates/common/schema/moor_rpc.fbs:348`
         #[derive(
             Clone,
             Debug,
@@ -40078,7 +40078,7 @@ mod root {
         /// The table `DetachHost` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DetachHost` in the file `moor_rpc.fbs:354`
+        /// * Table `DetachHost` in the file `crates/common/schema/moor_rpc.fbs:354`
         #[derive(
             Clone,
             Debug,
@@ -40289,7 +40289,7 @@ mod root {
         /// The table `RequestPerformanceCounters` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestPerformanceCounters` in the file `moor_rpc.fbs:357`
+        /// * Table `RequestPerformanceCounters` in the file `crates/common/schema/moor_rpc.fbs:357`
         #[derive(
             Clone,
             Debug,
@@ -40531,7 +40531,7 @@ mod root {
         /// The table `HostPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostPong` in the file `moor_rpc.fbs:360`
+        /// * Table `HostPong` in the file `crates/common/schema/moor_rpc.fbs:360`
         #[derive(
             Clone,
             Debug,
@@ -40878,7 +40878,7 @@ mod root {
         /// The table `Listener` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Listener` in the file `moor_rpc.fbs:366`
+        /// * Table `Listener` in the file `crates/common/schema/moor_rpc.fbs:366`
         #[derive(
             Clone,
             Debug,
@@ -41153,7 +41153,7 @@ mod root {
         /// The table `HostToDaemonMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostToDaemonMessage` in the file `moor_rpc.fbs:371`
+        /// * Table `HostToDaemonMessage` in the file `crates/common/schema/moor_rpc.fbs:371`
         #[derive(
             Clone,
             Debug,
@@ -41417,7 +41417,7 @@ mod root {
         /// The union `DaemonToHostReplyUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToHostReplyUnion` in the file `moor_rpc.fbs:379`
+        /// * Union `DaemonToHostReplyUnion` in the file `crates/common/schema/moor_rpc.fbs:379`
         #[derive(
             Clone,
             Debug,
@@ -41704,7 +41704,7 @@ mod root {
         /// The table `DaemonToHostAck` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostAck` in the file `moor_rpc.fbs:385`
+        /// * Table `DaemonToHostAck` in the file `crates/common/schema/moor_rpc.fbs:385`
         #[derive(
             Clone,
             Debug,
@@ -41930,7 +41930,7 @@ mod root {
         /// The table `DaemonToHostReject` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostReject` in the file `moor_rpc.fbs:388`
+        /// * Table `DaemonToHostReject` in the file `crates/common/schema/moor_rpc.fbs:388`
         #[derive(
             Clone,
             Debug,
@@ -42200,7 +42200,7 @@ mod root {
         /// The table `Counter` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Counter` in the file `moor_rpc.fbs:392`
+        /// * Table `Counter` in the file `crates/common/schema/moor_rpc.fbs:392`
         #[derive(
             Clone,
             Debug,
@@ -42548,7 +42548,7 @@ mod root {
         /// The table `CounterCategory` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CounterCategory` in the file `moor_rpc.fbs:398`
+        /// * Table `CounterCategory` in the file `crates/common/schema/moor_rpc.fbs:398`
         #[derive(
             Clone,
             Debug,
@@ -42859,7 +42859,7 @@ mod root {
         /// The table `DaemonToHostPerfCounters` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostPerfCounters` in the file `moor_rpc.fbs:403`
+        /// * Table `DaemonToHostPerfCounters` in the file `crates/common/schema/moor_rpc.fbs:403`
         #[derive(
             Clone,
             Debug,
@@ -43198,7 +43198,7 @@ mod root {
         /// The table `DaemonToHostReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostReply` in the file `moor_rpc.fbs:408`
+        /// * Table `DaemonToHostReply` in the file `crates/common/schema/moor_rpc.fbs:408`
         #[derive(
             Clone,
             Debug,
@@ -43462,7 +43462,7 @@ mod root {
         /// The union `HostBroadcastEventUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HostBroadcastEventUnion` in the file `moor_rpc.fbs:416`
+        /// * Union `HostBroadcastEventUnion` in the file `crates/common/schema/moor_rpc.fbs:416`
         #[derive(
             Clone,
             Debug,
@@ -43754,7 +43754,7 @@ mod root {
         /// The table `HostBroadcastListen` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastListen` in the file `moor_rpc.fbs:422`
+        /// * Table `HostBroadcastListen` in the file `crates/common/schema/moor_rpc.fbs:422`
         #[derive(
             Clone,
             Debug,
@@ -44175,7 +44175,7 @@ mod root {
         /// The table `HostBroadcastUnlisten` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastUnlisten` in the file `moor_rpc.fbs:429`
+        /// * Table `HostBroadcastUnlisten` in the file `crates/common/schema/moor_rpc.fbs:429`
         #[derive(
             Clone,
             Debug,
@@ -44517,7 +44517,7 @@ mod root {
         /// The table `HostBroadcastPingPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastPingPong` in the file `moor_rpc.fbs:434`
+        /// * Table `HostBroadcastPingPong` in the file `crates/common/schema/moor_rpc.fbs:434`
         #[derive(
             Clone,
             Debug,
@@ -44805,7 +44805,7 @@ mod root {
         /// The table `HostBroadcastEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastEvent` in the file `moor_rpc.fbs:438`
+        /// * Table `HostBroadcastEvent` in the file `crates/common/schema/moor_rpc.fbs:438`
         #[derive(
             Clone,
             Debug,
@@ -45069,7 +45069,7 @@ mod root {
         /// The union `HostClientToDaemonMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HostClientToDaemonMessageUnion` in the file `moor_rpc.fbs:446`
+        /// * Union `HostClientToDaemonMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:446`
         #[derive(
             Clone,
             Debug,
@@ -46425,7 +46425,7 @@ mod root {
         /// The table `ConnectionEstablish` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ConnectionEstablish` in the file `moor_rpc.fbs:469`
+        /// * Table `ConnectionEstablish` in the file `crates/common/schema/moor_rpc.fbs:469`
         #[derive(
             Clone,
             Debug,
@@ -46964,7 +46964,7 @@ mod root {
         /// The table `RequestSysProp` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestSysProp` in the file `moor_rpc.fbs:477`
+        /// * Table `RequestSysProp` in the file `crates/common/schema/moor_rpc.fbs:477`
         #[derive(
             Clone,
             Debug,
@@ -47279,7 +47279,7 @@ mod root {
         /// The table `LoginCommand` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `LoginCommand` in the file `moor_rpc.fbs:483`
+        /// * Table `LoginCommand` in the file `crates/common/schema/moor_rpc.fbs:483`
         #[derive(
             Clone,
             Debug,
@@ -47649,7 +47649,7 @@ mod root {
         /// The table `Attach` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Attach` in the file `moor_rpc.fbs:490`
+        /// * Table `Attach` in the file `crates/common/schema/moor_rpc.fbs:490`
         #[derive(
             Clone,
             Debug,
@@ -48182,7 +48182,7 @@ mod root {
         /// The table `Command` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Command` in the file `moor_rpc.fbs:500`
+        /// * Table `Command` in the file `crates/common/schema/moor_rpc.fbs:500`
         #[derive(
             Clone,
             Debug,
@@ -48528,7 +48528,7 @@ mod root {
         /// The table `Verbs` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Verbs` in the file `moor_rpc.fbs:507`
+        /// * Table `Verbs` in the file `crates/common/schema/moor_rpc.fbs:507`
         #[derive(
             Clone,
             Debug,
@@ -48887,7 +48887,7 @@ mod root {
         /// The table `InvokeVerb` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InvokeVerb` in the file `moor_rpc.fbs:514`
+        /// * Table `InvokeVerb` in the file `crates/common/schema/moor_rpc.fbs:514`
         #[derive(
             Clone,
             Debug,
@@ -49279,7 +49279,7 @@ mod root {
         /// The table `Properties` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Properties` in the file `moor_rpc.fbs:522`
+        /// * Table `Properties` in the file `crates/common/schema/moor_rpc.fbs:522`
         #[derive(
             Clone,
             Debug,
@@ -49647,7 +49647,7 @@ mod root {
         /// The table `Retrieve` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Retrieve` in the file `moor_rpc.fbs:529`
+        /// * Table `Retrieve` in the file `crates/common/schema/moor_rpc.fbs:529`
         #[derive(
             Clone,
             Debug,
@@ -50046,7 +50046,7 @@ mod root {
         /// The table `Program` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Program` in the file `moor_rpc.fbs:537`
+        /// * Table `Program` in the file `crates/common/schema/moor_rpc.fbs:537`
         #[derive(
             Clone,
             Debug,
@@ -50428,7 +50428,7 @@ mod root {
         /// The table `RequestedInput` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestedInput` in the file `moor_rpc.fbs:545`
+        /// * Table `RequestedInput` in the file `crates/common/schema/moor_rpc.fbs:545`
         #[derive(
             Clone,
             Debug,
@@ -50793,7 +50793,7 @@ mod root {
         /// The table `OutOfBand` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `OutOfBand` in the file `moor_rpc.fbs:552`
+        /// * Table `OutOfBand` in the file `crates/common/schema/moor_rpc.fbs:552`
         #[derive(
             Clone,
             Debug,
@@ -51143,7 +51143,7 @@ mod root {
         /// The table `Eval` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Eval` in the file `moor_rpc.fbs:559`
+        /// * Table `Eval` in the file `crates/common/schema/moor_rpc.fbs:559`
         #[derive(
             Clone,
             Debug,
@@ -51466,7 +51466,7 @@ mod root {
         /// The table `Resolve` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Resolve` in the file `moor_rpc.fbs:565`
+        /// * Table `Resolve` in the file `crates/common/schema/moor_rpc.fbs:565`
         #[derive(
             Clone,
             Debug,
@@ -51775,7 +51775,7 @@ mod root {
         /// The table `ClientPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientPong` in the file `moor_rpc.fbs:571`
+        /// * Table `ClientPong` in the file `crates/common/schema/moor_rpc.fbs:571`
         #[derive(
             Clone,
             Debug,
@@ -52192,7 +52192,7 @@ mod root {
         /// The table `RequestHistory` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestHistory` in the file `moor_rpc.fbs:579`
+        /// * Table `RequestHistory` in the file `crates/common/schema/moor_rpc.fbs:579`
         #[derive(
             Clone,
             Debug,
@@ -52513,7 +52513,7 @@ mod root {
         /// The table `RequestCurrentPresentations` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestCurrentPresentations` in the file `moor_rpc.fbs:585`
+        /// * Table `RequestCurrentPresentations` in the file `crates/common/schema/moor_rpc.fbs:585`
         #[derive(
             Clone,
             Debug,
@@ -52836,7 +52836,7 @@ mod root {
         /// The table `DismissPresentation` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DismissPresentation` in the file `moor_rpc.fbs:590`
+        /// * Table `DismissPresentation` in the file `crates/common/schema/moor_rpc.fbs:590`
         #[derive(
             Clone,
             Debug,
@@ -53184,7 +53184,7 @@ mod root {
         /// The table `SetClientAttribute` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SetClientAttribute` in the file `moor_rpc.fbs:596`
+        /// * Table `SetClientAttribute` in the file `crates/common/schema/moor_rpc.fbs:596`
         #[derive(
             Clone,
             Debug,
@@ -53590,7 +53590,7 @@ mod root {
         /// The table `Detach` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Detach` in the file `moor_rpc.fbs:603`
+        /// * Table `Detach` in the file `crates/common/schema/moor_rpc.fbs:603`
         #[derive(
             Clone,
             Debug,
@@ -53890,7 +53890,7 @@ mod root {
         /// The table `HostClientToDaemonMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostClientToDaemonMessage` in the file `moor_rpc.fbs:608`
+        /// * Table `HostClientToDaemonMessage` in the file `crates/common/schema/moor_rpc.fbs:608`
         #[derive(
             Clone,
             Debug,
@@ -54164,7 +54164,7 @@ mod root {
         /// The union `DaemonToClientReplyUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToClientReplyUnion` in the file `moor_rpc.fbs:616`
+        /// * Union `DaemonToClientReplyUnion` in the file `crates/common/schema/moor_rpc.fbs:616`
         #[derive(
             Clone,
             Debug,
@@ -55452,7 +55452,7 @@ mod root {
         /// The table `NewConnection` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NewConnection` in the file `moor_rpc.fbs:638`
+        /// * Table `NewConnection` in the file `crates/common/schema/moor_rpc.fbs:638`
         #[derive(
             Clone,
             Debug,
@@ -55734,7 +55734,7 @@ mod root {
         /// The table `LoginResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `LoginResult` in the file `moor_rpc.fbs:643`
+        /// * Table `LoginResult` in the file `crates/common/schema/moor_rpc.fbs:643`
         #[derive(
             Clone,
             Debug,
@@ -56174,7 +56174,7 @@ mod root {
         /// The table `AttachResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AttachResult` in the file `moor_rpc.fbs:650`
+        /// * Table `AttachResult` in the file `crates/common/schema/moor_rpc.fbs:650`
         #[derive(
             Clone,
             Debug,
@@ -56559,7 +56559,7 @@ mod root {
         /// The table `SysPropValue` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SysPropValue` in the file `moor_rpc.fbs:656`
+        /// * Table `SysPropValue` in the file `crates/common/schema/moor_rpc.fbs:656`
         #[derive(
             Clone,
             Debug,
@@ -56838,7 +56838,7 @@ mod root {
         /// The table `TaskSubmitted` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskSubmitted` in the file `moor_rpc.fbs:660`
+        /// * Table `TaskSubmitted` in the file `crates/common/schema/moor_rpc.fbs:660`
         #[derive(
             Clone,
             Debug,
@@ -57103,7 +57103,7 @@ mod root {
         /// The table `InputThanks` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InputThanks` in the file `moor_rpc.fbs:664`
+        /// * Table `InputThanks` in the file `crates/common/schema/moor_rpc.fbs:664`
         #[derive(
             Clone,
             Debug,
@@ -57314,7 +57314,7 @@ mod root {
         /// The table `EvalResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `EvalResult` in the file `moor_rpc.fbs:667`
+        /// * Table `EvalResult` in the file `crates/common/schema/moor_rpc.fbs:667`
         #[derive(
             Clone,
             Debug,
@@ -57569,7 +57569,7 @@ mod root {
         /// The table `ThanksPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ThanksPong` in the file `moor_rpc.fbs:671`
+        /// * Table `ThanksPong` in the file `crates/common/schema/moor_rpc.fbs:671`
         #[derive(
             Clone,
             Debug,
@@ -57834,7 +57834,7 @@ mod root {
         /// The table `VerbsReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbsReply` in the file `moor_rpc.fbs:675`
+        /// * Table `VerbsReply` in the file `crates/common/schema/moor_rpc.fbs:675`
         #[derive(
             Clone,
             Debug,
@@ -58098,7 +58098,7 @@ mod root {
         /// The table `PropertiesReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PropertiesReply` in the file `moor_rpc.fbs:679`
+        /// * Table `PropertiesReply` in the file `crates/common/schema/moor_rpc.fbs:679`
         #[derive(
             Clone,
             Debug,
@@ -58378,7 +58378,7 @@ mod root {
         /// The table `VerbProgramResponseReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramResponseReply` in the file `moor_rpc.fbs:683`
+        /// * Table `VerbProgramResponseReply` in the file `crates/common/schema/moor_rpc.fbs:683`
         #[derive(
             Clone,
             Debug,
@@ -58651,7 +58651,7 @@ mod root {
         /// The table `PropertyValue` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyValue` in the file `moor_rpc.fbs:687`
+        /// * Table `PropertyValue` in the file `crates/common/schema/moor_rpc.fbs:687`
         #[derive(
             Clone,
             Debug,
@@ -58933,7 +58933,7 @@ mod root {
         /// The table `VerbValue` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbValue` in the file `moor_rpc.fbs:692`
+        /// * Table `VerbValue` in the file `crates/common/schema/moor_rpc.fbs:692`
         #[derive(
             Clone,
             Debug,
@@ -59215,7 +59215,7 @@ mod root {
         /// The table `ResolveResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ResolveResult` in the file `moor_rpc.fbs:697`
+        /// * Table `ResolveResult` in the file `crates/common/schema/moor_rpc.fbs:697`
         #[derive(
             Clone,
             Debug,
@@ -59471,7 +59471,7 @@ mod root {
         /// The table `HistoryResponseReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryResponseReply` in the file `moor_rpc.fbs:701`
+        /// * Table `HistoryResponseReply` in the file `crates/common/schema/moor_rpc.fbs:701`
         #[derive(
             Clone,
             Debug,
@@ -59744,7 +59744,7 @@ mod root {
         /// The table `CurrentPresentations` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CurrentPresentations` in the file `moor_rpc.fbs:705`
+        /// * Table `CurrentPresentations` in the file `crates/common/schema/moor_rpc.fbs:705`
         #[derive(
             Clone,
             Debug,
@@ -60032,7 +60032,7 @@ mod root {
         /// The table `PresentationDismissed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PresentationDismissed` in the file `moor_rpc.fbs:709`
+        /// * Table `PresentationDismissed` in the file `crates/common/schema/moor_rpc.fbs:709`
         #[derive(
             Clone,
             Debug,
@@ -60264,7 +60264,7 @@ mod root {
         /// The table `ClientAttributeSet` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientAttributeSet` in the file `moor_rpc.fbs:712`
+        /// * Table `ClientAttributeSet` in the file `crates/common/schema/moor_rpc.fbs:712`
         #[derive(
             Clone,
             Debug,
@@ -60492,7 +60492,7 @@ mod root {
         /// The table `Disconnected` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Disconnected` in the file `moor_rpc.fbs:715`
+        /// * Table `Disconnected` in the file `crates/common/schema/moor_rpc.fbs:715`
         #[derive(
             Clone,
             Debug,
@@ -60703,7 +60703,7 @@ mod root {
         /// The table `DaemonToClientReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToClientReply` in the file `moor_rpc.fbs:718`
+        /// * Table `DaemonToClientReply` in the file `crates/common/schema/moor_rpc.fbs:718`
         #[derive(
             Clone,
             Debug,
@@ -60967,7 +60967,7 @@ mod root {
         /// The union `ClientEventUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `ClientEventUnion` in the file `moor_rpc.fbs:726`
+        /// * Union `ClientEventUnion` in the file `crates/common/schema/moor_rpc.fbs:726`
         #[derive(
             Clone,
             Debug,
@@ -61567,7 +61567,7 @@ mod root {
         /// The table `NarrativeEventMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NarrativeEventMessage` in the file `moor_rpc.fbs:737`
+        /// * Table `NarrativeEventMessage` in the file `crates/common/schema/moor_rpc.fbs:737`
         #[derive(
             Clone,
             Debug,
@@ -61870,7 +61870,7 @@ mod root {
         /// The table `RequestInputEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestInputEvent` in the file `moor_rpc.fbs:742`
+        /// * Table `RequestInputEvent` in the file `crates/common/schema/moor_rpc.fbs:742`
         #[derive(
             Clone,
             Debug,
@@ -62142,7 +62142,7 @@ mod root {
         /// The table `SystemMessageEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SystemMessageEvent` in the file `moor_rpc.fbs:746`
+        /// * Table `SystemMessageEvent` in the file `crates/common/schema/moor_rpc.fbs:746`
         #[derive(
             Clone,
             Debug,
@@ -62438,7 +62438,7 @@ mod root {
         /// The table `DisconnectEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DisconnectEvent` in the file `moor_rpc.fbs:751`
+        /// * Table `DisconnectEvent` in the file `crates/common/schema/moor_rpc.fbs:751`
         #[derive(
             Clone,
             Debug,
@@ -62664,7 +62664,7 @@ mod root {
         /// The table `TaskErrorEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskErrorEvent` in the file `moor_rpc.fbs:754`
+        /// * Table `TaskErrorEvent` in the file `crates/common/schema/moor_rpc.fbs:754`
         #[derive(
             Clone,
             Debug,
@@ -62957,7 +62957,7 @@ mod root {
         /// The table `TaskSuccessEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskSuccessEvent` in the file `moor_rpc.fbs:759`
+        /// * Table `TaskSuccessEvent` in the file `crates/common/schema/moor_rpc.fbs:759`
         #[derive(
             Clone,
             Debug,
@@ -63278,7 +63278,7 @@ mod root {
         /// The table `PlayerSwitchedEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PlayerSwitchedEvent` in the file `moor_rpc.fbs:764`
+        /// * Table `PlayerSwitchedEvent` in the file `crates/common/schema/moor_rpc.fbs:764`
         #[derive(
             Clone,
             Debug,
@@ -63578,7 +63578,7 @@ mod root {
         /// The table `SetConnectionOptionEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SetConnectionOptionEvent` in the file `moor_rpc.fbs:769`
+        /// * Table `SetConnectionOptionEvent` in the file `crates/common/schema/moor_rpc.fbs:769`
         #[derive(
             Clone,
             Debug,
@@ -63925,7 +63925,7 @@ mod root {
         /// The table `ClientEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientEvent` in the file `moor_rpc.fbs:775`
+        /// * Table `ClientEvent` in the file `crates/common/schema/moor_rpc.fbs:775`
         #[derive(
             Clone,
             Debug,
@@ -64171,7 +64171,7 @@ mod root {
         /// The union `ClientsBroadcastEventUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `ClientsBroadcastEventUnion` in the file `moor_rpc.fbs:783`
+        /// * Union `ClientsBroadcastEventUnion` in the file `crates/common/schema/moor_rpc.fbs:783`
         #[derive(
             Clone,
             Debug,
@@ -64337,7 +64337,7 @@ mod root {
         /// The table `ClientsBroadcastPingPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientsBroadcastPingPong` in the file `moor_rpc.fbs:787`
+        /// * Table `ClientsBroadcastPingPong` in the file `crates/common/schema/moor_rpc.fbs:787`
         #[derive(
             Clone,
             Debug,
@@ -64632,7 +64632,7 @@ mod root {
         /// The table `ClientsBroadcastEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientsBroadcastEvent` in the file `moor_rpc.fbs:791`
+        /// * Table `ClientsBroadcastEvent` in the file `crates/common/schema/moor_rpc.fbs:791`
         #[derive(
             Clone,
             Debug,
@@ -64898,7 +64898,7 @@ mod root {
         /// The union `DaemonToWorkerMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToWorkerMessageUnion` in the file `moor_rpc.fbs:799`
+        /// * Union `DaemonToWorkerMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:799`
         #[derive(
             Clone,
             Debug,
@@ -65186,7 +65186,7 @@ mod root {
         /// The table `PingWorkers` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PingWorkers` in the file `moor_rpc.fbs:805`
+        /// * Table `PingWorkers` in the file `crates/common/schema/moor_rpc.fbs:805`
         #[derive(
             Clone,
             Debug,
@@ -65397,7 +65397,7 @@ mod root {
         /// The table `WorkerRequest` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRequest` in the file `moor_rpc.fbs:808`
+        /// * Table `WorkerRequest` in the file `crates/common/schema/moor_rpc.fbs:808`
         #[derive(
             Clone,
             Debug,
@@ -65840,7 +65840,7 @@ mod root {
         /// The table `PleaseDie` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PleaseDie` in the file `moor_rpc.fbs:817`
+        /// * Table `PleaseDie` in the file `crates/common/schema/moor_rpc.fbs:817`
         #[derive(
             Clone,
             Debug,
@@ -66131,7 +66131,7 @@ mod root {
         /// The table `DaemonToWorkerMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToWorkerMessage` in the file `moor_rpc.fbs:822`
+        /// * Table `DaemonToWorkerMessage` in the file `crates/common/schema/moor_rpc.fbs:822`
         #[derive(
             Clone,
             Debug,
@@ -66397,7 +66397,7 @@ mod root {
         /// The union `WorkerToDaemonMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `WorkerToDaemonMessageUnion` in the file `moor_rpc.fbs:826`
+        /// * Union `WorkerToDaemonMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:826`
         #[derive(
             Clone,
             Debug,
@@ -66809,7 +66809,7 @@ mod root {
         /// The table `AttachWorker` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AttachWorker` in the file `moor_rpc.fbs:834`
+        /// * Table `AttachWorker` in the file `crates/common/schema/moor_rpc.fbs:834`
         #[derive(
             Clone,
             Debug,
@@ -67101,7 +67101,7 @@ mod root {
         /// The table `WorkerPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerPong` in the file `moor_rpc.fbs:839`
+        /// * Table `WorkerPong` in the file `crates/common/schema/moor_rpc.fbs:839`
         #[derive(
             Clone,
             Debug,
@@ -67392,7 +67392,7 @@ mod root {
         /// The table `DetachWorker` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DetachWorker` in the file `moor_rpc.fbs:844`
+        /// * Table `DetachWorker` in the file `crates/common/schema/moor_rpc.fbs:844`
         #[derive(
             Clone,
             Debug,
@@ -67648,7 +67648,7 @@ mod root {
         /// The table `RequestResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestResult` in the file `moor_rpc.fbs:848`
+        /// * Table `RequestResult` in the file `crates/common/schema/moor_rpc.fbs:848`
         #[derive(
             Clone,
             Debug,
@@ -67974,7 +67974,7 @@ mod root {
         /// The table `RequestError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestError` in the file `moor_rpc.fbs:854`
+        /// * Table `RequestError` in the file `crates/common/schema/moor_rpc.fbs:854`
         #[derive(
             Clone,
             Debug,
@@ -68288,7 +68288,7 @@ mod root {
         /// The table `WorkerToDaemonMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerToDaemonMessage` in the file `moor_rpc.fbs:860`
+        /// * Table `WorkerToDaemonMessage` in the file `crates/common/schema/moor_rpc.fbs:860`
         #[derive(
             Clone,
             Debug,
@@ -68554,7 +68554,7 @@ mod root {
         /// The union `DaemonToWorkerReplyUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToWorkerReplyUnion` in the file `moor_rpc.fbs:864`
+        /// * Union `DaemonToWorkerReplyUnion` in the file `crates/common/schema/moor_rpc.fbs:864`
         #[derive(
             Clone,
             Debug,
@@ -68575,6 +68575,18 @@ mod root {
 
             /// The variant of type `WorkerAttached` in the union `DaemonToWorkerReplyUnion`
             WorkerAttached(::planus::alloc::boxed::Box<self::WorkerAttached>),
+
+            /// The variant of type `WorkerAuthFailed` in the union `DaemonToWorkerReplyUnion`
+            WorkerAuthFailed(::planus::alloc::boxed::Box<self::WorkerAuthFailed>),
+
+            /// The variant of type `WorkerInvalidPayload` in the union `DaemonToWorkerReplyUnion`
+            WorkerInvalidPayload(::planus::alloc::boxed::Box<self::WorkerInvalidPayload>),
+
+            /// The variant of type `WorkerUnknownRequest` in the union `DaemonToWorkerReplyUnion`
+            WorkerUnknownRequest(::planus::alloc::boxed::Box<self::WorkerUnknownRequest>),
+
+            /// The variant of type `WorkerNotRegistered` in the union `DaemonToWorkerReplyUnion`
+            WorkerNotRegistered(::planus::alloc::boxed::Box<self::WorkerNotRegistered>),
         }
 
         impl DaemonToWorkerReplyUnion {
@@ -68607,6 +68619,38 @@ mod root {
             ) -> ::planus::UnionOffset<Self> {
                 ::planus::UnionOffset::new(3, value.prepare(builder).downcast())
             }
+
+            #[inline]
+            pub fn create_worker_auth_failed(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::WorkerAuthFailed>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(4, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_worker_invalid_payload(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::WorkerInvalidPayload>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(5, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_worker_unknown_request(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::WorkerUnknownRequest>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(6, value.prepare(builder).downcast())
+            }
+
+            #[inline]
+            pub fn create_worker_not_registered(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::WorkerNotRegistered>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(7, value.prepare(builder).downcast())
+            }
         }
 
         impl ::planus::WriteAsUnion<DaemonToWorkerReplyUnion> for DaemonToWorkerReplyUnion {
@@ -68616,6 +68660,18 @@ mod root {
                     Self::WorkerAck(value) => Self::create_worker_ack(builder, value),
                     Self::WorkerRejected(value) => Self::create_worker_rejected(builder, value),
                     Self::WorkerAttached(value) => Self::create_worker_attached(builder, value),
+                    Self::WorkerAuthFailed(value) => {
+                        Self::create_worker_auth_failed(builder, value)
+                    }
+                    Self::WorkerInvalidPayload(value) => {
+                        Self::create_worker_invalid_payload(builder, value)
+                    }
+                    Self::WorkerUnknownRequest(value) => {
+                        Self::create_worker_unknown_request(builder, value)
+                    }
+                    Self::WorkerNotRegistered(value) => {
+                        Self::create_worker_not_registered(builder, value)
+                    }
                 }
             }
         }
@@ -68670,6 +68726,54 @@ mod root {
             ) -> DaemonToWorkerReplyUnionBuilder<::planus::Initialized<3, T>>
             where
                 T: ::planus::WriteAsOffset<self::WorkerAttached>,
+            {
+                DaemonToWorkerReplyUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`WorkerAuthFailed` variant](DaemonToWorkerReplyUnion#variant.WorkerAuthFailed).
+            #[inline]
+            pub fn worker_auth_failed<T>(
+                self,
+                value: T,
+            ) -> DaemonToWorkerReplyUnionBuilder<::planus::Initialized<4, T>>
+            where
+                T: ::planus::WriteAsOffset<self::WorkerAuthFailed>,
+            {
+                DaemonToWorkerReplyUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`WorkerInvalidPayload` variant](DaemonToWorkerReplyUnion#variant.WorkerInvalidPayload).
+            #[inline]
+            pub fn worker_invalid_payload<T>(
+                self,
+                value: T,
+            ) -> DaemonToWorkerReplyUnionBuilder<::planus::Initialized<5, T>>
+            where
+                T: ::planus::WriteAsOffset<self::WorkerInvalidPayload>,
+            {
+                DaemonToWorkerReplyUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`WorkerUnknownRequest` variant](DaemonToWorkerReplyUnion#variant.WorkerUnknownRequest).
+            #[inline]
+            pub fn worker_unknown_request<T>(
+                self,
+                value: T,
+            ) -> DaemonToWorkerReplyUnionBuilder<::planus::Initialized<6, T>>
+            where
+                T: ::planus::WriteAsOffset<self::WorkerUnknownRequest>,
+            {
+                DaemonToWorkerReplyUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`WorkerNotRegistered` variant](DaemonToWorkerReplyUnion#variant.WorkerNotRegistered).
+            #[inline]
+            pub fn worker_not_registered<T>(
+                self,
+                value: T,
+            ) -> DaemonToWorkerReplyUnionBuilder<::planus::Initialized<7, T>>
+            where
+                T: ::planus::WriteAsOffset<self::WorkerNotRegistered>,
             {
                 DaemonToWorkerReplyUnionBuilder(::planus::Initialized(value))
             }
@@ -68773,6 +68877,118 @@ mod root {
                 ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
             }
         }
+        impl<T> ::planus::WriteAsUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<4, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerAuthFailed>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<DaemonToWorkerReplyUnion> {
+                ::planus::UnionOffset::new(4, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<4, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerAuthFailed>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<DaemonToWorkerReplyUnion>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<5, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerInvalidPayload>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<DaemonToWorkerReplyUnion> {
+                ::planus::UnionOffset::new(5, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<5, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerInvalidPayload>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<DaemonToWorkerReplyUnion>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<6, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerUnknownRequest>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<DaemonToWorkerReplyUnion> {
+                ::planus::UnionOffset::new(6, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<6, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerUnknownRequest>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<DaemonToWorkerReplyUnion>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
+        impl<T> ::planus::WriteAsUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<7, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerNotRegistered>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::UnionOffset<DaemonToWorkerReplyUnion> {
+                ::planus::UnionOffset::new(7, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<DaemonToWorkerReplyUnion>
+            for DaemonToWorkerReplyUnionBuilder<::planus::Initialized<7, T>>
+        where
+            T: ::planus::WriteAsOffset<self::WorkerNotRegistered>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<DaemonToWorkerReplyUnion>>
+            {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
 
         /// Reference to a deserialized [DaemonToWorkerReplyUnion].
         #[derive(Copy, Clone, Debug)]
@@ -68780,6 +68996,10 @@ mod root {
             WorkerAck(self::WorkerAckRef<'a>),
             WorkerRejected(self::WorkerRejectedRef<'a>),
             WorkerAttached(self::WorkerAttachedRef<'a>),
+            WorkerAuthFailed(self::WorkerAuthFailedRef<'a>),
+            WorkerInvalidPayload(self::WorkerInvalidPayloadRef<'a>),
+            WorkerUnknownRequest(self::WorkerUnknownRequestRef<'a>),
+            WorkerNotRegistered(self::WorkerNotRegisteredRef<'a>),
         }
 
         impl<'a> ::core::convert::TryFrom<DaemonToWorkerReplyUnionRef<'a>> for DaemonToWorkerReplyUnion {
@@ -68804,6 +69024,30 @@ mod root {
                             ::core::convert::TryFrom::try_from(value)?,
                         ))
                     }
+
+                    DaemonToWorkerReplyUnionRef::WorkerAuthFailed(value) => {
+                        Self::WorkerAuthFailed(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+
+                    DaemonToWorkerReplyUnionRef::WorkerInvalidPayload(value) => {
+                        Self::WorkerInvalidPayload(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+
+                    DaemonToWorkerReplyUnionRef::WorkerUnknownRequest(value) => {
+                        Self::WorkerUnknownRequest(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
+
+                    DaemonToWorkerReplyUnionRef::WorkerNotRegistered(value) => {
+                        Self::WorkerNotRegistered(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
                 })
             }
         }
@@ -68824,6 +69068,18 @@ mod root {
                     3 => ::core::result::Result::Ok(Self::WorkerAttached(
                         ::planus::TableRead::from_buffer(buffer, field_offset)?,
                     )),
+                    4 => ::core::result::Result::Ok(Self::WorkerAuthFailed(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    5 => ::core::result::Result::Ok(Self::WorkerInvalidPayload(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    6 => ::core::result::Result::Ok(Self::WorkerUnknownRequest(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
+                    7 => ::core::result::Result::Ok(Self::WorkerNotRegistered(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
                     _ => {
                         ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
                             tag,
@@ -68840,7 +69096,7 @@ mod root {
         /// The table `WorkerAck` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerAck` in the file `moor_rpc.fbs:870`
+        /// * Table `WorkerAck` in the file `crates/common/schema/moor_rpc.fbs:874`
         #[derive(
             Clone,
             Debug,
@@ -69051,7 +69307,7 @@ mod root {
         /// The table `WorkerRejected` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRejected` in the file `moor_rpc.fbs:873`
+        /// * Table `WorkerRejected` in the file `crates/common/schema/moor_rpc.fbs:877`
         #[derive(
             Clone,
             Debug,
@@ -69063,12 +69319,17 @@ mod root {
             ::serde::Serialize,
             ::serde::Deserialize,
         )]
-        pub struct WorkerRejected {}
+        pub struct WorkerRejected {
+            /// The field `reason` in the table `WorkerRejected`
+            pub reason: ::core::option::Option<::planus::alloc::string::String>,
+        }
 
         #[allow(clippy::derivable_impls)]
         impl ::core::default::Default for WorkerRejected {
             fn default() -> Self {
-                Self {}
+                Self {
+                    reason: ::core::default::Default::default(),
+                }
             }
         }
 
@@ -69080,11 +69341,24 @@ mod root {
             }
 
             #[allow(clippy::too_many_arguments)]
-            pub fn create(builder: &mut ::planus::Builder) -> ::planus::Offset<Self> {
-                let table_writer: ::planus::table_writer::TableWriter<4> =
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_reason: impl ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_reason = field_reason.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
                     ::core::default::Default::default();
+                if prepared_reason.is_some() {
+                    table_writer.write_entry::<::planus::Offset<str>>(0);
+                }
+
                 unsafe {
-                    table_writer.finish(builder, |_table_writer| {});
+                    table_writer.finish(builder, |object_writer| {
+                        if let ::core::option::Option::Some(prepared_reason) = prepared_reason {
+                            object_writer.write::<_, _, 4>(&prepared_reason);
+                        }
+                    });
                 }
                 builder.current_offset()
             }
@@ -69114,7 +69388,7 @@ mod root {
         impl ::planus::WriteAsOffset<WorkerRejected> for WorkerRejected {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<WorkerRejected> {
-                WorkerRejected::create(builder)
+                WorkerRejected::create(builder, &self.reason)
             }
         }
 
@@ -69126,6 +69400,25 @@ mod root {
         pub struct WorkerRejectedBuilder<State>(State);
 
         impl WorkerRejectedBuilder<()> {
+            /// Setter for the [`reason` field](WorkerRejected#structfield.reason).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn reason<T0>(self, value: T0) -> WorkerRejectedBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            {
+                WorkerRejectedBuilder((value,))
+            }
+
+            /// Sets the [`reason` field](WorkerRejected#structfield.reason) to null.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn reason_as_null(self) -> WorkerRejectedBuilder<((),)> {
+                self.reason(())
+            }
+        }
+
+        impl<T0> WorkerRejectedBuilder<(T0,)> {
             /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [WorkerRejected].
             #[inline]
             pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<WorkerRejected>
@@ -69136,7 +69429,9 @@ mod root {
             }
         }
 
-        impl ::planus::WriteAs<::planus::Offset<WorkerRejected>> for WorkerRejectedBuilder<()> {
+        impl<T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>>
+            ::planus::WriteAs<::planus::Offset<WorkerRejected>> for WorkerRejectedBuilder<(T0,)>
+        {
             type Prepared = ::planus::Offset<WorkerRejected>;
 
             #[inline]
@@ -69145,7 +69440,10 @@ mod root {
             }
         }
 
-        impl ::planus::WriteAsOptional<::planus::Offset<WorkerRejected>> for WorkerRejectedBuilder<()> {
+        impl<T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>>
+            ::planus::WriteAsOptional<::planus::Offset<WorkerRejected>>
+            for WorkerRejectedBuilder<(T0,)>
+        {
             type Prepared = ::planus::Offset<WorkerRejected>;
 
             #[inline]
@@ -69157,10 +69455,13 @@ mod root {
             }
         }
 
-        impl ::planus::WriteAsOffset<WorkerRejected> for WorkerRejectedBuilder<()> {
+        impl<T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>>
+            ::planus::WriteAsOffset<WorkerRejected> for WorkerRejectedBuilder<(T0,)>
+        {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<WorkerRejected> {
-                WorkerRejected::create(builder)
+                let (v0,) = &self.0;
+                WorkerRejected::create(builder, v0)
             }
         }
 
@@ -69168,12 +69469,22 @@ mod root {
         #[derive(Copy, Clone)]
         pub struct WorkerRejectedRef<'a>(::planus::table_reader::Table<'a>);
 
-        impl<'a> WorkerRejectedRef<'a> {}
+        impl<'a> WorkerRejectedRef<'a> {
+            /// Getter for the [`reason` field](WorkerRejected#structfield.reason).
+            #[inline]
+            pub fn reason(
+                &self,
+            ) -> ::planus::Result<::core::option::Option<&'a ::core::primitive::str>> {
+                self.0.access(0, "WorkerRejected", "reason")
+            }
+        }
 
         impl<'a> ::core::fmt::Debug for WorkerRejectedRef<'a> {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 let mut f = f.debug_struct("WorkerRejectedRef");
-
+                if let ::core::option::Option::Some(field_reason) = self.reason().transpose() {
+                    f.field("reason", &field_reason);
+                }
                 f.finish()
             }
         }
@@ -69181,8 +69492,11 @@ mod root {
         impl<'a> ::core::convert::TryFrom<WorkerRejectedRef<'a>> for WorkerRejected {
             type Error = ::planus::Error;
 
-            fn try_from(_value: WorkerRejectedRef<'a>) -> ::planus::Result<Self> {
-                ::core::result::Result::Ok(Self {})
+            #[allow(unreachable_code)]
+            fn try_from(value: WorkerRejectedRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    reason: value.reason()?.map(::core::convert::Into::into),
+                })
             }
         }
 
@@ -69262,7 +69576,7 @@ mod root {
         /// The table `WorkerAttached` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerAttached` in the file `moor_rpc.fbs:876`
+        /// * Table `WorkerAttached` in the file `crates/common/schema/moor_rpc.fbs:881`
         #[derive(
             Clone,
             Debug,
@@ -69551,10 +69865,1096 @@ mod root {
             }
         }
 
+        /// The table `WorkerAuthFailed` in the namespace `MoorRpc`
+        ///
+        /// Generated from these locations:
+        /// * Table `WorkerAuthFailed` in the file `crates/common/schema/moor_rpc.fbs:886`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct WorkerAuthFailed {
+            /// The field `reason` in the table `WorkerAuthFailed`
+            pub reason: ::planus::alloc::string::String,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for WorkerAuthFailed {
+            fn default() -> Self {
+                Self {
+                    reason: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl WorkerAuthFailed {
+            /// Creates a [WorkerAuthFailedBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> WorkerAuthFailedBuilder<()> {
+                WorkerAuthFailedBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_reason: impl ::planus::WriteAs<::planus::Offset<str>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_reason = field_reason.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<str>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_reason);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<WorkerAuthFailed>> for WorkerAuthFailed {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerAuthFailed> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<WorkerAuthFailed>> for WorkerAuthFailed {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerAuthFailed>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<WorkerAuthFailed> for WorkerAuthFailed {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerAuthFailed> {
+                WorkerAuthFailed::create(builder, &self.reason)
+            }
+        }
+
+        /// Builder for serializing an instance of the [WorkerAuthFailed] type.
+        ///
+        /// Can be created using the [WorkerAuthFailed::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct WorkerAuthFailedBuilder<State>(State);
+
+        impl WorkerAuthFailedBuilder<()> {
+            /// Setter for the [`reason` field](WorkerAuthFailed#structfield.reason).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn reason<T0>(self, value: T0) -> WorkerAuthFailedBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+            {
+                WorkerAuthFailedBuilder((value,))
+            }
+        }
+
+        impl<T0> WorkerAuthFailedBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [WorkerAuthFailed].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerAuthFailed>
+            where
+                Self: ::planus::WriteAsOffset<WorkerAuthFailed>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAs<::planus::Offset<WorkerAuthFailed>>
+            for WorkerAuthFailedBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerAuthFailed>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerAuthFailed> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAsOptional<::planus::Offset<WorkerAuthFailed>>
+            for WorkerAuthFailedBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerAuthFailed>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerAuthFailed>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>> ::planus::WriteAsOffset<WorkerAuthFailed>
+            for WorkerAuthFailedBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerAuthFailed> {
+                let (v0,) = &self.0;
+                WorkerAuthFailed::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [WorkerAuthFailed].
+        #[derive(Copy, Clone)]
+        pub struct WorkerAuthFailedRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> WorkerAuthFailedRef<'a> {
+            /// Getter for the [`reason` field](WorkerAuthFailed#structfield.reason).
+            #[inline]
+            pub fn reason(&self) -> ::planus::Result<&'a ::core::primitive::str> {
+                self.0.access_required(0, "WorkerAuthFailed", "reason")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for WorkerAuthFailedRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("WorkerAuthFailedRef");
+                f.field("reason", &self.reason());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<WorkerAuthFailedRef<'a>> for WorkerAuthFailed {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: WorkerAuthFailedRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    reason: ::core::convert::Into::into(value.reason()?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for WorkerAuthFailedRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for WorkerAuthFailedRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[WorkerAuthFailedRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<WorkerAuthFailed>> for WorkerAuthFailed {
+            type Value = ::planus::Offset<WorkerAuthFailed>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<WorkerAuthFailed>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for WorkerAuthFailedRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[WorkerAuthFailedRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `WorkerInvalidPayload` in the namespace `MoorRpc`
+        ///
+        /// Generated from these locations:
+        /// * Table `WorkerInvalidPayload` in the file `crates/common/schema/moor_rpc.fbs:890`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct WorkerInvalidPayload {
+            /// The field `reason` in the table `WorkerInvalidPayload`
+            pub reason: ::planus::alloc::string::String,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for WorkerInvalidPayload {
+            fn default() -> Self {
+                Self {
+                    reason: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl WorkerInvalidPayload {
+            /// Creates a [WorkerInvalidPayloadBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> WorkerInvalidPayloadBuilder<()> {
+                WorkerInvalidPayloadBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_reason: impl ::planus::WriteAs<::planus::Offset<str>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_reason = field_reason.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<str>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_reason);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<WorkerInvalidPayload>> for WorkerInvalidPayload {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerInvalidPayload> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<WorkerInvalidPayload>> for WorkerInvalidPayload {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerInvalidPayload>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<WorkerInvalidPayload> for WorkerInvalidPayload {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerInvalidPayload> {
+                WorkerInvalidPayload::create(builder, &self.reason)
+            }
+        }
+
+        /// Builder for serializing an instance of the [WorkerInvalidPayload] type.
+        ///
+        /// Can be created using the [WorkerInvalidPayload::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct WorkerInvalidPayloadBuilder<State>(State);
+
+        impl WorkerInvalidPayloadBuilder<()> {
+            /// Setter for the [`reason` field](WorkerInvalidPayload#structfield.reason).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn reason<T0>(self, value: T0) -> WorkerInvalidPayloadBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+            {
+                WorkerInvalidPayloadBuilder((value,))
+            }
+        }
+
+        impl<T0> WorkerInvalidPayloadBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [WorkerInvalidPayload].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerInvalidPayload>
+            where
+                Self: ::planus::WriteAsOffset<WorkerInvalidPayload>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAs<::planus::Offset<WorkerInvalidPayload>>
+            for WorkerInvalidPayloadBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerInvalidPayload>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerInvalidPayload> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAsOptional<::planus::Offset<WorkerInvalidPayload>>
+            for WorkerInvalidPayloadBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerInvalidPayload>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerInvalidPayload>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<str>>>
+            ::planus::WriteAsOffset<WorkerInvalidPayload> for WorkerInvalidPayloadBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerInvalidPayload> {
+                let (v0,) = &self.0;
+                WorkerInvalidPayload::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [WorkerInvalidPayload].
+        #[derive(Copy, Clone)]
+        pub struct WorkerInvalidPayloadRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> WorkerInvalidPayloadRef<'a> {
+            /// Getter for the [`reason` field](WorkerInvalidPayload#structfield.reason).
+            #[inline]
+            pub fn reason(&self) -> ::planus::Result<&'a ::core::primitive::str> {
+                self.0.access_required(0, "WorkerInvalidPayload", "reason")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for WorkerInvalidPayloadRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("WorkerInvalidPayloadRef");
+                f.field("reason", &self.reason());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<WorkerInvalidPayloadRef<'a>> for WorkerInvalidPayload {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: WorkerInvalidPayloadRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    reason: ::core::convert::Into::into(value.reason()?),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for WorkerInvalidPayloadRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for WorkerInvalidPayloadRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[WorkerInvalidPayloadRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<WorkerInvalidPayload>> for WorkerInvalidPayload {
+            type Value = ::planus::Offset<WorkerInvalidPayload>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<WorkerInvalidPayload>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for WorkerInvalidPayloadRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[WorkerInvalidPayloadRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `WorkerUnknownRequest` in the namespace `MoorRpc`
+        ///
+        /// Generated from these locations:
+        /// * Table `WorkerUnknownRequest` in the file `crates/common/schema/moor_rpc.fbs:894`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct WorkerUnknownRequest {
+            /// The field `request_id` in the table `WorkerUnknownRequest`
+            pub request_id: ::planus::alloc::boxed::Box<super::moor_common::Uuid>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for WorkerUnknownRequest {
+            fn default() -> Self {
+                Self {
+                    request_id: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl WorkerUnknownRequest {
+            /// Creates a [WorkerUnknownRequestBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> WorkerUnknownRequestBuilder<()> {
+                WorkerUnknownRequestBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_request_id: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_request_id = field_request_id.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Uuid>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_request_id);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<WorkerUnknownRequest>> for WorkerUnknownRequest {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerUnknownRequest> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<WorkerUnknownRequest>> for WorkerUnknownRequest {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerUnknownRequest>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<WorkerUnknownRequest> for WorkerUnknownRequest {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerUnknownRequest> {
+                WorkerUnknownRequest::create(builder, &self.request_id)
+            }
+        }
+
+        /// Builder for serializing an instance of the [WorkerUnknownRequest] type.
+        ///
+        /// Can be created using the [WorkerUnknownRequest::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct WorkerUnknownRequestBuilder<State>(State);
+
+        impl WorkerUnknownRequestBuilder<()> {
+            /// Setter for the [`request_id` field](WorkerUnknownRequest#structfield.request_id).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn request_id<T0>(self, value: T0) -> WorkerUnknownRequestBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            {
+                WorkerUnknownRequestBuilder((value,))
+            }
+        }
+
+        impl<T0> WorkerUnknownRequestBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [WorkerUnknownRequest].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerUnknownRequest>
+            where
+                Self: ::planus::WriteAsOffset<WorkerUnknownRequest>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>>
+            ::planus::WriteAs<::planus::Offset<WorkerUnknownRequest>>
+            for WorkerUnknownRequestBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerUnknownRequest>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerUnknownRequest> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>>
+            ::planus::WriteAsOptional<::planus::Offset<WorkerUnknownRequest>>
+            for WorkerUnknownRequestBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerUnknownRequest>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerUnknownRequest>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>>
+            ::planus::WriteAsOffset<WorkerUnknownRequest> for WorkerUnknownRequestBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerUnknownRequest> {
+                let (v0,) = &self.0;
+                WorkerUnknownRequest::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [WorkerUnknownRequest].
+        #[derive(Copy, Clone)]
+        pub struct WorkerUnknownRequestRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> WorkerUnknownRequestRef<'a> {
+            /// Getter for the [`request_id` field](WorkerUnknownRequest#structfield.request_id).
+            #[inline]
+            pub fn request_id(&self) -> ::planus::Result<super::moor_common::UuidRef<'a>> {
+                self.0
+                    .access_required(0, "WorkerUnknownRequest", "request_id")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for WorkerUnknownRequestRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("WorkerUnknownRequestRef");
+                f.field("request_id", &self.request_id());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<WorkerUnknownRequestRef<'a>> for WorkerUnknownRequest {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: WorkerUnknownRequestRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    request_id: ::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryInto::try_into(value.request_id()?)?,
+                    ),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for WorkerUnknownRequestRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for WorkerUnknownRequestRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[WorkerUnknownRequestRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<WorkerUnknownRequest>> for WorkerUnknownRequest {
+            type Value = ::planus::Offset<WorkerUnknownRequest>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<WorkerUnknownRequest>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for WorkerUnknownRequestRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[WorkerUnknownRequestRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `WorkerNotRegistered` in the namespace `MoorRpc`
+        ///
+        /// Generated from these locations:
+        /// * Table `WorkerNotRegistered` in the file `crates/common/schema/moor_rpc.fbs:898`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct WorkerNotRegistered {
+            /// The field `worker_id` in the table `WorkerNotRegistered`
+            pub worker_id: ::planus::alloc::boxed::Box<super::moor_common::Uuid>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for WorkerNotRegistered {
+            fn default() -> Self {
+                Self {
+                    worker_id: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl WorkerNotRegistered {
+            /// Creates a [WorkerNotRegisteredBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> WorkerNotRegisteredBuilder<()> {
+                WorkerNotRegisteredBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_worker_id: impl ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_worker_id = field_worker_id.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<super::moor_common::Uuid>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_worker_id);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<WorkerNotRegistered>> for WorkerNotRegistered {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerNotRegistered> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<WorkerNotRegistered>> for WorkerNotRegistered {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerNotRegistered>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<WorkerNotRegistered> for WorkerNotRegistered {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerNotRegistered> {
+                WorkerNotRegistered::create(builder, &self.worker_id)
+            }
+        }
+
+        /// Builder for serializing an instance of the [WorkerNotRegistered] type.
+        ///
+        /// Can be created using the [WorkerNotRegistered::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct WorkerNotRegisteredBuilder<State>(State);
+
+        impl WorkerNotRegisteredBuilder<()> {
+            /// Setter for the [`worker_id` field](WorkerNotRegistered#structfield.worker_id).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn worker_id<T0>(self, value: T0) -> WorkerNotRegisteredBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            {
+                WorkerNotRegisteredBuilder((value,))
+            }
+        }
+
+        impl<T0> WorkerNotRegisteredBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [WorkerNotRegistered].
+            #[inline]
+            pub fn finish(
+                self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerNotRegistered>
+            where
+                Self: ::planus::WriteAsOffset<WorkerNotRegistered>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>>
+            ::planus::WriteAs<::planus::Offset<WorkerNotRegistered>>
+            for WorkerNotRegisteredBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerNotRegistered>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerNotRegistered> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>>
+            ::planus::WriteAsOptional<::planus::Offset<WorkerNotRegistered>>
+            for WorkerNotRegisteredBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<WorkerNotRegistered>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<WorkerNotRegistered>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>>
+            ::planus::WriteAsOffset<WorkerNotRegistered> for WorkerNotRegisteredBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::planus::Offset<WorkerNotRegistered> {
+                let (v0,) = &self.0;
+                WorkerNotRegistered::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [WorkerNotRegistered].
+        #[derive(Copy, Clone)]
+        pub struct WorkerNotRegisteredRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> WorkerNotRegisteredRef<'a> {
+            /// Getter for the [`worker_id` field](WorkerNotRegistered#structfield.worker_id).
+            #[inline]
+            pub fn worker_id(&self) -> ::planus::Result<super::moor_common::UuidRef<'a>> {
+                self.0
+                    .access_required(0, "WorkerNotRegistered", "worker_id")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for WorkerNotRegisteredRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("WorkerNotRegisteredRef");
+                f.field("worker_id", &self.worker_id());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<WorkerNotRegisteredRef<'a>> for WorkerNotRegistered {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: WorkerNotRegisteredRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    worker_id: ::planus::alloc::boxed::Box::new(
+                        ::core::convert::TryInto::try_into(value.worker_id()?)?,
+                    ),
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for WorkerNotRegisteredRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for WorkerNotRegisteredRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[WorkerNotRegisteredRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<WorkerNotRegistered>> for WorkerNotRegistered {
+            type Value = ::planus::Offset<WorkerNotRegistered>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<WorkerNotRegistered>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for WorkerNotRegisteredRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[WorkerNotRegisteredRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `DaemonToWorkerReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToWorkerReply` in the file `moor_rpc.fbs:881`
+        /// * Table `DaemonToWorkerReply` in the file `crates/common/schema/moor_rpc.fbs:902`
         #[derive(
             Clone,
             Debug,
@@ -69818,7 +71218,7 @@ mod root {
         /// The enum `RpcMessageErrorCode` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `RpcMessageErrorCode` in the file `moor_rpc.fbs:889`
+        /// * Enum `RpcMessageErrorCode` in the file `crates/common/schema/moor_rpc.fbs:910`
         #[derive(
             Copy,
             Clone,
@@ -70032,7 +71432,7 @@ mod root {
         /// The table `RpcMessageError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RpcMessageError` in the file `moor_rpc.fbs:902`
+        /// * Table `RpcMessageError` in the file `crates/common/schema/moor_rpc.fbs:923`
         #[derive(
             Clone,
             Debug,
@@ -70440,7 +71840,7 @@ mod root {
         /// The union `MessageTypeUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `MessageTypeUnion` in the file `moor_rpc.fbs:908`
+        /// * Union `MessageTypeUnion` in the file `crates/common/schema/moor_rpc.fbs:929`
         #[derive(
             Clone,
             Debug,
@@ -70664,7 +72064,7 @@ mod root {
         /// The table `HostToDaemonMsg` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostToDaemonMsg` in the file `moor_rpc.fbs:913`
+        /// * Table `HostToDaemonMsg` in the file `crates/common/schema/moor_rpc.fbs:934`
         #[derive(
             Clone,
             Debug,
@@ -70962,7 +72362,7 @@ mod root {
         /// The table `HostClientToDaemonMsg` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostClientToDaemonMsg` in the file `moor_rpc.fbs:918`
+        /// * Table `HostClientToDaemonMsg` in the file `crates/common/schema/moor_rpc.fbs:939`
         #[derive(
             Clone,
             Debug,
@@ -71263,7 +72663,7 @@ mod root {
         /// The table `MessageType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `MessageType` in the file `moor_rpc.fbs:923`
+        /// * Table `MessageType` in the file `crates/common/schema/moor_rpc.fbs:944`
         #[derive(
             Clone,
             Debug,
@@ -71509,7 +72909,7 @@ mod root {
         /// The union `ReplyResultUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `ReplyResultUnion` in the file `moor_rpc.fbs:927`
+        /// * Union `ReplyResultUnion` in the file `crates/common/schema/moor_rpc.fbs:948`
         #[derive(
             Clone,
             Debug,
@@ -71792,7 +73192,7 @@ mod root {
         /// The table `HostSuccess` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostSuccess` in the file `moor_rpc.fbs:933`
+        /// * Table `HostSuccess` in the file `crates/common/schema/moor_rpc.fbs:954`
         #[derive(
             Clone,
             Debug,
@@ -72038,7 +73438,7 @@ mod root {
         /// The table `ClientSuccess` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientSuccess` in the file `moor_rpc.fbs:937`
+        /// * Table `ClientSuccess` in the file `crates/common/schema/moor_rpc.fbs:958`
         #[derive(
             Clone,
             Debug,
@@ -72285,7 +73685,7 @@ mod root {
         /// The table `Failure` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Failure` in the file `moor_rpc.fbs:941`
+        /// * Table `Failure` in the file `crates/common/schema/moor_rpc.fbs:962`
         #[derive(
             Clone,
             Debug,
@@ -72536,7 +73936,7 @@ mod root {
         /// The table `ReplyResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ReplyResult` in the file `moor_rpc.fbs:945`
+        /// * Table `ReplyResult` in the file `crates/common/schema/moor_rpc.fbs:966`
         #[derive(
             Clone,
             Debug,
@@ -72782,7 +74182,7 @@ mod root {
         /// The union `HistoryRecallUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HistoryRecallUnion` in the file `moor_rpc.fbs:953`
+        /// * Union `HistoryRecallUnion` in the file `crates/common/schema/moor_rpc.fbs:974`
         #[derive(
             Clone,
             Debug,
@@ -73134,7 +74534,7 @@ mod root {
         /// The table `HistoryRecallSinceEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallSinceEvent` in the file `moor_rpc.fbs:960`
+        /// * Table `HistoryRecallSinceEvent` in the file `crates/common/schema/moor_rpc.fbs:981`
         #[derive(
             Clone,
             Debug,
@@ -73467,7 +74867,7 @@ mod root {
         /// The table `HistoryRecallUntilEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallUntilEvent` in the file `moor_rpc.fbs:965`
+        /// * Table `HistoryRecallUntilEvent` in the file `crates/common/schema/moor_rpc.fbs:986`
         #[derive(
             Clone,
             Debug,
@@ -73800,7 +75200,7 @@ mod root {
         /// The table `HistoryRecallSinceSeconds` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallSinceSeconds` in the file `moor_rpc.fbs:970`
+        /// * Table `HistoryRecallSinceSeconds` in the file `crates/common/schema/moor_rpc.fbs:991`
         #[derive(
             Clone,
             Debug,
@@ -74143,7 +75543,7 @@ mod root {
         /// The table `HistoryRecallNone` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallNone` in the file `moor_rpc.fbs:975`
+        /// * Table `HistoryRecallNone` in the file `crates/common/schema/moor_rpc.fbs:996`
         #[derive(
             Clone,
             Debug,
@@ -74371,7 +75771,7 @@ mod root {
         /// The table `HistoryRecall` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecall` in the file `moor_rpc.fbs:978`
+        /// * Table `HistoryRecall` in the file `crates/common/schema/moor_rpc.fbs:999`
         #[derive(
             Clone,
             Debug,
@@ -74618,7 +76018,7 @@ mod root {
         /// The table `HistoricalNarrativeEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoricalNarrativeEvent` in the file `moor_rpc.fbs:982`
+        /// * Table `HistoricalNarrativeEvent` in the file `crates/common/schema/moor_rpc.fbs:1003`
         #[derive(
             Clone,
             Debug,
@@ -74983,7 +76383,7 @@ mod root {
         /// The table `HistoryResponse` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryResponse` in the file `moor_rpc.fbs:988`
+        /// * Table `HistoryResponse` in the file `crates/common/schema/moor_rpc.fbs:1009`
         #[derive(
             Clone,
             Debug,
@@ -75613,12 +77013,12 @@ mod root {
     /// The namespace `MoorEventLog`
     ///
     /// Generated from these locations:
-    /// * File `moor_event_log.fbs`
+    /// * File `crates/common/schema/moor_event_log.fbs`
     pub mod moor_event_log {
         /// The table `LoggedNarrativeEvent` in the namespace `MoorEventLog`
         ///
         /// Generated from these locations:
-        /// * Table `LoggedNarrativeEvent` in the file `moor_event_log.fbs:29`
+        /// * Table `LoggedNarrativeEvent` in the file `crates/common/schema/moor_event_log.fbs:29`
         #[derive(
             Clone,
             Debug,
@@ -75918,7 +77318,7 @@ mod root {
         /// The table `PlayerPresentations` in the namespace `MoorEventLog`
         ///
         /// Generated from these locations:
-        /// * Table `PlayerPresentations` in the file `moor_event_log.fbs:36`
+        /// * Table `PlayerPresentations` in the file `crates/common/schema/moor_event_log.fbs:36`
         #[derive(
             Clone,
             Debug,
@@ -76229,12 +77629,12 @@ mod root {
     /// The namespace `MoorProgram`
     ///
     /// Generated from these locations:
-    /// * File `moor_program.fbs`
+    /// * File `crates/common/schema/moor_program.fbs`
     pub mod moor_program {
         /// The table `StoredName` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredName` in the file `moor_program.fbs:35`
+        /// * Table `StoredName` in the file `crates/common/schema/moor_program.fbs:35`
         #[derive(
             Clone,
             Debug,
@@ -76592,7 +77992,7 @@ mod root {
         /// The table `StoredJumpLabel` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredJumpLabel` in the file `moor_program.fbs:41`
+        /// * Table `StoredJumpLabel` in the file `crates/common/schema/moor_program.fbs:41`
         #[derive(
             Clone,
             Debug,
@@ -76976,7 +78376,7 @@ mod root {
         /// The enum `StoredDeclType` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Enum `StoredDeclType` in the file `moor_program.fbs:48`
+        /// * Enum `StoredDeclType` in the file `crates/common/schema/moor_program.fbs:48`
         #[derive(
             Copy,
             Clone,
@@ -77183,7 +78583,7 @@ mod root {
         /// The union `StoredVarNameUnion` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Union `StoredVarNameUnion` in the file `moor_program.fbs:61`
+        /// * Union `StoredVarNameUnion` in the file `crates/common/schema/moor_program.fbs:61`
         #[derive(
             Clone,
             Debug,
@@ -77407,7 +78807,7 @@ mod root {
         /// The table `StoredNamedVar` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNamedVar` in the file `moor_program.fbs:66`
+        /// * Table `StoredNamedVar` in the file `crates/common/schema/moor_program.fbs:66`
         #[derive(
             Clone,
             Debug,
@@ -77663,7 +79063,7 @@ mod root {
         /// The table `StoredRegisterVar` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredRegisterVar` in the file `moor_program.fbs:70`
+        /// * Table `StoredRegisterVar` in the file `crates/common/schema/moor_program.fbs:70`
         #[derive(
             Clone,
             Debug,
@@ -77950,7 +79350,7 @@ mod root {
         /// The table `StoredVariable` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredVariable` in the file `moor_program.fbs:75`
+        /// * Table `StoredVariable` in the file `crates/common/schema/moor_program.fbs:75`
         #[derive(
             Clone,
             Debug,
@@ -78288,7 +79688,7 @@ mod root {
         /// The table `StoredDecl` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredDecl` in the file `moor_program.fbs:82`
+        /// * Table `StoredDecl` in the file `crates/common/schema/moor_program.fbs:82`
         #[derive(
             Clone,
             Debug,
@@ -78725,7 +80125,7 @@ mod root {
         /// The table `StoredNameDeclPair` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNameDeclPair` in the file `moor_program.fbs:91`
+        /// * Table `StoredNameDeclPair` in the file `crates/common/schema/moor_program.fbs:91`
         #[derive(
             Clone,
             Debug,
@@ -79023,7 +80423,7 @@ mod root {
         /// The table `StoredNames` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNames` in the file `moor_program.fbs:96`
+        /// * Table `StoredNames` in the file `crates/common/schema/moor_program.fbs:96`
         #[derive(
             Clone,
             Debug,
@@ -79339,7 +80739,7 @@ mod root {
         /// The union `StoredScatterLabelUnion` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Union `StoredScatterLabelUnion` in the file `moor_program.fbs:105`
+        /// * Union `StoredScatterLabelUnion` in the file `crates/common/schema/moor_program.fbs:105`
         #[derive(
             Clone,
             Debug,
@@ -79631,7 +81031,7 @@ mod root {
         /// The table `StoredScatterRequired` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterRequired` in the file `moor_program.fbs:111`
+        /// * Table `StoredScatterRequired` in the file `crates/common/schema/moor_program.fbs:111`
         #[derive(
             Clone,
             Debug,
@@ -79905,7 +81305,7 @@ mod root {
         /// The table `StoredScatterOptional` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterOptional` in the file `moor_program.fbs:115`
+        /// * Table `StoredScatterOptional` in the file `crates/common/schema/moor_program.fbs:115`
         #[derive(
             Clone,
             Debug,
@@ -80288,7 +81688,7 @@ mod root {
         /// The table `StoredScatterRest` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterRest` in the file `moor_program.fbs:121`
+        /// * Table `StoredScatterRest` in the file `crates/common/schema/moor_program.fbs:121`
         #[derive(
             Clone,
             Debug,
@@ -80560,7 +81960,7 @@ mod root {
         /// The table `StoredScatterLabel` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterLabel` in the file `moor_program.fbs:125`
+        /// * Table `StoredScatterLabel` in the file `crates/common/schema/moor_program.fbs:125`
         #[derive(
             Clone,
             Debug,
@@ -80824,7 +82224,7 @@ mod root {
         /// The table `StoredScatterArgs` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterArgs` in the file `moor_program.fbs:129`
+        /// * Table `StoredScatterArgs` in the file `crates/common/schema/moor_program.fbs:129`
         #[derive(
             Clone,
             Debug,
@@ -81152,7 +82552,7 @@ mod root {
         /// The table `StoredForSequenceOperand` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredForSequenceOperand` in the file `moor_program.fbs:134`
+        /// * Table `StoredForSequenceOperand` in the file `crates/common/schema/moor_program.fbs:134`
         #[derive(
             Clone,
             Debug,
@@ -81599,7 +82999,7 @@ mod root {
         /// The table `StoredForRangeOperand` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredForRangeOperand` in the file `moor_program.fbs:141`
+        /// * Table `StoredForRangeOperand` in the file `crates/common/schema/moor_program.fbs:141`
         #[derive(
             Clone,
             Debug,
@@ -81987,7 +83387,7 @@ mod root {
         /// The table `StoredRangeComprehend` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredRangeComprehend` in the file `moor_program.fbs:147`
+        /// * Table `StoredRangeComprehend` in the file `crates/common/schema/moor_program.fbs:147`
         #[derive(
             Clone,
             Debug,
@@ -82357,7 +83757,7 @@ mod root {
         /// The table `StoredListComprehend` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredListComprehend` in the file `moor_program.fbs:153`
+        /// * Table `StoredListComprehend` in the file `crates/common/schema/moor_program.fbs:153`
         #[derive(
             Clone,
             Debug,
@@ -82757,7 +84157,7 @@ mod root {
         /// The table `ForkVector` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `ForkVector` in the file `moor_program.fbs:164`
+        /// * Table `ForkVector` in the file `crates/common/schema/moor_program.fbs:164`
         #[derive(
             Clone,
             Debug,
@@ -83050,7 +84450,7 @@ mod root {
         /// The table `StoredProgram` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredProgram` in the file `moor_program.fbs:173`
+        /// * Table `StoredProgram` in the file `crates/common/schema/moor_program.fbs:173`
         #[derive(
             Clone,
             Debug,
@@ -84073,7 +85473,7 @@ mod root {
         /// The table `LineSpan` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `LineSpan` in the file `moor_program.fbs:223`
+        /// * Table `LineSpan` in the file `crates/common/schema/moor_program.fbs:223`
         #[derive(
             Clone,
             Debug,
@@ -84376,7 +85776,7 @@ mod root {
         /// The table `ForkLineSpans` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `ForkLineSpans` in the file `moor_program.fbs:228`
+        /// * Table `ForkLineSpans` in the file `crates/common/schema/moor_program.fbs:228`
         #[derive(
             Clone,
             Debug,
