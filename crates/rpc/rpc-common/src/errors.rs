@@ -1,133 +1,18 @@
-// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
-// software: you can redistribute it and/or modify it under the terms of the GNU
-// General Public License as published by the Free Software Foundation, version
-// 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
-//! Error type conversions between moor types and FlatBuffer types
-//!
-//! This module handles conversion of error types like Error, WorkerError, SchedulerError,
-//! CompileError, CommandError, VerbProgramError, and WorldStateError.
-
-use crate::{
-    convert::{
-        obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_to_flatbuffer_struct,
-        var_from_flatbuffer_bytes, var_to_flatbuffer_bytes,
-    },
-    symbol_from_flatbuffer_struct, symbol_from_ref, uuid_from_ref,
-};
 use moor_common::{
-    model,
-    model::{CompileContext, CompileError, WorldStateError},
+    model::WorldStateError,
     schema::{
-        common as moor_common_schema,
-        common::{CompileErrorUnion, CompileErrorUnionRef},
+        common,
+        convert::{
+            compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
+            obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct,
+            symbol_from_flatbuffer_struct, symbol_to_flatbuffer_struct, uuid_from_ref,
+            var_to_flatbuffer_bytes,
+        },
         rpc,
     },
     tasks::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError, WorkerError},
 };
-use moor_var::Var;
 use std::time::Duration;
-
-/// Convert from moor_var::Error to flatbuffer Error struct
-pub fn error_to_flatbuffer_struct(
-    error: &moor_var::Error,
-) -> Result<moor_common_schema::Error, Box<dyn std::error::Error>> {
-    use moor_var::ErrorCode as VarErrorCode;
-
-    let err_code = match error.err_type {
-        VarErrorCode::E_NONE => moor_common_schema::ErrorCode::ENone,
-        VarErrorCode::E_TYPE => moor_common_schema::ErrorCode::EType,
-        VarErrorCode::E_DIV => moor_common_schema::ErrorCode::EDiv,
-        VarErrorCode::E_PERM => moor_common_schema::ErrorCode::EPerm,
-        VarErrorCode::E_PROPNF => moor_common_schema::ErrorCode::EPropnf,
-        VarErrorCode::E_VERBNF => moor_common_schema::ErrorCode::EVerbnf,
-        VarErrorCode::E_VARNF => moor_common_schema::ErrorCode::EVarnf,
-        VarErrorCode::E_INVIND => moor_common_schema::ErrorCode::EInvind,
-        VarErrorCode::E_RECMOVE => moor_common_schema::ErrorCode::ERecmove,
-        VarErrorCode::E_MAXREC => moor_common_schema::ErrorCode::EMaxrec,
-        VarErrorCode::E_RANGE => moor_common_schema::ErrorCode::ERange,
-        VarErrorCode::E_ARGS => moor_common_schema::ErrorCode::EArgs,
-        VarErrorCode::E_NACC => moor_common_schema::ErrorCode::ENacc,
-        VarErrorCode::E_INVARG => moor_common_schema::ErrorCode::EInvarg,
-        VarErrorCode::E_QUOTA => moor_common_schema::ErrorCode::EQuota,
-        VarErrorCode::E_FLOAT => moor_common_schema::ErrorCode::EFloat,
-        VarErrorCode::E_FILE => moor_common_schema::ErrorCode::EFile,
-        VarErrorCode::E_EXEC => moor_common_schema::ErrorCode::EExec,
-        VarErrorCode::E_INTRPT => moor_common_schema::ErrorCode::EIntrpt,
-        VarErrorCode::ErrCustom(_) => moor_common_schema::ErrorCode::ErrCustom,
-    };
-
-    let msg = error.msg.as_ref().map(|m| m.as_str().to_string());
-    let value = match &error.value {
-        Some(v) => var_to_flatbuffer_bytes(v)
-            .ok()
-            .map(|data| Box::new(moor_common_schema::VarBytes { data })),
-        None => None,
-    };
-    let custom_symbol = match &error.err_type {
-        VarErrorCode::ErrCustom(sym) => Some(Box::new(symbol_to_flatbuffer_struct(sym))),
-        _ => None,
-    };
-
-    Ok(moor_common_schema::Error {
-        err_type: err_code,
-        msg,
-        value,
-        custom_symbol,
-    })
-}
-
-/// Convert from flatbuffer Error struct to moor_var::Error
-pub fn error_from_flatbuffer_struct(
-    fb_error: &moor_common_schema::Error,
-) -> Result<moor_var::Error, Box<dyn std::error::Error>> {
-    use moor_var::ErrorCode as VarErrorCode;
-
-    let err_type = match fb_error.err_type {
-        moor_common_schema::ErrorCode::ENone => VarErrorCode::E_NONE,
-        moor_common_schema::ErrorCode::EType => VarErrorCode::E_TYPE,
-        moor_common_schema::ErrorCode::EDiv => VarErrorCode::E_DIV,
-        moor_common_schema::ErrorCode::EPerm => VarErrorCode::E_PERM,
-        moor_common_schema::ErrorCode::EPropnf => VarErrorCode::E_PROPNF,
-        moor_common_schema::ErrorCode::EVerbnf => VarErrorCode::E_VERBNF,
-        moor_common_schema::ErrorCode::EVarnf => VarErrorCode::E_VARNF,
-        moor_common_schema::ErrorCode::EInvind => VarErrorCode::E_INVIND,
-        moor_common_schema::ErrorCode::ERecmove => VarErrorCode::E_RECMOVE,
-        moor_common_schema::ErrorCode::EMaxrec => VarErrorCode::E_MAXREC,
-        moor_common_schema::ErrorCode::ERange => VarErrorCode::E_RANGE,
-        moor_common_schema::ErrorCode::EArgs => VarErrorCode::E_ARGS,
-        moor_common_schema::ErrorCode::ENacc => VarErrorCode::E_NACC,
-        moor_common_schema::ErrorCode::EInvarg => VarErrorCode::E_INVARG,
-        moor_common_schema::ErrorCode::EQuota => VarErrorCode::E_QUOTA,
-        moor_common_schema::ErrorCode::EFloat => VarErrorCode::E_FLOAT,
-        moor_common_schema::ErrorCode::EFile => VarErrorCode::E_FILE,
-        moor_common_schema::ErrorCode::EExec => VarErrorCode::E_EXEC,
-        moor_common_schema::ErrorCode::EIntrpt => VarErrorCode::E_INTRPT,
-        moor_common_schema::ErrorCode::ErrCustom => {
-            let custom_symbol = fb_error
-                .custom_symbol
-                .as_ref()
-                .ok_or("ErrCustom missing custom_symbol")?;
-            VarErrorCode::ErrCustom(symbol_from_flatbuffer_struct(custom_symbol))
-        }
-    };
-
-    let msg = fb_error.msg.clone();
-    let value = match &fb_error.value {
-        Some(v) => Some(var_from_flatbuffer_bytes(&v.data)?),
-        None => None,
-    };
-
-    Ok(moor_var::Error::new(err_type, msg, value))
-}
 
 /// Convert from WorkerError to flatbuffer WorkerError struct
 pub fn worker_error_to_flatbuffer_struct(error: &WorkerError) -> rpc::WorkerError {
@@ -205,7 +90,7 @@ pub fn worker_error_from_flatbuffer_struct(
 
 /// Convert VerbProgramError to FlatBuffer struct
 pub fn verb_program_error_to_flatbuffer_struct(
-    error: &moor_common::tasks::VerbProgramError,
+    error: &VerbProgramError,
 ) -> Result<rpc::VerbProgramError, String> {
     let error_union = match error {
         VerbProgramError::NoVerbToProgram => {
@@ -227,68 +112,62 @@ pub fn verb_program_error_to_flatbuffer_struct(
 
 /// Convert WorldStateError to FlatBuffer struct
 pub fn world_state_error_to_flatbuffer_struct(
-    error: &model::WorldStateError,
-) -> Result<moor_common_schema::WorldStateError, String> {
+    error: &WorldStateError,
+) -> Result<common::WorldStateError, String> {
     let error_union = match error {
         WorldStateError::ObjectNotFound(objref) => {
-            moor_common_schema::WorldStateErrorUnion::ObjectNotFound(Box::new(
-                moor_common_schema::ObjectNotFound {
-                    object_ref: Box::new(objectref_to_flatbuffer_struct(objref)),
-                },
-            ))
+            common::WorldStateErrorUnion::ObjectNotFound(Box::new(common::ObjectNotFound {
+                object_ref: Box::new(objectref_to_flatbuffer_struct(objref)),
+            }))
         }
         WorldStateError::ObjectAlreadyExists(obj) => {
-            moor_common_schema::WorldStateErrorUnion::ObjectAlreadyExists(Box::new(
-                moor_common_schema::ObjectAlreadyExists {
+            common::WorldStateErrorUnion::ObjectAlreadyExists(Box::new(
+                common::ObjectAlreadyExists {
                     obj: Box::new(obj_to_flatbuffer_struct(obj)),
                 },
             ))
         }
         WorldStateError::RecursiveMove(from_obj, to_obj) => {
-            moor_common_schema::WorldStateErrorUnion::RecursiveMove(Box::new(
-                moor_common_schema::RecursiveMove {
-                    from_obj: Box::new(obj_to_flatbuffer_struct(from_obj)),
-                    to_obj: Box::new(obj_to_flatbuffer_struct(to_obj)),
-                },
-            ))
+            common::WorldStateErrorUnion::RecursiveMove(Box::new(common::RecursiveMove {
+                from_obj: Box::new(obj_to_flatbuffer_struct(from_obj)),
+                to_obj: Box::new(obj_to_flatbuffer_struct(to_obj)),
+            }))
         }
         WorldStateError::ObjectPermissionDenied => {
-            moor_common_schema::WorldStateErrorUnion::ObjectPermissionDenied(Box::new(
-                moor_common_schema::ObjectPermissionDenied {},
+            common::WorldStateErrorUnion::ObjectPermissionDenied(Box::new(
+                common::ObjectPermissionDenied {},
             ))
         }
         WorldStateError::PropertyNotFound(obj, property) => {
-            moor_common_schema::WorldStateErrorUnion::PropertyNotFound(Box::new(
-                moor_common_schema::PropertyNotFound {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                    property: property.clone(),
-                },
-            ))
+            common::WorldStateErrorUnion::PropertyNotFound(Box::new(common::PropertyNotFound {
+                obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                property: property.clone(),
+            }))
         }
         WorldStateError::PropertyPermissionDenied => {
-            moor_common_schema::WorldStateErrorUnion::PropertyPermissionDenied(Box::new(
-                moor_common_schema::PropertyPermissionDenied {},
+            common::WorldStateErrorUnion::PropertyPermissionDenied(Box::new(
+                common::PropertyPermissionDenied {},
             ))
         }
         WorldStateError::PropertyDefinitionNotFound(obj, property) => {
-            moor_common_schema::WorldStateErrorUnion::PropertyDefinitionNotFound(Box::new(
-                moor_common_schema::PropertyDefinitionNotFound {
+            common::WorldStateErrorUnion::PropertyDefinitionNotFound(Box::new(
+                common::PropertyDefinitionNotFound {
                     obj: Box::new(obj_to_flatbuffer_struct(obj)),
                     property: property.clone(),
                 },
             ))
         }
         WorldStateError::DuplicatePropertyDefinition(obj, property) => {
-            moor_common_schema::WorldStateErrorUnion::DuplicatePropertyDefinition(Box::new(
-                moor_common_schema::DuplicatePropertyDefinition {
+            common::WorldStateErrorUnion::DuplicatePropertyDefinition(Box::new(
+                common::DuplicatePropertyDefinition {
                     obj: Box::new(obj_to_flatbuffer_struct(obj)),
                     property: property.clone(),
                 },
             ))
         }
         WorldStateError::ChparentPropertyNameConflict(descendant, ancestor, property) => {
-            moor_common_schema::WorldStateErrorUnion::ChparentPropertyNameConflict(Box::new(
-                moor_common_schema::ChparentPropertyNameConflict {
+            common::WorldStateErrorUnion::ChparentPropertyNameConflict(Box::new(
+                common::ChparentPropertyNameConflict {
                     descendant: Box::new(obj_to_flatbuffer_struct(descendant)),
                     ancestor: Box::new(obj_to_flatbuffer_struct(ancestor)),
                     property: property.clone(),
@@ -296,157 +175,80 @@ pub fn world_state_error_to_flatbuffer_struct(
             ))
         }
         WorldStateError::PropertyTypeMismatch => {
-            moor_common_schema::WorldStateErrorUnion::PropertyTypeMismatch(Box::new(
-                moor_common_schema::PropertyTypeMismatch {},
+            common::WorldStateErrorUnion::PropertyTypeMismatch(Box::new(
+                common::PropertyTypeMismatch {},
             ))
         }
         WorldStateError::VerbNotFound(obj, verb) => {
-            moor_common_schema::WorldStateErrorUnion::VerbNotFound(Box::new(
-                moor_common_schema::VerbNotFound {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                    verb: verb.clone(),
-                },
-            ))
+            common::WorldStateErrorUnion::VerbNotFound(Box::new(common::VerbNotFound {
+                obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                verb: verb.clone(),
+            }))
         }
-        WorldStateError::InvalidVerb(vid) => moor_common_schema::WorldStateErrorUnion::InvalidVerb(
-            Box::new(moor_common_schema::InvalidVerb { vid: vid.0 }),
-        ),
+        WorldStateError::InvalidVerb(vid) => {
+            common::WorldStateErrorUnion::InvalidVerb(Box::new(common::InvalidVerb { vid: vid.0 }))
+        }
         WorldStateError::VerbDecodeError(obj, verb) => {
-            moor_common_schema::WorldStateErrorUnion::VerbDecodeError(Box::new(
-                moor_common_schema::VerbDecodeError {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                    verb: Box::new(symbol_to_flatbuffer_struct(verb)),
-                },
-            ))
+            common::WorldStateErrorUnion::VerbDecodeError(Box::new(common::VerbDecodeError {
+                obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                verb: Box::new(symbol_to_flatbuffer_struct(verb)),
+            }))
         }
         WorldStateError::VerbPermissionDenied => {
-            moor_common_schema::WorldStateErrorUnion::VerbPermissionDenied(Box::new(
-                moor_common_schema::VerbPermissionDenied {},
+            common::WorldStateErrorUnion::VerbPermissionDenied(Box::new(
+                common::VerbPermissionDenied {},
             ))
         }
         WorldStateError::DuplicateVerb(obj, verb) => {
-            moor_common_schema::WorldStateErrorUnion::DuplicateVerb(Box::new(
-                moor_common_schema::DuplicateVerb {
-                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
-                    verb: Box::new(symbol_to_flatbuffer_struct(verb)),
-                },
-            ))
+            common::WorldStateErrorUnion::DuplicateVerb(Box::new(common::DuplicateVerb {
+                obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                verb: Box::new(symbol_to_flatbuffer_struct(verb)),
+            }))
         }
         WorldStateError::FailedMatch(match_string) => {
-            moor_common_schema::WorldStateErrorUnion::FailedMatch(Box::new(
-                moor_common_schema::FailedMatch {
-                    match_string: match_string.clone(),
-                },
-            ))
+            common::WorldStateErrorUnion::FailedMatch(Box::new(common::FailedMatch {
+                match_string: match_string.clone(),
+            }))
         }
         WorldStateError::AmbiguousMatch(match_string) => {
-            moor_common_schema::WorldStateErrorUnion::AmbiguousMatch(Box::new(
-                moor_common_schema::AmbiguousMatch {
-                    match_string: match_string.clone(),
-                },
-            ))
+            common::WorldStateErrorUnion::AmbiguousMatch(Box::new(common::AmbiguousMatch {
+                match_string: match_string.clone(),
+            }))
         }
         WorldStateError::InvalidRenumber(message) => {
-            moor_common_schema::WorldStateErrorUnion::InvalidRenumber(Box::new(
-                moor_common_schema::InvalidRenumber {
-                    message: message.clone(),
-                },
-            ))
+            common::WorldStateErrorUnion::InvalidRenumber(Box::new(common::InvalidRenumber {
+                message: message.clone(),
+            }))
         }
         WorldStateError::DatabaseError(message) => {
-            moor_common_schema::WorldStateErrorUnion::WorldStateDatabaseError(Box::new(
-                moor_common_schema::WorldStateDatabaseError {
+            common::WorldStateErrorUnion::WorldStateDatabaseError(Box::new(
+                common::WorldStateDatabaseError {
                     message: message.clone(),
                 },
             ))
         }
-        WorldStateError::RollbackRetry => moor_common_schema::WorldStateErrorUnion::RollbackRetry(
-            Box::new(moor_common_schema::RollbackRetry {}),
-        ),
-    };
-
-    Ok(moor_common_schema::WorldStateError { error: error_union })
-}
-
-/// Convert from FlatBuffer ErrorRef to moor_var::Error
-pub fn error_from_ref(
-    error_ref: moor_common_schema::ErrorRef<'_>,
-) -> Result<moor_var::Error, String> {
-    use moor_common_schema::ErrorCode as FbErr;
-    use moor_var::ErrorCode as VarErrorCode;
-
-    let error_code = error_ref.err_type().map_err(|_| "Missing err_type")?;
-
-    let err_type = match error_code {
-        FbErr::ENone => VarErrorCode::E_NONE,
-        FbErr::EType => VarErrorCode::E_TYPE,
-        FbErr::EDiv => VarErrorCode::E_DIV,
-        FbErr::EPerm => VarErrorCode::E_PERM,
-        FbErr::EPropnf => VarErrorCode::E_PROPNF,
-        FbErr::EVerbnf => VarErrorCode::E_VERBNF,
-        FbErr::EVarnf => VarErrorCode::E_VARNF,
-        FbErr::EInvind => VarErrorCode::E_INVIND,
-        FbErr::ERecmove => VarErrorCode::E_RECMOVE,
-        FbErr::EMaxrec => VarErrorCode::E_MAXREC,
-        FbErr::ERange => VarErrorCode::E_RANGE,
-        FbErr::EArgs => VarErrorCode::E_ARGS,
-        FbErr::ENacc => VarErrorCode::E_NACC,
-        FbErr::EInvarg => VarErrorCode::E_INVARG,
-        FbErr::EQuota => VarErrorCode::E_QUOTA,
-        FbErr::EFloat => VarErrorCode::E_FLOAT,
-        FbErr::EFile => VarErrorCode::E_FILE,
-        FbErr::EExec => VarErrorCode::E_EXEC,
-        FbErr::EIntrpt => VarErrorCode::E_INTRPT,
-        FbErr::ErrCustom => {
-            let custom_symbol_ref = error_ref
-                .custom_symbol()
-                .map_err(|_| "Failed to access custom_symbol")?
-                .ok_or("ErrCustom missing custom_symbol")?;
-            let custom_symbol = symbol_from_ref(custom_symbol_ref)?;
-            VarErrorCode::ErrCustom(custom_symbol)
+        WorldStateError::RollbackRetry => {
+            common::WorldStateErrorUnion::RollbackRetry(Box::new(common::RollbackRetry {}))
         }
     };
 
-    let msg = error_ref
-        .msg()
-        .ok()
-        .flatten()
-        .map(|s| Box::new(s.to_string()));
-
-    let value = if let Ok(Some(value_bytes_ref)) = error_ref.value() {
-        let value_data = value_bytes_ref.data().map_err(|_| "Missing value data")?;
-        Some(Box::new(var_from_flatbuffer_bytes(value_data).map_err(
-            |e| format!("Failed to decode error value: {e}"),
-        )?))
-    } else {
-        None
-    };
-
-    Ok(moor_var::Error {
-        err_type,
-        msg,
-        value,
-    })
+    Ok(common::WorldStateError { error: error_union })
 }
 
 /// Convert from FlatBuffer VerbProgramErrorRef to VerbProgramError
 fn verb_program_error_from_ref(
     error_ref: rpc::VerbProgramErrorRef<'_>,
-) -> Result<moor_common::tasks::VerbProgramError, String> {
+) -> Result<VerbProgramError, String> {
     match error_ref
         .error()
         .map_err(|_| "Failed to read VerbProgramError union")?
     {
-        rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => {
-            Ok(moor_common::tasks::VerbProgramError::NoVerbToProgram)
-        }
+        rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => Ok(VerbProgramError::NoVerbToProgram),
         rpc::VerbProgramErrorUnionRef::VerbCompilationError(_compile_error) => {
             // TODO: Implement CompileError conversion if needed
             Err("VerbCompilationError conversion not yet implemented".to_string())
         }
-        rpc::VerbProgramErrorUnionRef::VerbDatabaseError(_) => {
-            Ok(moor_common::tasks::VerbProgramError::DatabaseError)
-        }
+        rpc::VerbProgramErrorUnionRef::VerbDatabaseError(_) => Ok(VerbProgramError::DatabaseError),
     }
 }
 
@@ -712,273 +514,4 @@ pub fn scheduler_error_to_flatbuffer_struct(
     };
 
     Ok(rpc::SchedulerError { error: error_union })
-}
-
-/// Convert from FlatBuffer CompileErrorRef to moor_common::model::CompileError
-pub fn compilation_error_from_ref(
-    error_ref: moor_common_schema::CompileErrorRef<'_>,
-) -> Result<CompileError, String> {
-    let error_union = error_ref.error().map_err(|_| "Missing error union")?;
-
-    match error_union {
-        CompileErrorUnionRef::StringLexError(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let msg = e.message().map_err(|_| "Missing message")?.to_string();
-            Ok(CompileError::StringLexError(ctx, msg))
-        }
-        CompileErrorUnionRef::ParseError(e) => {
-            let pos_ref = e.error_position().map_err(|_| "Missing error_position")?;
-            let error_position = CompileContext::new((
-                pos_ref.line().map_err(|_| "Missing line")? as usize,
-                pos_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let context = e.context().map_err(|_| "Missing context")?.to_string();
-            let message = e.message().map_err(|_| "Missing message")?.to_string();
-            let end_line_col = if e.has_end().map_err(|_| "Missing has_end")? {
-                Some((
-                    e.end_line().map_err(|_| "Missing end_line")? as usize,
-                    e.end_col().map_err(|_| "Missing end_col")? as usize,
-                ))
-            } else {
-                None
-            };
-            Ok(CompileError::ParseError {
-                error_position,
-                context,
-                end_line_col,
-                message,
-            })
-        }
-        CompileErrorUnionRef::UnknownBuiltinFunction(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let name = e.name().map_err(|_| "Missing name")?.to_string();
-            Ok(CompileError::UnknownBuiltinFunction(ctx, name))
-        }
-        CompileErrorUnionRef::UnknownTypeConstant(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let name = e.name().map_err(|_| "Missing name")?.to_string();
-            Ok(CompileError::UnknownTypeConstant(ctx, name))
-        }
-        CompileErrorUnionRef::UnknownLoopLabel(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let label = e.label().map_err(|_| "Missing label")?.to_string();
-            Ok(CompileError::UnknownLoopLabel(ctx, label))
-        }
-        CompileErrorUnionRef::DuplicateVariable(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let var_ref = e.var_name().map_err(|_| "Missing var_name")?;
-            let var_struct = moor_common_schema::Symbol::try_from(var_ref)
-                .map_err(|_| "Failed to convert var_name")?;
-            let var_name = symbol_from_flatbuffer_struct(&var_struct);
-            Ok(CompileError::DuplicateVariable(ctx, var_name))
-        }
-        CompileErrorUnionRef::AssignToConst(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let var_ref = e.var_name().map_err(|_| "Missing var_name")?;
-            let var_struct = moor_common_schema::Symbol::try_from(var_ref)
-                .map_err(|_| "Failed to convert var_name")?;
-            let var_name = symbol_from_flatbuffer_struct(&var_struct);
-            Ok(CompileError::AssignToConst(ctx, var_name))
-        }
-        CompileErrorUnionRef::DisabledFeature(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let feature = e.feature().map_err(|_| "Missing feature")?.to_string();
-            Ok(CompileError::DisabledFeature(ctx, feature))
-        }
-        CompileErrorUnionRef::BadSlotName(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            let slot = e.slot().map_err(|_| "Missing slot")?.to_string();
-            Ok(CompileError::BadSlotName(ctx, slot))
-        }
-        CompileErrorUnionRef::InvalidAssignment(e) => {
-            let ctx_ref = e.context().map_err(|_| "Missing context")?;
-            let ctx = CompileContext::new((
-                ctx_ref.line().map_err(|_| "Missing line")? as usize,
-                ctx_ref.col().map_err(|_| "Missing col")? as usize,
-            ));
-            Ok(CompileError::InvalidAssignemnt(ctx))
-        }
-    }
-}
-
-/// Convert from moor_common::model::CompileError to FlatBuffer CompileError
-pub fn compilation_error_to_flatbuffer_struct(
-    error: &CompileError,
-) -> Result<moor_common_schema::CompileError, String> {
-    let error_union = match error {
-        CompileError::StringLexError(ctx, msg) => {
-            CompileErrorUnion::StringLexError(Box::new(moor_common_schema::StringLexError {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                message: msg.clone(),
-            }))
-        }
-        CompileError::ParseError {
-            error_position,
-            context,
-            end_line_col,
-            message,
-        } => CompileErrorUnion::ParseError(Box::new(moor_common_schema::ParseError {
-            error_position: Box::new(moor_common_schema::CompileContext {
-                line: error_position.line_col.0 as u64,
-                col: error_position.line_col.1 as u64,
-            }),
-            context: context.clone(),
-            end_line: end_line_col.map(|(l, _)| l as u64).unwrap_or(0),
-            end_col: end_line_col.map(|(_, c)| c as u64).unwrap_or(0),
-            has_end: end_line_col.is_some(),
-            message: message.clone(),
-        })),
-        CompileError::UnknownBuiltinFunction(ctx, name) => {
-            CompileErrorUnion::UnknownBuiltinFunction(Box::new(
-                moor_common_schema::UnknownBuiltinFunction {
-                    context: Box::new(moor_common_schema::CompileContext {
-                        line: ctx.line_col.0 as u64,
-                        col: ctx.line_col.1 as u64,
-                    }),
-                    name: name.clone(),
-                },
-            ))
-        }
-        CompileError::UnknownTypeConstant(ctx, name) => CompileErrorUnion::UnknownTypeConstant(
-            Box::new(moor_common_schema::UnknownTypeConstant {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                name: name.clone(),
-            }),
-        ),
-        CompileError::UnknownLoopLabel(ctx, label) => {
-            CompileErrorUnion::UnknownLoopLabel(Box::new(moor_common_schema::UnknownLoopLabel {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                label: label.clone(),
-            }))
-        }
-        CompileError::DuplicateVariable(ctx, var_name) => {
-            CompileErrorUnion::DuplicateVariable(Box::new(moor_common_schema::DuplicateVariable {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                var_name: Box::new(symbol_to_flatbuffer_struct(var_name)),
-            }))
-        }
-        CompileError::AssignToConst(ctx, var_name) => {
-            CompileErrorUnion::AssignToConst(Box::new(moor_common_schema::AssignToConst {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                var_name: Box::new(symbol_to_flatbuffer_struct(var_name)),
-            }))
-        }
-        CompileError::DisabledFeature(ctx, feature) => {
-            CompileErrorUnion::DisabledFeature(Box::new(moor_common_schema::DisabledFeature {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                feature: feature.clone(),
-            }))
-        }
-        CompileError::BadSlotName(ctx, slot) => {
-            CompileErrorUnion::BadSlotName(Box::new(moor_common_schema::BadSlotName {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-                slot: slot.clone(),
-            }))
-        }
-        CompileError::InvalidAssignemnt(ctx) => {
-            CompileErrorUnion::InvalidAssignment(Box::new(moor_common_schema::InvalidAssignment {
-                context: Box::new(moor_common_schema::CompileContext {
-                    line: ctx.line_col.0 as u64,
-                    col: ctx.line_col.1 as u64,
-                }),
-            }))
-        }
-    };
-
-    Ok(moor_common_schema::CompileError { error: error_union })
-}
-
-/// Convert from FlatBuffer ExceptionRef to Exception
-pub(crate) fn exception_from_ref(
-    exception_ref: moor_common_schema::ExceptionRef<'_>,
-) -> Result<moor_common::tasks::Exception, String> {
-    let error_ref = exception_ref.error().map_err(|_| "Missing error")?;
-    let error_value = error_from_ref(error_ref)?;
-
-    let stack_vec = exception_ref.stack().map_err(|_| "Missing stack")?;
-    let stack: Result<Vec<_>, String> = stack_vec
-        .iter()
-        .map(|vb_result| -> Result<Var, String> {
-            let vb = vb_result.map_err(|e| format!("Failed to get stack item: {e}"))?;
-            let data = vb
-                .data()
-                .map_err(|e| format!("Missing stack item data: {e}"))?;
-            var_from_flatbuffer_bytes(data)
-                .map_err(|e| format!("Failed to decode stack var: {e}"))
-        })
-        .collect();
-    let stack = stack?;
-
-    let backtrace_vec = exception_ref.backtrace().map_err(|_| "Missing backtrace")?;
-    let backtrace: Result<Vec<_>, String> = backtrace_vec
-        .iter()
-        .map(|vb_result| -> Result<Var, String> {
-            let vb = vb_result.map_err(|e| format!("Failed to get backtrace item: {e}"))?;
-            let data = vb
-                .data()
-                .map_err(|e| format!("Missing backtrace item data: {e}"))?;
-            var_from_flatbuffer_bytes(data)
-                .map_err(|e| format!("Failed to decode backtrace var: {e}"))
-        })
-        .collect();
-    let backtrace = backtrace?;
-
-    Ok(moor_common::tasks::Exception {
-        error: error_value,
-        stack,
-        backtrace,
-    })
 }

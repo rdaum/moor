@@ -53,6 +53,10 @@ use moor_kernel::{
     SchedulerClient, config::Config, tasks::sched_counters, vm::builtins::bf_perf_counters,
 };
 
+use moor_common::schema::convert::{
+    obj_from_ref, obj_to_flatbuffer_struct, presentation_to_flatbuffer_struct,
+    uuid_to_flatbuffer_struct, var_from_ref,
+};
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, RpcMessageError, auth_token_from_ref,
@@ -60,9 +64,7 @@ use rpc_common::{
     extract_object_ref_rpc, extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc,
     extract_uuid_rpc, extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack,
     mk_disconnected_reply, mk_new_connection_reply, mk_presentation_dismissed_reply,
-    mk_thanks_pong_reply, obj_from_ref, obj_to_flatbuffer_struct,
-    presentation_to_flatbuffer_struct, uuid_to_flatbuffer_struct, var_from_ref,
-    var_to_flatbuffer_bytes_rpc, verb_program_error_to_flatbuffer_struct,
+    mk_thanks_pong_reply, var_to_flatbuffer_bytes_rpc, verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
 use tracing::{error, info, warn};

@@ -24,7 +24,17 @@ use axum::{
 use eyre::eyre;
 use hickory_resolver::TokioResolver;
 
-use moor_common::{model::ObjectRef, schema::rpc as moor_rpc, tasks::Event};
+use moor_common::{
+    model::ObjectRef,
+    schema::{
+        convert::{
+            narrative_event_from_ref, obj_from_flatbuffer_struct, presentation_from_ref,
+            var_from_flatbuffer_bytes,
+        },
+        rpc as moor_rpc,
+    },
+    tasks::Event,
+};
 use moor_var::{E_INVIND, Obj, Symbol, Var, v_err, v_obj};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{
@@ -187,7 +197,7 @@ impl WebHost {
                                 .expect("Player is None");
                             let player_struct = moor_rpc::Obj::try_from(player_ref)
                                 .expect("Failed to convert player");
-                            let player = rpc_common::obj_from_flatbuffer_struct(&player_struct)
+                            let player = obj_from_flatbuffer_struct(&player_struct)
                                 .expect("Failed to decode player");
                             info!("Connection authenticated, player: {}", player);
                             (client_token, player)
@@ -338,7 +348,7 @@ impl WebHost {
                         let objid_ref = new_conn.connection_obj().expect("Missing connection_obj");
                         let objid_struct = moor_rpc::Obj::try_from(objid_ref)
                             .expect("Failed to convert connection_obj");
-                        let objid = rpc_common::obj_from_flatbuffer_struct(&objid_struct)
+                        let objid = obj_from_flatbuffer_struct(&objid_struct)
                             .expect("Failed to decode connection_obj");
                         info!("Connection established, connection ID: {}", objid);
                         client_token
@@ -433,8 +443,8 @@ pub async fn system_property_handler(
                 moor_rpc::DaemonToClientReplyUnionRef::SysPropValue(sysprop) => {
                     if let Ok(Some(value_ref)) = sysprop.value() {
                         let value_bytes = value_ref.data().expect("Missing value data");
-                        let value = rpc_common::var_from_flatbuffer_bytes(value_bytes)
-                            .expect("Failed to decode value");
+                        let value =
+                            var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
                         Json(var_as_json(&value)).into_response()
                     } else {
                         StatusCode::NOT_FOUND.into_response()
@@ -501,8 +511,8 @@ pub async fn eval_handler(
                 moor_rpc::DaemonToClientReplyUnionRef::EvalResult(eval_result) => {
                     let value_ref = eval_result.result().expect("Missing value");
                     let value_bytes = value_ref.data().expect("Missing value data");
-                    let value = rpc_common::var_from_flatbuffer_bytes(value_bytes)
-                        .expect("Failed to decode value");
+                    let value =
+                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
                     debug!("Eval result: {:?}", value);
                     Json(var_as_json(&value)).into_response()
                 }
@@ -572,8 +582,8 @@ pub async fn resolve_objref_handler(
                 moor_rpc::DaemonToClientReplyUnionRef::ResolveResult(resolve_result) => {
                     let value_ref = resolve_result.result().expect("Missing value");
                     let value_bytes = value_ref.data().expect("Missing value data");
-                    let obj = rpc_common::var_from_flatbuffer_bytes(value_bytes)
-                        .expect("Failed to decode value");
+                    let obj =
+                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
                     if obj == v_err(E_INVIND) {
                         StatusCode::NOT_FOUND.into_response()
                     } else {
@@ -773,11 +783,11 @@ pub async fn history_handler(
                         .filter_map(|event_result| {
                             let historical_event = event_result.ok()?;
                             let narrative_event_ref = historical_event.event().ok()?;
-                            let narrative_event = rpc_common::narrative_event_from_ref(narrative_event_ref).ok()?;
+                            let narrative_event = narrative_event_from_ref(narrative_event_ref).ok()?;
                             let is_historical = historical_event.is_historical().ok()?;
                             let player_ref = historical_event.player().ok()?;
                             let player_struct = moor_rpc::Obj::try_from(player_ref).ok()?;
-                            let player = rpc_common::obj_from_flatbuffer_struct(&player_struct).ok()?;
+                            let player = obj_from_flatbuffer_struct(&player_struct).ok()?;
 
                             Some(json!({
                                 "event_id": narrative_event.event_id(),
@@ -935,7 +945,7 @@ pub async fn presentations_handler(
                         .expect("Missing presentations");
                     let presentations: Vec<_> = presentations_vec
                         .iter()
-                        .filter_map(|p| rpc_common::presentation_from_ref(p.ok()?).ok())
+                        .filter_map(|p| presentation_from_ref(p.ok()?).ok())
                         .collect();
                     Json(json!({
                         "presentations": presentations
@@ -1097,8 +1107,8 @@ pub async fn invoke_verb_handler(
                 moor_rpc::DaemonToClientReplyUnionRef::EvalResult(eval_result) => {
                     let value_ref = eval_result.result().expect("Missing value");
                     let value_bytes = value_ref.data().expect("Missing value data");
-                    let result = rpc_common::var_from_flatbuffer_bytes(value_bytes)
-                        .expect("Failed to decode value");
+                    let result =
+                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
                     Json(var_as_json(&result)).into_response()
                 }
                 moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(task_submitted) => {

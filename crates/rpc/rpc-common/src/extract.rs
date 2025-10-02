@@ -13,16 +13,19 @@
 
 //! Helper functions for extracting and converting FlatBuffer message fields
 
-use moor_common::{model::ObjectRef, schema::rpc};
-use moor_var::{Obj, Symbol, Var};
-use uuid::Uuid;
-
-use crate::{
-    RpcMessageError,
-    convert::{
-        obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer_bytes,
+use crate::RpcMessageError;
+use moor_common::{
+    model::ObjectRef,
+    schema::{
+        convert::{
+            obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref,
+            var_from_flatbuffer_bytes,
+        },
+        rpc,
     },
 };
+use moor_var::{Obj, Symbol, Var};
+use uuid::Uuid;
 
 /// Extract a required field and convert it, handling errors uniformly
 pub fn extract_obj<T>(

@@ -18,7 +18,15 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
+use moor_common::{
+    model::ObjectRef,
+    schema::{
+        convert::{
+            obj_from_flatbuffer_struct, symbol_from_flatbuffer_struct, var_from_flatbuffer_bytes,
+        },
+        rpc as moor_rpc,
+    },
+};
 use moor_var::Symbol;
 use planus::ReadAsRoot;
 use rpc_common::{mk_detach_msg, mk_properties_msg, mk_retrieve_msg};
@@ -26,6 +34,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::net::SocketAddr;
 use tracing::{debug, error};
+
 #[derive(Deserialize)]
 pub struct PropertiesQuery {
     inherited: Option<bool>,
@@ -79,26 +88,24 @@ pub async fn properties_handler(
                                 let definer_ref = prop.definer().expect("Missing definer");
                                 let definer_struct = moor_rpc::Obj::try_from(definer_ref)
                                     .expect("Failed to convert definer");
-                                let definer =
-                                    rpc_common::obj_from_flatbuffer_struct(&definer_struct)
-                                        .expect("Failed to decode definer");
+                                let definer = obj_from_flatbuffer_struct(&definer_struct)
+                                    .expect("Failed to decode definer");
 
                                 let location_ref = prop.location().expect("Missing location");
                                 let location_struct = moor_rpc::Obj::try_from(location_ref)
                                     .expect("Failed to convert location");
-                                let location =
-                                    rpc_common::obj_from_flatbuffer_struct(&location_struct)
-                                        .expect("Failed to decode location");
+                                let location = obj_from_flatbuffer_struct(&location_struct)
+                                    .expect("Failed to decode location");
 
                                 let name_ref = prop.name().expect("Missing name");
                                 let name_struct = moor_rpc::Symbol::try_from(name_ref)
                                     .expect("Failed to convert name");
-                                let name = rpc_common::symbol_from_flatbuffer_struct(&name_struct);
+                                let name = symbol_from_flatbuffer_struct(&name_struct);
 
                                 let owner_ref = prop.owner().expect("Missing owner");
                                 let owner_struct = moor_rpc::Obj::try_from(owner_ref)
                                     .expect("Failed to convert owner");
-                                let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
+                                let owner = obj_from_flatbuffer_struct(&owner_struct)
                                     .expect("Failed to decode owner");
 
                                 json!({
@@ -188,30 +195,30 @@ pub async fn property_retrieval_handler(
                     let definer_ref = prop.definer().expect("Missing definer");
                     let definer_struct =
                         moor_rpc::Obj::try_from(definer_ref).expect("Failed to convert definer");
-                    let definer = rpc_common::obj_from_flatbuffer_struct(&definer_struct)
+                    let definer = obj_from_flatbuffer_struct(&definer_struct)
                         .expect("Failed to decode definer");
 
                     let location_ref = prop.location().expect("Missing location");
                     let location_struct =
                         moor_rpc::Obj::try_from(location_ref).expect("Failed to convert location");
-                    let location = rpc_common::obj_from_flatbuffer_struct(&location_struct)
+                    let location = obj_from_flatbuffer_struct(&location_struct)
                         .expect("Failed to decode location");
 
                     let name_ref = prop.name().expect("Missing name");
                     let name_struct =
                         moor_rpc::Symbol::try_from(name_ref).expect("Failed to convert name");
-                    let name = rpc_common::symbol_from_flatbuffer_struct(&name_struct);
+                    let name = symbol_from_flatbuffer_struct(&name_struct);
 
                     let owner_ref = prop.owner().expect("Missing owner");
                     let owner_struct =
                         moor_rpc::Obj::try_from(owner_ref).expect("Failed to convert owner");
-                    let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
-                        .expect("Failed to decode owner");
+                    let owner =
+                        obj_from_flatbuffer_struct(&owner_struct).expect("Failed to decode owner");
 
                     let value_ref = prop_value.value().expect("Missing value");
                     let value_bytes = value_ref.data().expect("Missing value data");
-                    let value = rpc_common::var_from_flatbuffer_bytes(value_bytes)
-                        .expect("Failed to decode value");
+                    let value =
+                        var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
 
                     debug!("Property value: {:?}", value);
                     Json(json!({

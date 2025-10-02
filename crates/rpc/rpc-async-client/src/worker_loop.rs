@@ -15,7 +15,13 @@ use crate::{
     WorkerRpcSendClient, attach_worker,
     pubsub_client::{WorkerMessage, workers_events_recv},
 };
-use moor_common::{schema::rpc as moor_rpc, tasks::WorkerError};
+use moor_common::{
+    schema::{
+        convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_bytes},
+        rpc as moor_rpc,
+    },
+    tasks::WorkerError,
+};
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::{WORKER_BROADCAST_TOPIC, WorkerToken};
 use std::{
@@ -195,7 +201,7 @@ async fn process_fb<ProcessFunc, Fut>(
                     return;
                 }
             };
-            let perms = match rpc_common::obj_from_flatbuffer_struct(&perms_obj) {
+            let perms = match obj_from_flatbuffer_struct(&perms_obj) {
                 Ok(obj) => obj,
                 Err(e) => {
                     info!("Failed to decode perms: {}", e);
@@ -223,7 +229,7 @@ async fn process_fb<ProcessFunc, Fut>(
                             "Failed to get var_bytes data: {e}"
                         ))
                     })?;
-                    rpc_common::var_from_flatbuffer_bytes(data).map_err(|e| {
+                    var_from_flatbuffer_bytes(data).map_err(|e| {
                         rpc_common::RpcError::CouldNotDecode(format!("Failed to decode var: {e}"))
                     })
                 })

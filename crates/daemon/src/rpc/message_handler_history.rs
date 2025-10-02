@@ -12,9 +12,12 @@
 //
 
 use crate::rpc::message_handler::RpcMessageHandler;
-use moor_common::schema::rpc as moor_rpc;
+use moor_common::schema::{
+    convert::{uuid_from_ref, uuid_to_flatbuffer_struct},
+    rpc as moor_rpc,
+};
 use moor_var::Obj;
-use rpc_common::{RpcMessageError, uuid_from_ref, uuid_to_flatbuffer_struct};
+use rpc_common::RpcMessageError;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::debug;
 use uuid::Uuid;

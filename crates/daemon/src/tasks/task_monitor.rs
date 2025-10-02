@@ -22,15 +22,14 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::rpc::SessionActions;
 use flume::Sender;
 use moor_common::{
-    schema::rpc as moor_rpc,
+    schema::{convert::var_to_flatbuffer_bytes, rpc as moor_rpc},
     tasks::{SchedulerError, TaskId},
 };
 use moor_kernel::tasks::TaskHandle;
 use tracing::info;
-
-use crate::rpc::SessionActions;
 
 /// Monitors task completions and handles their lifecycle
 pub struct TaskMonitor {
@@ -141,8 +140,7 @@ impl TaskMonitor {
             Ok((task_id, r)) => {
                 let result = match r {
                     Ok(moor_kernel::tasks::TaskResult::Result(v)) => {
-                        let value_bytes =
-                            rpc_common::var_to_flatbuffer_bytes(&v).unwrap_or_default();
+                        let value_bytes = var_to_flatbuffer_bytes(&v).unwrap_or_default();
                         moor_rpc::ClientEvent {
                             event: moor_rpc::ClientEventUnion::TaskSuccessEvent(Box::new(
                                 moor_rpc::TaskSuccessEvent {

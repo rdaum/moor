@@ -14,12 +14,13 @@
 //! Conversions between domain types and FlatBuffer event log types
 
 use moor_common::{
-    schema::event_log::LoggedNarrativeEvent,
+    schema::{
+        convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
+        event_log::LoggedNarrativeEvent,
+    },
     tasks::{NarrativeEvent, Presentation},
 };
 use moor_var::Obj;
-
-use rpc_common::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct};
 
 /// Convert from domain types to FlatBuffer LoggedNarrativeEvent
 pub fn logged_narrative_event_to_flatbuffer(

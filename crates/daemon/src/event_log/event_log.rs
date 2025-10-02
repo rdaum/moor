@@ -26,6 +26,7 @@ use moor_common::{
     schema::{
         common as fb_common,
         common::{EventUnion, ObjUnion, ObjUnionRef},
+        convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
         event_log::{LoggedNarrativeEvent, PlayerPresentations},
     },
     tasks::Presentation,
@@ -317,7 +318,7 @@ impl EventPersistence {
         let mut events = Vec::new();
 
         // Convert player to FlatBuffer Obj for comparison
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
 
         for entry in self.narrative_events_partition.iter() {
             let (_key, value) = entry?;
@@ -349,7 +350,7 @@ impl EventPersistence {
         &self,
         player: Obj,
     ) -> Result<Option<PlayerPresentations>, eyre::Error> {
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
         let player_key = Self::obj_to_key(&player_fb);
 
         if let Some(value) = self.presentations_partition.get(player_key.as_bytes())? {
@@ -493,8 +494,7 @@ impl EventLog {
         remove_id: Option<String>,
     ) {
         // Convert FlatBuffer Obj to domain Obj to use as key
-        let player_obj = rpc_common::convert::obj_from_flatbuffer_struct(player)
-            .expect("Failed to convert player obj");
+        let player_obj = obj_from_flatbuffer_struct(player).expect("Failed to convert player obj");
 
         // Lock persistence and update synchronously for consistency
         let mut persistence_guard = self.persistence.lock().unwrap();
@@ -640,7 +640,7 @@ impl EventLogOps for EventLog {
         since: Option<Uuid>,
     ) -> Vec<LoggedNarrativeEvent> {
         // Convert player to FlatBuffer for comparison
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
 
         match self.load_narrative_from_disk_since(since) {
             Ok(events) => {
@@ -666,7 +666,7 @@ impl EventLogOps for EventLog {
         until: Option<Uuid>,
     ) -> Vec<LoggedNarrativeEvent> {
         // Convert player to FlatBuffer for comparison
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
 
         match self.load_narrative_from_disk_until(until) {
             Ok(events) => events

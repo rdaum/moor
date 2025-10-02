@@ -27,7 +27,13 @@ use uuid::Uuid;
 use zmq::Socket;
 
 use super::message_handler::MessageHandler;
-use moor_common::{schema::rpc as moor_rpc, tasks::NarrativeEvent};
+use moor_common::{
+    schema::{
+        convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
+        rpc as moor_rpc,
+    },
+    tasks::NarrativeEvent,
+};
 use moor_kernel::SchedulerClient;
 use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
 use moor_var::Obj;
@@ -396,12 +402,12 @@ impl Transport for RpcTransport {
             let client_ids = connections.client_ids_for(*player)?;
 
             // Build FlatBuffer ClientEvent directly
-            let narrative_fb = rpc_common::narrative_event_to_flatbuffer_struct(event.as_ref())
+            let narrative_fb = narrative_event_to_flatbuffer_struct(event.as_ref())
                 .map_err(|e| eyre::eyre!("Failed to convert narrative event: {}", e))?;
             let client_event = moor_rpc::ClientEvent {
                 event: moor_rpc::ClientEventUnion::NarrativeEventMessage(Box::new(
                     moor_rpc::NarrativeEventMessage {
-                        player: Box::new(rpc_common::obj_to_flatbuffer_struct(player)),
+                        player: Box::new(obj_to_flatbuffer_struct(player)),
                         event: Box::new(narrative_fb),
                     },
                 )),

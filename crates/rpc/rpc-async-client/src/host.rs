@@ -12,7 +12,10 @@
 //
 
 use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcSendClient};
-use moor_common::schema::rpc as moor_rpc;
+use moor_common::schema::{
+    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
+    rpc as moor_rpc,
+};
 use rpc_common::{HOST_BROADCAST_TOPIC, HostToken, HostType, RpcError};
 use std::{
     net::SocketAddr,
@@ -68,7 +71,7 @@ pub async fn start_host_session(
         let listeners_fb: Vec<moor_rpc::Listener> = listener_list
             .iter()
             .map(|(obj, addr)| moor_rpc::Listener {
-                handler_object: Box::new(rpc_common::obj_to_flatbuffer_struct(obj)),
+                handler_object: Box::new(obj_to_flatbuffer_struct(obj)),
                 socket_addr: addr.to_string(),
             })
             .collect();
@@ -94,9 +97,9 @@ pub async fn start_host_session(
                     .map_err(|e| RpcError::CouldNotDecode(format!("Missing result: {e}")))?
                 {
                     moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
-                        let daemon_reply = host_success.reply().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing reply: {e}"))
-                        })?;
+                        let daemon_reply = host_success
+                            .reply()
+                            .map_err(|e| RpcError::CouldNotDecode(format!("Missing reply: {e}")))?;
                         match daemon_reply.reply().map_err(|e| {
                             RpcError::CouldNotDecode(format!("Missing reply union: {e}"))
                         })? {
@@ -125,9 +128,9 @@ pub async fn start_host_session(
                         }
                     }
                     moor_rpc::ReplyResultUnionRef::Failure(failure) => {
-                        let error_ref = failure.error().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing error: {e}"))
-                        })?;
+                        let error_ref = failure
+                            .error()
+                            .map_err(|e| RpcError::CouldNotDecode(format!("Missing error: {e}")))?;
                         let error_code = error_ref.error_code().map_err(|e| {
                             RpcError::CouldNotDecode(format!("Missing error code: {e}"))
                         })?;
@@ -201,7 +204,7 @@ pub async fn process_hosts_events(
                 let listeners_fb: Vec<moor_rpc::Listener> = listener_list
                     .iter()
                     .map(|(obj, addr)| moor_rpc::Listener {
-                        handler_object: Box::new(rpc_common::obj_to_flatbuffer_struct(obj)),
+                        handler_object: Box::new(obj_to_flatbuffer_struct(obj)),
                         socket_addr: addr.to_string(),
                     })
                     .collect();
@@ -224,9 +227,10 @@ pub async fn process_hosts_events(
                                 RpcError::CouldNotDecode(format!("Invalid flatbuffer: {e}"))
                             })?;
 
-                        match reply_ref.result().map_err(|e| {
-                            RpcError::CouldNotDecode(format!("Missing result: {e}"))
-                        })? {
+                        match reply_ref
+                            .result()
+                            .map_err(|e| RpcError::CouldNotDecode(format!("Missing result: {e}")))?
+                        {
                             moor_rpc::ReplyResultUnionRef::HostSuccess(host_success) => {
                                 let daemon_reply = host_success.reply().map_err(|e| {
                                     RpcError::CouldNotDecode(format!("Missing reply: {e}"))
@@ -294,8 +298,8 @@ pub async fn process_hosts_events(
                     moor_rpc::Obj::try_from(handler_object_ref).map_err(|e| {
                         RpcError::CouldNotDecode(format!("Failed to convert handler_object: {e}"))
                     })?;
-                let handler_object = rpc_common::obj_from_flatbuffer_struct(&handler_object_struct)
-                    .map_err(|e| {
+                let handler_object =
+                    obj_from_flatbuffer_struct(&handler_object_struct).map_err(|e| {
                         RpcError::CouldNotDecode(format!("Failed to decode handler_object: {e}"))
                     })?;
 

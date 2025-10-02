@@ -26,7 +26,10 @@ use futures_util::{
 };
 use moor_common::{
     model::{CompileError, ObjectRef},
-    schema::rpc as moor_rpc,
+    schema::{
+        convert::{compilation_error_from_ref, narrative_event_from_ref, obj_from_ref},
+        rpc as moor_rpc,
+    },
     tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError},
     util::parse_into_words,
 };
@@ -418,7 +421,7 @@ impl TelnetConnection {
                         }
                         moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative) => {
                             let event_ref = narrative.event().map_err(|e| eyre::eyre!("Missing event: {}", e))?;
-                            let narrative_event = rpc_common::narrative_event_from_ref(event_ref)
+                            let narrative_event = narrative_event_from_ref(event_ref)
                                 .map_err(|e| eyre::eyre!("Failed to convert narrative event: {}", e))?;
                             self.output(narrative_event.event()).await?;
                         }
@@ -503,7 +506,7 @@ impl TelnetConnection {
 
                                 let player_opt = login_result.player().map_err(|e| eyre::eyre!("Missing player: {}", e))?
                                     .ok_or_else(|| eyre::eyre!("Player is None"))?;
-                                let player = rpc_common::obj_from_ref(player_opt)
+                                let player = obj_from_ref(player_opt)
                                     .map_err(|e| eyre::eyre!("{}", e))?;
 
                                 info!(?player, client_id = ?self.client_id, "Login successful");
@@ -703,7 +706,7 @@ impl TelnetConnection {
                                             .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
                                         match error_ref.error().map_err(|e| eyre::eyre!("Missing error union: {}", e))? {
                                             moor_rpc::VerbProgramErrorUnionRef::VerbCompilationError(comp_err) => {
-                                                let compile_error = rpc_common::compilation_error_from_ref(
+                                                let compile_error = compilation_error_from_ref(
                                                     comp_err.error().map_err(|e| eyre::eyre!("Missing error: {}", e))?
                                                 ).map_err(|e| eyre::eyre!("Failed to convert compilation error: {}", e))?;
                                                 let error_str = describe_compile_error(compile_error);
@@ -917,11 +920,10 @@ impl TelnetConnection {
                     error!("Failed to get event from NarrativeEventMessage: {}", e);
                     eyre::eyre!("Missing event: {}", e)
                 })?;
-                let narrative_event =
-                    rpc_common::narrative_event_from_ref(event_ref).map_err(|e| {
-                        error!("Failed to convert narrative event: {}", e);
-                        eyre::eyre!("Failed to convert narrative event: {}", e)
-                    })?;
+                let narrative_event = narrative_event_from_ref(event_ref).map_err(|e| {
+                    error!("Failed to convert narrative event: {}", e);
+                    eyre::eyre!("Failed to convert narrative event: {}", e)
+                })?;
                 let msg = narrative_event.event();
                 match &msg {
                     Event::Notify {

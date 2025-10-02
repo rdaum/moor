@@ -14,14 +14,17 @@
 use crate::rpc::{message_handler::RpcMessageHandler, session::RpcSession};
 use moor_common::{
     model::ObjectRef,
-    schema::{rpc as moor_rpc, rpc::DaemonToClientReply},
+    schema::{
+        convert::{obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref},
+        rpc as moor_rpc,
+        rpc::DaemonToClientReply,
+    },
 };
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
     MOOR_SESSION_TOKEN_FOOTER, RpcMessageError, auth_token_from_ref, client_token_from_ref,
-    obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,

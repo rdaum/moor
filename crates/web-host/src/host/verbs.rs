@@ -19,7 +19,15 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
+use moor_common::{
+    model::ObjectRef,
+    schema::{
+        convert::{
+            compilation_error_from_ref, obj_from_flatbuffer_struct, symbol_from_flatbuffer_struct,
+        },
+        rpc as moor_rpc,
+    },
+};
 use moor_var::Symbol;
 use planus::ReadAsRoot;
 use rpc_common::{mk_detach_msg, mk_program_msg, mk_retrieve_msg, mk_verbs_msg};
@@ -88,7 +96,7 @@ pub async fn verb_program_handler(
                             let objid_ref = success.obj().expect("Missing obj");
                             let objid_struct =
                                 moor_rpc::Obj::try_from(objid_ref).expect("Failed to convert obj");
-                            let objid = rpc_common::obj_from_flatbuffer_struct(&objid_struct)
+                            let objid = obj_from_flatbuffer_struct(&objid_struct)
                                 .expect("Failed to decode obj");
 
                             let verb_name = success.verb_name().expect("Missing verb_name");
@@ -114,9 +122,8 @@ pub async fn verb_program_handler(
                                 ) => {
                                     let comp_error_ref =
                                         comp_error_wrapper.error().expect("Missing error");
-                                    let error_struct =
-                                        rpc_common::compilation_error_from_ref(comp_error_ref)
-                                            .expect("Failed to convert compilation error");
+                                    let error_struct = compilation_error_from_ref(comp_error_ref)
+                                        .expect("Failed to convert compilation error");
                                     Json(json!({
                                         "errors": serde_json::to_value(error_struct).unwrap()
                                     }))
@@ -199,14 +206,14 @@ pub async fn verb_retrieval_handler(
                     let location_ref = verb_info.location().expect("Missing location");
                     let location_struct =
                         moor_rpc::Obj::try_from(location_ref).expect("Failed to convert location");
-                    let location = rpc_common::obj_from_flatbuffer_struct(&location_struct)
+                    let location = obj_from_flatbuffer_struct(&location_struct)
                         .expect("Failed to decode location");
 
                     let owner_ref = verb_info.owner().expect("Missing owner");
                     let owner_struct =
                         moor_rpc::Obj::try_from(owner_ref).expect("Failed to convert owner");
-                    let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
-                        .expect("Failed to decode owner");
+                    let owner =
+                        obj_from_flatbuffer_struct(&owner_struct).expect("Failed to decode owner");
 
                     let names_vec = verb_info.names().expect("Missing names");
                     let names: Vec<String> = names_vec
@@ -215,7 +222,7 @@ pub async fn verb_retrieval_handler(
                             let name_ref = name_result.expect("Failed to get name");
                             let name_struct = moor_rpc::Symbol::try_from(name_ref)
                                 .expect("Failed to convert name");
-                            rpc_common::symbol_from_flatbuffer_struct(&name_struct).to_string()
+                            symbol_from_flatbuffer_struct(&name_struct).to_string()
                         })
                         .collect();
 
@@ -226,7 +233,7 @@ pub async fn verb_retrieval_handler(
                             let arg_ref = arg_result.expect("Failed to get arg");
                             let arg_struct =
                                 moor_rpc::Symbol::try_from(arg_ref).expect("Failed to convert arg");
-                            rpc_common::symbol_from_flatbuffer_struct(&arg_struct).to_string()
+                            symbol_from_flatbuffer_struct(&arg_struct).to_string()
                         })
                         .collect();
 
@@ -322,14 +329,13 @@ pub async fn verbs_handler(
                                 let location_ref = verb.location().expect("Missing location");
                                 let location_struct = moor_rpc::Obj::try_from(location_ref)
                                     .expect("Failed to convert location");
-                                let location =
-                                    rpc_common::obj_from_flatbuffer_struct(&location_struct)
-                                        .expect("Failed to decode location");
+                                let location = obj_from_flatbuffer_struct(&location_struct)
+                                    .expect("Failed to decode location");
 
                                 let owner_ref = verb.owner().expect("Missing owner");
                                 let owner_struct = moor_rpc::Obj::try_from(owner_ref)
                                     .expect("Failed to convert owner");
-                                let owner = rpc_common::obj_from_flatbuffer_struct(&owner_struct)
+                                let owner = obj_from_flatbuffer_struct(&owner_struct)
                                     .expect("Failed to decode owner");
 
                                 let names_vec = verb.names().expect("Missing names");
@@ -339,8 +345,7 @@ pub async fn verbs_handler(
                                         let name_ref = name_result.expect("Failed to get name");
                                         let name_struct = moor_rpc::Symbol::try_from(name_ref)
                                             .expect("Failed to convert name");
-                                        rpc_common::symbol_from_flatbuffer_struct(&name_struct)
-                                            .to_string()
+                                        symbol_from_flatbuffer_struct(&name_struct).to_string()
                                     })
                                     .collect();
 
@@ -351,8 +356,7 @@ pub async fn verbs_handler(
                                         let arg_ref = arg_result.expect("Failed to get arg");
                                         let arg_struct = moor_rpc::Symbol::try_from(arg_ref)
                                             .expect("Failed to convert arg");
-                                        rpc_common::symbol_from_flatbuffer_struct(&arg_struct)
-                                            .to_string()
+                                        symbol_from_flatbuffer_struct(&arg_struct).to_string()
                                     })
                                     .collect();
 

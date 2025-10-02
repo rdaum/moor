@@ -21,13 +21,14 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_common::schema::rpc as moor_rpc;
+use moor_common::schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
+
 #[derive(Deserialize)]
 pub struct AuthRequest {
     player: String,
@@ -114,7 +115,7 @@ async fn auth_handler(
                             .expect("Missing player obj");
                         let player_struct =
                             moor_rpc::Obj::try_from(player_ref).expect("Failed to convert player");
-                        let player = rpc_common::obj_from_flatbuffer_struct(&player_struct)
+                        let player = obj_from_flatbuffer_struct(&player_struct)
                             .expect("Failed to decode player");
                         (auth_token, player)
                     } else {

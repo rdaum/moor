@@ -14,7 +14,13 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #[cfg_attr(coverage_nightly, coverage(off))]
 use eyre::{anyhow, bail};
-use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
+use moor_common::{
+    model::ObjectRef,
+    schema::{
+        convert::{obj_from_ref, var_from_flatbuffer_bytes},
+        rpc as moor_rpc,
+    },
+};
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use planus::ReadAsRoot;
 use rpc_async_client::{
@@ -25,7 +31,6 @@ use rpc_async_client::{
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, auth_token_from_ref, mk_client_pong_msg,
     mk_connection_establish_msg, mk_eval_msg, mk_login_command_msg, mk_program_msg, mk_verbs_msg,
-    obj_from_ref,
 };
 use std::{
     collections::HashMap,
@@ -453,7 +458,7 @@ pub async fn listen_responses(
                             let tid = task_success.task_id().expect("Missing task_id") as usize;
                             let value_ref = task_success.result().expect("Missing result");
                             let value_bytes = value_ref.data().expect("Missing value data");
-                            let v = rpc_common::var_from_flatbuffer_bytes(value_bytes)
+                            let v = var_from_flatbuffer_bytes(value_bytes)
                                 .expect("Failed to decode value");
 
                             let mut tasks = event_listen_task_results.lock().await;

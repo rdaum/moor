@@ -33,7 +33,11 @@ mod tests {
     };
     use moor_common::{
         model::CommitResult,
-        schema::{common::EventUnion, rpc as moor_rpc},
+        schema::{
+            common::EventUnion,
+            convert::{narrative_event_from_ref, obj_from_flatbuffer_struct},
+            rpc as moor_rpc,
+        },
         tasks::Event,
     };
     use moor_db::{Database, DatabaseConfig, TxDB};
@@ -46,7 +50,6 @@ mod tests {
     use planus::ReadAsRoot;
     use rpc_common::{
         AuthToken, ClientToken, mk_command_msg, mk_connection_establish_msg, mk_login_command_msg,
-        narrative_event_from_ref,
     };
     use rusty_paseto::prelude::Key;
     use semver::Version;
@@ -93,7 +96,7 @@ mod tests {
             let events = event_log.get_all_events();
             for e in &events {
                 // Compare FlatBuffer player with domain player
-                let event_player = rpc_common::obj_from_flatbuffer_struct(&e.player).ok();
+                let event_player = obj_from_flatbuffer_struct(&e.player).ok();
                 if event_player != Some(player) {
                     continue;
                 }

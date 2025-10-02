@@ -28,14 +28,6 @@ pub use tokens::{
 };
 pub use worker::DaemonToWorkerReply;
 
-// Re-export generic type conversions
-pub use convert::{
-    obj_from_flatbuffer_struct, obj_from_ref, obj_to_flatbuffer_struct, objectref_from_ref,
-    objectref_to_flatbuffer_struct, symbol_from_flatbuffer_struct, symbol_from_ref,
-    symbol_to_flatbuffer_struct, uuid_from_ref, uuid_to_flatbuffer_struct,
-    var_from_flatbuffer_bytes, var_from_ref, var_to_flatbuffer_bytes,
-};
-
 pub use tokens::{auth_token_from_ref, client_token_from_ref};
 
 // Re-export extraction helpers
@@ -45,6 +37,8 @@ pub use extract::{
     extract_string_rpc, extract_symbol, extract_symbol_list, extract_symbol_rpc, extract_uuid,
     extract_uuid_rpc, extract_var, extract_var_list, extract_var_rpc,
 };
+
+pub use errors::*;
 
 // Re-export FlatBuffer construction helpers
 pub use helpers::{
@@ -59,17 +53,6 @@ pub use client_messages::{
     mk_out_of_band_msg, mk_program_msg, mk_properties_msg, mk_request_current_presentations_msg,
     mk_request_history_msg, mk_request_sys_prop_msg, mk_requested_input_msg, mk_resolve_msg,
     mk_retrieve_msg, mk_set_client_attribute_msg, mk_verbs_msg,
-};
-pub use errors::{
-    command_error_to_flatbuffer_struct, compilation_error_from_ref,
-    compilation_error_to_flatbuffer_struct, error_from_flatbuffer_struct,
-    error_to_flatbuffer_struct, scheduler_error_from_ref, scheduler_error_to_flatbuffer_struct,
-    verb_program_error_to_flatbuffer_struct, worker_error_from_flatbuffer_struct,
-    worker_error_to_flatbuffer_struct, world_state_error_to_flatbuffer_struct,
-};
-pub use events::{
-    event_from_ref, event_to_flatbuffer_struct, narrative_event_from_ref,
-    narrative_event_to_flatbuffer_struct, presentation_from_ref, presentation_to_flatbuffer_struct,
 };
 pub use host_messages::{
     mk_detach_host_msg, mk_host_pong_msg, mk_register_host_msg, mk_request_performance_counters_msg,
@@ -96,9 +79,7 @@ pub mod client_args;
 
 // Private domain-organized modules
 mod client_messages;
-pub mod convert; // Made public for event_log usage
 mod errors;
-mod events;
 mod extract;
 mod helpers;
 mod host;

@@ -28,7 +28,7 @@ mod tests {
         tasks::task_monitor::TaskMonitor,
         testing::{MockEventLog, MockTransport},
     };
-    use moor_common::schema::rpc as moor_rpc;
+    use moor_common::schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
     use moor_var::{Obj, SYSTEM_OBJECT};
     use planus::ReadAsRoot;
     use rpc_common::{
@@ -870,7 +870,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let events = event_log.events_for_player_since(player, None);
         assert_eq!(events.len(), 1, "Should have one event");
         // Events are now FlatBuffer types, so convert for comparison
-        let event_player = rpc_common::obj_from_flatbuffer_struct(&events[0].player).unwrap();
+        let event_player = obj_from_flatbuffer_struct(&events[0].player).unwrap();
         assert_eq!(event_player, player, "Event should be for correct player");
         // event_id is now a field, not a method, and is a FlatBuffer UUID
         let event_uuid_bytes = events[0].event.event_id.data.as_slice();

@@ -23,6 +23,7 @@ use uuid::Uuid;
 use moor_common::{
     schema::{
         common::{EventUnion, ObjUnion},
+        convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
         event_log::LoggedNarrativeEvent,
     },
     tasks::Presentation,
@@ -106,7 +107,7 @@ impl MockEventLog {
     /// Get count of events for a specific player
     #[allow(dead_code)]
     pub fn event_count_for_player(&self, player: Obj) -> usize {
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
         self.narrative_events
             .lock()
             .unwrap()
@@ -190,7 +191,7 @@ impl EventLogOps for MockEventLog {
             EventUnion::PresentEvent(present_ref) => {
                 // Add presentation to player's current presentations
                 if let Ok(presentation) = presentation_from_flatbuffer(&present_ref.presentation) {
-                    let player_obj = rpc_common::convert::obj_from_flatbuffer_struct(&event.player)
+                    let player_obj = obj_from_flatbuffer_struct(&event.player)
                         .expect("Failed to convert player obj");
                     let mut presentations = self.presentations.lock().unwrap();
                     presentations
@@ -201,7 +202,7 @@ impl EventLogOps for MockEventLog {
             }
             EventUnion::UnpresentEvent(unpresent_ref) => {
                 // Remove presentation from player's current presentations
-                let player_obj = rpc_common::convert::obj_from_flatbuffer_struct(&event.player)
+                let player_obj = obj_from_flatbuffer_struct(&event.player)
                     .expect("Failed to convert player obj");
                 let mut presentations = self.presentations.lock().unwrap();
                 if let Some(player_presentations) = presentations.get_mut(&player_obj) {
@@ -237,7 +238,7 @@ impl EventLogOps for MockEventLog {
         player: Obj,
         since: Option<Uuid>,
     ) -> Vec<LoggedNarrativeEvent> {
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
         let events = self.narrative_events.lock().unwrap();
         let mut player_events: Vec<_> = events
             .values()
@@ -264,7 +265,7 @@ impl EventLogOps for MockEventLog {
         player: Obj,
         until: Option<Uuid>,
     ) -> Vec<LoggedNarrativeEvent> {
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
         let events = self.narrative_events.lock().unwrap();
         let mut player_events: Vec<_> = events
             .values()
@@ -295,7 +296,7 @@ impl EventLogOps for MockEventLog {
             .checked_sub(Duration::from_secs(seconds_ago))
             .unwrap_or(UNIX_EPOCH);
 
-        let player_fb = rpc_common::convert::obj_to_flatbuffer_struct(&player);
+        let player_fb = obj_to_flatbuffer_struct(&player);
         let events = self.narrative_events.lock().unwrap();
         let mut player_events: Vec<_> = events
             .values()

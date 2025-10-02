@@ -15,7 +15,10 @@ use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt, stream::SplitSink};
 use moor_common::{
-    schema::rpc as moor_rpc,
+    schema::{
+        convert::{narrative_event_from_ref, var_from_flatbuffer_bytes},
+        rpc as moor_rpc,
+    },
     tasks::{
         AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
         VerbProgramError,
@@ -261,8 +264,8 @@ impl WebSocketConnection {
             }
             moor_rpc::ClientEventUnionRef::NarrativeEventMessage(narrative) => {
                 let event_ref = narrative.event().expect("Missing narrative event");
-                let narrative_event = rpc_common::narrative_event_from_ref(event_ref)
-                    .expect("Failed to convert narrative event");
+                let narrative_event =
+                    narrative_event_from_ref(event_ref).expect("Failed to convert narrative event");
                 let msg = narrative_event.event();
                 let event_id = narrative_event.event_id().to_string();
                 let author = narrative_event.author();
@@ -344,8 +347,7 @@ impl WebSocketConnection {
                 }
                 let value_ref = task_success.result().expect("Missing value");
                 let value_bytes = value_ref.data().expect("Missing value data");
-                let s = rpc_common::var_from_flatbuffer_bytes(value_bytes)
-                    .expect("Failed to decode value");
+                let s = var_from_flatbuffer_bytes(value_bytes).expect("Failed to decode value");
                 Self::emit_value(ws_sender, ValueResult(s)).await;
             }
             moor_rpc::ClientEventUnionRef::PlayerSwitchedEvent(switch) => {

@@ -16,10 +16,13 @@ use futures_util::StreamExt;
 use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
-use moor_common::schema::rpc;
+use moor_common::schema::{
+    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer_bytes},
+    rpc,
+};
 use moor_var::{Obj, Var};
 use planus::ReadAsRoot;
-use rpc_common::{RpcError, WorkerToken, obj_from_flatbuffer_struct, var_from_flatbuffer_bytes};
+use rpc_common::{RpcError, WorkerToken};
 use std::time::Duration;
 
 /// Type alias for the complex return type of worker request extraction
