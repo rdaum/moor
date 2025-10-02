@@ -786,7 +786,10 @@ impl TelnetConnection {
             let verb = verb_spec[1].to_string();
 
             // verb must be a valid identifier
-            if !verb.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            if !verb
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+            {
                 self.send_line("You must specify a verb; use the format object:verb.")
                     .await?;
                 return Ok(line_mode);
