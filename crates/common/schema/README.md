@@ -29,9 +29,11 @@ Previously mooR used `bincode`, which has several disadvantages compared to Flat
 
 ### Schema Files
 
-- **`common.fbs`**: Shared core types (Var, Obj, Symbol, UUID, errors, events, etc.)
+- **`common.fbs`**: Shared core types (Obj, Symbol, UUID, errors, events, etc.)
+- **`var.fbs`**: Var type schema with all variants including lambda support for DB storage
+- **`moor_program.fbs`**: Program/verb types with structured Var literals (not bincode)
 - **`moor_rpc.fbs`**: RPC message types for host↔daemon, client↔daemon, worker↔daemon communication
-- **`db.fbs`**: Database persistence types (objects, properties, verbs, etc.)
+- **`moor_event_log.fbs`**: Event log types for persistence
 - **`all_schemas.fbs`**: Top-level schema that includes all the above
 
 ### Structure
@@ -47,7 +49,8 @@ namespaces:
 
 - **`crates/common/src/schema/rpc.rs`**: Re-exports `MoorRpc` namespace types for RPC messages
 - **`crates/common/src/schema/common.rs`**: Re-exports `MoorCommon` namespace for shared core types
-  (Var, Obj, errors, etc.)
+  (Obj, errors, etc.)
+- **`crates/common/src/schema/var.rs`**: Re-exports `MoorVar` namespace for Var types
 - **`crates/common/src/schema/event_log.rs`**: Re-exports event log related types
 - **`crates/common/src/schema/program.rs`**: Re-exports program/verb types
 
@@ -56,7 +59,8 @@ through modules like:
 
 ```rust
 use moor_common::schema::rpc::DaemonToWorkerReply;
-use moor_common::schema::common::VarBytes;
+use moor_common::schema::var::Var;
+use moor_common::schema::convert::{var_to_flatbuffer, var_to_db_flatbuffer};
 ```
 
 ### Generating Code
@@ -72,10 +76,19 @@ planus rust -o ./crates/common/src/schema/schemas_generated.rs ./crates/common/s
 
 ### Migration Status
 
-**Note:** Not everything has been migrated to FlatBuffers yet. The following still use `bincode`:
+**Var Migration Complete:** The core `Var` type now uses FlatBuffer serialization with two conversion
+paths:
+- **RPC**: `var_to_flatbuffer` / `var_from_flatbuffer` - rejects lambdas and anonymous objects
+- **Database**: `var_to_db_flatbuffer` / `var_from_db_flatbuffer` - allows lambdas and anonymous objects
 
-- **`crates/var/`**: Core Var type serialization (used extensively throughout the system)
+**VerbDefs/PropDefs Migration Complete:** Property and verb definition collections now use FlatBuffer
+serialization via `verbdefs_to_flatbuffer` / `verbdefs_from_flatbuffer` and
+`propdefs_to_flatbuffer` / `propdefs_from_flatbuffer` in `convert_defs.rs`.
+
+Program literals also use structured Var FlatBuffers instead of bincode.
+
+**Still using bincode:**
 - **`crates/kernel/src/tasks/tasks_db.rs`**: Some task persistence structures
 
-These are candidates for future migration to FlatBuffers to gain the benefits of zero-copy
-deserialization and better schema evolution.
+Future migration of these types to FlatBuffers would provide zero-copy deserialization and better
+schema evolution.

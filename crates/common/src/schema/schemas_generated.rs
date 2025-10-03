@@ -5,19 +5,19 @@ const _: () = ::planus::check_version_compatibility("planus-1.2.0");
 /// The root namespace
 ///
 /// Generated from these locations:
-/// * File `all_schemas.fbs`
+/// * File `crates/common/schema/all_schemas.fbs`
 #[no_implicit_prelude]
 #[allow(dead_code, clippy::needless_lifetimes)]
 mod root {
     /// The namespace `MoorCommon`
     ///
     /// Generated from these locations:
-    /// * File `common.fbs`
+    /// * File `crates/common/schema/common.fbs`
     pub mod moor_common {
         /// The table `VarBytes` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VarBytes` in the file `common.fbs:30`
+        /// * Table `VarBytes` in the file `crates/common/schema/common.fbs:30`
         #[derive(
             Clone,
             Debug,
@@ -266,7 +266,7 @@ mod root {
         /// The table `Symbol` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Symbol` in the file `common.fbs:34`
+        /// * Table `Symbol` in the file `crates/common/schema/common.fbs:34`
         #[derive(
             Clone,
             Debug,
@@ -515,7 +515,7 @@ mod root {
         /// The table `Uuid` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Uuid` in the file `common.fbs:38`
+        /// * Table `Uuid` in the file `crates/common/schema/common.fbs:38`
         #[derive(
             Clone,
             Debug,
@@ -764,7 +764,7 @@ mod root {
         /// The union `ObjUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `ObjUnion` in the file `common.fbs:46`
+        /// * Union `ObjUnion` in the file `crates/common/schema/common.fbs:46`
         #[derive(
             Clone,
             Debug,
@@ -1020,7 +1020,7 @@ mod root {
         /// The table `ObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjId` in the file `common.fbs:52`
+        /// * Table `ObjId` in the file `crates/common/schema/common.fbs:52`
         #[derive(
             Clone,
             Debug,
@@ -1278,7 +1278,7 @@ mod root {
         /// The table `UuObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UuObjId` in the file `common.fbs:56`
+        /// * Table `UuObjId` in the file `crates/common/schema/common.fbs:56`
         #[derive(
             Clone,
             Debug,
@@ -1540,7 +1540,7 @@ mod root {
         /// The table `AnonymousObjId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AnonymousObjId` in the file `common.fbs:61`
+        /// * Table `AnonymousObjId` in the file `crates/common/schema/common.fbs:61`
         #[derive(
             Clone,
             Debug,
@@ -1811,7 +1811,7 @@ mod root {
         /// The table `Obj` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Obj` in the file `common.fbs:66`
+        /// * Table `Obj` in the file `crates/common/schema/common.fbs:66`
         #[derive(
             Clone,
             Debug,
@@ -2051,7 +2051,7 @@ mod root {
         /// The enum `ErrorCode` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Enum `ErrorCode` in the file `common.fbs:74`
+        /// * Enum `ErrorCode` in the file `crates/common/schema/common.fbs:74`
         #[derive(
             Copy,
             Clone,
@@ -2313,7 +2313,7 @@ mod root {
         /// The table `Error` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Error` in the file `common.fbs:97`
+        /// * Table `Error` in the file `crates/common/schema/common.fbs:97`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Error {
             /// The field `err_type` in the table `Error`
@@ -2527,11 +2527,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<Error>> for ErrorBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<Error>> for ErrorBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Error>;
 
@@ -2542,11 +2542,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Error>> for ErrorBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Error>>
+            for ErrorBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Error>;
 
@@ -2560,11 +2561,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<Error> for ErrorBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<self::ErrorCode, self::ErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<Error> for ErrorBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Error> {
@@ -2732,7 +2733,7 @@ mod root {
         /// The table `NarrativeEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `NarrativeEvent` in the file `common.fbs:108`
+        /// * Table `NarrativeEvent` in the file `crates/common/schema/common.fbs:108`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct NarrativeEvent {
             /// The field `event_id` in the table `NarrativeEvent`
@@ -2902,11 +2903,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
-        > ::planus::WriteAs<::planus::Offset<NarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
+            > ::planus::WriteAs<::planus::Offset<NarrativeEvent>>
             for NarrativeEventBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<NarrativeEvent>;
@@ -2918,11 +2919,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
-        > ::planus::WriteAsOptional<::planus::Offset<NarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
+            > ::planus::WriteAsOptional<::planus::Offset<NarrativeEvent>>
             for NarrativeEventBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<NarrativeEvent>;
@@ -2937,11 +2938,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
-        > ::planus::WriteAsOffset<NarrativeEvent> for NarrativeEventBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Event>>,
+            > ::planus::WriteAsOffset<NarrativeEvent> for NarrativeEventBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<NarrativeEvent> {
@@ -3091,7 +3092,7 @@ mod root {
         /// The union `EventUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `EventUnion` in the file `common.fbs:115`
+        /// * Union `EventUnion` in the file `crates/common/schema/common.fbs:115`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum EventUnion {
             /// The variant of type `NotifyEvent` in the union `EventUnion`
@@ -3418,7 +3419,7 @@ mod root {
         /// The table `NotifyEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `NotifyEvent` in the file `common.fbs:122`
+        /// * Table `NotifyEvent` in the file `crates/common/schema/common.fbs:122`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct NotifyEvent {
             /// The field `value` in the table `NotifyEvent`
@@ -3615,11 +3616,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<NotifyEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<NotifyEvent>>
             for NotifyEventBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<NotifyEvent>;
@@ -3631,11 +3632,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<NotifyEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<NotifyEvent>>
             for NotifyEventBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<NotifyEvent>;
@@ -3650,11 +3651,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<NotifyEvent> for NotifyEventBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::Symbol>>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<NotifyEvent> for NotifyEventBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<NotifyEvent> {
@@ -3818,7 +3819,7 @@ mod root {
         /// The table `PresentEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PresentEvent` in the file `common.fbs:129`
+        /// * Table `PresentEvent` in the file `crates/common/schema/common.fbs:129`
         #[derive(
             Clone,
             Debug,
@@ -4074,7 +4075,7 @@ mod root {
         /// The table `UnpresentEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnpresentEvent` in the file `common.fbs:133`
+        /// * Table `UnpresentEvent` in the file `crates/common/schema/common.fbs:133`
         #[derive(
             Clone,
             Debug,
@@ -4329,7 +4330,7 @@ mod root {
         /// The table `TracebackEvent` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `TracebackEvent` in the file `common.fbs:137`
+        /// * Table `TracebackEvent` in the file `crates/common/schema/common.fbs:137`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct TracebackEvent {
             /// The field `exception` in the table `TracebackEvent`
@@ -4575,7 +4576,7 @@ mod root {
         /// The table `Event` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Event` in the file `common.fbs:141`
+        /// * Table `Event` in the file `crates/common/schema/common.fbs:141`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Event {
             /// The field `event` in the table `Event`
@@ -4807,7 +4808,7 @@ mod root {
         /// The table `Presentation` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Presentation` in the file `common.fbs:145`
+        /// * Table `Presentation` in the file `crates/common/schema/common.fbs:145`
         #[derive(
             Clone,
             Debug,
@@ -4990,8 +4991,8 @@ mod root {
             pub fn attributes<T4>(self, value: T4) -> PresentationBuilder<(T0, T1, T2, T3, T4)>
             where
                 T4: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
             {
                 let (v0, v1, v2, v3) = self.0;
                 PresentationBuilder((v0, v1, v2, v3, value))
@@ -5010,12 +5011,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>>,
-        > ::planus::WriteAs<::planus::Offset<Presentation>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
+            > ::planus::WriteAs<::planus::Offset<Presentation>>
             for PresentationBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Presentation>;
@@ -5027,12 +5030,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Presentation>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
+            > ::planus::WriteAsOptional<::planus::Offset<Presentation>>
             for PresentationBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Presentation>;
@@ -5047,12 +5052,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>>,
-        > ::planus::WriteAsOffset<Presentation> for PresentationBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::PresentationAttribute>]>,
+                >,
+            > ::planus::WriteAsOffset<Presentation> for PresentationBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Presentation> {
@@ -5204,7 +5211,7 @@ mod root {
         /// The table `PresentationAttribute` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PresentationAttribute` in the file `common.fbs:153`
+        /// * Table `PresentationAttribute` in the file `crates/common/schema/common.fbs:153`
         #[derive(
             Clone,
             Debug,
@@ -5345,9 +5352,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<PresentationAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<PresentationAttribute>>
             for PresentationAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PresentationAttribute>;
@@ -5362,9 +5369,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PresentationAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PresentationAttribute>>
             for PresentationAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PresentationAttribute>;
@@ -5379,9 +5386,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<PresentationAttribute>
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<PresentationAttribute>
             for PresentationAttributeBuilder<(T0, T1)>
         {
             #[inline]
@@ -5511,7 +5518,7 @@ mod root {
         /// The table `Exception` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `Exception` in the file `common.fbs:158`
+        /// * Table `Exception` in the file `crates/common/schema/common.fbs:158`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Exception {
             /// The field `error` in the table `Exception`
@@ -5659,10 +5666,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAs<::planus::Offset<Exception>> for ExceptionBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAs<::planus::Offset<Exception>> for ExceptionBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Exception>;
 
@@ -5673,10 +5680,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Exception>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Exception>>
             for ExceptionBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Exception>;
@@ -5691,10 +5698,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAsOffset<Exception> for ExceptionBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Error>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAsOffset<Exception> for ExceptionBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Exception> {
@@ -5834,7 +5841,7 @@ mod root {
         /// The table `CompileContext` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `CompileContext` in the file `common.fbs:168`
+        /// * Table `CompileContext` in the file `crates/common/schema/common.fbs:168`
         #[derive(
             Clone,
             Debug,
@@ -6136,7 +6143,7 @@ mod root {
         /// The table `StringLexError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `StringLexError` in the file `common.fbs:173`
+        /// * Table `StringLexError` in the file `crates/common/schema/common.fbs:173`
         #[derive(
             Clone,
             Debug,
@@ -6268,9 +6275,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<StringLexError>> for StringLexErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<StringLexError>>
+            for StringLexErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StringLexError>;
 
@@ -6281,9 +6289,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StringLexError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StringLexError>>
             for StringLexErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StringLexError>;
@@ -6298,9 +6306,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<StringLexError> for StringLexErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<StringLexError> for StringLexErrorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StringLexError> {
@@ -6426,7 +6434,7 @@ mod root {
         /// The table `ParseError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ParseError` in the file `common.fbs:178`
+        /// * Table `ParseError` in the file `crates/common/schema/common.fbs:178`
         #[derive(
             Clone,
             Debug,
@@ -6685,13 +6693,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<ParseError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<ParseError>>
             for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<ParseError>;
@@ -6703,13 +6711,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ParseError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ParseError>>
             for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<ParseError>;
@@ -6724,13 +6732,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<ParseError> for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<ParseError> for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ParseError> {
@@ -6890,7 +6898,7 @@ mod root {
         /// The table `UnknownBuiltinFunction` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownBuiltinFunction` in the file `common.fbs:187`
+        /// * Table `UnknownBuiltinFunction` in the file `crates/common/schema/common.fbs:187`
         #[derive(
             Clone,
             Debug,
@@ -7033,9 +7041,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownBuiltinFunction>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownBuiltinFunction>>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownBuiltinFunction>;
@@ -7050,9 +7058,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownBuiltinFunction>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownBuiltinFunction>>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownBuiltinFunction>;
@@ -7067,9 +7075,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownBuiltinFunction>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownBuiltinFunction>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             #[inline]
@@ -7202,7 +7210,7 @@ mod root {
         /// The table `UnknownTypeConstant` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownTypeConstant` in the file `common.fbs:192`
+        /// * Table `UnknownTypeConstant` in the file `crates/common/schema/common.fbs:192`
         #[derive(
             Clone,
             Debug,
@@ -7343,9 +7351,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownTypeConstant>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownTypeConstant>>
             for UnknownTypeConstantBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownTypeConstant>;
@@ -7360,9 +7368,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownTypeConstant>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownTypeConstant>>
             for UnknownTypeConstantBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownTypeConstant>;
@@ -7377,9 +7385,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownTypeConstant> for UnknownTypeConstantBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownTypeConstant>
+            for UnknownTypeConstantBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -7508,7 +7517,7 @@ mod root {
         /// The table `UnknownLoopLabel` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownLoopLabel` in the file `common.fbs:197`
+        /// * Table `UnknownLoopLabel` in the file `crates/common/schema/common.fbs:197`
         #[derive(
             Clone,
             Debug,
@@ -7649,9 +7658,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownLoopLabel>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownLoopLabel>>
             for UnknownLoopLabelBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownLoopLabel>;
@@ -7666,9 +7675,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownLoopLabel>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownLoopLabel>>
             for UnknownLoopLabelBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownLoopLabel>;
@@ -7683,9 +7692,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownLoopLabel> for UnknownLoopLabelBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownLoopLabel> for UnknownLoopLabelBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -7814,7 +7823,7 @@ mod root {
         /// The table `DuplicateVariable` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVariable` in the file `common.fbs:202`
+        /// * Table `DuplicateVariable` in the file `crates/common/schema/common.fbs:202`
         #[derive(
             Clone,
             Debug,
@@ -7955,9 +7964,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicateVariable>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicateVariable>>
             for DuplicateVariableBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVariable>;
@@ -7972,9 +7981,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicateVariable>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicateVariable>>
             for DuplicateVariableBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVariable>;
@@ -7989,9 +7998,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<DuplicateVariable> for DuplicateVariableBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<DuplicateVariable> for DuplicateVariableBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -8122,7 +8131,7 @@ mod root {
         /// The table `AssignToConst` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AssignToConst` in the file `common.fbs:207`
+        /// * Table `AssignToConst` in the file `crates/common/schema/common.fbs:207`
         #[derive(
             Clone,
             Debug,
@@ -8254,9 +8263,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<AssignToConst>> for AssignToConstBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<AssignToConst>>
+            for AssignToConstBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AssignToConst>;
 
@@ -8267,9 +8277,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<AssignToConst>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<AssignToConst>>
             for AssignToConstBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AssignToConst>;
@@ -8284,9 +8294,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<AssignToConst> for AssignToConstBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<AssignToConst> for AssignToConstBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<AssignToConst> {
@@ -8414,7 +8424,7 @@ mod root {
         /// The table `DisabledFeature` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DisabledFeature` in the file `common.fbs:212`
+        /// * Table `DisabledFeature` in the file `crates/common/schema/common.fbs:212`
         #[derive(
             Clone,
             Debug,
@@ -8555,9 +8565,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<DisabledFeature>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<DisabledFeature>>
             for DisabledFeatureBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DisabledFeature>;
@@ -8572,9 +8582,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DisabledFeature>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DisabledFeature>>
             for DisabledFeatureBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DisabledFeature>;
@@ -8589,9 +8599,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<DisabledFeature> for DisabledFeatureBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<DisabledFeature> for DisabledFeatureBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -8720,7 +8730,7 @@ mod root {
         /// The table `BadSlotName` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `BadSlotName` in the file `common.fbs:217`
+        /// * Table `BadSlotName` in the file `crates/common/schema/common.fbs:217`
         #[derive(
             Clone,
             Debug,
@@ -8852,9 +8862,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<BadSlotName>> for BadSlotNameBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<BadSlotName>> for BadSlotNameBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<BadSlotName>;
 
@@ -8865,9 +8875,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<BadSlotName>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<BadSlotName>>
             for BadSlotNameBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<BadSlotName>;
@@ -8882,9 +8892,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<BadSlotName> for BadSlotNameBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<BadSlotName> for BadSlotNameBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BadSlotName> {
@@ -9010,7 +9020,7 @@ mod root {
         /// The table `InvalidAssignment` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidAssignment` in the file `common.fbs:222`
+        /// * Table `InvalidAssignment` in the file `crates/common/schema/common.fbs:222`
         #[derive(
             Clone,
             Debug,
@@ -9282,7 +9292,7 @@ mod root {
         /// The union `CompileErrorUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `CompileErrorUnion` in the file `common.fbs:226`
+        /// * Union `CompileErrorUnion` in the file `crates/common/schema/common.fbs:226`
         #[derive(
             Clone,
             Debug,
@@ -10002,7 +10012,7 @@ mod root {
         /// The table `CompileError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `CompileError` in the file `common.fbs:239`
+        /// * Table `CompileError` in the file `crates/common/schema/common.fbs:239`
         #[derive(
             Clone,
             Debug,
@@ -10249,7 +10259,7 @@ mod root {
         /// The union `ObjectRefUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `ObjectRefUnion` in the file `common.fbs:247`
+        /// * Union `ObjectRefUnion` in the file `crates/common/schema/common.fbs:247`
         #[derive(
             Clone,
             Debug,
@@ -10532,7 +10542,7 @@ mod root {
         /// The table `ObjectRefId` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefId` in the file `common.fbs:253`
+        /// * Table `ObjectRefId` in the file `crates/common/schema/common.fbs:253`
         #[derive(
             Clone,
             Debug,
@@ -10778,7 +10788,7 @@ mod root {
         /// The table `ObjectRefSysObj` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefSysObj` in the file `common.fbs:257`
+        /// * Table `ObjectRefSysObj` in the file `crates/common/schema/common.fbs:257`
         #[derive(
             Clone,
             Debug,
@@ -11052,7 +11062,7 @@ mod root {
         /// The table `ObjectRefMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRefMatch` in the file `common.fbs:261`
+        /// * Table `ObjectRefMatch` in the file `crates/common/schema/common.fbs:261`
         #[derive(
             Clone,
             Debug,
@@ -11306,7 +11316,7 @@ mod root {
         /// The table `ObjectRef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectRef` in the file `common.fbs:265`
+        /// * Table `ObjectRef` in the file `crates/common/schema/common.fbs:265`
         #[derive(
             Clone,
             Debug,
@@ -11552,7 +11562,7 @@ mod root {
         /// The union `WorldStateErrorUnion` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Union `WorldStateErrorUnion` in the file `common.fbs:273`
+        /// * Union `WorldStateErrorUnion` in the file `crates/common/schema/common.fbs:273`
         #[derive(
             Clone,
             Debug,
@@ -12898,7 +12908,7 @@ mod root {
         /// The table `ObjectNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectNotFound` in the file `common.fbs:296`
+        /// * Table `ObjectNotFound` in the file `crates/common/schema/common.fbs:296`
         #[derive(
             Clone,
             Debug,
@@ -13145,7 +13155,7 @@ mod root {
         /// The table `ObjectAlreadyExists` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectAlreadyExists` in the file `common.fbs:300`
+        /// * Table `ObjectAlreadyExists` in the file `crates/common/schema/common.fbs:300`
         #[derive(
             Clone,
             Debug,
@@ -13408,7 +13418,7 @@ mod root {
         /// The table `RecursiveMove` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `RecursiveMove` in the file `common.fbs:304`
+        /// * Table `RecursiveMove` in the file `crates/common/schema/common.fbs:304`
         #[derive(
             Clone,
             Debug,
@@ -13530,9 +13540,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-        > ::planus::WriteAs<::planus::Offset<RecursiveMove>> for RecursiveMoveBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+            > ::planus::WriteAs<::planus::Offset<RecursiveMove>>
+            for RecursiveMoveBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<RecursiveMove>;
 
@@ -13543,9 +13554,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RecursiveMove>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RecursiveMove>>
             for RecursiveMoveBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<RecursiveMove>;
@@ -13560,9 +13571,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-        > ::planus::WriteAsOffset<RecursiveMove> for RecursiveMoveBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+            > ::planus::WriteAsOffset<RecursiveMove> for RecursiveMoveBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RecursiveMove> {
@@ -13690,7 +13701,7 @@ mod root {
         /// The table `ObjectPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectPermissionDenied` in the file `common.fbs:309`
+        /// * Table `ObjectPermissionDenied` in the file `crates/common/schema/common.fbs:309`
         #[derive(
             Clone,
             Debug,
@@ -13924,7 +13935,7 @@ mod root {
         /// The table `PropertyNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyNotFound` in the file `common.fbs:312`
+        /// * Table `PropertyNotFound` in the file `crates/common/schema/common.fbs:312`
         #[derive(
             Clone,
             Debug,
@@ -14055,9 +14066,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<PropertyNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<PropertyNotFound>>
             for PropertyNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyNotFound>;
@@ -14072,9 +14083,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropertyNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropertyNotFound>>
             for PropertyNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyNotFound>;
@@ -14089,9 +14100,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<PropertyNotFound> for PropertyNotFoundBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<PropertyNotFound> for PropertyNotFoundBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -14220,7 +14231,7 @@ mod root {
         /// The table `PropertyPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyPermissionDenied` in the file `common.fbs:317`
+        /// * Table `PropertyPermissionDenied` in the file `crates/common/schema/common.fbs:317`
         #[derive(
             Clone,
             Debug,
@@ -14458,7 +14469,7 @@ mod root {
         /// The table `PropertyDefinitionNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyDefinitionNotFound` in the file `common.fbs:320`
+        /// * Table `PropertyDefinitionNotFound` in the file `crates/common/schema/common.fbs:320`
         #[derive(
             Clone,
             Debug,
@@ -14593,9 +14604,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<PropertyDefinitionNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<PropertyDefinitionNotFound>>
             for PropertyDefinitionNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyDefinitionNotFound>;
@@ -14610,9 +14621,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropertyDefinitionNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropertyDefinitionNotFound>>
             for PropertyDefinitionNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyDefinitionNotFound>;
@@ -14627,9 +14638,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<PropertyDefinitionNotFound>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<PropertyDefinitionNotFound>
             for PropertyDefinitionNotFoundBuilder<(T0, T1)>
         {
             #[inline]
@@ -14769,7 +14780,7 @@ mod root {
         /// The table `DuplicatePropertyDefinition` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicatePropertyDefinition` in the file `common.fbs:325`
+        /// * Table `DuplicatePropertyDefinition` in the file `crates/common/schema/common.fbs:325`
         #[derive(
             Clone,
             Debug,
@@ -14904,9 +14915,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicatePropertyDefinition>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicatePropertyDefinition>>
             for DuplicatePropertyDefinitionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicatePropertyDefinition>;
@@ -14921,9 +14932,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicatePropertyDefinition>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicatePropertyDefinition>>
             for DuplicatePropertyDefinitionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicatePropertyDefinition>;
@@ -14938,9 +14949,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<DuplicatePropertyDefinition>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<DuplicatePropertyDefinition>
             for DuplicatePropertyDefinitionBuilder<(T0, T1)>
         {
             #[inline]
@@ -15080,7 +15091,7 @@ mod root {
         /// The table `ChparentPropertyNameConflict` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ChparentPropertyNameConflict` in the file `common.fbs:330`
+        /// * Table `ChparentPropertyNameConflict` in the file `crates/common/schema/common.fbs:330`
         #[derive(
             Clone,
             Debug,
@@ -15243,10 +15254,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<ChparentPropertyNameConflict>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<ChparentPropertyNameConflict>>
             for ChparentPropertyNameConflictBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<ChparentPropertyNameConflict>;
@@ -15261,10 +15272,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ChparentPropertyNameConflict>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ChparentPropertyNameConflict>>
             for ChparentPropertyNameConflictBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<ChparentPropertyNameConflict>;
@@ -15280,10 +15291,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<ChparentPropertyNameConflict>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<ChparentPropertyNameConflict>
             for ChparentPropertyNameConflictBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -15434,7 +15445,7 @@ mod root {
         /// The table `PropertyTypeMismatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyTypeMismatch` in the file `common.fbs:336`
+        /// * Table `PropertyTypeMismatch` in the file `crates/common/schema/common.fbs:336`
         #[derive(
             Clone,
             Debug,
@@ -15662,7 +15673,7 @@ mod root {
         /// The table `VerbNotFound` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbNotFound` in the file `common.fbs:339`
+        /// * Table `VerbNotFound` in the file `crates/common/schema/common.fbs:339`
         #[derive(
             Clone,
             Debug,
@@ -15784,9 +15795,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<VerbNotFound>> for VerbNotFoundBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<VerbNotFound>> for VerbNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbNotFound>;
 
@@ -15797,9 +15808,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbNotFound>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbNotFound>>
             for VerbNotFoundBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbNotFound>;
@@ -15814,9 +15825,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<VerbNotFound> for VerbNotFoundBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<VerbNotFound> for VerbNotFoundBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbNotFound> {
@@ -15942,7 +15953,7 @@ mod root {
         /// The table `InvalidVerb` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidVerb` in the file `common.fbs:344`
+        /// * Table `InvalidVerb` in the file `crates/common/schema/common.fbs:344`
         #[derive(
             Clone,
             Debug,
@@ -16204,7 +16215,7 @@ mod root {
         /// The table `VerbDecodeError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDecodeError` in the file `common.fbs:348`
+        /// * Table `VerbDecodeError` in the file `crates/common/schema/common.fbs:348`
         #[derive(
             Clone,
             Debug,
@@ -16335,9 +16346,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<VerbDecodeError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<VerbDecodeError>>
             for VerbDecodeErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbDecodeError>;
@@ -16352,9 +16363,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbDecodeError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbDecodeError>>
             for VerbDecodeErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbDecodeError>;
@@ -16369,9 +16380,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<VerbDecodeError> for VerbDecodeErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<VerbDecodeError> for VerbDecodeErrorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -16502,7 +16513,7 @@ mod root {
         /// The table `VerbPermissionDenied` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbPermissionDenied` in the file `common.fbs:353`
+        /// * Table `VerbPermissionDenied` in the file `crates/common/schema/common.fbs:353`
         #[derive(
             Clone,
             Debug,
@@ -16730,7 +16741,7 @@ mod root {
         /// The table `DuplicateVerb` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVerb` in the file `common.fbs:356`
+        /// * Table `DuplicateVerb` in the file `crates/common/schema/common.fbs:356`
         #[derive(
             Clone,
             Debug,
@@ -16852,9 +16863,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicateVerb>> for DuplicateVerbBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicateVerb>>
+            for DuplicateVerbBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVerb>;
 
@@ -16865,9 +16877,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicateVerb>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicateVerb>>
             for DuplicateVerbBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVerb>;
@@ -16882,9 +16894,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<DuplicateVerb> for DuplicateVerbBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<DuplicateVerb> for DuplicateVerbBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<DuplicateVerb> {
@@ -17012,7 +17024,7 @@ mod root {
         /// The table `FailedMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `FailedMatch` in the file `common.fbs:361`
+        /// * Table `FailedMatch` in the file `crates/common/schema/common.fbs:361`
         #[derive(
             Clone,
             Debug,
@@ -17265,7 +17277,7 @@ mod root {
         /// The table `AmbiguousMatch` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `AmbiguousMatch` in the file `common.fbs:365`
+        /// * Table `AmbiguousMatch` in the file `crates/common/schema/common.fbs:365`
         #[derive(
             Clone,
             Debug,
@@ -17519,7 +17531,7 @@ mod root {
         /// The table `InvalidRenumber` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidRenumber` in the file `common.fbs:369`
+        /// * Table `InvalidRenumber` in the file `crates/common/schema/common.fbs:369`
         #[derive(
             Clone,
             Debug,
@@ -17788,7 +17800,7 @@ mod root {
         /// The table `WorldStateDatabaseError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `WorldStateDatabaseError` in the file `common.fbs:373`
+        /// * Table `WorldStateDatabaseError` in the file `crates/common/schema/common.fbs:373`
         #[derive(
             Clone,
             Debug,
@@ -18068,7 +18080,7 @@ mod root {
         /// The table `RollbackRetry` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `RollbackRetry` in the file `common.fbs:377`
+        /// * Table `RollbackRetry` in the file `crates/common/schema/common.fbs:377`
         #[derive(
             Clone,
             Debug,
@@ -18279,7 +18291,7 @@ mod root {
         /// The table `WorldStateError` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `WorldStateError` in the file `common.fbs:380`
+        /// * Table `WorldStateError` in the file `crates/common/schema/common.fbs:380`
         #[derive(
             Clone,
             Debug,
@@ -18541,7 +18553,7 @@ mod root {
         /// The table `PropInfo` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropInfo` in the file `common.fbs:388`
+        /// * Table `PropInfo` in the file `crates/common/schema/common.fbs:388`
         #[derive(
             Clone,
             Debug,
@@ -18804,14 +18816,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<PropInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<PropInfo>>
             for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<PropInfo>;
@@ -18823,14 +18835,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropInfo>>
             for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<PropInfo>;
@@ -18845,14 +18857,14 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<PropInfo> for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<PropInfo> for PropInfoBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropInfo> {
@@ -19020,7 +19032,7 @@ mod root {
         /// The table `VerbInfo` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbInfo` in the file `common.fbs:398`
+        /// * Table `VerbInfo` in the file `crates/common/schema/common.fbs:398`
         #[derive(
             Clone,
             Debug,
@@ -19319,15 +19331,15 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-        > ::planus::WriteAs<::planus::Offset<VerbInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+            > ::planus::WriteAs<::planus::Offset<VerbInfo>>
             for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
         {
             type Prepared = ::planus::Offset<VerbInfo>;
@@ -19339,15 +19351,15 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbInfo>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbInfo>>
             for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
         {
             type Prepared = ::planus::Offset<VerbInfo>;
@@ -19362,15 +19374,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsDefault<bool, bool>,
-            T6: ::planus::WriteAsDefault<bool, bool>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-        > ::planus::WriteAsOffset<VerbInfo> for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsDefault<bool, bool>,
+                T6: ::planus::WriteAsDefault<bool, bool>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+            > ::planus::WriteAsOffset<VerbInfo>
+            for VerbInfoBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbInfo> {
@@ -19548,7 +19561,7 @@ mod root {
         /// The enum `ArgSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Enum `ArgSpec` in the file `common.fbs:414`
+        /// * Enum `ArgSpec` in the file `crates/common/schema/common.fbs:414`
         #[derive(
             Copy,
             Clone,
@@ -19718,7 +19731,7 @@ mod root {
         /// The table `PrepSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PrepSpec` in the file `common.fbs:422`
+        /// * Table `PrepSpec` in the file `crates/common/schema/common.fbs:422`
         #[derive(
             Clone,
             Debug,
@@ -19976,7 +19989,7 @@ mod root {
         /// The table `VerbArgsSpec` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbArgsSpec` in the file `common.fbs:428`
+        /// * Table `VerbArgsSpec` in the file `crates/common/schema/common.fbs:428`
         #[derive(
             Clone,
             Debug,
@@ -20161,10 +20174,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-            T1: ::planus::WriteAsDefault<i16, i16>,
-            T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-        > ::planus::WriteAs<::planus::Offset<VerbArgsSpec>> for VerbArgsSpecBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+                T1: ::planus::WriteAsDefault<i16, i16>,
+                T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+            > ::planus::WriteAs<::planus::Offset<VerbArgsSpec>>
+            for VerbArgsSpecBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VerbArgsSpec>;
 
@@ -20175,10 +20189,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-            T1: ::planus::WriteAsDefault<i16, i16>,
-            T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbArgsSpec>>
+                T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+                T1: ::planus::WriteAsDefault<i16, i16>,
+                T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbArgsSpec>>
             for VerbArgsSpecBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VerbArgsSpec>;
@@ -20193,10 +20207,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-            T1: ::planus::WriteAsDefault<i16, i16>,
-            T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
-        > ::planus::WriteAsOffset<VerbArgsSpec> for VerbArgsSpecBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+                T1: ::planus::WriteAsDefault<i16, i16>,
+                T2: ::planus::WriteAsDefault<self::ArgSpec, self::ArgSpec>,
+            > ::planus::WriteAsOffset<VerbArgsSpec> for VerbArgsSpecBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbArgsSpec> {
@@ -20336,7 +20350,7 @@ mod root {
         /// The table `VerbDef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDef` in the file `common.fbs:435`
+        /// * Table `VerbDef` in the file `crates/common/schema/common.fbs:435`
         #[derive(
             Clone,
             Debug,
@@ -20555,13 +20569,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
-        > ::planus::WriteAs<::planus::Offset<VerbDef>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
+            > ::planus::WriteAs<::planus::Offset<VerbDef>>
             for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<VerbDef>;
@@ -20573,13 +20587,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbDef>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbDef>>
             for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<VerbDef>;
@@ -20594,13 +20608,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
-        > ::planus::WriteAsOffset<VerbDef> for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Symbol>]>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAs<::planus::Offset<self::VerbArgsSpec>>,
+            > ::planus::WriteAsOffset<VerbDef> for VerbDefBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDef> {
@@ -20763,7 +20777,7 @@ mod root {
         /// The table `PropDef` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `PropDef` in the file `common.fbs:445`
+        /// * Table `PropDef` in the file `crates/common/schema/common.fbs:445`
         #[derive(
             Clone,
             Debug,
@@ -20929,11 +20943,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<PropDef>> for PropDefBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<PropDef>> for PropDefBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<PropDef>;
 
@@ -20944,11 +20958,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropDef>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropDef>>
             for PropDefBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<PropDef>;
@@ -20963,11 +20977,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
-        > ::planus::WriteAsOffset<PropDef> for PropDefBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<self::Symbol>>,
+            > ::planus::WriteAsOffset<PropDef> for PropDefBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDef> {
@@ -21108,10 +21122,514 @@ mod root {
             }
         }
 
+        /// The table `VerbDefs` in the namespace `MoorCommon`
+        ///
+        /// Generated from these locations:
+        /// * Table `VerbDefs` in the file `crates/common/schema/common.fbs:453`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct VerbDefs {
+            /// The field `verbs` in the table `VerbDefs`
+            pub verbs: ::planus::alloc::vec::Vec<self::VerbDef>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VerbDefs {
+            fn default() -> Self {
+                Self {
+                    verbs: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VerbDefs {
+            /// Creates a [VerbDefsBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VerbDefsBuilder<()> {
+                VerbDefsBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_verbs: impl ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VerbDef>]>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_verbs = field_verbs.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::VerbDef>]>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_verbs);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VerbDefs>> for VerbDefs {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDefs> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VerbDefs>> for VerbDefs {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VerbDefs>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VerbDefs> for VerbDefs {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDefs> {
+                VerbDefs::create(builder, &self.verbs)
+            }
+        }
+
+        /// Builder for serializing an instance of the [VerbDefs] type.
+        ///
+        /// Can be created using the [VerbDefs::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VerbDefsBuilder<State>(State);
+
+        impl VerbDefsBuilder<()> {
+            /// Setter for the [`verbs` field](VerbDefs#structfield.verbs).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn verbs<T0>(self, value: T0) -> VerbDefsBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VerbDef>]>>,
+            {
+                VerbDefsBuilder((value,))
+            }
+        }
+
+        impl<T0> VerbDefsBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VerbDefs].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDefs>
+            where
+                Self: ::planus::WriteAsOffset<VerbDefs>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VerbDef>]>>>
+            ::planus::WriteAs<::planus::Offset<VerbDefs>> for VerbDefsBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VerbDefs>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDefs> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VerbDef>]>>>
+            ::planus::WriteAsOptional<::planus::Offset<VerbDefs>> for VerbDefsBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<VerbDefs>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VerbDefs>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VerbDef>]>>>
+            ::planus::WriteAsOffset<VerbDefs> for VerbDefsBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbDefs> {
+                let (v0,) = &self.0;
+                VerbDefs::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [VerbDefs].
+        #[derive(Copy, Clone)]
+        pub struct VerbDefsRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VerbDefsRef<'a> {
+            /// Getter for the [`verbs` field](VerbDefs#structfield.verbs).
+            #[inline]
+            pub fn verbs(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::VerbDefRef<'a>>>>
+            {
+                self.0.access_required(0, "VerbDefs", "verbs")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VerbDefsRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VerbDefsRef");
+                f.field("verbs", &self.verbs());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VerbDefsRef<'a>> for VerbDefs {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VerbDefsRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    verbs: value.verbs()?.to_vec_result()?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VerbDefsRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VerbDefsRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[VerbDefsRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VerbDefs>> for VerbDefs {
+            type Value = ::planus::Offset<VerbDefs>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VerbDefs>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VerbDefsRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VerbDefsRef]", "read_as_root", 0)
+                })
+            }
+        }
+
+        /// The table `PropDefs` in the namespace `MoorCommon`
+        ///
+        /// Generated from these locations:
+        /// * Table `PropDefs` in the file `crates/common/schema/common.fbs:458`
+        #[derive(
+            Clone,
+            Debug,
+            PartialEq,
+            PartialOrd,
+            Eq,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        pub struct PropDefs {
+            /// The field `props` in the table `PropDefs`
+            pub props: ::planus::alloc::vec::Vec<self::PropDef>,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for PropDefs {
+            fn default() -> Self {
+                Self {
+                    props: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl PropDefs {
+            /// Creates a [PropDefsBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> PropDefsBuilder<()> {
+                PropDefsBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_props: impl ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PropDef>]>>,
+            ) -> ::planus::Offset<Self> {
+                let prepared_props = field_props.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                    ::core::default::Default::default();
+                table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::PropDef>]>>(0);
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_props);
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<PropDefs>> for PropDefs {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDefs> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<PropDefs>> for PropDefs {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<PropDefs>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<PropDefs> for PropDefs {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDefs> {
+                PropDefs::create(builder, &self.props)
+            }
+        }
+
+        /// Builder for serializing an instance of the [PropDefs] type.
+        ///
+        /// Can be created using the [PropDefs::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct PropDefsBuilder<State>(State);
+
+        impl PropDefsBuilder<()> {
+            /// Setter for the [`props` field](PropDefs#structfield.props).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn props<T0>(self, value: T0) -> PropDefsBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PropDef>]>>,
+            {
+                PropDefsBuilder((value,))
+            }
+        }
+
+        impl<T0> PropDefsBuilder<(T0,)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [PropDefs].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDefs>
+            where
+                Self: ::planus::WriteAsOffset<PropDefs>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PropDef>]>>>
+            ::planus::WriteAs<::planus::Offset<PropDefs>> for PropDefsBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<PropDefs>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDefs> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PropDef>]>>>
+            ::planus::WriteAsOptional<::planus::Offset<PropDefs>> for PropDefsBuilder<(T0,)>
+        {
+            type Prepared = ::planus::Offset<PropDefs>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<PropDefs>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::PropDef>]>>>
+            ::planus::WriteAsOffset<PropDefs> for PropDefsBuilder<(T0,)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropDefs> {
+                let (v0,) = &self.0;
+                PropDefs::create(builder, v0)
+            }
+        }
+
+        /// Reference to a deserialized [PropDefs].
+        #[derive(Copy, Clone)]
+        pub struct PropDefsRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> PropDefsRef<'a> {
+            /// Getter for the [`props` field](PropDefs#structfield.props).
+            #[inline]
+            pub fn props(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::PropDefRef<'a>>>>
+            {
+                self.0.access_required(0, "PropDefs", "props")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for PropDefsRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("PropDefsRef");
+                f.field("props", &self.props());
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<PropDefsRef<'a>> for PropDefs {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: PropDefsRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    props: value.props()?.to_vec_result()?,
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for PropDefsRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for PropDefsRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location("[PropDefsRef]", "get", buffer.offset_from_start)
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<PropDefs>> for PropDefs {
+            type Value = ::planus::Offset<PropDefs>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<PropDefs>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for PropDefsRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[PropDefsRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `ObjAttrs` in the namespace `MoorCommon`
         ///
         /// Generated from these locations:
-        /// * Table `ObjAttrs` in the file `common.fbs:453`
+        /// * Table `ObjAttrs` in the file `crates/common/schema/common.fbs:463`
         #[derive(
             Clone,
             Debug,
@@ -21319,12 +21837,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-            T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-        > ::planus::WriteAs<::planus::Offset<ObjAttrs>> for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+                T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAs<::planus::Offset<ObjAttrs>>
+            for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ObjAttrs>;
 
@@ -21335,12 +21854,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-            T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ObjAttrs>>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+                T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ObjAttrs>>
             for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ObjAttrs>;
@@ -21355,12 +21874,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-            T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-        > ::planus::WriteAsOffset<ObjAttrs> for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::Obj>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+                T4: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+            > ::planus::WriteAsOffset<ObjAttrs> for ObjAttrsBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ObjAttrs> {
@@ -21514,12 +22033,12 @@ mod root {
     /// The namespace `MoorVar`
     ///
     /// Generated from these locations:
-    /// * File `var.fbs`
+    /// * File `crates/common/schema/var.fbs`
     pub mod moor_var {
         /// The union `VarUnion` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Union `VarUnion` in the file `var.fbs:25`
+        /// * Union `VarUnion` in the file `crates/common/schema/var.fbs:27`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum VarUnion {
             /// The variant of type `VarNone` in the union `VarUnion`
@@ -21557,6 +22076,9 @@ mod root {
 
             /// The variant of type `VarFlyweight` in the union `VarUnion`
             VarFlyweight(::planus::alloc::boxed::Box<self::VarFlyweight>),
+
+            /// The variant of type `VarLambda` in the union `VarUnion`
+            VarLambda(::planus::alloc::boxed::Box<self::VarLambda>),
         }
 
         impl VarUnion {
@@ -21661,6 +22183,14 @@ mod root {
             ) -> ::planus::UnionOffset<Self> {
                 ::planus::UnionOffset::new(12, value.prepare(builder).downcast())
             }
+
+            #[inline]
+            pub fn create_var_lambda(
+                builder: &mut ::planus::Builder,
+                value: impl ::planus::WriteAsOffset<self::VarLambda>,
+            ) -> ::planus::UnionOffset<Self> {
+                ::planus::UnionOffset::new(13, value.prepare(builder).downcast())
+            }
         }
 
         impl ::planus::WriteAsUnion<VarUnion> for VarUnion {
@@ -21679,6 +22209,7 @@ mod root {
                     Self::VarSym(value) => Self::create_var_sym(builder, value),
                     Self::VarBinary(value) => Self::create_var_binary(builder, value),
                     Self::VarFlyweight(value) => Self::create_var_flyweight(builder, value),
+                    Self::VarLambda(value) => Self::create_var_lambda(builder, value),
                 }
             }
         }
@@ -21805,6 +22336,15 @@ mod root {
             pub fn var_flyweight<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<12, T>>
             where
                 T: ::planus::WriteAsOffset<self::VarFlyweight>,
+            {
+                VarUnionBuilder(::planus::Initialized(value))
+            }
+
+            /// Creates an instance of the [`VarLambda` variant](VarUnion#variant.VarLambda).
+            #[inline]
+            pub fn var_lambda<T>(self, value: T) -> VarUnionBuilder<::planus::Initialized<13, T>>
+            where
+                T: ::planus::WriteAsOffset<self::VarLambda>,
             {
                 VarUnionBuilder(::planus::Initialized(value))
             }
@@ -22085,6 +22625,28 @@ mod root {
                 ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
             }
         }
+        impl<T> ::planus::WriteAsUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<13, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarLambda>,
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::UnionOffset<VarUnion> {
+                ::planus::UnionOffset::new(13, (self.0).0.prepare(builder).downcast())
+            }
+        }
+
+        impl<T> ::planus::WriteAsOptionalUnion<VarUnion> for VarUnionBuilder<::planus::Initialized<13, T>>
+        where
+            T: ::planus::WriteAsOffset<self::VarLambda>,
+        {
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::UnionOffset<VarUnion>> {
+                ::core::option::Option::Some(::planus::WriteAsUnion::prepare(self, builder))
+            }
+        }
 
         /// Reference to a deserialized [VarUnion].
         #[derive(Copy, Clone, Debug)]
@@ -22101,6 +22663,7 @@ mod root {
             VarSym(self::VarSymRef<'a>),
             VarBinary(self::VarBinaryRef<'a>),
             VarFlyweight(self::VarFlyweightRef<'a>),
+            VarLambda(self::VarLambdaRef<'a>),
         }
 
         impl<'a> ::core::convert::TryFrom<VarUnionRef<'a>> for VarUnion {
@@ -22161,6 +22724,12 @@ mod root {
                             ::core::convert::TryFrom::try_from(value)?,
                         ))
                     }
+
+                    VarUnionRef::VarLambda(value) => {
+                        Self::VarLambda(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryFrom::try_from(value)?,
+                        ))
+                    }
                 })
             }
         }
@@ -22208,6 +22777,9 @@ mod root {
                     12 => ::core::result::Result::Ok(Self::VarFlyweight(
                         ::planus::TableRead::from_buffer(buffer, field_offset)?,
                     )),
+                    13 => ::core::result::Result::Ok(Self::VarLambda(
+                        ::planus::TableRead::from_buffer(buffer, field_offset)?,
+                    )),
                     _ => {
                         ::core::result::Result::Err(::planus::errors::ErrorKind::UnknownUnionTag {
                             tag,
@@ -22224,7 +22796,7 @@ mod root {
         /// The table `VarNone` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarNone` in the file `var.fbs:41`
+        /// * Table `VarNone` in the file `crates/common/schema/var.fbs:45`
         #[derive(
             Clone,
             Debug,
@@ -22431,7 +23003,7 @@ mod root {
         /// The table `VarBool` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarBool` in the file `var.fbs:44`
+        /// * Table `VarBool` in the file `crates/common/schema/var.fbs:48`
         #[derive(
             Clone,
             Debug,
@@ -22689,7 +23261,7 @@ mod root {
         /// The table `VarInt` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarInt` in the file `var.fbs:48`
+        /// * Table `VarInt` in the file `crates/common/schema/var.fbs:52`
         #[derive(
             Clone,
             Debug,
@@ -22947,7 +23519,7 @@ mod root {
         /// The table `VarFloat` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarFloat` in the file `var.fbs:52`
+        /// * Table `VarFloat` in the file `crates/common/schema/var.fbs:56`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarFloat {
             /// The field `value` in the table `VarFloat`
@@ -23195,7 +23767,7 @@ mod root {
         /// The table `VarStr` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarStr` in the file `var.fbs:56`
+        /// * Table `VarStr` in the file `crates/common/schema/var.fbs:60`
         #[derive(
             Clone,
             Debug,
@@ -23444,7 +24016,7 @@ mod root {
         /// The table `VarObj` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarObj` in the file `var.fbs:60`
+        /// * Table `VarObj` in the file `crates/common/schema/var.fbs:64`
         #[derive(
             Clone,
             Debug,
@@ -23686,7 +24258,7 @@ mod root {
         /// The table `VarErr` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarErr` in the file `var.fbs:64`
+        /// * Table `VarErr` in the file `crates/common/schema/var.fbs:68`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarErr {
             /// The field `error` in the table `VarErr`
@@ -23927,7 +24499,7 @@ mod root {
         /// The table `VarSym` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarSym` in the file `var.fbs:68`
+        /// * Table `VarSym` in the file `crates/common/schema/var.fbs:72`
         #[derive(
             Clone,
             Debug,
@@ -24178,7 +24750,7 @@ mod root {
         /// The table `VarBinary` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarBinary` in the file `var.fbs:72`
+        /// * Table `VarBinary` in the file `crates/common/schema/var.fbs:76`
         #[derive(
             Clone,
             Debug,
@@ -24431,7 +25003,7 @@ mod root {
         /// The table `VarList` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarList` in the file `var.fbs:76`
+        /// * Table `VarList` in the file `crates/common/schema/var.fbs:80`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarList {
             /// The field `elements` in the table `VarList`
@@ -24673,7 +25245,7 @@ mod root {
         /// The table `VarMapPair` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarMapPair` in the file `var.fbs:80`
+        /// * Table `VarMapPair` in the file `crates/common/schema/var.fbs:84`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarMapPair {
             /// The field `key` in the table `VarMapPair`
@@ -24785,9 +25357,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAs<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAs<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VarMapPair>;
 
@@ -24798,9 +25370,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VarMapPair>> for VarMapPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VarMapPair>>
+            for VarMapPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VarMapPair>;
 
@@ -24814,9 +25387,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOffset<VarMapPair> for VarMapPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::Var>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOffset<VarMapPair> for VarMapPairBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarMapPair> {
@@ -24944,7 +25517,7 @@ mod root {
         /// The table `VarMap` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarMap` in the file `var.fbs:85`
+        /// * Table `VarMap` in the file `crates/common/schema/var.fbs:89`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarMap {
             /// The field `pairs` in the table `VarMap`
@@ -25189,7 +25762,7 @@ mod root {
         /// The table `FlyweightSlot` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `FlyweightSlot` in the file `var.fbs:89`
+        /// * Table `FlyweightSlot` in the file `crates/common/schema/var.fbs:93`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct FlyweightSlot {
             /// The field `name` in the table `FlyweightSlot`
@@ -25301,9 +25874,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAs<::planus::Offset<FlyweightSlot>> for FlyweightSlotBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAs<::planus::Offset<FlyweightSlot>>
+            for FlyweightSlotBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<FlyweightSlot>;
 
@@ -25314,9 +25888,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<FlyweightSlot>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<FlyweightSlot>>
             for FlyweightSlotBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<FlyweightSlot>;
@@ -25331,9 +25905,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
-        > ::planus::WriteAsOffset<FlyweightSlot> for FlyweightSlotBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::Var>>,
+            > ::planus::WriteAsOffset<FlyweightSlot> for FlyweightSlotBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<FlyweightSlot> {
@@ -25461,7 +26035,7 @@ mod root {
         /// The table `VarFlyweight` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `VarFlyweight` in the file `var.fbs:94`
+        /// * Table `VarFlyweight` in the file `crates/common/schema/var.fbs:98`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct VarFlyweight {
             /// The field `delegate` in the table `VarFlyweight`
@@ -25595,10 +26169,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
-        > ::planus::WriteAs<::planus::Offset<VarFlyweight>> for VarFlyweightBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            > ::planus::WriteAs<::planus::Offset<VarFlyweight>>
+            for VarFlyweightBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VarFlyweight>;
 
@@ -25609,10 +26184,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VarFlyweight>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VarFlyweight>>
             for VarFlyweightBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<VarFlyweight>;
@@ -25627,10 +26202,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
-        > ::planus::WriteAsOffset<VarFlyweight> for VarFlyweightBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::FlyweightSlot>]>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::VarList>>,
+            > ::planus::WriteAsOffset<VarFlyweight> for VarFlyweightBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarFlyweight> {
@@ -25766,10 +26341,398 @@ mod root {
             }
         }
 
+        /// The table `VarLambda` in the namespace `MoorVar`
+        ///
+        /// Generated from these locations:
+        /// * Table `VarLambda` in the file `crates/common/schema/var.fbs:104`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct VarLambda {
+            /// The field `params` in the table `VarLambda`
+            pub params: ::planus::alloc::boxed::Box<super::moor_program::StoredScatterArgs>,
+            /// The field `body` in the table `VarLambda`
+            pub body: ::planus::alloc::boxed::Box<super::moor_program::StoredProgram>,
+            /// The field `captured_env` in the table `VarLambda`
+            pub captured_env: ::planus::alloc::vec::Vec<self::VarList>,
+            /// The field `self_var` in the table `VarLambda`
+            pub self_var: ::core::option::Option<
+                ::planus::alloc::boxed::Box<super::moor_program::StoredName>,
+            >,
+        }
+
+        #[allow(clippy::derivable_impls)]
+        impl ::core::default::Default for VarLambda {
+            fn default() -> Self {
+                Self {
+                    params: ::core::default::Default::default(),
+                    body: ::core::default::Default::default(),
+                    captured_env: ::core::default::Default::default(),
+                    self_var: ::core::default::Default::default(),
+                }
+            }
+        }
+
+        impl VarLambda {
+            /// Creates a [VarLambdaBuilder] for serializing an instance of this table.
+            #[inline]
+            pub fn builder() -> VarLambdaBuilder<()> {
+                VarLambdaBuilder(())
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn create(
+                builder: &mut ::planus::Builder,
+                field_params: impl ::planus::WriteAs<
+                    ::planus::Offset<super::moor_program::StoredScatterArgs>,
+                >,
+                field_body: impl ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                field_captured_env: impl ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::VarList>]>,
+                >,
+                field_self_var: impl ::planus::WriteAsOptional<
+                    ::planus::Offset<super::moor_program::StoredName>,
+                >,
+            ) -> ::planus::Offset<Self> {
+                let prepared_params = field_params.prepare(builder);
+                let prepared_body = field_body.prepare(builder);
+                let prepared_captured_env = field_captured_env.prepare(builder);
+                let prepared_self_var = field_self_var.prepare(builder);
+
+                let mut table_writer: ::planus::table_writer::TableWriter<12> =
+                    ::core::default::Default::default();
+                table_writer
+                    .write_entry::<::planus::Offset<super::moor_program::StoredScatterArgs>>(0);
+                table_writer.write_entry::<::planus::Offset<super::moor_program::StoredProgram>>(1);
+                table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::VarList>]>>(2);
+                if prepared_self_var.is_some() {
+                    table_writer
+                        .write_entry::<::planus::Offset<super::moor_program::StoredName>>(3);
+                }
+
+                unsafe {
+                    table_writer.finish(builder, |object_writer| {
+                        object_writer.write::<_, _, 4>(&prepared_params);
+                        object_writer.write::<_, _, 4>(&prepared_body);
+                        object_writer.write::<_, _, 4>(&prepared_captured_env);
+                        if let ::core::option::Option::Some(prepared_self_var) = prepared_self_var {
+                            object_writer.write::<_, _, 4>(&prepared_self_var);
+                        }
+                    });
+                }
+                builder.current_offset()
+            }
+        }
+
+        impl ::planus::WriteAs<::planus::Offset<VarLambda>> for VarLambda {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarLambda> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl ::planus::WriteAsOptional<::planus::Offset<VarLambda>> for VarLambda {
+            type Prepared = ::planus::Offset<Self>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarLambda>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl ::planus::WriteAsOffset<VarLambda> for VarLambda {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarLambda> {
+                VarLambda::create(
+                    builder,
+                    &self.params,
+                    &self.body,
+                    &self.captured_env,
+                    &self.self_var,
+                )
+            }
+        }
+
+        /// Builder for serializing an instance of the [VarLambda] type.
+        ///
+        /// Can be created using the [VarLambda::builder] method.
+        #[derive(Debug)]
+        #[must_use]
+        pub struct VarLambdaBuilder<State>(State);
+
+        impl VarLambdaBuilder<()> {
+            /// Setter for the [`params` field](VarLambda#structfield.params).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn params<T0>(self, value: T0) -> VarLambdaBuilder<(T0,)>
+            where
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+            {
+                VarLambdaBuilder((value,))
+            }
+        }
+
+        impl<T0> VarLambdaBuilder<(T0,)> {
+            /// Setter for the [`body` field](VarLambda#structfield.body).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn body<T1>(self, value: T1) -> VarLambdaBuilder<(T0, T1)>
+            where
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+            {
+                let (v0,) = self.0;
+                VarLambdaBuilder((v0, value))
+            }
+        }
+
+        impl<T0, T1> VarLambdaBuilder<(T0, T1)> {
+            /// Setter for the [`captured_env` field](VarLambda#structfield.captured_env).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn captured_env<T2>(self, value: T2) -> VarLambdaBuilder<(T0, T1, T2)>
+            where
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+            {
+                let (v0, v1) = self.0;
+                VarLambdaBuilder((v0, v1, value))
+            }
+        }
+
+        impl<T0, T1, T2> VarLambdaBuilder<(T0, T1, T2)> {
+            /// Setter for the [`self_var` field](VarLambda#structfield.self_var).
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn self_var<T3>(self, value: T3) -> VarLambdaBuilder<(T0, T1, T2, T3)>
+            where
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            {
+                let (v0, v1, v2) = self.0;
+                VarLambdaBuilder((v0, v1, v2, value))
+            }
+
+            /// Sets the [`self_var` field](VarLambda#structfield.self_var) to null.
+            #[inline]
+            #[allow(clippy::type_complexity)]
+            pub fn self_var_as_null(self) -> VarLambdaBuilder<(T0, T1, T2, ())> {
+                self.self_var(())
+            }
+        }
+
+        impl<T0, T1, T2, T3> VarLambdaBuilder<(T0, T1, T2, T3)> {
+            /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [VarLambda].
+            #[inline]
+            pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarLambda>
+            where
+                Self: ::planus::WriteAsOffset<VarLambda>,
+            {
+                ::planus::WriteAsOffset::prepare(&self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            > ::planus::WriteAs<::planus::Offset<VarLambda>>
+            for VarLambdaBuilder<(T0, T1, T2, T3)>
+        {
+            type Prepared = ::planus::Offset<VarLambda>;
+
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarLambda> {
+                ::planus::WriteAsOffset::prepare(self, builder)
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VarLambda>>
+            for VarLambdaBuilder<(T0, T1, T2, T3)>
+        {
+            type Prepared = ::planus::Offset<VarLambda>;
+
+            #[inline]
+            fn prepare(
+                &self,
+                builder: &mut ::planus::Builder,
+            ) -> ::core::option::Option<::planus::Offset<VarLambda>> {
+                ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+            }
+        }
+
+        impl<
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredScatterArgs>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_program::StoredProgram>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::VarList>]>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_program::StoredName>>,
+            > ::planus::WriteAsOffset<VarLambda> for VarLambdaBuilder<(T0, T1, T2, T3)>
+        {
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VarLambda> {
+                let (v0, v1, v2, v3) = &self.0;
+                VarLambda::create(builder, v0, v1, v2, v3)
+            }
+        }
+
+        /// Reference to a deserialized [VarLambda].
+        #[derive(Copy, Clone)]
+        pub struct VarLambdaRef<'a>(::planus::table_reader::Table<'a>);
+
+        impl<'a> VarLambdaRef<'a> {
+            /// Getter for the [`params` field](VarLambda#structfield.params).
+            #[inline]
+            pub fn params(
+                &self,
+            ) -> ::planus::Result<super::moor_program::StoredScatterArgsRef<'a>> {
+                self.0.access_required(0, "VarLambda", "params")
+            }
+
+            /// Getter for the [`body` field](VarLambda#structfield.body).
+            #[inline]
+            pub fn body(&self) -> ::planus::Result<super::moor_program::StoredProgramRef<'a>> {
+                self.0.access_required(1, "VarLambda", "body")
+            }
+
+            /// Getter for the [`captured_env` field](VarLambda#structfield.captured_env).
+            #[inline]
+            pub fn captured_env(
+                &self,
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::VarListRef<'a>>>>
+            {
+                self.0.access_required(2, "VarLambda", "captured_env")
+            }
+
+            /// Getter for the [`self_var` field](VarLambda#structfield.self_var).
+            #[inline]
+            pub fn self_var(
+                &self,
+            ) -> ::planus::Result<::core::option::Option<super::moor_program::StoredNameRef<'a>>>
+            {
+                self.0.access(3, "VarLambda", "self_var")
+            }
+        }
+
+        impl<'a> ::core::fmt::Debug for VarLambdaRef<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut f = f.debug_struct("VarLambdaRef");
+                f.field("params", &self.params());
+                f.field("body", &self.body());
+                f.field("captured_env", &self.captured_env());
+                if let ::core::option::Option::Some(field_self_var) = self.self_var().transpose() {
+                    f.field("self_var", &field_self_var);
+                }
+                f.finish()
+            }
+        }
+
+        impl<'a> ::core::convert::TryFrom<VarLambdaRef<'a>> for VarLambda {
+            type Error = ::planus::Error;
+
+            #[allow(unreachable_code)]
+            fn try_from(value: VarLambdaRef<'a>) -> ::planus::Result<Self> {
+                ::core::result::Result::Ok(Self {
+                    params: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.params()?,
+                    )?),
+                    body: ::planus::alloc::boxed::Box::new(::core::convert::TryInto::try_into(
+                        value.body()?,
+                    )?),
+                    captured_env: value.captured_env()?.to_vec_result()?,
+                    self_var: if let ::core::option::Option::Some(self_var) = value.self_var()? {
+                        ::core::option::Option::Some(::planus::alloc::boxed::Box::new(
+                            ::core::convert::TryInto::try_into(self_var)?,
+                        ))
+                    } else {
+                        ::core::option::Option::None
+                    },
+                })
+            }
+        }
+
+        impl<'a> ::planus::TableRead<'a> for VarLambdaRef<'a> {
+            #[inline]
+            fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                    buffer, offset,
+                )?))
+            }
+        }
+
+        impl<'a> ::planus::VectorReadInner<'a> for VarLambdaRef<'a> {
+            type Error = ::planus::Error;
+            const STRIDE: usize = 4;
+
+            unsafe fn from_buffer(
+                buffer: ::planus::SliceWithStartOffset<'a>,
+                offset: usize,
+            ) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                    error_kind.with_error_location(
+                        "[VarLambdaRef]",
+                        "get",
+                        buffer.offset_from_start,
+                    )
+                })
+            }
+        }
+
+        /// # Safety
+        /// The planus compiler generates implementations that initialize
+        /// the bytes in `write_values`.
+        unsafe impl ::planus::VectorWrite<::planus::Offset<VarLambda>> for VarLambda {
+            type Value = ::planus::Offset<VarLambda>;
+            const STRIDE: usize = 4;
+            #[inline]
+            fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                ::planus::WriteAs::prepare(self, builder)
+            }
+
+            #[inline]
+            unsafe fn write_values(
+                values: &[::planus::Offset<VarLambda>],
+                bytes: *mut ::core::mem::MaybeUninit<u8>,
+                buffer_position: u32,
+            ) {
+                let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                    ::planus::WriteAsPrimitive::write(
+                        v,
+                        ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                        buffer_position - (Self::STRIDE * i) as u32,
+                    );
+                }
+            }
+        }
+
+        impl<'a> ::planus::ReadAsRoot<'a> for VarLambdaRef<'a> {
+            fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                ::planus::TableRead::from_buffer(
+                    ::planus::SliceWithStartOffset {
+                        buffer: slice,
+                        offset_from_start: 0,
+                    },
+                    0,
+                )
+                .map_err(|error_kind| {
+                    error_kind.with_error_location("[VarLambdaRef]", "read_as_root", 0)
+                })
+            }
+        }
+
         /// The table `Var` in the namespace `MoorVar`
         ///
         /// Generated from these locations:
-        /// * Table `Var` in the file `var.fbs:100`
+        /// * Table `Var` in the file `crates/common/schema/var.fbs:111`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Var {
             /// The field `variant` in the table `Var`
@@ -25999,12 +26962,12 @@ mod root {
     /// The namespace `MoorRpc`
     ///
     /// Generated from these locations:
-    /// * File `moor_rpc.fbs`
+    /// * File `crates/common/schema/moor_rpc.fbs`
     pub mod moor_rpc {
         /// The table `HostToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostToken` in the file `moor_rpc.fbs:25`
+        /// * Table `HostToken` in the file `crates/common/schema/moor_rpc.fbs:25`
         #[derive(
             Clone,
             Debug,
@@ -26257,7 +27220,7 @@ mod root {
         /// The table `ClientToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientToken` in the file `moor_rpc.fbs:29`
+        /// * Table `ClientToken` in the file `crates/common/schema/moor_rpc.fbs:29`
         #[derive(
             Clone,
             Debug,
@@ -26510,7 +27473,7 @@ mod root {
         /// The table `AuthToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AuthToken` in the file `moor_rpc.fbs:33`
+        /// * Table `AuthToken` in the file `crates/common/schema/moor_rpc.fbs:33`
         #[derive(
             Clone,
             Debug,
@@ -26763,7 +27726,7 @@ mod root {
         /// The table `WorkerToken` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerToken` in the file `moor_rpc.fbs:37`
+        /// * Table `WorkerToken` in the file `crates/common/schema/moor_rpc.fbs:37`
         #[derive(
             Clone,
             Debug,
@@ -27016,7 +27979,7 @@ mod root {
         /// The enum `AbortLimitReason` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `AbortLimitReason` in the file `moor_rpc.fbs:45`
+        /// * Enum `AbortLimitReason` in the file `crates/common/schema/moor_rpc.fbs:45`
         #[derive(
             Copy,
             Clone,
@@ -27185,7 +28148,7 @@ mod root {
         /// The table `AbortLimit` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AbortLimit` in the file `moor_rpc.fbs:50`
+        /// * Table `AbortLimit` in the file `crates/common/schema/moor_rpc.fbs:50`
         #[derive(
             Clone,
             Debug,
@@ -27377,10 +28340,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::AbortLimitReason, self::AbortLimitReason>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAs<::planus::Offset<AbortLimit>> for AbortLimitBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::AbortLimitReason, self::AbortLimitReason>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAs<::planus::Offset<AbortLimit>> for AbortLimitBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<AbortLimit>;
 
@@ -27391,10 +28354,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::AbortLimitReason, self::AbortLimitReason>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOptional<::planus::Offset<AbortLimit>>
+                T0: ::planus::WriteAsDefault<self::AbortLimitReason, self::AbortLimitReason>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOptional<::planus::Offset<AbortLimit>>
             for AbortLimitBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<AbortLimit>;
@@ -27409,10 +28372,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::AbortLimitReason, self::AbortLimitReason>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOffset<AbortLimit> for AbortLimitBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::AbortLimitReason, self::AbortLimitReason>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOffset<AbortLimit> for AbortLimitBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<AbortLimit> {
@@ -27550,7 +28513,7 @@ mod root {
         /// The union `SchedulerErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `SchedulerErrorUnion` in the file `moor_rpc.fbs:56`
+        /// * Union `SchedulerErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:56`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum SchedulerErrorUnion {
             /// The variant of type `SchedulerNotResponding` in the union `SchedulerErrorUnion`
@@ -28581,7 +29544,7 @@ mod root {
         /// The table `SchedulerNotResponding` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SchedulerNotResponding` in the file `moor_rpc.fbs:74`
+        /// * Table `SchedulerNotResponding` in the file `crates/common/schema/moor_rpc.fbs:74`
         #[derive(
             Clone,
             Debug,
@@ -28815,7 +29778,7 @@ mod root {
         /// The table `TaskNotFound` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskNotFound` in the file `moor_rpc.fbs:77`
+        /// * Table `TaskNotFound` in the file `crates/common/schema/moor_rpc.fbs:77`
         #[derive(
             Clone,
             Debug,
@@ -29080,7 +30043,7 @@ mod root {
         /// The table `InputRequestNotFound` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InputRequestNotFound` in the file `moor_rpc.fbs:81`
+        /// * Table `InputRequestNotFound` in the file `crates/common/schema/moor_rpc.fbs:81`
         #[derive(
             Clone,
             Debug,
@@ -29353,7 +30316,7 @@ mod root {
         /// The table `CouldNotStartTask` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CouldNotStartTask` in the file `moor_rpc.fbs:85`
+        /// * Table `CouldNotStartTask` in the file `crates/common/schema/moor_rpc.fbs:85`
         #[derive(
             Clone,
             Debug,
@@ -29581,7 +30544,7 @@ mod root {
         /// The table `CompilationError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CompilationError` in the file `moor_rpc.fbs:88`
+        /// * Table `CompilationError` in the file `crates/common/schema/moor_rpc.fbs:88`
         #[derive(
             Clone,
             Debug,
@@ -29844,7 +30807,7 @@ mod root {
         /// The table `CommandExecutionError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CommandExecutionError` in the file `moor_rpc.fbs:92`
+        /// * Table `CommandExecutionError` in the file `crates/common/schema/moor_rpc.fbs:92`
         #[derive(
             Clone,
             Debug,
@@ -30109,7 +31072,7 @@ mod root {
         /// The table `TaskAbortedLimit` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedLimit` in the file `moor_rpc.fbs:96`
+        /// * Table `TaskAbortedLimit` in the file `crates/common/schema/moor_rpc.fbs:96`
         #[derive(
             Clone,
             Debug,
@@ -30381,7 +31344,7 @@ mod root {
         /// The table `TaskAbortedError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedError` in the file `moor_rpc.fbs:100`
+        /// * Table `TaskAbortedError` in the file `crates/common/schema/moor_rpc.fbs:100`
         #[derive(
             Clone,
             Debug,
@@ -30607,7 +31570,7 @@ mod root {
         /// The table `TaskAbortedException` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedException` in the file `moor_rpc.fbs:103`
+        /// * Table `TaskAbortedException` in the file `crates/common/schema/moor_rpc.fbs:103`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct TaskAbortedException {
             /// The field `exception` in the table `TaskAbortedException`
@@ -30870,7 +31833,7 @@ mod root {
         /// The table `TaskAbortedCancelled` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskAbortedCancelled` in the file `moor_rpc.fbs:107`
+        /// * Table `TaskAbortedCancelled` in the file `crates/common/schema/moor_rpc.fbs:107`
         #[derive(
             Clone,
             Debug,
@@ -31098,7 +32061,7 @@ mod root {
         /// The table `VerbProgramFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramFailed` in the file `moor_rpc.fbs:110`
+        /// * Table `VerbProgramFailed` in the file `crates/common/schema/moor_rpc.fbs:110`
         #[derive(
             Clone,
             Debug,
@@ -31361,7 +32324,7 @@ mod root {
         /// The table `PropertyRetrievalFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyRetrievalFailed` in the file `moor_rpc.fbs:114`
+        /// * Table `PropertyRetrievalFailed` in the file `crates/common/schema/moor_rpc.fbs:114`
         #[derive(
             Clone,
             Debug,
@@ -31637,7 +32600,7 @@ mod root {
         /// The table `VerbRetrievalFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbRetrievalFailed` in the file `moor_rpc.fbs:118`
+        /// * Table `VerbRetrievalFailed` in the file `crates/common/schema/moor_rpc.fbs:118`
         #[derive(
             Clone,
             Debug,
@@ -31903,7 +32866,7 @@ mod root {
         /// The table `ObjectResolutionFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ObjectResolutionFailed` in the file `moor_rpc.fbs:122`
+        /// * Table `ObjectResolutionFailed` in the file `crates/common/schema/moor_rpc.fbs:122`
         #[derive(
             Clone,
             Debug,
@@ -32174,7 +33137,7 @@ mod root {
         /// The table `GarbageCollectionFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `GarbageCollectionFailed` in the file `moor_rpc.fbs:126`
+        /// * Table `GarbageCollectionFailed` in the file `crates/common/schema/moor_rpc.fbs:126`
         #[derive(
             Clone,
             Debug,
@@ -32454,7 +33417,7 @@ mod root {
         /// The table `SchedulerError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SchedulerError` in the file `moor_rpc.fbs:130`
+        /// * Table `SchedulerError` in the file `crates/common/schema/moor_rpc.fbs:130`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct SchedulerError {
             /// The field `error` in the table `SchedulerError`
@@ -32691,7 +33654,7 @@ mod root {
         /// The union `CommandErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `CommandErrorUnion` in the file `moor_rpc.fbs:135`
+        /// * Union `CommandErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:135`
         #[derive(
             Clone,
             Debug,
@@ -33098,7 +34061,7 @@ mod root {
         /// The table `CouldNotParseCommand` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CouldNotParseCommand` in the file `moor_rpc.fbs:143`
+        /// * Table `CouldNotParseCommand` in the file `crates/common/schema/moor_rpc.fbs:143`
         #[derive(
             Clone,
             Debug,
@@ -33326,7 +34289,7 @@ mod root {
         /// The table `NoObjectMatch` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoObjectMatch` in the file `moor_rpc.fbs:146`
+        /// * Table `NoObjectMatch` in the file `crates/common/schema/moor_rpc.fbs:146`
         #[derive(
             Clone,
             Debug,
@@ -33537,7 +34500,7 @@ mod root {
         /// The table `NoCommandMatch` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoCommandMatch` in the file `moor_rpc.fbs:149`
+        /// * Table `NoCommandMatch` in the file `crates/common/schema/moor_rpc.fbs:149`
         #[derive(
             Clone,
             Debug,
@@ -33748,7 +34711,7 @@ mod root {
         /// The table `DatabaseError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DatabaseError` in the file `moor_rpc.fbs:152`
+        /// * Table `DatabaseError` in the file `crates/common/schema/moor_rpc.fbs:152`
         #[derive(
             Clone,
             Debug,
@@ -33998,7 +34961,7 @@ mod root {
         /// The table `PermissionDenied` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PermissionDenied` in the file `moor_rpc.fbs:156`
+        /// * Table `PermissionDenied` in the file `crates/common/schema/moor_rpc.fbs:156`
         #[derive(
             Clone,
             Debug,
@@ -34224,7 +35187,7 @@ mod root {
         /// The table `CommandError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CommandError` in the file `moor_rpc.fbs:159`
+        /// * Table `CommandError` in the file `crates/common/schema/moor_rpc.fbs:159`
         #[derive(
             Clone,
             Debug,
@@ -34471,7 +35434,7 @@ mod root {
         /// The union `VerbProgramErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `VerbProgramErrorUnion` in the file `moor_rpc.fbs:164`
+        /// * Union `VerbProgramErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:164`
         #[derive(
             Clone,
             Debug,
@@ -34758,7 +35721,7 @@ mod root {
         /// The table `NoVerbToProgram` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoVerbToProgram` in the file `moor_rpc.fbs:170`
+        /// * Table `NoVerbToProgram` in the file `crates/common/schema/moor_rpc.fbs:170`
         #[derive(
             Clone,
             Debug,
@@ -34984,7 +35947,7 @@ mod root {
         /// The table `VerbCompilationError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbCompilationError` in the file `moor_rpc.fbs:173`
+        /// * Table `VerbCompilationError` in the file `crates/common/schema/moor_rpc.fbs:173`
         #[derive(
             Clone,
             Debug,
@@ -35247,7 +36210,7 @@ mod root {
         /// The table `VerbDatabaseError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbDatabaseError` in the file `moor_rpc.fbs:177`
+        /// * Table `VerbDatabaseError` in the file `crates/common/schema/moor_rpc.fbs:177`
         #[derive(
             Clone,
             Debug,
@@ -35475,7 +36438,7 @@ mod root {
         /// The table `VerbProgramError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramError` in the file `moor_rpc.fbs:180`
+        /// * Table `VerbProgramError` in the file `crates/common/schema/moor_rpc.fbs:180`
         #[derive(
             Clone,
             Debug,
@@ -35738,7 +36701,7 @@ mod root {
         /// The union `WorkerErrorUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `WorkerErrorUnion` in the file `moor_rpc.fbs:185`
+        /// * Union `WorkerErrorUnion` in the file `crates/common/schema/moor_rpc.fbs:185`
         #[derive(
             Clone,
             Debug,
@@ -36277,7 +37240,7 @@ mod root {
         /// The table `WorkerPermissionDenied` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerPermissionDenied` in the file `moor_rpc.fbs:195`
+        /// * Table `WorkerPermissionDenied` in the file `crates/common/schema/moor_rpc.fbs:195`
         #[derive(
             Clone,
             Debug,
@@ -36553,7 +37516,7 @@ mod root {
         /// The table `WorkerInvalidRequest` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerInvalidRequest` in the file `moor_rpc.fbs:199`
+        /// * Table `WorkerInvalidRequest` in the file `crates/common/schema/moor_rpc.fbs:199`
         #[derive(
             Clone,
             Debug,
@@ -36823,7 +37786,7 @@ mod root {
         /// The table `WorkerInternalError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerInternalError` in the file `moor_rpc.fbs:203`
+        /// * Table `WorkerInternalError` in the file `crates/common/schema/moor_rpc.fbs:203`
         #[derive(
             Clone,
             Debug,
@@ -37093,7 +38056,7 @@ mod root {
         /// The table `WorkerRequestTimedOut` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRequestTimedOut` in the file `moor_rpc.fbs:207`
+        /// * Table `WorkerRequestTimedOut` in the file `crates/common/schema/moor_rpc.fbs:207`
         #[derive(
             Clone,
             Debug,
@@ -37366,7 +38329,7 @@ mod root {
         /// The table `WorkerRequestError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRequestError` in the file `moor_rpc.fbs:211`
+        /// * Table `WorkerRequestError` in the file `crates/common/schema/moor_rpc.fbs:211`
         #[derive(
             Clone,
             Debug,
@@ -37636,7 +38599,7 @@ mod root {
         /// The table `WorkerDetached` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerDetached` in the file `moor_rpc.fbs:215`
+        /// * Table `WorkerDetached` in the file `crates/common/schema/moor_rpc.fbs:215`
         #[derive(
             Clone,
             Debug,
@@ -37890,7 +38853,7 @@ mod root {
         /// The table `NoWorkerAvailable` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NoWorkerAvailable` in the file `moor_rpc.fbs:219`
+        /// * Table `NoWorkerAvailable` in the file `crates/common/schema/moor_rpc.fbs:219`
         #[derive(
             Clone,
             Debug,
@@ -38163,7 +39126,7 @@ mod root {
         /// The table `WorkerError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerError` in the file `moor_rpc.fbs:223`
+        /// * Table `WorkerError` in the file `crates/common/schema/moor_rpc.fbs:223`
         #[derive(
             Clone,
             Debug,
@@ -38409,7 +39372,7 @@ mod root {
         /// The table `CompileContext` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CompileContext` in the file `moor_rpc.fbs:228`
+        /// * Table `CompileContext` in the file `crates/common/schema/moor_rpc.fbs:228`
         #[derive(
             Clone,
             Debug,
@@ -38711,7 +39674,7 @@ mod root {
         /// The table `StringLexError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `StringLexError` in the file `moor_rpc.fbs:233`
+        /// * Table `StringLexError` in the file `crates/common/schema/moor_rpc.fbs:233`
         #[derive(
             Clone,
             Debug,
@@ -38843,9 +39806,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<StringLexError>> for StringLexErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<StringLexError>>
+            for StringLexErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StringLexError>;
 
@@ -38856,9 +39820,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StringLexError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StringLexError>>
             for StringLexErrorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StringLexError>;
@@ -38873,9 +39837,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<StringLexError> for StringLexErrorBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<StringLexError> for StringLexErrorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StringLexError> {
@@ -39001,7 +39965,7 @@ mod root {
         /// The table `ParseError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ParseError` in the file `moor_rpc.fbs:238`
+        /// * Table `ParseError` in the file `crates/common/schema/moor_rpc.fbs:238`
         #[derive(
             Clone,
             Debug,
@@ -39260,13 +40224,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<ParseError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<ParseError>>
             for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<ParseError>;
@@ -39278,13 +40242,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ParseError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ParseError>>
             for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<ParseError>;
@@ -39299,13 +40263,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<ParseError> for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<ParseError> for ParseErrorBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ParseError> {
@@ -39465,7 +40429,7 @@ mod root {
         /// The table `UnknownBuiltinFunction` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownBuiltinFunction` in the file `moor_rpc.fbs:247`
+        /// * Table `UnknownBuiltinFunction` in the file `crates/common/schema/moor_rpc.fbs:247`
         #[derive(
             Clone,
             Debug,
@@ -39608,9 +40572,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownBuiltinFunction>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownBuiltinFunction>>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownBuiltinFunction>;
@@ -39625,9 +40589,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownBuiltinFunction>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownBuiltinFunction>>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownBuiltinFunction>;
@@ -39642,9 +40606,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownBuiltinFunction>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownBuiltinFunction>
             for UnknownBuiltinFunctionBuilder<(T0, T1)>
         {
             #[inline]
@@ -39777,7 +40741,7 @@ mod root {
         /// The table `UnknownTypeConstant` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownTypeConstant` in the file `moor_rpc.fbs:252`
+        /// * Table `UnknownTypeConstant` in the file `crates/common/schema/moor_rpc.fbs:252`
         #[derive(
             Clone,
             Debug,
@@ -39918,9 +40882,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownTypeConstant>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownTypeConstant>>
             for UnknownTypeConstantBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownTypeConstant>;
@@ -39935,9 +40899,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownTypeConstant>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownTypeConstant>>
             for UnknownTypeConstantBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownTypeConstant>;
@@ -39952,9 +40916,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownTypeConstant> for UnknownTypeConstantBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownTypeConstant>
+            for UnknownTypeConstantBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -40083,7 +41048,7 @@ mod root {
         /// The table `UnknownLoopLabel` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `UnknownLoopLabel` in the file `moor_rpc.fbs:257`
+        /// * Table `UnknownLoopLabel` in the file `crates/common/schema/moor_rpc.fbs:257`
         #[derive(
             Clone,
             Debug,
@@ -40224,9 +41189,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<UnknownLoopLabel>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<UnknownLoopLabel>>
             for UnknownLoopLabelBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownLoopLabel>;
@@ -40241,9 +41206,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<UnknownLoopLabel>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<UnknownLoopLabel>>
             for UnknownLoopLabelBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<UnknownLoopLabel>;
@@ -40258,9 +41223,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<UnknownLoopLabel> for UnknownLoopLabelBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<UnknownLoopLabel> for UnknownLoopLabelBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -40389,7 +41354,7 @@ mod root {
         /// The table `DuplicateVariable` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DuplicateVariable` in the file `moor_rpc.fbs:262`
+        /// * Table `DuplicateVariable` in the file `crates/common/schema/moor_rpc.fbs:262`
         #[derive(
             Clone,
             Debug,
@@ -40530,9 +41495,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<DuplicateVariable>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<DuplicateVariable>>
             for DuplicateVariableBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVariable>;
@@ -40547,9 +41512,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DuplicateVariable>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DuplicateVariable>>
             for DuplicateVariableBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DuplicateVariable>;
@@ -40564,9 +41529,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOffset<DuplicateVariable> for DuplicateVariableBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOffset<DuplicateVariable> for DuplicateVariableBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -40697,7 +41662,7 @@ mod root {
         /// The table `AssignToConst` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AssignToConst` in the file `moor_rpc.fbs:267`
+        /// * Table `AssignToConst` in the file `crates/common/schema/moor_rpc.fbs:267`
         #[derive(
             Clone,
             Debug,
@@ -40829,9 +41794,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<AssignToConst>> for AssignToConstBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<AssignToConst>>
+            for AssignToConstBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AssignToConst>;
 
@@ -40842,9 +41808,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<AssignToConst>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<AssignToConst>>
             for AssignToConstBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AssignToConst>;
@@ -40859,9 +41825,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOffset<AssignToConst> for AssignToConstBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOffset<AssignToConst> for AssignToConstBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<AssignToConst> {
@@ -40989,7 +41955,7 @@ mod root {
         /// The table `DisabledFeature` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DisabledFeature` in the file `moor_rpc.fbs:272`
+        /// * Table `DisabledFeature` in the file `crates/common/schema/moor_rpc.fbs:272`
         #[derive(
             Clone,
             Debug,
@@ -41130,9 +42096,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<DisabledFeature>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<DisabledFeature>>
             for DisabledFeatureBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DisabledFeature>;
@@ -41147,9 +42113,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DisabledFeature>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DisabledFeature>>
             for DisabledFeatureBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DisabledFeature>;
@@ -41164,9 +42130,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<DisabledFeature> for DisabledFeatureBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<DisabledFeature> for DisabledFeatureBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -41295,7 +42261,7 @@ mod root {
         /// The table `BadSlotName` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `BadSlotName` in the file `moor_rpc.fbs:277`
+        /// * Table `BadSlotName` in the file `crates/common/schema/moor_rpc.fbs:277`
         #[derive(
             Clone,
             Debug,
@@ -41427,9 +42393,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<BadSlotName>> for BadSlotNameBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<BadSlotName>> for BadSlotNameBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<BadSlotName>;
 
@@ -41440,9 +42406,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<BadSlotName>>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<BadSlotName>>
             for BadSlotNameBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<BadSlotName>;
@@ -41457,9 +42423,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<BadSlotName> for BadSlotNameBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::CompileContext>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<BadSlotName> for BadSlotNameBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BadSlotName> {
@@ -41585,7 +42551,7 @@ mod root {
         /// The table `InvalidAssignment` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InvalidAssignment` in the file `moor_rpc.fbs:282`
+        /// * Table `InvalidAssignment` in the file `crates/common/schema/moor_rpc.fbs:282`
         #[derive(
             Clone,
             Debug,
@@ -41857,7 +42823,7 @@ mod root {
         /// The enum `HostType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `HostType` in the file `moor_rpc.fbs:290`
+        /// * Enum `HostType` in the file `crates/common/schema/moor_rpc.fbs:290`
         #[derive(
             Copy,
             Clone,
@@ -42026,7 +42992,7 @@ mod root {
         /// The enum `ConnectType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `ConnectType` in the file `moor_rpc.fbs:295`
+        /// * Enum `ConnectType` in the file `crates/common/schema/moor_rpc.fbs:295`
         #[derive(
             Copy,
             Clone,
@@ -42208,7 +43174,7 @@ mod root {
         /// The enum `EntityType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `EntityType` in the file `moor_rpc.fbs:302`
+        /// * Enum `EntityType` in the file `crates/common/schema/moor_rpc.fbs:302`
         #[derive(
             Copy,
             Clone,
@@ -42377,7 +43343,7 @@ mod root {
         /// The union `VerbProgramResponseUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `VerbProgramResponseUnion` in the file `moor_rpc.fbs:311`
+        /// * Union `VerbProgramResponseUnion` in the file `crates/common/schema/moor_rpc.fbs:311`
         #[derive(
             Clone,
             Debug,
@@ -42605,7 +43571,7 @@ mod root {
         /// The table `VerbProgramSuccess` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramSuccess` in the file `moor_rpc.fbs:316`
+        /// * Table `VerbProgramSuccess` in the file `crates/common/schema/moor_rpc.fbs:316`
         #[derive(
             Clone,
             Debug,
@@ -42736,9 +43702,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<VerbProgramSuccess>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<VerbProgramSuccess>>
             for VerbProgramSuccessBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbProgramSuccess>;
@@ -42753,9 +43719,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbProgramSuccess>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbProgramSuccess>>
             for VerbProgramSuccessBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbProgramSuccess>;
@@ -42770,9 +43736,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<VerbProgramSuccess> for VerbProgramSuccessBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<VerbProgramSuccess> for VerbProgramSuccessBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -42901,7 +43867,7 @@ mod root {
         /// The table `VerbProgramFailure` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramFailure` in the file `moor_rpc.fbs:321`
+        /// * Table `VerbProgramFailure` in the file `crates/common/schema/moor_rpc.fbs:321`
         #[derive(
             Clone,
             Debug,
@@ -43164,7 +44130,7 @@ mod root {
         /// The table `VerbProgramResponse` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramResponse` in the file `moor_rpc.fbs:325`
+        /// * Table `VerbProgramResponse` in the file `crates/common/schema/moor_rpc.fbs:325`
         #[derive(
             Clone,
             Debug,
@@ -43428,7 +44394,7 @@ mod root {
         /// The table `ConnectionAttribute` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ConnectionAttribute` in the file `moor_rpc.fbs:333`
+        /// * Table `ConnectionAttribute` in the file `crates/common/schema/moor_rpc.fbs:333`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ConnectionAttribute {
             /// The field `key` in the table `ConnectionAttribute`
@@ -43549,9 +44515,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<ConnectionAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<ConnectionAttribute>>
             for ConnectionAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ConnectionAttribute>;
@@ -43566,9 +44532,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ConnectionAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ConnectionAttribute>>
             for ConnectionAttributeBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ConnectionAttribute>;
@@ -43583,9 +44549,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<ConnectionAttribute> for ConnectionAttributeBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<ConnectionAttribute>
+            for ConnectionAttributeBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -43716,7 +44683,7 @@ mod root {
         /// The union `HostToDaemonMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HostToDaemonMessageUnion` in the file `moor_rpc.fbs:342`
+        /// * Union `HostToDaemonMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:342`
         #[derive(
             Clone,
             Debug,
@@ -44068,7 +45035,7 @@ mod root {
         /// The table `RegisterHost` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RegisterHost` in the file `moor_rpc.fbs:349`
+        /// * Table `RegisterHost` in the file `crates/common/schema/moor_rpc.fbs:349`
         #[derive(
             Clone,
             Debug,
@@ -44246,10 +45213,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
-        > ::planus::WriteAs<::planus::Offset<RegisterHost>> for RegisterHostBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
+            > ::planus::WriteAs<::planus::Offset<RegisterHost>>
+            for RegisterHostBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RegisterHost>;
 
@@ -44260,10 +45228,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RegisterHost>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RegisterHost>>
             for RegisterHostBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RegisterHost>;
@@ -44278,10 +45246,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
-        > ::planus::WriteAsOffset<RegisterHost> for RegisterHostBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
+            > ::planus::WriteAsOffset<RegisterHost> for RegisterHostBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RegisterHost> {
@@ -44422,7 +45390,7 @@ mod root {
         /// The table `DetachHost` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DetachHost` in the file `moor_rpc.fbs:355`
+        /// * Table `DetachHost` in the file `crates/common/schema/moor_rpc.fbs:355`
         #[derive(
             Clone,
             Debug,
@@ -44633,7 +45601,7 @@ mod root {
         /// The table `RequestPerformanceCounters` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestPerformanceCounters` in the file `moor_rpc.fbs:358`
+        /// * Table `RequestPerformanceCounters` in the file `crates/common/schema/moor_rpc.fbs:358`
         #[derive(
             Clone,
             Debug,
@@ -44875,7 +45843,7 @@ mod root {
         /// The table `HostPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostPong` in the file `moor_rpc.fbs:361`
+        /// * Table `HostPong` in the file `crates/common/schema/moor_rpc.fbs:361`
         #[derive(
             Clone,
             Debug,
@@ -45053,10 +46021,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
-        > ::planus::WriteAs<::planus::Offset<HostPong>> for HostPongBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
+            > ::planus::WriteAs<::planus::Offset<HostPong>> for HostPongBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<HostPong>;
 
@@ -45067,10 +46035,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<HostPong>> for HostPongBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<HostPong>>
+            for HostPongBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<HostPong>;
 
@@ -45084,10 +46053,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
-        > ::planus::WriteAsOffset<HostPong> for HostPongBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Listener>]>>,
+            > ::planus::WriteAsOffset<HostPong> for HostPongBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<HostPong> {
@@ -45222,7 +46191,7 @@ mod root {
         /// The table `Listener` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Listener` in the file `moor_rpc.fbs:367`
+        /// * Table `Listener` in the file `crates/common/schema/moor_rpc.fbs:367`
         #[derive(
             Clone,
             Debug,
@@ -45344,9 +46313,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<Listener>> for ListenerBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<Listener>> for ListenerBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<Listener>;
 
@@ -45357,9 +46326,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Listener>> for ListenerBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Listener>> for ListenerBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<Listener>;
 
@@ -45373,9 +46342,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<Listener> for ListenerBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<Listener> for ListenerBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Listener> {
@@ -45497,7 +46466,7 @@ mod root {
         /// The table `HostToDaemonMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostToDaemonMessage` in the file `moor_rpc.fbs:372`
+        /// * Table `HostToDaemonMessage` in the file `crates/common/schema/moor_rpc.fbs:372`
         #[derive(
             Clone,
             Debug,
@@ -45761,7 +46730,7 @@ mod root {
         /// The union `DaemonToHostReplyUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToHostReplyUnion` in the file `moor_rpc.fbs:380`
+        /// * Union `DaemonToHostReplyUnion` in the file `crates/common/schema/moor_rpc.fbs:380`
         #[derive(
             Clone,
             Debug,
@@ -46048,7 +47017,7 @@ mod root {
         /// The table `DaemonToHostAck` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostAck` in the file `moor_rpc.fbs:386`
+        /// * Table `DaemonToHostAck` in the file `crates/common/schema/moor_rpc.fbs:386`
         #[derive(
             Clone,
             Debug,
@@ -46274,7 +47243,7 @@ mod root {
         /// The table `DaemonToHostReject` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostReject` in the file `moor_rpc.fbs:389`
+        /// * Table `DaemonToHostReject` in the file `crates/common/schema/moor_rpc.fbs:389`
         #[derive(
             Clone,
             Debug,
@@ -46544,7 +47513,7 @@ mod root {
         /// The table `Counter` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Counter` in the file `moor_rpc.fbs:393`
+        /// * Table `Counter` in the file `crates/common/schema/moor_rpc.fbs:393`
         #[derive(
             Clone,
             Debug,
@@ -46722,10 +47691,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAsDefault<i64, i64>,
-            T2: ::planus::WriteAsDefault<i64, i64>,
-        > ::planus::WriteAs<::planus::Offset<Counter>> for CounterBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAsDefault<i64, i64>,
+                T2: ::planus::WriteAsDefault<i64, i64>,
+            > ::planus::WriteAs<::planus::Offset<Counter>> for CounterBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Counter>;
 
@@ -46736,10 +47705,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAsDefault<i64, i64>,
-            T2: ::planus::WriteAsDefault<i64, i64>,
-        > ::planus::WriteAsOptional<::planus::Offset<Counter>> for CounterBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAsDefault<i64, i64>,
+                T2: ::planus::WriteAsDefault<i64, i64>,
+            > ::planus::WriteAsOptional<::planus::Offset<Counter>>
+            for CounterBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Counter>;
 
@@ -46753,10 +47723,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAsDefault<i64, i64>,
-            T2: ::planus::WriteAsDefault<i64, i64>,
-        > ::planus::WriteAsOffset<Counter> for CounterBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAsDefault<i64, i64>,
+                T2: ::planus::WriteAsDefault<i64, i64>,
+            > ::planus::WriteAsOffset<Counter> for CounterBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Counter> {
@@ -46892,7 +47862,7 @@ mod root {
         /// The table `CounterCategory` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CounterCategory` in the file `moor_rpc.fbs:399`
+        /// * Table `CounterCategory` in the file `crates/common/schema/moor_rpc.fbs:399`
         #[derive(
             Clone,
             Debug,
@@ -47035,9 +48005,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Counter>]>>,
-        > ::planus::WriteAs<::planus::Offset<CounterCategory>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Counter>]>>,
+            > ::planus::WriteAs<::planus::Offset<CounterCategory>>
             for CounterCategoryBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<CounterCategory>;
@@ -47052,9 +48022,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Counter>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<CounterCategory>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Counter>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<CounterCategory>>
             for CounterCategoryBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<CounterCategory>;
@@ -47069,9 +48039,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Counter>]>>,
-        > ::planus::WriteAsOffset<CounterCategory> for CounterCategoryBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Counter>]>>,
+            > ::planus::WriteAsOffset<CounterCategory> for CounterCategoryBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -47203,7 +48173,7 @@ mod root {
         /// The table `DaemonToHostPerfCounters` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostPerfCounters` in the file `moor_rpc.fbs:404`
+        /// * Table `DaemonToHostPerfCounters` in the file `crates/common/schema/moor_rpc.fbs:404`
         #[derive(
             Clone,
             Debug,
@@ -47363,9 +48333,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::CounterCategory>]>>,
-        > ::planus::WriteAs<::planus::Offset<DaemonToHostPerfCounters>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::CounterCategory>]>>,
+            > ::planus::WriteAs<::planus::Offset<DaemonToHostPerfCounters>>
             for DaemonToHostPerfCountersBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DaemonToHostPerfCounters>;
@@ -47380,9 +48350,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::CounterCategory>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DaemonToHostPerfCounters>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::CounterCategory>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DaemonToHostPerfCounters>>
             for DaemonToHostPerfCountersBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<DaemonToHostPerfCounters>;
@@ -47397,9 +48367,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::CounterCategory>]>>,
-        > ::planus::WriteAsOffset<DaemonToHostPerfCounters>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::CounterCategory>]>>,
+            > ::planus::WriteAsOffset<DaemonToHostPerfCounters>
             for DaemonToHostPerfCountersBuilder<(T0, T1)>
         {
             #[inline]
@@ -47542,7 +48512,7 @@ mod root {
         /// The table `DaemonToHostReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToHostReply` in the file `moor_rpc.fbs:409`
+        /// * Table `DaemonToHostReply` in the file `crates/common/schema/moor_rpc.fbs:409`
         #[derive(
             Clone,
             Debug,
@@ -47806,7 +48776,7 @@ mod root {
         /// The union `HostBroadcastEventUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HostBroadcastEventUnion` in the file `moor_rpc.fbs:417`
+        /// * Union `HostBroadcastEventUnion` in the file `crates/common/schema/moor_rpc.fbs:417`
         #[derive(
             Clone,
             Debug,
@@ -48098,7 +49068,7 @@ mod root {
         /// The table `HostBroadcastListen` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastListen` in the file `moor_rpc.fbs:423`
+        /// * Table `HostBroadcastListen` in the file `crates/common/schema/moor_rpc.fbs:423`
         #[derive(
             Clone,
             Debug,
@@ -48318,11 +49288,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<HostBroadcastListen>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<HostBroadcastListen>>
             for HostBroadcastListenBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<HostBroadcastListen>;
@@ -48337,11 +49307,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<HostBroadcastListen>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<HostBroadcastListen>>
             for HostBroadcastListenBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<HostBroadcastListen>;
@@ -48356,11 +49326,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<HostBroadcastListen>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<HostBroadcastListen>
             for HostBroadcastListenBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
@@ -48519,7 +49489,7 @@ mod root {
         /// The table `HostBroadcastUnlisten` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastUnlisten` in the file `moor_rpc.fbs:430`
+        /// * Table `HostBroadcastUnlisten` in the file `crates/common/schema/moor_rpc.fbs:430`
         #[derive(
             Clone,
             Debug,
@@ -48687,9 +49657,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<HostBroadcastUnlisten>>
+                T0: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<HostBroadcastUnlisten>>
             for HostBroadcastUnlistenBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HostBroadcastUnlisten>;
@@ -48704,9 +49674,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<HostBroadcastUnlisten>>
+                T0: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<HostBroadcastUnlisten>>
             for HostBroadcastUnlistenBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HostBroadcastUnlisten>;
@@ -48721,9 +49691,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<HostBroadcastUnlisten>
+                T0: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<HostBroadcastUnlisten>
             for HostBroadcastUnlistenBuilder<(T0, T1)>
         {
             #[inline]
@@ -48861,7 +49831,7 @@ mod root {
         /// The table `HostBroadcastPingPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastPingPong` in the file `moor_rpc.fbs:435`
+        /// * Table `HostBroadcastPingPong` in the file `crates/common/schema/moor_rpc.fbs:435`
         #[derive(
             Clone,
             Debug,
@@ -49149,7 +50119,7 @@ mod root {
         /// The table `HostBroadcastEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostBroadcastEvent` in the file `moor_rpc.fbs:439`
+        /// * Table `HostBroadcastEvent` in the file `crates/common/schema/moor_rpc.fbs:439`
         #[derive(
             Clone,
             Debug,
@@ -49413,7 +50383,7 @@ mod root {
         /// The union `HostClientToDaemonMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HostClientToDaemonMessageUnion` in the file `moor_rpc.fbs:447`
+        /// * Union `HostClientToDaemonMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:447`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum HostClientToDaemonMessageUnion {
             /// The variant of type `ConnectionEstablish` in the union `HostClientToDaemonMessageUnion`
@@ -50759,7 +51729,7 @@ mod root {
         /// The table `ConnectionEstablish` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ConnectionEstablish` in the file `moor_rpc.fbs:470`
+        /// * Table `ConnectionEstablish` in the file `crates/common/schema/moor_rpc.fbs:470`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ConnectionEstablish {
             /// The field `peer_addr` in the table `ConnectionEstablish`
@@ -50975,8 +51945,8 @@ mod root {
             ) -> ConnectionEstablishBuilder<(T0, T1, T2, T3)>
             where
                 T3: ::planus::WriteAsOptional<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
+                >,
             {
                 let (v0, v1, v2) = self.0;
                 ConnectionEstablishBuilder((v0, v1, v2, value))
@@ -51002,8 +51972,8 @@ mod root {
             ) -> ConnectionEstablishBuilder<(T0, T1, T2, T3, T4)>
             where
                 T4: ::planus::WriteAsOptional<
-                        ::planus::Offset<[::planus::Offset<self::ConnectionAttribute>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::ConnectionAttribute>]>,
+                >,
             {
                 let (v0, v1, v2, v3) = self.0;
                 ConnectionEstablishBuilder((v0, v1, v2, v3, value))
@@ -51034,16 +52004,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsOptional<
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
                 >,
-            T4: ::planus::WriteAsOptional<
+                T4: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<self::ConnectionAttribute>]>,
                 >,
-        > ::planus::WriteAs<::planus::Offset<ConnectionEstablish>>
+            > ::planus::WriteAs<::planus::Offset<ConnectionEstablish>>
             for ConnectionEstablishBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ConnectionEstablish>;
@@ -51058,16 +52028,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsOptional<
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
                 >,
-            T4: ::planus::WriteAsOptional<
+                T4: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<self::ConnectionAttribute>]>,
                 >,
-        > ::planus::WriteAsOptional<::planus::Offset<ConnectionEstablish>>
+            > ::planus::WriteAsOptional<::planus::Offset<ConnectionEstablish>>
             for ConnectionEstablishBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ConnectionEstablish>;
@@ -51082,16 +52052,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<str>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsOptional<
+                T0: ::planus::WriteAs<::planus::Offset<str>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
                 >,
-            T4: ::planus::WriteAsOptional<
+                T4: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<self::ConnectionAttribute>]>,
                 >,
-        > ::planus::WriteAsOffset<ConnectionEstablish>
+            > ::planus::WriteAsOffset<ConnectionEstablish>
             for ConnectionEstablishBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
@@ -51288,7 +52258,7 @@ mod root {
         /// The table `RequestSysProp` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestSysProp` in the file `moor_rpc.fbs:478`
+        /// * Table `RequestSysProp` in the file `crates/common/schema/moor_rpc.fbs:478`
         #[derive(
             Clone,
             Debug,
@@ -51429,10 +52399,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<RequestSysProp>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<RequestSysProp>>
             for RequestSysPropBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestSysProp>;
@@ -51444,10 +52414,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RequestSysProp>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RequestSysProp>>
             for RequestSysPropBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestSysProp>;
@@ -51462,10 +52432,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOffset<RequestSysProp> for RequestSysPropBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOffset<RequestSysProp> for RequestSysPropBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RequestSysProp> {
@@ -51603,7 +52573,7 @@ mod root {
         /// The table `LoginCommand` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `LoginCommand` in the file `moor_rpc.fbs:484`
+        /// * Table `LoginCommand` in the file `crates/common/schema/moor_rpc.fbs:484`
         #[derive(
             Clone,
             Debug,
@@ -51783,11 +52753,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<LoginCommand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<LoginCommand>>
             for LoginCommandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<LoginCommand>;
@@ -51799,11 +52769,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<LoginCommand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<LoginCommand>>
             for LoginCommandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<LoginCommand>;
@@ -51818,11 +52788,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<LoginCommand> for LoginCommandBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<LoginCommand> for LoginCommandBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<LoginCommand> {
@@ -51973,7 +52943,7 @@ mod root {
         /// The table `Attach` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Attach` in the file `moor_rpc.fbs:491`
+        /// * Table `Attach` in the file `crates/common/schema/moor_rpc.fbs:491`
         #[derive(
             Clone,
             Debug,
@@ -52238,8 +53208,8 @@ mod root {
             ) -> AttachBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             where
                 T6: ::planus::WriteAsOptional<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5) = self.0;
                 AttachBuilder((v0, v1, v2, v3, v4, v5, value))
@@ -52267,16 +53237,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T1: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAsDefault<u16, u16>,
-            T6: ::planus::WriteAsOptional<
+                T0: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T1: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAsDefault<u16, u16>,
+                T6: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
                 >,
-        > ::planus::WriteAs<::planus::Offset<Attach>>
+            > ::planus::WriteAs<::planus::Offset<Attach>>
             for AttachBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<Attach>;
@@ -52288,16 +53258,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T1: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAsDefault<u16, u16>,
-            T6: ::planus::WriteAsOptional<
+                T0: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T1: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAsDefault<u16, u16>,
+                T6: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
                 >,
-        > ::planus::WriteAsOptional<::planus::Offset<Attach>>
+            > ::planus::WriteAsOptional<::planus::Offset<Attach>>
             for AttachBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<Attach>;
@@ -52312,16 +53282,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T1: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-            T5: ::planus::WriteAsDefault<u16, u16>,
-            T6: ::planus::WriteAsOptional<
+                T0: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T1: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+                T5: ::planus::WriteAsDefault<u16, u16>,
+                T6: ::planus::WriteAsOptional<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
                 >,
-        > ::planus::WriteAsOffset<Attach> for AttachBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+            > ::planus::WriteAsOffset<Attach> for AttachBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Attach> {
@@ -52506,7 +53476,7 @@ mod root {
         /// The table `Command` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Command` in the file `moor_rpc.fbs:501`
+        /// * Table `Command` in the file `crates/common/schema/moor_rpc.fbs:501`
         #[derive(
             Clone,
             Debug,
@@ -52672,11 +53642,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<Command>> for CommandBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<Command>> for CommandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Command>;
 
@@ -52687,11 +53657,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Command>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Command>>
             for CommandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Command>;
@@ -52706,11 +53676,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<Command> for CommandBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<Command> for CommandBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Command> {
@@ -52852,7 +53822,7 @@ mod root {
         /// The table `Verbs` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Verbs` in the file `moor_rpc.fbs:508`
+        /// * Table `Verbs` in the file `crates/common/schema/moor_rpc.fbs:508`
         #[derive(
             Clone,
             Debug,
@@ -53032,11 +54002,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<Verbs>> for VerbsBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<Verbs>> for VerbsBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Verbs>;
 
@@ -53047,11 +54017,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<Verbs>> for VerbsBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<Verbs>>
+            for VerbsBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Verbs>;
 
@@ -53065,11 +54036,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<Verbs> for VerbsBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<Verbs> for VerbsBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Verbs> {
@@ -53211,7 +54182,7 @@ mod root {
         /// The table `InvokeVerb` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InvokeVerb` in the file `moor_rpc.fbs:515`
+        /// * Table `InvokeVerb` in the file `crates/common/schema/moor_rpc.fbs:515`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct InvokeVerb {
             /// The field `client_token` in the table `InvokeVerb`
@@ -53390,12 +54361,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAs<::planus::Offset<InvokeVerb>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAs<::planus::Offset<InvokeVerb>>
             for InvokeVerbBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<InvokeVerb>;
@@ -53407,12 +54378,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<InvokeVerb>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<InvokeVerb>>
             for InvokeVerbBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<InvokeVerb>;
@@ -53427,12 +54398,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-        > ::planus::WriteAsOffset<InvokeVerb> for InvokeVerbBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+            > ::planus::WriteAsOffset<InvokeVerb> for InvokeVerbBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<InvokeVerb> {
@@ -53591,7 +54562,7 @@ mod root {
         /// The table `Properties` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Properties` in the file `moor_rpc.fbs:523`
+        /// * Table `Properties` in the file `crates/common/schema/moor_rpc.fbs:523`
         #[derive(
             Clone,
             Debug,
@@ -53771,11 +54742,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<Properties>> for PropertiesBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<Properties>>
+            for PropertiesBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Properties>;
 
@@ -53786,11 +54758,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<Properties>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<Properties>>
             for PropertiesBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<Properties>;
@@ -53805,11 +54777,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<Properties> for PropertiesBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<Properties> for PropertiesBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Properties> {
@@ -53959,7 +54931,7 @@ mod root {
         /// The table `Retrieve` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Retrieve` in the file `moor_rpc.fbs:530`
+        /// * Table `Retrieve` in the file `crates/common/schema/moor_rpc.fbs:530`
         #[derive(
             Clone,
             Debug,
@@ -54161,12 +55133,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<self::EntityType, self::EntityType>,
-            T4: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<Retrieve>> for RetrieveBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<self::EntityType, self::EntityType>,
+                T4: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<Retrieve>>
+            for RetrieveBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Retrieve>;
 
@@ -54177,12 +55150,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<self::EntityType, self::EntityType>,
-            T4: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Retrieve>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<self::EntityType, self::EntityType>,
+                T4: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Retrieve>>
             for RetrieveBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Retrieve>;
@@ -54197,12 +55170,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAsDefault<self::EntityType, self::EntityType>,
-            T4: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOffset<Retrieve> for RetrieveBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAsDefault<self::EntityType, self::EntityType>,
+                T4: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOffset<Retrieve> for RetrieveBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Retrieve> {
@@ -54358,7 +55331,7 @@ mod root {
         /// The table `Program` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Program` in the file `moor_rpc.fbs:538`
+        /// * Table `Program` in the file `crates/common/schema/moor_rpc.fbs:538`
         #[derive(
             Clone,
             Debug,
@@ -54544,12 +55517,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-        > ::planus::WriteAs<::planus::Offset<Program>> for ProgramBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAs<::planus::Offset<Program>>
+            for ProgramBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Program>;
 
@@ -54560,12 +55534,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Program>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Program>>
             for ProgramBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<Program>;
@@ -54580,12 +55554,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-        > ::planus::WriteAsOffset<Program> for ProgramBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAsOffset<Program> for ProgramBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Program> {
@@ -54740,7 +55714,7 @@ mod root {
         /// The table `RequestedInput` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestedInput` in the file `moor_rpc.fbs:546`
+        /// * Table `RequestedInput` in the file `crates/common/schema/moor_rpc.fbs:546`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct RequestedInput {
             /// The field `client_token` in the table `RequestedInput`
@@ -54896,11 +55870,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<RequestedInput>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<RequestedInput>>
             for RequestedInputBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<RequestedInput>;
@@ -54912,11 +55886,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RequestedInput>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RequestedInput>>
             for RequestedInputBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<RequestedInput>;
@@ -54931,11 +55905,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<RequestedInput> for RequestedInputBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<RequestedInput> for RequestedInputBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RequestedInput> {
@@ -55083,7 +56057,7 @@ mod root {
         /// The table `OutOfBand` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `OutOfBand` in the file `moor_rpc.fbs:553`
+        /// * Table `OutOfBand` in the file `crates/common/schema/moor_rpc.fbs:553`
         #[derive(
             Clone,
             Debug,
@@ -55249,11 +56223,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<OutOfBand>> for OutOfBandBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<OutOfBand>>
+            for OutOfBandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<OutOfBand>;
 
@@ -55264,11 +56239,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<OutOfBand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<OutOfBand>>
             for OutOfBandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<OutOfBand>;
@@ -55283,11 +56258,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<OutOfBand> for OutOfBandBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<OutOfBand> for OutOfBandBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<OutOfBand> {
@@ -55433,7 +56408,7 @@ mod root {
         /// The table `Eval` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Eval` in the file `moor_rpc.fbs:560`
+        /// * Table `Eval` in the file `crates/common/schema/moor_rpc.fbs:560`
         #[derive(
             Clone,
             Debug,
@@ -55590,10 +56565,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<Eval>> for EvalBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<Eval>> for EvalBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Eval>;
 
@@ -55604,10 +56579,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Eval>> for EvalBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Eval>> for EvalBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Eval>;
 
@@ -55621,10 +56596,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<Eval> for EvalBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<Eval> for EvalBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Eval> {
@@ -55756,7 +56731,7 @@ mod root {
         /// The table `Resolve` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Resolve` in the file `moor_rpc.fbs:566`
+        /// * Table `Resolve` in the file `crates/common/schema/moor_rpc.fbs:566`
         #[derive(
             Clone,
             Debug,
@@ -55897,10 +56872,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-        > ::planus::WriteAs<::planus::Offset<Resolve>> for ResolveBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+            > ::planus::WriteAs<::planus::Offset<Resolve>> for ResolveBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Resolve>;
 
@@ -55911,10 +56886,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-        > ::planus::WriteAsOptional<::planus::Offset<Resolve>> for ResolveBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+            > ::planus::WriteAsOptional<::planus::Offset<Resolve>>
+            for ResolveBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<Resolve>;
 
@@ -55928,10 +56904,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
-        > ::planus::WriteAsOffset<Resolve> for ResolveBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::ObjectRef>>,
+            > ::planus::WriteAsOffset<Resolve> for ResolveBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Resolve> {
@@ -56065,7 +57041,7 @@ mod root {
         /// The table `ClientPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientPong` in the file `moor_rpc.fbs:572`
+        /// * Table `ClientPong` in the file `crates/common/schema/moor_rpc.fbs:572`
         #[derive(
             Clone,
             Debug,
@@ -56280,12 +57256,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T4: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<ClientPong>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T4: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<ClientPong>>
             for ClientPongBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ClientPong>;
@@ -56297,12 +57273,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T4: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<ClientPong>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T4: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ClientPong>>
             for ClientPongBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<ClientPong>;
@@ -56317,12 +57293,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T3: ::planus::WriteAsDefault<self::HostType, self::HostType>,
-            T4: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<ClientPong> for ClientPongBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T3: ::planus::WriteAsDefault<self::HostType, self::HostType>,
+                T4: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<ClientPong> for ClientPongBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ClientPong> {
@@ -56482,7 +57458,7 @@ mod root {
         /// The table `RequestHistory` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestHistory` in the file `moor_rpc.fbs:580`
+        /// * Table `RequestHistory` in the file `crates/common/schema/moor_rpc.fbs:580`
         #[derive(
             Clone,
             Debug,
@@ -56628,10 +57604,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::HistoryRecall>>,
-        > ::planus::WriteAs<::planus::Offset<RequestHistory>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::HistoryRecall>>,
+            > ::planus::WriteAs<::planus::Offset<RequestHistory>>
             for RequestHistoryBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestHistory>;
@@ -56643,10 +57619,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::HistoryRecall>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RequestHistory>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::HistoryRecall>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RequestHistory>>
             for RequestHistoryBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestHistory>;
@@ -56661,10 +57637,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::HistoryRecall>>,
-        > ::planus::WriteAsOffset<RequestHistory> for RequestHistoryBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::HistoryRecall>>,
+            > ::planus::WriteAsOffset<RequestHistory> for RequestHistoryBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RequestHistory> {
@@ -56803,7 +57779,7 @@ mod root {
         /// The table `RequestCurrentPresentations` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestCurrentPresentations` in the file `moor_rpc.fbs:586`
+        /// * Table `RequestCurrentPresentations` in the file `crates/common/schema/moor_rpc.fbs:586`
         #[derive(
             Clone,
             Debug,
@@ -56948,9 +57924,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-        > ::planus::WriteAs<::planus::Offset<RequestCurrentPresentations>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+            > ::planus::WriteAs<::planus::Offset<RequestCurrentPresentations>>
             for RequestCurrentPresentationsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<RequestCurrentPresentations>;
@@ -56965,9 +57941,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RequestCurrentPresentations>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RequestCurrentPresentations>>
             for RequestCurrentPresentationsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<RequestCurrentPresentations>;
@@ -56982,9 +57958,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-        > ::planus::WriteAsOffset<RequestCurrentPresentations>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+            > ::planus::WriteAsOffset<RequestCurrentPresentations>
             for RequestCurrentPresentationsBuilder<(T0, T1)>
         {
             #[inline]
@@ -57126,7 +58102,7 @@ mod root {
         /// The table `DismissPresentation` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DismissPresentation` in the file `moor_rpc.fbs:591`
+        /// * Table `DismissPresentation` in the file `crates/common/schema/moor_rpc.fbs:591`
         #[derive(
             Clone,
             Debug,
@@ -57292,10 +58268,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<DismissPresentation>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<DismissPresentation>>
             for DismissPresentationBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<DismissPresentation>;
@@ -57310,10 +58286,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<DismissPresentation>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<DismissPresentation>>
             for DismissPresentationBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<DismissPresentation>;
@@ -57328,10 +58304,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<DismissPresentation>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<DismissPresentation>
             for DismissPresentationBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -57474,7 +58450,7 @@ mod root {
         /// The table `SetClientAttribute` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SetClientAttribute` in the file `moor_rpc.fbs:597`
+        /// * Table `SetClientAttribute` in the file `crates/common/schema/moor_rpc.fbs:597`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct SetClientAttribute {
             /// The field `client_token` in the table `SetClientAttribute`
@@ -57662,11 +58638,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<SetClientAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<SetClientAttribute>>
             for SetClientAttributeBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<SetClientAttribute>;
@@ -57681,11 +58657,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<SetClientAttribute>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<SetClientAttribute>>
             for SetClientAttributeBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<SetClientAttribute>;
@@ -57700,11 +58676,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<SetClientAttribute>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<SetClientAttribute>
             for SetClientAttributeBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
@@ -57866,7 +58842,7 @@ mod root {
         /// The table `Detach` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Detach` in the file `moor_rpc.fbs:604`
+        /// * Table `Detach` in the file `crates/common/schema/moor_rpc.fbs:604`
         #[derive(
             Clone,
             Debug,
@@ -58011,9 +58987,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<Detach>> for DetachBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<Detach>> for DetachBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<Detach>;
 
@@ -58024,9 +59000,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<Detach>> for DetachBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<Detach>> for DetachBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<Detach>;
 
@@ -58040,9 +59016,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<Detach> for DetachBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<Detach> for DetachBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Detach> {
@@ -58166,7 +59142,7 @@ mod root {
         /// The table `HostClientToDaemonMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostClientToDaemonMessage` in the file `moor_rpc.fbs:609`
+        /// * Table `HostClientToDaemonMessage` in the file `crates/common/schema/moor_rpc.fbs:609`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct HostClientToDaemonMessage {
             /// The field `message` in the table `HostClientToDaemonMessage`
@@ -58430,7 +59406,7 @@ mod root {
         /// The union `DaemonToClientReplyUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToClientReplyUnion` in the file `moor_rpc.fbs:617`
+        /// * Union `DaemonToClientReplyUnion` in the file `crates/common/schema/moor_rpc.fbs:617`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum DaemonToClientReplyUnion {
             /// The variant of type `NewConnection` in the union `DaemonToClientReplyUnion`
@@ -59708,7 +60684,7 @@ mod root {
         /// The table `NewConnection` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NewConnection` in the file `moor_rpc.fbs:639`
+        /// * Table `NewConnection` in the file `crates/common/schema/moor_rpc.fbs:639`
         #[derive(
             Clone,
             Debug,
@@ -59830,9 +60806,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAs<::planus::Offset<NewConnection>> for NewConnectionBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAs<::planus::Offset<NewConnection>>
+            for NewConnectionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<NewConnection>;
 
@@ -59843,9 +60820,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOptional<::planus::Offset<NewConnection>>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOptional<::planus::Offset<NewConnection>>
             for NewConnectionBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<NewConnection>;
@@ -59860,9 +60837,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOffset<NewConnection> for NewConnectionBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::ClientToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOffset<NewConnection> for NewConnectionBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<NewConnection> {
@@ -59990,7 +60967,7 @@ mod root {
         /// The table `LoginResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `LoginResult` in the file `moor_rpc.fbs:644`
+        /// * Table `LoginResult` in the file `crates/common/schema/moor_rpc.fbs:644`
         #[derive(
             Clone,
             Debug,
@@ -60220,11 +61197,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<bool, bool>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAs<::planus::Offset<LoginResult>>
+                T0: ::planus::WriteAsDefault<bool, bool>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAs<::planus::Offset<LoginResult>>
             for LoginResultBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<LoginResult>;
@@ -60236,11 +61213,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<bool, bool>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOptional<::planus::Offset<LoginResult>>
+                T0: ::planus::WriteAsDefault<bool, bool>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOptional<::planus::Offset<LoginResult>>
             for LoginResultBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<LoginResult>;
@@ -60255,11 +61232,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<bool, bool>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::AuthToken>>,
-            T2: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
-            T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOffset<LoginResult> for LoginResultBuilder<(T0, T1, T2, T3)>
+                T0: ::planus::WriteAsDefault<bool, bool>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::AuthToken>>,
+                T2: ::planus::WriteAsDefault<self::ConnectType, self::ConnectType>,
+                T3: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOffset<LoginResult> for LoginResultBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<LoginResult> {
@@ -60430,7 +61407,7 @@ mod root {
         /// The table `AttachResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AttachResult` in the file `moor_rpc.fbs:651`
+        /// * Table `AttachResult` in the file `crates/common/schema/moor_rpc.fbs:651`
         #[derive(
             Clone,
             Debug,
@@ -60619,10 +61596,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<bool, bool>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::ClientToken>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAs<::planus::Offset<AttachResult>> for AttachResultBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<bool, bool>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::ClientToken>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAs<::planus::Offset<AttachResult>>
+            for AttachResultBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<AttachResult>;
 
@@ -60633,10 +61611,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<bool, bool>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::ClientToken>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOptional<::planus::Offset<AttachResult>>
+                T0: ::planus::WriteAsDefault<bool, bool>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::ClientToken>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOptional<::planus::Offset<AttachResult>>
             for AttachResultBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<AttachResult>;
@@ -60651,10 +61629,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<bool, bool>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::ClientToken>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOffset<AttachResult> for AttachResultBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<bool, bool>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::ClientToken>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOffset<AttachResult> for AttachResultBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<AttachResult> {
@@ -60815,7 +61793,7 @@ mod root {
         /// The table `SysPropValue` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SysPropValue` in the file `moor_rpc.fbs:657`
+        /// * Table `SysPropValue` in the file `crates/common/schema/moor_rpc.fbs:657`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct SysPropValue {
             /// The field `value` in the table `SysPropValue`
@@ -61080,7 +62058,7 @@ mod root {
         /// The table `TaskSubmitted` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskSubmitted` in the file `moor_rpc.fbs:661`
+        /// * Table `TaskSubmitted` in the file `crates/common/schema/moor_rpc.fbs:661`
         #[derive(
             Clone,
             Debug,
@@ -61345,7 +62323,7 @@ mod root {
         /// The table `InputThanks` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `InputThanks` in the file `moor_rpc.fbs:665`
+        /// * Table `InputThanks` in the file `crates/common/schema/moor_rpc.fbs:665`
         #[derive(
             Clone,
             Debug,
@@ -61556,7 +62534,7 @@ mod root {
         /// The table `EvalResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `EvalResult` in the file `moor_rpc.fbs:668`
+        /// * Table `EvalResult` in the file `crates/common/schema/moor_rpc.fbs:668`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct EvalResult {
             /// The field `result` in the table `EvalResult`
@@ -61792,7 +62770,7 @@ mod root {
         /// The table `ThanksPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ThanksPong` in the file `moor_rpc.fbs:672`
+        /// * Table `ThanksPong` in the file `crates/common/schema/moor_rpc.fbs:672`
         #[derive(
             Clone,
             Debug,
@@ -62057,7 +63035,7 @@ mod root {
         /// The table `VerbsReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbsReply` in the file `moor_rpc.fbs:676`
+        /// * Table `VerbsReply` in the file `crates/common/schema/moor_rpc.fbs:676`
         #[derive(
             Clone,
             Debug,
@@ -62154,8 +63132,8 @@ mod root {
             pub fn verbs<T0>(self, value: T0) -> VerbsReplyBuilder<(T0,)>
             where
                 T0: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>,
+                >,
             {
                 VerbsReplyBuilder((value,))
             }
@@ -62173,8 +63151,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>>,
-        > ::planus::WriteAs<::planus::Offset<VerbsReply>> for VerbsReplyBuilder<(T0,)>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>,
+                >,
+            > ::planus::WriteAs<::planus::Offset<VerbsReply>> for VerbsReplyBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<VerbsReply>;
 
@@ -62185,8 +63165,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbsReply>> for VerbsReplyBuilder<(T0,)>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>,
+                >,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbsReply>> for VerbsReplyBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<VerbsReply>;
 
@@ -62200,8 +63182,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>>,
-        > ::planus::WriteAsOffset<VerbsReply> for VerbsReplyBuilder<(T0,)>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<super::moor_common::VerbInfo>]>,
+                >,
+            > ::planus::WriteAsOffset<VerbsReply> for VerbsReplyBuilder<(T0,)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbsReply> {
@@ -62321,7 +63305,7 @@ mod root {
         /// The table `PropertiesReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PropertiesReply` in the file `moor_rpc.fbs:680`
+        /// * Table `PropertiesReply` in the file `crates/common/schema/moor_rpc.fbs:680`
         #[derive(
             Clone,
             Debug,
@@ -62424,8 +63408,8 @@ mod root {
             pub fn properties<T0>(self, value: T0) -> PropertiesReplyBuilder<(T0,)>
             where
                 T0: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>,
+                >,
             {
                 PropertiesReplyBuilder((value,))
             }
@@ -62446,8 +63430,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>>,
-        > ::planus::WriteAs<::planus::Offset<PropertiesReply>> for PropertiesReplyBuilder<(T0,)>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>,
+                >,
+            > ::planus::WriteAs<::planus::Offset<PropertiesReply>>
+            for PropertiesReplyBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<PropertiesReply>;
 
@@ -62461,8 +63448,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropertiesReply>>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>,
+                >,
+            > ::planus::WriteAsOptional<::planus::Offset<PropertiesReply>>
             for PropertiesReplyBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<PropertiesReply>;
@@ -62477,8 +63466,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>>,
-        > ::planus::WriteAsOffset<PropertiesReply> for PropertiesReplyBuilder<(T0,)>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<super::moor_common::PropInfo>]>,
+                >,
+            > ::planus::WriteAsOffset<PropertiesReply> for PropertiesReplyBuilder<(T0,)>
         {
             #[inline]
             fn prepare(
@@ -62601,7 +63592,7 @@ mod root {
         /// The table `VerbProgramResponseReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbProgramResponseReply` in the file `moor_rpc.fbs:684`
+        /// * Table `VerbProgramResponseReply` in the file `crates/common/schema/moor_rpc.fbs:684`
         #[derive(
             Clone,
             Debug,
@@ -62874,7 +63865,7 @@ mod root {
         /// The table `PropertyValue` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PropertyValue` in the file `moor_rpc.fbs:688`
+        /// * Table `PropertyValue` in the file `crates/common/schema/moor_rpc.fbs:688`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct PropertyValue {
             /// The field `prop_info` in the table `PropertyValue`
@@ -62986,9 +63977,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::PropInfo>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<PropertyValue>> for PropertyValueBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::PropInfo>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<PropertyValue>>
+            for PropertyValueBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyValue>;
 
@@ -62999,9 +63991,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::PropInfo>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PropertyValue>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::PropInfo>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PropertyValue>>
             for PropertyValueBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PropertyValue>;
@@ -63016,9 +64008,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::PropInfo>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<PropertyValue> for PropertyValueBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::PropInfo>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<PropertyValue> for PropertyValueBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PropertyValue> {
@@ -63146,7 +64138,7 @@ mod root {
         /// The table `VerbValue` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `VerbValue` in the file `moor_rpc.fbs:693`
+        /// * Table `VerbValue` in the file `crates/common/schema/moor_rpc.fbs:693`
         #[derive(
             Clone,
             Debug,
@@ -63268,9 +64260,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::VerbInfo>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-        > ::planus::WriteAs<::planus::Offset<VerbValue>> for VerbValueBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::VerbInfo>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAs<::planus::Offset<VerbValue>> for VerbValueBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbValue>;
 
@@ -63281,9 +64273,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::VerbInfo>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<VerbValue>> for VerbValueBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::VerbInfo>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<VerbValue>>
+            for VerbValueBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<VerbValue>;
 
@@ -63297,9 +64290,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::VerbInfo>>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-        > ::planus::WriteAsOffset<VerbValue> for VerbValueBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::VerbInfo>>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+            > ::planus::WriteAsOffset<VerbValue> for VerbValueBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<VerbValue> {
@@ -63428,7 +64421,7 @@ mod root {
         /// The table `ResolveResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ResolveResult` in the file `moor_rpc.fbs:698`
+        /// * Table `ResolveResult` in the file `crates/common/schema/moor_rpc.fbs:698`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ResolveResult {
             /// The field `result` in the table `ResolveResult`
@@ -63665,7 +64658,7 @@ mod root {
         /// The table `HistoryResponseReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryResponseReply` in the file `moor_rpc.fbs:702`
+        /// * Table `HistoryResponseReply` in the file `crates/common/schema/moor_rpc.fbs:702`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct HistoryResponseReply {
             /// The field `response` in the table `HistoryResponseReply`
@@ -63928,7 +64921,7 @@ mod root {
         /// The table `CurrentPresentations` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `CurrentPresentations` in the file `moor_rpc.fbs:706`
+        /// * Table `CurrentPresentations` in the file `crates/common/schema/moor_rpc.fbs:706`
         #[derive(
             Clone,
             Debug,
@@ -64031,8 +65024,8 @@ mod root {
             pub fn presentations<T0>(self, value: T0) -> CurrentPresentationsBuilder<(T0,)>
             where
                 T0: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
+                >,
             {
                 CurrentPresentationsBuilder((value,))
             }
@@ -64053,10 +65046,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<
+                T0: ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
                 >,
-        > ::planus::WriteAs<::planus::Offset<CurrentPresentations>>
+            > ::planus::WriteAs<::planus::Offset<CurrentPresentations>>
             for CurrentPresentationsBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<CurrentPresentations>;
@@ -64071,10 +65064,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<
+                T0: ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
                 >,
-        > ::planus::WriteAsOptional<::planus::Offset<CurrentPresentations>>
+            > ::planus::WriteAsOptional<::planus::Offset<CurrentPresentations>>
             for CurrentPresentationsBuilder<(T0,)>
         {
             type Prepared = ::planus::Offset<CurrentPresentations>;
@@ -64089,10 +65082,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<
+                T0: ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
                 >,
-        > ::planus::WriteAsOffset<CurrentPresentations> for CurrentPresentationsBuilder<(T0,)>
+            > ::planus::WriteAsOffset<CurrentPresentations> for CurrentPresentationsBuilder<(T0,)>
         {
             #[inline]
             fn prepare(
@@ -64216,7 +65209,7 @@ mod root {
         /// The table `PresentationDismissed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PresentationDismissed` in the file `moor_rpc.fbs:710`
+        /// * Table `PresentationDismissed` in the file `crates/common/schema/moor_rpc.fbs:710`
         #[derive(
             Clone,
             Debug,
@@ -64448,7 +65441,7 @@ mod root {
         /// The table `ClientAttributeSet` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientAttributeSet` in the file `moor_rpc.fbs:713`
+        /// * Table `ClientAttributeSet` in the file `crates/common/schema/moor_rpc.fbs:713`
         #[derive(
             Clone,
             Debug,
@@ -64676,7 +65669,7 @@ mod root {
         /// The table `Disconnected` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Disconnected` in the file `moor_rpc.fbs:716`
+        /// * Table `Disconnected` in the file `crates/common/schema/moor_rpc.fbs:716`
         #[derive(
             Clone,
             Debug,
@@ -64887,7 +65880,7 @@ mod root {
         /// The table `DaemonToClientReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToClientReply` in the file `moor_rpc.fbs:719`
+        /// * Table `DaemonToClientReply` in the file `crates/common/schema/moor_rpc.fbs:719`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct DaemonToClientReply {
             /// The field `reply` in the table `DaemonToClientReply`
@@ -65141,7 +66134,7 @@ mod root {
         /// The union `ClientEventUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `ClientEventUnion` in the file `moor_rpc.fbs:727`
+        /// * Union `ClientEventUnion` in the file `crates/common/schema/moor_rpc.fbs:727`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum ClientEventUnion {
             /// The variant of type `NarrativeEventMessage` in the union `ClientEventUnion`
@@ -65731,7 +66724,7 @@ mod root {
         /// The table `NarrativeEventMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `NarrativeEventMessage` in the file `moor_rpc.fbs:738`
+        /// * Table `NarrativeEventMessage` in the file `crates/common/schema/moor_rpc.fbs:738`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct NarrativeEventMessage {
             /// The field `player` in the table `NarrativeEventMessage`
@@ -65854,9 +66847,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-        > ::planus::WriteAs<::planus::Offset<NarrativeEventMessage>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+            > ::planus::WriteAs<::planus::Offset<NarrativeEventMessage>>
             for NarrativeEventMessageBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<NarrativeEventMessage>;
@@ -65871,9 +66864,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-        > ::planus::WriteAsOptional<::planus::Offset<NarrativeEventMessage>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+            > ::planus::WriteAsOptional<::planus::Offset<NarrativeEventMessage>>
             for NarrativeEventMessageBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<NarrativeEventMessage>;
@@ -65888,9 +66881,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-        > ::planus::WriteAsOffset<NarrativeEventMessage>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+            > ::planus::WriteAsOffset<NarrativeEventMessage>
             for NarrativeEventMessageBuilder<(T0, T1)>
         {
             #[inline]
@@ -66024,7 +67017,7 @@ mod root {
         /// The table `RequestInputEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestInputEvent` in the file `moor_rpc.fbs:743`
+        /// * Table `RequestInputEvent` in the file `crates/common/schema/moor_rpc.fbs:743`
         #[derive(
             Clone,
             Debug,
@@ -66296,7 +67289,7 @@ mod root {
         /// The table `SystemMessageEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SystemMessageEvent` in the file `moor_rpc.fbs:747`
+        /// * Table `SystemMessageEvent` in the file `crates/common/schema/moor_rpc.fbs:747`
         #[derive(
             Clone,
             Debug,
@@ -66427,9 +67420,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAs<::planus::Offset<SystemMessageEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAs<::planus::Offset<SystemMessageEvent>>
             for SystemMessageEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<SystemMessageEvent>;
@@ -66444,9 +67437,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOptional<::planus::Offset<SystemMessageEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOptional<::planus::Offset<SystemMessageEvent>>
             for SystemMessageEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<SystemMessageEvent>;
@@ -66461,9 +67454,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<str>>,
-        > ::planus::WriteAsOffset<SystemMessageEvent> for SystemMessageEventBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<str>>,
+            > ::planus::WriteAsOffset<SystemMessageEvent> for SystemMessageEventBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -66592,7 +67585,7 @@ mod root {
         /// The table `DisconnectEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DisconnectEvent` in the file `moor_rpc.fbs:752`
+        /// * Table `DisconnectEvent` in the file `crates/common/schema/moor_rpc.fbs:752`
         #[derive(
             Clone,
             Debug,
@@ -66818,7 +67811,7 @@ mod root {
         /// The table `TaskErrorEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskErrorEvent` in the file `moor_rpc.fbs:755`
+        /// * Table `TaskErrorEvent` in the file `crates/common/schema/moor_rpc.fbs:755`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct TaskErrorEvent {
             /// The field `task_id` in the table `TaskErrorEvent`
@@ -66941,9 +67934,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<self::SchedulerError>>,
-        > ::planus::WriteAs<::planus::Offset<TaskErrorEvent>> for TaskErrorEventBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<self::SchedulerError>>,
+            > ::planus::WriteAs<::planus::Offset<TaskErrorEvent>>
+            for TaskErrorEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<TaskErrorEvent>;
 
@@ -66954,9 +67948,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<self::SchedulerError>>,
-        > ::planus::WriteAsOptional<::planus::Offset<TaskErrorEvent>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<self::SchedulerError>>,
+            > ::planus::WriteAsOptional<::planus::Offset<TaskErrorEvent>>
             for TaskErrorEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<TaskErrorEvent>;
@@ -66971,9 +67965,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<self::SchedulerError>>,
-        > ::planus::WriteAsOffset<TaskErrorEvent> for TaskErrorEventBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<self::SchedulerError>>,
+            > ::planus::WriteAsOffset<TaskErrorEvent> for TaskErrorEventBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<TaskErrorEvent> {
@@ -67101,7 +68095,7 @@ mod root {
         /// The table `TaskSuccessEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `TaskSuccessEvent` in the file `moor_rpc.fbs:760`
+        /// * Table `TaskSuccessEvent` in the file `crates/common/schema/moor_rpc.fbs:760`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct TaskSuccessEvent {
             /// The field `task_id` in the table `TaskSuccessEvent`
@@ -67233,9 +68227,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<TaskSuccessEvent>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<TaskSuccessEvent>>
             for TaskSuccessEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<TaskSuccessEvent>;
@@ -67250,9 +68244,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<TaskSuccessEvent>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<TaskSuccessEvent>>
             for TaskSuccessEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<TaskSuccessEvent>;
@@ -67267,9 +68261,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<TaskSuccessEvent> for TaskSuccessEventBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<TaskSuccessEvent> for TaskSuccessEventBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -67402,7 +68396,7 @@ mod root {
         /// The table `PlayerSwitchedEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PlayerSwitchedEvent` in the file `moor_rpc.fbs:765`
+        /// * Table `PlayerSwitchedEvent` in the file `crates/common/schema/moor_rpc.fbs:765`
         #[derive(
             Clone,
             Debug,
@@ -67533,9 +68527,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-        > ::planus::WriteAs<::planus::Offset<PlayerSwitchedEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+            > ::planus::WriteAs<::planus::Offset<PlayerSwitchedEvent>>
             for PlayerSwitchedEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PlayerSwitchedEvent>;
@@ -67550,9 +68544,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PlayerSwitchedEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PlayerSwitchedEvent>>
             for PlayerSwitchedEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PlayerSwitchedEvent>;
@@ -67567,9 +68561,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
-        > ::planus::WriteAsOffset<PlayerSwitchedEvent> for PlayerSwitchedEventBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::AuthToken>>,
+            > ::planus::WriteAsOffset<PlayerSwitchedEvent>
+            for PlayerSwitchedEventBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -67702,7 +68697,7 @@ mod root {
         /// The table `SetConnectionOptionEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `SetConnectionOptionEvent` in the file `moor_rpc.fbs:770`
+        /// * Table `SetConnectionOptionEvent` in the file `crates/common/schema/moor_rpc.fbs:770`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct SetConnectionOptionEvent {
             /// The field `connection_obj` in the table `SetConnectionOptionEvent`
@@ -67849,10 +68844,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<SetConnectionOptionEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<SetConnectionOptionEvent>>
             for SetConnectionOptionEventBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<SetConnectionOptionEvent>;
@@ -67867,10 +68862,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<SetConnectionOptionEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<SetConnectionOptionEvent>>
             for SetConnectionOptionEventBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<SetConnectionOptionEvent>;
@@ -67885,10 +68880,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<SetConnectionOptionEvent>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<SetConnectionOptionEvent>
             for SetConnectionOptionEventBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -68039,7 +69034,7 @@ mod root {
         /// The table `ClientEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientEvent` in the file `moor_rpc.fbs:776`
+        /// * Table `ClientEvent` in the file `crates/common/schema/moor_rpc.fbs:776`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ClientEvent {
             /// The field `event` in the table `ClientEvent`
@@ -68275,7 +69270,7 @@ mod root {
         /// The union `ClientsBroadcastEventUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `ClientsBroadcastEventUnion` in the file `moor_rpc.fbs:784`
+        /// * Union `ClientsBroadcastEventUnion` in the file `crates/common/schema/moor_rpc.fbs:784`
         #[derive(
             Clone,
             Debug,
@@ -68441,7 +69436,7 @@ mod root {
         /// The table `ClientsBroadcastPingPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientsBroadcastPingPong` in the file `moor_rpc.fbs:788`
+        /// * Table `ClientsBroadcastPingPong` in the file `crates/common/schema/moor_rpc.fbs:788`
         #[derive(
             Clone,
             Debug,
@@ -68736,7 +69731,7 @@ mod root {
         /// The table `ClientsBroadcastEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientsBroadcastEvent` in the file `moor_rpc.fbs:792`
+        /// * Table `ClientsBroadcastEvent` in the file `crates/common/schema/moor_rpc.fbs:792`
         #[derive(
             Clone,
             Debug,
@@ -69002,7 +69997,7 @@ mod root {
         /// The union `DaemonToWorkerMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToWorkerMessageUnion` in the file `moor_rpc.fbs:800`
+        /// * Union `DaemonToWorkerMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:800`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum DaemonToWorkerMessageUnion {
             /// The variant of type `PingWorkers` in the union `DaemonToWorkerMessageUnion`
@@ -69280,7 +70275,7 @@ mod root {
         /// The table `PingWorkers` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PingWorkers` in the file `moor_rpc.fbs:806`
+        /// * Table `PingWorkers` in the file `crates/common/schema/moor_rpc.fbs:806`
         #[derive(
             Clone,
             Debug,
@@ -69491,7 +70486,7 @@ mod root {
         /// The table `WorkerRequest` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRequest` in the file `moor_rpc.fbs:809`
+        /// * Table `WorkerRequest` in the file `crates/common/schema/moor_rpc.fbs:809`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct WorkerRequest {
             /// The field `worker_id` in the table `WorkerRequest`
@@ -69705,13 +70700,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T5: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAs<::planus::Offset<WorkerRequest>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T5: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAs<::planus::Offset<WorkerRequest>>
             for WorkerRequestBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<WorkerRequest>;
@@ -69723,13 +70718,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T5: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOptional<::planus::Offset<WorkerRequest>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T5: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOptional<::planus::Offset<WorkerRequest>>
             for WorkerRequestBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             type Prepared = ::planus::Offset<WorkerRequest>;
@@ -69744,13 +70739,13 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
-            T5: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOffset<WorkerRequest>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T3: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T5: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOffset<WorkerRequest>
             for WorkerRequestBuilder<(T0, T1, T2, T3, T4, T5)>
         {
             #[inline]
@@ -69922,7 +70917,7 @@ mod root {
         /// The table `PleaseDie` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `PleaseDie` in the file `moor_rpc.fbs:818`
+        /// * Table `PleaseDie` in the file `crates/common/schema/moor_rpc.fbs:818`
         #[derive(
             Clone,
             Debug,
@@ -70054,9 +71049,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAs<::planus::Offset<PleaseDie>> for PleaseDieBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAs<::planus::Offset<PleaseDie>> for PleaseDieBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PleaseDie>;
 
@@ -70067,9 +71062,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAsOptional<::planus::Offset<PleaseDie>> for PleaseDieBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAsOptional<::planus::Offset<PleaseDie>>
+            for PleaseDieBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PleaseDie>;
 
@@ -70083,9 +71079,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAsOffset<PleaseDie> for PleaseDieBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAsOffset<PleaseDie> for PleaseDieBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<PleaseDie> {
@@ -70213,7 +71209,7 @@ mod root {
         /// The table `DaemonToWorkerMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToWorkerMessage` in the file `moor_rpc.fbs:823`
+        /// * Table `DaemonToWorkerMessage` in the file `crates/common/schema/moor_rpc.fbs:823`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct DaemonToWorkerMessage {
             /// The field `message` in the table `DaemonToWorkerMessage`
@@ -70469,7 +71465,7 @@ mod root {
         /// The union `WorkerToDaemonMessageUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `WorkerToDaemonMessageUnion` in the file `moor_rpc.fbs:827`
+        /// * Union `WorkerToDaemonMessageUnion` in the file `crates/common/schema/moor_rpc.fbs:827`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum WorkerToDaemonMessageUnion {
             /// The variant of type `AttachWorker` in the union `WorkerToDaemonMessageUnion`
@@ -70871,7 +71867,7 @@ mod root {
         /// The table `AttachWorker` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `AttachWorker` in the file `moor_rpc.fbs:835`
+        /// * Table `AttachWorker` in the file `crates/common/schema/moor_rpc.fbs:835`
         #[derive(
             Clone,
             Debug,
@@ -71003,9 +71999,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<AttachWorker>> for AttachWorkerBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<AttachWorker>> for AttachWorkerBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AttachWorker>;
 
@@ -71016,9 +72012,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<AttachWorker>>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<AttachWorker>>
             for AttachWorkerBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<AttachWorker>;
@@ -71033,9 +72029,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOffset<AttachWorker> for AttachWorkerBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOffset<AttachWorker> for AttachWorkerBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<AttachWorker> {
@@ -71163,7 +72159,7 @@ mod root {
         /// The table `WorkerPong` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerPong` in the file `moor_rpc.fbs:840`
+        /// * Table `WorkerPong` in the file `crates/common/schema/moor_rpc.fbs:840`
         #[derive(
             Clone,
             Debug,
@@ -71295,9 +72291,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAs<::planus::Offset<WorkerPong>> for WorkerPongBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAs<::planus::Offset<WorkerPong>> for WorkerPongBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<WorkerPong>;
 
@@ -71308,9 +72304,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOptional<::planus::Offset<WorkerPong>> for WorkerPongBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOptional<::planus::Offset<WorkerPong>>
+            for WorkerPongBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<WorkerPong>;
 
@@ -71324,9 +72321,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
-        > ::planus::WriteAsOffset<WorkerPong> for WorkerPongBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Symbol>>,
+            > ::planus::WriteAsOffset<WorkerPong> for WorkerPongBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<WorkerPong> {
@@ -71454,7 +72451,7 @@ mod root {
         /// The table `DetachWorker` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DetachWorker` in the file `moor_rpc.fbs:845`
+        /// * Table `DetachWorker` in the file `crates/common/schema/moor_rpc.fbs:845`
         #[derive(
             Clone,
             Debug,
@@ -71710,7 +72707,7 @@ mod root {
         /// The table `RequestResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestResult` in the file `moor_rpc.fbs:849`
+        /// * Table `RequestResult` in the file `crates/common/schema/moor_rpc.fbs:849`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct RequestResult {
             /// The field `token` in the table `RequestResult`
@@ -71841,10 +72838,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAs<::planus::Offset<RequestResult>>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAs<::planus::Offset<RequestResult>>
             for RequestResultBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestResult>;
@@ -71856,10 +72853,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RequestResult>>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RequestResult>>
             for RequestResultBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestResult>;
@@ -71874,10 +72871,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
-        > ::planus::WriteAsOffset<RequestResult> for RequestResultBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_var::Var>>,
+            > ::planus::WriteAsOffset<RequestResult> for RequestResultBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RequestResult> {
@@ -72015,7 +73012,7 @@ mod root {
         /// The table `RequestError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RequestError` in the file `moor_rpc.fbs:855`
+        /// * Table `RequestError` in the file `crates/common/schema/moor_rpc.fbs:855`
         #[derive(
             Clone,
             Debug,
@@ -72156,10 +73153,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::WorkerError>>,
-        > ::planus::WriteAs<::planus::Offset<RequestError>> for RequestErrorBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::WorkerError>>,
+            > ::planus::WriteAs<::planus::Offset<RequestError>>
+            for RequestErrorBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestError>;
 
@@ -72170,10 +73168,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::WorkerError>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RequestError>>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::WorkerError>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RequestError>>
             for RequestErrorBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RequestError>;
@@ -72188,10 +73186,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::WorkerError>>,
-        > ::planus::WriteAsOffset<RequestError> for RequestErrorBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::WorkerError>>,
+            > ::planus::WriteAsOffset<RequestError> for RequestErrorBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RequestError> {
@@ -72329,7 +73327,7 @@ mod root {
         /// The table `WorkerToDaemonMessage` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerToDaemonMessage` in the file `moor_rpc.fbs:861`
+        /// * Table `WorkerToDaemonMessage` in the file `crates/common/schema/moor_rpc.fbs:861`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct WorkerToDaemonMessage {
             /// The field `message` in the table `WorkerToDaemonMessage`
@@ -72585,7 +73583,7 @@ mod root {
         /// The union `DaemonToWorkerReplyUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `DaemonToWorkerReplyUnion` in the file `moor_rpc.fbs:865`
+        /// * Union `DaemonToWorkerReplyUnion` in the file `crates/common/schema/moor_rpc.fbs:865`
         #[derive(
             Clone,
             Debug,
@@ -73127,7 +74125,7 @@ mod root {
         /// The table `WorkerAck` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerAck` in the file `moor_rpc.fbs:875`
+        /// * Table `WorkerAck` in the file `crates/common/schema/moor_rpc.fbs:875`
         #[derive(
             Clone,
             Debug,
@@ -73338,7 +74336,7 @@ mod root {
         /// The table `WorkerRejected` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerRejected` in the file `moor_rpc.fbs:878`
+        /// * Table `WorkerRejected` in the file `crates/common/schema/moor_rpc.fbs:878`
         #[derive(
             Clone,
             Debug,
@@ -73607,7 +74605,7 @@ mod root {
         /// The table `WorkerAttached` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerAttached` in the file `moor_rpc.fbs:882`
+        /// * Table `WorkerAttached` in the file `crates/common/schema/moor_rpc.fbs:882`
         #[derive(
             Clone,
             Debug,
@@ -73739,9 +74737,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAs<::planus::Offset<WorkerAttached>> for WorkerAttachedBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAs<::planus::Offset<WorkerAttached>>
+            for WorkerAttachedBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<WorkerAttached>;
 
@@ -73752,9 +74751,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAsOptional<::planus::Offset<WorkerAttached>>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAsOptional<::planus::Offset<WorkerAttached>>
             for WorkerAttachedBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<WorkerAttached>;
@@ -73769,9 +74768,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAsOffset<WorkerAttached> for WorkerAttachedBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::WorkerToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAsOffset<WorkerAttached> for WorkerAttachedBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<WorkerAttached> {
@@ -73899,7 +74898,7 @@ mod root {
         /// The table `WorkerAuthFailed` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerAuthFailed` in the file `moor_rpc.fbs:887`
+        /// * Table `WorkerAuthFailed` in the file `crates/common/schema/moor_rpc.fbs:887`
         #[derive(
             Clone,
             Debug,
@@ -74169,7 +75168,7 @@ mod root {
         /// The table `WorkerInvalidPayload` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerInvalidPayload` in the file `moor_rpc.fbs:891`
+        /// * Table `WorkerInvalidPayload` in the file `crates/common/schema/moor_rpc.fbs:891`
         #[derive(
             Clone,
             Debug,
@@ -74439,7 +75438,7 @@ mod root {
         /// The table `WorkerUnknownRequest` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerUnknownRequest` in the file `moor_rpc.fbs:895`
+        /// * Table `WorkerUnknownRequest` in the file `crates/common/schema/moor_rpc.fbs:895`
         #[derive(
             Clone,
             Debug,
@@ -74712,7 +75711,7 @@ mod root {
         /// The table `WorkerNotRegistered` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `WorkerNotRegistered` in the file `moor_rpc.fbs:899`
+        /// * Table `WorkerNotRegistered` in the file `crates/common/schema/moor_rpc.fbs:899`
         #[derive(
             Clone,
             Debug,
@@ -74985,7 +75984,7 @@ mod root {
         /// The table `DaemonToWorkerReply` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `DaemonToWorkerReply` in the file `moor_rpc.fbs:903`
+        /// * Table `DaemonToWorkerReply` in the file `crates/common/schema/moor_rpc.fbs:903`
         #[derive(
             Clone,
             Debug,
@@ -75249,7 +76248,7 @@ mod root {
         /// The enum `RpcMessageErrorCode` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Enum `RpcMessageErrorCode` in the file `moor_rpc.fbs:911`
+        /// * Enum `RpcMessageErrorCode` in the file `crates/common/schema/moor_rpc.fbs:911`
         #[derive(
             Copy,
             Clone,
@@ -75463,7 +76462,7 @@ mod root {
         /// The table `RpcMessageError` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `RpcMessageError` in the file `moor_rpc.fbs:924`
+        /// * Table `RpcMessageError` in the file `crates/common/schema/moor_rpc.fbs:924`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct RpcMessageError {
             /// The field `error_code` in the table `RpcMessageError`
@@ -75665,10 +76664,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::RpcMessageErrorCode, self::RpcMessageErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::SchedulerError>>,
-        > ::planus::WriteAs<::planus::Offset<RpcMessageError>>
+                T0: ::planus::WriteAsDefault<self::RpcMessageErrorCode, self::RpcMessageErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::SchedulerError>>,
+            > ::planus::WriteAs<::planus::Offset<RpcMessageError>>
             for RpcMessageErrorBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RpcMessageError>;
@@ -75683,10 +76682,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::RpcMessageErrorCode, self::RpcMessageErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::SchedulerError>>,
-        > ::planus::WriteAsOptional<::planus::Offset<RpcMessageError>>
+                T0: ::planus::WriteAsDefault<self::RpcMessageErrorCode, self::RpcMessageErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::SchedulerError>>,
+            > ::planus::WriteAsOptional<::planus::Offset<RpcMessageError>>
             for RpcMessageErrorBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<RpcMessageError>;
@@ -75701,10 +76700,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::RpcMessageErrorCode, self::RpcMessageErrorCode>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::SchedulerError>>,
-        > ::planus::WriteAsOffset<RpcMessageError> for RpcMessageErrorBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<self::RpcMessageErrorCode, self::RpcMessageErrorCode>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::SchedulerError>>,
+            > ::planus::WriteAsOffset<RpcMessageError> for RpcMessageErrorBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(
@@ -75861,7 +76860,7 @@ mod root {
         /// The union `MessageTypeUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `MessageTypeUnion` in the file `moor_rpc.fbs:930`
+        /// * Union `MessageTypeUnion` in the file `crates/common/schema/moor_rpc.fbs:930`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum MessageTypeUnion {
             /// The variant of type `HostToDaemonMsg` in the union `MessageTypeUnion`
@@ -76075,7 +77074,7 @@ mod root {
         /// The table `HostToDaemonMsg` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostToDaemonMsg` in the file `moor_rpc.fbs:935`
+        /// * Table `HostToDaemonMsg` in the file `crates/common/schema/moor_rpc.fbs:935`
         #[derive(
             Clone,
             Debug,
@@ -76206,9 +77205,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::HostToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::HostToDaemonMessage>>,
-        > ::planus::WriteAs<::planus::Offset<HostToDaemonMsg>>
+                T0: ::planus::WriteAs<::planus::Offset<self::HostToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::HostToDaemonMessage>>,
+            > ::planus::WriteAs<::planus::Offset<HostToDaemonMsg>>
             for HostToDaemonMsgBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HostToDaemonMsg>;
@@ -76223,9 +77222,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::HostToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::HostToDaemonMessage>>,
-        > ::planus::WriteAsOptional<::planus::Offset<HostToDaemonMsg>>
+                T0: ::planus::WriteAs<::planus::Offset<self::HostToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::HostToDaemonMessage>>,
+            > ::planus::WriteAsOptional<::planus::Offset<HostToDaemonMsg>>
             for HostToDaemonMsgBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HostToDaemonMsg>;
@@ -76240,9 +77239,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::HostToken>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::HostToDaemonMessage>>,
-        > ::planus::WriteAsOffset<HostToDaemonMsg> for HostToDaemonMsgBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::HostToken>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::HostToDaemonMessage>>,
+            > ::planus::WriteAsOffset<HostToDaemonMsg> for HostToDaemonMsgBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -76373,7 +77372,7 @@ mod root {
         /// The table `HostClientToDaemonMsg` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostClientToDaemonMsg` in the file `moor_rpc.fbs:940`
+        /// * Table `HostClientToDaemonMsg` in the file `crates/common/schema/moor_rpc.fbs:940`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct HostClientToDaemonMsg {
             /// The field `client_data` in the table `HostClientToDaemonMsg`
@@ -76494,9 +77493,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::HostClientToDaemonMessage>>,
-        > ::planus::WriteAs<::planus::Offset<HostClientToDaemonMsg>>
+                T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::HostClientToDaemonMessage>>,
+            > ::planus::WriteAs<::planus::Offset<HostClientToDaemonMsg>>
             for HostClientToDaemonMsgBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HostClientToDaemonMsg>;
@@ -76511,9 +77510,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::HostClientToDaemonMessage>>,
-        > ::planus::WriteAsOptional<::planus::Offset<HostClientToDaemonMsg>>
+                T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::HostClientToDaemonMessage>>,
+            > ::planus::WriteAsOptional<::planus::Offset<HostClientToDaemonMsg>>
             for HostClientToDaemonMsgBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HostClientToDaemonMsg>;
@@ -76528,9 +77527,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::HostClientToDaemonMessage>>,
-        > ::planus::WriteAsOffset<HostClientToDaemonMsg>
+                T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::HostClientToDaemonMessage>>,
+            > ::planus::WriteAsOffset<HostClientToDaemonMsg>
             for HostClientToDaemonMsgBuilder<(T0, T1)>
         {
             #[inline]
@@ -76664,7 +77663,7 @@ mod root {
         /// The table `MessageType` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `MessageType` in the file `moor_rpc.fbs:945`
+        /// * Table `MessageType` in the file `crates/common/schema/moor_rpc.fbs:945`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct MessageType {
             /// The field `message` in the table `MessageType`
@@ -76900,7 +77899,7 @@ mod root {
         /// The union `ReplyResultUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `ReplyResultUnion` in the file `moor_rpc.fbs:949`
+        /// * Union `ReplyResultUnion` in the file `crates/common/schema/moor_rpc.fbs:949`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub enum ReplyResultUnion {
             /// The variant of type `HostSuccess` in the union `ReplyResultUnion`
@@ -77173,7 +78172,7 @@ mod root {
         /// The table `HostSuccess` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HostSuccess` in the file `moor_rpc.fbs:955`
+        /// * Table `HostSuccess` in the file `crates/common/schema/moor_rpc.fbs:955`
         #[derive(
             Clone,
             Debug,
@@ -77419,7 +78418,7 @@ mod root {
         /// The table `ClientSuccess` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ClientSuccess` in the file `moor_rpc.fbs:959`
+        /// * Table `ClientSuccess` in the file `crates/common/schema/moor_rpc.fbs:959`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ClientSuccess {
             /// The field `reply` in the table `ClientSuccess`
@@ -77656,7 +78655,7 @@ mod root {
         /// The table `Failure` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `Failure` in the file `moor_rpc.fbs:963`
+        /// * Table `Failure` in the file `crates/common/schema/moor_rpc.fbs:963`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Failure {
             /// The field `error` in the table `Failure`
@@ -77897,7 +78896,7 @@ mod root {
         /// The table `ReplyResult` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `ReplyResult` in the file `moor_rpc.fbs:967`
+        /// * Table `ReplyResult` in the file `crates/common/schema/moor_rpc.fbs:967`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct ReplyResult {
             /// The field `result` in the table `ReplyResult`
@@ -78133,7 +79132,7 @@ mod root {
         /// The union `HistoryRecallUnion` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Union `HistoryRecallUnion` in the file `moor_rpc.fbs:975`
+        /// * Union `HistoryRecallUnion` in the file `crates/common/schema/moor_rpc.fbs:975`
         #[derive(
             Clone,
             Debug,
@@ -78485,7 +79484,7 @@ mod root {
         /// The table `HistoryRecallSinceEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallSinceEvent` in the file `moor_rpc.fbs:982`
+        /// * Table `HistoryRecallSinceEvent` in the file `crates/common/schema/moor_rpc.fbs:982`
         #[derive(
             Clone,
             Debug,
@@ -78641,9 +79640,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAs<::planus::Offset<HistoryRecallSinceEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAs<::planus::Offset<HistoryRecallSinceEvent>>
             for HistoryRecallSinceEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HistoryRecallSinceEvent>;
@@ -78658,9 +79657,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOptional<::planus::Offset<HistoryRecallSinceEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOptional<::planus::Offset<HistoryRecallSinceEvent>>
             for HistoryRecallSinceEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HistoryRecallSinceEvent>;
@@ -78675,9 +79674,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOffset<HistoryRecallSinceEvent>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOffset<HistoryRecallSinceEvent>
             for HistoryRecallSinceEventBuilder<(T0, T1)>
         {
             #[inline]
@@ -78818,7 +79817,7 @@ mod root {
         /// The table `HistoryRecallUntilEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallUntilEvent` in the file `moor_rpc.fbs:987`
+        /// * Table `HistoryRecallUntilEvent` in the file `crates/common/schema/moor_rpc.fbs:987`
         #[derive(
             Clone,
             Debug,
@@ -78974,9 +79973,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAs<::planus::Offset<HistoryRecallUntilEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAs<::planus::Offset<HistoryRecallUntilEvent>>
             for HistoryRecallUntilEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HistoryRecallUntilEvent>;
@@ -78991,9 +79990,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOptional<::planus::Offset<HistoryRecallUntilEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOptional<::planus::Offset<HistoryRecallUntilEvent>>
             for HistoryRecallUntilEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<HistoryRecallUntilEvent>;
@@ -79008,9 +80007,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-        > ::planus::WriteAsOffset<HistoryRecallUntilEvent>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Uuid>>,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+            > ::planus::WriteAsOffset<HistoryRecallUntilEvent>
             for HistoryRecallUntilEventBuilder<(T0, T1)>
         {
             #[inline]
@@ -79151,7 +80150,7 @@ mod root {
         /// The table `HistoryRecallSinceSeconds` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallSinceSeconds` in the file `moor_rpc.fbs:992`
+        /// * Table `HistoryRecallSinceSeconds` in the file `crates/common/schema/moor_rpc.fbs:992`
         #[derive(
             Clone,
             Debug,
@@ -79494,7 +80493,7 @@ mod root {
         /// The table `HistoryRecallNone` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecallNone` in the file `moor_rpc.fbs:997`
+        /// * Table `HistoryRecallNone` in the file `crates/common/schema/moor_rpc.fbs:997`
         #[derive(
             Clone,
             Debug,
@@ -79722,7 +80721,7 @@ mod root {
         /// The table `HistoryRecall` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryRecall` in the file `moor_rpc.fbs:1000`
+        /// * Table `HistoryRecall` in the file `crates/common/schema/moor_rpc.fbs:1000`
         #[derive(
             Clone,
             Debug,
@@ -79969,7 +80968,7 @@ mod root {
         /// The table `HistoricalNarrativeEvent` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoricalNarrativeEvent` in the file `moor_rpc.fbs:1004`
+        /// * Table `HistoricalNarrativeEvent` in the file `crates/common/schema/moor_rpc.fbs:1004`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct HistoricalNarrativeEvent {
             /// The field `event` in the table `HistoricalNarrativeEvent`
@@ -80133,10 +81132,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-            T1: ::planus::WriteAsDefault<bool, bool>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAs<::planus::Offset<HistoricalNarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+                T1: ::planus::WriteAsDefault<bool, bool>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAs<::planus::Offset<HistoricalNarrativeEvent>>
             for HistoricalNarrativeEventBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<HistoricalNarrativeEvent>;
@@ -80151,10 +81150,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-            T1: ::planus::WriteAsDefault<bool, bool>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOptional<::planus::Offset<HistoricalNarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+                T1: ::planus::WriteAsDefault<bool, bool>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOptional<::planus::Offset<HistoricalNarrativeEvent>>
             for HistoricalNarrativeEventBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<HistoricalNarrativeEvent>;
@@ -80169,10 +81168,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-            T1: ::planus::WriteAsDefault<bool, bool>,
-            T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-        > ::planus::WriteAsOffset<HistoricalNarrativeEvent>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+                T1: ::planus::WriteAsDefault<bool, bool>,
+                T2: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+            > ::planus::WriteAsOffset<HistoricalNarrativeEvent>
             for HistoricalNarrativeEventBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -80324,7 +81323,7 @@ mod root {
         /// The table `HistoryResponse` in the namespace `MoorRpc`
         ///
         /// Generated from these locations:
-        /// * Table `HistoryResponse` in the file `moor_rpc.fbs:1010`
+        /// * Table `HistoryResponse` in the file `crates/common/schema/moor_rpc.fbs:1010`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct HistoryResponse {
             /// The field `events` in the table `HistoryResponse`
@@ -80510,8 +81509,8 @@ mod root {
             pub fn events<T0>(self, value: T0) -> HistoryResponseBuilder<(T0,)>
             where
                 T0: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>,
+                >,
             {
                 HistoryResponseBuilder((value,))
             }
@@ -80673,14 +81672,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
-            T6: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAs<::planus::Offset<HistoryResponse>>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>,
+                >,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
+                T6: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAs<::planus::Offset<HistoryResponse>>
             for HistoryResponseBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<HistoryResponse>;
@@ -80695,14 +81696,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
-            T6: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAsOptional<::planus::Offset<HistoryResponse>>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>,
+                >,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
+                T6: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAsOptional<::planus::Offset<HistoryResponse>>
             for HistoryResponseBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             type Prepared = ::planus::Offset<HistoryResponse>;
@@ -80717,14 +81720,16 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>>,
-            T1: ::planus::WriteAsDefault<u64, u64>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<u64, u64>,
-            T4: ::planus::WriteAsDefault<bool, bool>,
-            T5: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
-            T6: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
-        > ::planus::WriteAsOffset<HistoryResponse>
+                T0: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::HistoricalNarrativeEvent>]>,
+                >,
+                T1: ::planus::WriteAsDefault<u64, u64>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<u64, u64>,
+                T4: ::planus::WriteAsDefault<bool, bool>,
+                T5: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
+                T6: ::planus::WriteAsOptional<::planus::Offset<super::moor_common::Uuid>>,
+            > ::planus::WriteAsOffset<HistoryResponse>
             for HistoryResponseBuilder<(T0, T1, T2, T3, T4, T5, T6)>
         {
             #[inline]
@@ -80944,12 +81949,12 @@ mod root {
     /// The namespace `MoorEventLog`
     ///
     /// Generated from these locations:
-    /// * File `moor_event_log.fbs`
+    /// * File `crates/common/schema/moor_event_log.fbs`
     pub mod moor_event_log {
         /// The table `LoggedNarrativeEvent` in the namespace `MoorEventLog`
         ///
         /// Generated from these locations:
-        /// * Table `LoggedNarrativeEvent` in the file `moor_event_log.fbs:29`
+        /// * Table `LoggedNarrativeEvent` in the file `crates/common/schema/moor_event_log.fbs:29`
         #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct LoggedNarrativeEvent {
             /// The field `player` in the table `LoggedNarrativeEvent`
@@ -81072,9 +82077,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-        > ::planus::WriteAs<::planus::Offset<LoggedNarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+            > ::planus::WriteAs<::planus::Offset<LoggedNarrativeEvent>>
             for LoggedNarrativeEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<LoggedNarrativeEvent>;
@@ -81089,9 +82094,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-        > ::planus::WriteAsOptional<::planus::Offset<LoggedNarrativeEvent>>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+            > ::planus::WriteAsOptional<::planus::Offset<LoggedNarrativeEvent>>
             for LoggedNarrativeEventBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<LoggedNarrativeEvent>;
@@ -81106,9 +82111,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
-        > ::planus::WriteAsOffset<LoggedNarrativeEvent> for LoggedNarrativeEventBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<::planus::Offset<super::moor_common::NarrativeEvent>>,
+            > ::planus::WriteAsOffset<LoggedNarrativeEvent>
+            for LoggedNarrativeEventBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -81239,7 +82245,7 @@ mod root {
         /// The table `PlayerPresentations` in the namespace `MoorEventLog`
         ///
         /// Generated from these locations:
-        /// * Table `PlayerPresentations` in the file `moor_event_log.fbs:36`
+        /// * Table `PlayerPresentations` in the file `crates/common/schema/moor_event_log.fbs:36`
         #[derive(
             Clone,
             Debug,
@@ -81351,8 +82357,8 @@ mod root {
             pub fn presentations<T1>(self, value: T1) -> PlayerPresentationsBuilder<(T0, T1)>
             where
                 T1: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
+                >,
             {
                 let (v0,) = self.0;
                 PlayerPresentationsBuilder((v0, value))
@@ -81374,11 +82380,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
                 >,
-        > ::planus::WriteAs<::planus::Offset<PlayerPresentations>>
+            > ::planus::WriteAs<::planus::Offset<PlayerPresentations>>
             for PlayerPresentationsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PlayerPresentations>;
@@ -81393,11 +82399,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
                 >,
-        > ::planus::WriteAsOptional<::planus::Offset<PlayerPresentations>>
+            > ::planus::WriteAsOptional<::planus::Offset<PlayerPresentations>>
             for PlayerPresentationsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<PlayerPresentations>;
@@ -81412,11 +82418,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
-            T1: ::planus::WriteAs<
+                T0: ::planus::WriteAs<::planus::Offset<super::moor_common::Obj>>,
+                T1: ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<super::moor_common::Presentation>]>,
                 >,
-        > ::planus::WriteAsOffset<PlayerPresentations> for PlayerPresentationsBuilder<(T0, T1)>
+            > ::planus::WriteAsOffset<PlayerPresentations>
+            for PlayerPresentationsBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -81550,12 +82557,12 @@ mod root {
     /// The namespace `MoorProgram`
     ///
     /// Generated from these locations:
-    /// * File `moor_program.fbs`
+    /// * File `crates/common/schema/moor_program.fbs`
     pub mod moor_program {
         /// The table `StoredName` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredName` in the file `moor_program.fbs:35`
+        /// * Table `StoredName` in the file `crates/common/schema/moor_program.fbs:35`
         #[derive(
             Clone,
             Debug,
@@ -81744,10 +82751,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u8, u8>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredName>> for StoredNameBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u8, u8>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredName>> for StoredNameBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredName>;
 
@@ -81758,10 +82765,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u8, u8>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredName>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u8, u8>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredName>>
             for StoredNameBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredName>;
@@ -81776,10 +82783,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u8, u8>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredName> for StoredNameBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u8, u8>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredName> for StoredNameBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredName> {
@@ -81913,7 +82920,7 @@ mod root {
         /// The table `StoredJumpLabel` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredJumpLabel` in the file `moor_program.fbs:41`
+        /// * Table `StoredJumpLabel` in the file `crates/common/schema/moor_program.fbs:41`
         #[derive(
             Clone,
             Debug,
@@ -82109,10 +83116,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-        > ::planus::WriteAs<::planus::Offset<StoredJumpLabel>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+            > ::planus::WriteAs<::planus::Offset<StoredJumpLabel>>
             for StoredJumpLabelBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredJumpLabel>;
@@ -82127,10 +83134,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredJumpLabel>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredJumpLabel>>
             for StoredJumpLabelBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredJumpLabel>;
@@ -82145,10 +83152,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-        > ::planus::WriteAsOffset<StoredJumpLabel> for StoredJumpLabelBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+            > ::planus::WriteAsOffset<StoredJumpLabel> for StoredJumpLabelBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(
@@ -82297,7 +83304,7 @@ mod root {
         /// The enum `StoredDeclType` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Enum `StoredDeclType` in the file `moor_program.fbs:48`
+        /// * Enum `StoredDeclType` in the file `crates/common/schema/moor_program.fbs:48`
         #[derive(
             Copy,
             Clone,
@@ -82504,7 +83511,7 @@ mod root {
         /// The union `StoredVarNameUnion` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Union `StoredVarNameUnion` in the file `moor_program.fbs:61`
+        /// * Union `StoredVarNameUnion` in the file `crates/common/schema/moor_program.fbs:61`
         #[derive(
             Clone,
             Debug,
@@ -82728,7 +83735,7 @@ mod root {
         /// The table `StoredNamedVar` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNamedVar` in the file `moor_program.fbs:66`
+        /// * Table `StoredNamedVar` in the file `crates/common/schema/moor_program.fbs:66`
         #[derive(
             Clone,
             Debug,
@@ -82984,7 +83991,7 @@ mod root {
         /// The table `StoredRegisterVar` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredRegisterVar` in the file `moor_program.fbs:70`
+        /// * Table `StoredRegisterVar` in the file `crates/common/schema/moor_program.fbs:70`
         #[derive(
             Clone,
             Debug,
@@ -83271,7 +84278,7 @@ mod root {
         /// The table `StoredVariable` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredVariable` in the file `moor_program.fbs:75`
+        /// * Table `StoredVariable` in the file `crates/common/schema/moor_program.fbs:75`
         #[derive(
             Clone,
             Debug,
@@ -83438,10 +84445,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
-        > ::planus::WriteAs<::planus::Offset<StoredVariable>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
+            > ::planus::WriteAs<::planus::Offset<StoredVariable>>
             for StoredVariableBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredVariable>;
@@ -83453,10 +84460,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredVariable>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredVariable>>
             for StoredVariableBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredVariable>;
@@ -83471,10 +84478,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
-        > ::planus::WriteAsOffset<StoredVariable> for StoredVariableBuilder<(T0, T1, T2)>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsUnion<self::StoredVarNameUnion>,
+            > ::planus::WriteAsOffset<StoredVariable> for StoredVariableBuilder<(T0, T1, T2)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredVariable> {
@@ -83609,7 +84616,7 @@ mod root {
         /// The table `StoredDecl` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredDecl` in the file `moor_program.fbs:82`
+        /// * Table `StoredDecl` in the file `crates/common/schema/moor_program.fbs:82`
         #[derive(
             Clone,
             Debug,
@@ -83848,12 +84855,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredDecl>>
+                T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredDecl>>
             for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<StoredDecl>;
@@ -83865,12 +84872,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredDecl>>
+                T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredDecl>>
             for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
         {
             type Prepared = ::planus::Offset<StoredDecl>;
@@ -83885,12 +84892,12 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
-            T2: ::planus::WriteAsDefault<u64, u64>,
-            T3: ::planus::WriteAsDefault<bool, bool>,
-            T4: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredDecl> for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
+                T0: ::planus::WriteAsDefault<self::StoredDeclType, self::StoredDeclType>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredVariable>>,
+                T2: ::planus::WriteAsDefault<u64, u64>,
+                T3: ::planus::WriteAsDefault<bool, bool>,
+                T4: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredDecl> for StoredDeclBuilder<(T0, T1, T2, T3, T4)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredDecl> {
@@ -84046,7 +85053,7 @@ mod root {
         /// The table `StoredNameDeclPair` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNameDeclPair` in the file `moor_program.fbs:91`
+        /// * Table `StoredNameDeclPair` in the file `crates/common/schema/moor_program.fbs:91`
         #[derive(
             Clone,
             Debug,
@@ -84177,9 +85184,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
-        > ::planus::WriteAs<::planus::Offset<StoredNameDeclPair>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
+            > ::planus::WriteAs<::planus::Offset<StoredNameDeclPair>>
             for StoredNameDeclPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNameDeclPair>;
@@ -84194,9 +85201,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredNameDeclPair>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredNameDeclPair>>
             for StoredNameDeclPairBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNameDeclPair>;
@@ -84211,9 +85218,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
-        > ::planus::WriteAsOffset<StoredNameDeclPair> for StoredNameDeclPairBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredDecl>>,
+            > ::planus::WriteAsOffset<StoredNameDeclPair> for StoredNameDeclPairBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -84344,7 +85351,7 @@ mod root {
         /// The table `StoredNames` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredNames` in the file `moor_program.fbs:96`
+        /// * Table `StoredNames` in the file `crates/common/schema/moor_program.fbs:96`
         #[derive(
             Clone,
             Debug,
@@ -84476,8 +85483,8 @@ mod root {
             pub fn decls<T1>(self, value: T1) -> StoredNamesBuilder<(T0, T1)>
             where
                 T1: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>,
+                >,
             {
                 let (v0,) = self.0;
                 StoredNamesBuilder((v0, value))
@@ -84496,9 +85503,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
-        > ::planus::WriteAs<::planus::Offset<StoredNames>> for StoredNamesBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
+            > ::planus::WriteAs<::planus::Offset<StoredNames>> for StoredNamesBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNames>;
 
@@ -84509,9 +85516,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredNames>>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredNames>>
             for StoredNamesBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredNames>;
@@ -84526,9 +85533,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u64, u64>,
-            T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
-        > ::planus::WriteAsOffset<StoredNames> for StoredNamesBuilder<(T0, T1)>
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredNameDeclPair>]>>,
+            > ::planus::WriteAsOffset<StoredNames> for StoredNamesBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<StoredNames> {
@@ -84660,7 +85667,7 @@ mod root {
         /// The union `StoredScatterLabelUnion` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Union `StoredScatterLabelUnion` in the file `moor_program.fbs:105`
+        /// * Union `StoredScatterLabelUnion` in the file `crates/common/schema/moor_program.fbs:105`
         #[derive(
             Clone,
             Debug,
@@ -84952,7 +85959,7 @@ mod root {
         /// The table `StoredScatterRequired` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterRequired` in the file `moor_program.fbs:111`
+        /// * Table `StoredScatterRequired` in the file `crates/common/schema/moor_program.fbs:111`
         #[derive(
             Clone,
             Debug,
@@ -85226,7 +86233,7 @@ mod root {
         /// The table `StoredScatterOptional` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterOptional` in the file `moor_program.fbs:115`
+        /// * Table `StoredScatterOptional` in the file `crates/common/schema/moor_program.fbs:115`
         #[derive(
             Clone,
             Debug,
@@ -85422,10 +86429,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAs<::planus::Offset<StoredScatterOptional>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAs<::planus::Offset<StoredScatterOptional>>
             for StoredScatterOptionalBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredScatterOptional>;
@@ -85440,10 +86447,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredScatterOptional>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredScatterOptional>>
             for StoredScatterOptionalBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredScatterOptional>;
@@ -85458,10 +86465,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<bool, bool>,
-        > ::planus::WriteAsOffset<StoredScatterOptional>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<StoredScatterOptional>
             for StoredScatterOptionalBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -85609,7 +86616,7 @@ mod root {
         /// The table `StoredScatterRest` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterRest` in the file `moor_program.fbs:121`
+        /// * Table `StoredScatterRest` in the file `crates/common/schema/moor_program.fbs:121`
         #[derive(
             Clone,
             Debug,
@@ -85881,7 +86888,7 @@ mod root {
         /// The table `StoredScatterLabel` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterLabel` in the file `moor_program.fbs:125`
+        /// * Table `StoredScatterLabel` in the file `crates/common/schema/moor_program.fbs:125`
         #[derive(
             Clone,
             Debug,
@@ -86145,7 +87152,7 @@ mod root {
         /// The table `StoredScatterArgs` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredScatterArgs` in the file `moor_program.fbs:129`
+        /// * Table `StoredScatterArgs` in the file `crates/common/schema/moor_program.fbs:129`
         #[derive(
             Clone,
             Debug,
@@ -86262,8 +87269,8 @@ mod root {
             pub fn labels<T0>(self, value: T0) -> StoredScatterArgsBuilder<(T0,)>
             where
                 T0: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>,
+                >,
             {
                 StoredScatterArgsBuilder((value,))
             }
@@ -86304,9 +87311,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredScatterArgs>>
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredScatterArgs>>
             for StoredScatterArgsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredScatterArgs>;
@@ -86321,9 +87328,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredScatterArgs>>
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredScatterArgs>>
             for StoredScatterArgsBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<StoredScatterArgs>;
@@ -86338,9 +87345,9 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredScatterArgs> for StoredScatterArgsBuilder<(T0, T1)>
+                T0: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterLabel>]>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredScatterArgs> for StoredScatterArgsBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(
@@ -86473,7 +87480,7 @@ mod root {
         /// The table `StoredForSequenceOperand` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredForSequenceOperand` in the file `moor_program.fbs:134`
+        /// * Table `StoredForSequenceOperand` in the file `crates/common/schema/moor_program.fbs:134`
         #[derive(
             Clone,
             Debug,
@@ -86705,11 +87712,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredForSequenceOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredForSequenceOperand>>
             for StoredForSequenceOperandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredForSequenceOperand>;
@@ -86724,11 +87731,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredForSequenceOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredForSequenceOperand>>
             for StoredForSequenceOperandBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredForSequenceOperand>;
@@ -86743,11 +87750,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredForSequenceOperand>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsOptional<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredForSequenceOperand>
             for StoredForSequenceOperandBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
@@ -86920,7 +87927,7 @@ mod root {
         /// The table `StoredForRangeOperand` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredForRangeOperand` in the file `moor_program.fbs:141`
+        /// * Table `StoredForRangeOperand` in the file `crates/common/schema/moor_program.fbs:141`
         #[derive(
             Clone,
             Debug,
@@ -87118,10 +88125,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredForRangeOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredForRangeOperand>>
             for StoredForRangeOperandBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredForRangeOperand>;
@@ -87136,10 +88143,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredForRangeOperand>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredForRangeOperand>>
             for StoredForRangeOperandBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredForRangeOperand>;
@@ -87154,10 +88161,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAsDefault<u16, u16>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredForRangeOperand>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAsDefault<u16, u16>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredForRangeOperand>
             for StoredForRangeOperandBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -87308,7 +88315,7 @@ mod root {
         /// The table `StoredRangeComprehend` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredRangeComprehend` in the file `moor_program.fbs:147`
+        /// * Table `StoredRangeComprehend` in the file `crates/common/schema/moor_program.fbs:147`
         #[derive(
             Clone,
             Debug,
@@ -87491,10 +88498,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredRangeComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredRangeComprehend>>
             for StoredRangeComprehendBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredRangeComprehend>;
@@ -87509,10 +88516,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredRangeComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredRangeComprehend>>
             for StoredRangeComprehendBuilder<(T0, T1, T2)>
         {
             type Prepared = ::planus::Offset<StoredRangeComprehend>;
@@ -87527,10 +88534,10 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredRangeComprehend>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredRangeComprehend>
             for StoredRangeComprehendBuilder<(T0, T1, T2)>
         {
             #[inline]
@@ -87678,7 +88685,7 @@ mod root {
         /// The table `StoredListComprehend` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredListComprehend` in the file `moor_program.fbs:153`
+        /// * Table `StoredListComprehend` in the file `crates/common/schema/moor_program.fbs:153`
         #[derive(
             Clone,
             Debug,
@@ -87879,11 +88886,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAs<::planus::Offset<StoredListComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAs<::planus::Offset<StoredListComprehend>>
             for StoredListComprehendBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredListComprehend>;
@@ -87898,11 +88905,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredListComprehend>>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredListComprehend>>
             for StoredListComprehendBuilder<(T0, T1, T2, T3)>
         {
             type Prepared = ::planus::Offset<StoredListComprehend>;
@@ -87917,11 +88924,11 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
-            T3: ::planus::WriteAsDefault<u16, u16>,
-        > ::planus::WriteAsOffset<StoredListComprehend>
+                T0: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T1: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T2: ::planus::WriteAs<::planus::Offset<self::StoredName>>,
+                T3: ::planus::WriteAsDefault<u16, u16>,
+            > ::planus::WriteAsOffset<StoredListComprehend>
             for StoredListComprehendBuilder<(T0, T1, T2, T3)>
         {
             #[inline]
@@ -88078,7 +89085,7 @@ mod root {
         /// The table `ForkVector` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `ForkVector` in the file `moor_program.fbs:164`
+        /// * Table `ForkVector` in the file `crates/common/schema/moor_program.fbs:164`
         #[derive(
             Clone,
             Debug,
@@ -88220,8 +89227,10 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAsDefault<u64, u64>, T1: ::planus::WriteAs<::planus::Offset<[u16]>>>
-            ::planus::WriteAs<::planus::Offset<ForkVector>> for ForkVectorBuilder<(T0, T1)>
+        impl<
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            > ::planus::WriteAs<::planus::Offset<ForkVector>> for ForkVectorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ForkVector>;
 
@@ -88231,8 +89240,10 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAsDefault<u64, u64>, T1: ::planus::WriteAs<::planus::Offset<[u16]>>>
-            ::planus::WriteAsOptional<::planus::Offset<ForkVector>>
+        impl<
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<ForkVector>>
             for ForkVectorBuilder<(T0, T1)>
         {
             type Prepared = ::planus::Offset<ForkVector>;
@@ -88246,8 +89257,10 @@ mod root {
             }
         }
 
-        impl<T0: ::planus::WriteAsDefault<u64, u64>, T1: ::planus::WriteAs<::planus::Offset<[u16]>>>
-            ::planus::WriteAsOffset<ForkVector> for ForkVectorBuilder<(T0, T1)>
+        impl<
+                T0: ::planus::WriteAsDefault<u64, u64>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+            > ::planus::WriteAsOffset<ForkVector> for ForkVectorBuilder<(T0, T1)>
         {
             #[inline]
             fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<ForkVector> {
@@ -88371,18 +89384,8 @@ mod root {
         /// The table `StoredProgram` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `StoredProgram` in the file `moor_program.fbs:173`
-        #[derive(
-            Clone,
-            Debug,
-            PartialEq,
-            PartialOrd,
-            Eq,
-            Ord,
-            Hash,
-            ::serde::Serialize,
-            ::serde::Deserialize,
-        )]
+        /// * Table `StoredProgram` in the file `crates/common/schema/moor_program.fbs:173`
+        #[derive(Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize)]
         pub struct StoredProgram {
             /// The field `version` in the table `StoredProgram`
             pub version: u16,
@@ -88391,7 +89394,7 @@ mod root {
             /// The field `fork_vectors` in the table `StoredProgram`
             pub fork_vectors: ::planus::alloc::vec::Vec<self::ForkVector>,
             /// The field `literals` in the table `StoredProgram`
-            pub literals: ::planus::alloc::vec::Vec<super::moor_common::VarBytes>,
+            pub literals: ::planus::alloc::vec::Vec<super::moor_var::Var>,
             /// The field `jump_labels` in the table `StoredProgram`
             pub jump_labels: ::planus::alloc::vec::Vec<self::StoredJumpLabel>,
             /// The field `var_names` in the table `StoredProgram`
@@ -88458,7 +89461,7 @@ mod root {
                     ::planus::Offset<[::planus::Offset<self::ForkVector>]>,
                 >,
                 field_literals: impl ::planus::WriteAs<
-                    ::planus::Offset<[::planus::Offset<super::moor_common::VarBytes>]>,
+                    ::planus::Offset<[::planus::Offset<super::moor_var::Var>]>,
                 >,
                 field_jump_labels: impl ::planus::WriteAs<
                     ::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>,
@@ -88515,7 +89518,8 @@ mod root {
                 table_writer.write_entry::<::planus::Offset<[u16]>>(1);
                 table_writer
                     .write_entry::<::planus::Offset<[::planus::Offset<self::ForkVector>]>>(2);
-                table_writer.write_entry::<::planus::Offset<[::planus::Offset<super::moor_common::VarBytes>]>>(3);
+                table_writer
+                    .write_entry::<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>(3);
                 table_writer
                     .write_entry::<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>(4);
                 table_writer.write_entry::<::planus::Offset<self::StoredNames>>(5);
@@ -88669,9 +89673,7 @@ mod root {
             #[allow(clippy::type_complexity)]
             pub fn literals<T3>(self, value: T3) -> StoredProgramBuilder<(T0, T1, T2, T3)>
             where
-                T3: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::VarBytes>]>,
-                    >,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
             {
                 let (v0, v1, v2) = self.0;
                 StoredProgramBuilder((v0, v1, v2, value))
@@ -88714,8 +89716,8 @@ mod root {
             ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             where
                 T6: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5) = self.0;
                 StoredProgramBuilder((v0, v1, v2, v3, v4, v5, value))
@@ -88731,7 +89733,9 @@ mod root {
                 value: T7,
             ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
             where
-                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T7: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5, v6) = self.0;
                 StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, value))
@@ -88748,8 +89752,8 @@ mod root {
             ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
             where
                 T8: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5, v6, v7) = self.0;
                 StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, value))
@@ -88768,8 +89772,8 @@ mod root {
             ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9)>
             where
                 T9: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5, v6, v7, v8) = self.0;
                 StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, value))
@@ -88788,8 +89792,8 @@ mod root {
             ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>
             where
                 T10: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = self.0;
                 StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, value))
@@ -88808,8 +89812,8 @@ mod root {
             ) -> StoredProgramBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>
             where
                 T11: ::planus::WriteAs<
-                        ::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>,
-                    >,
+                    ::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>,
+                >,
             {
                 let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) = self.0;
                 StoredProgramBuilder((v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, value))
@@ -88972,23 +89976,29 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::VarBytes>]>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            T8: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>>,
-            T9: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>,
-            T10: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-        > ::planus::WriteAs<::planus::Offset<StoredProgram>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+                T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+                T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            > ::planus::WriteAs<::planus::Offset<StoredProgram>>
             for StoredProgramBuilder<(
                 T0,
                 T1,
@@ -89017,23 +90027,29 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::VarBytes>]>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            T8: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>>,
-            T9: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>,
-            T10: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-        > ::planus::WriteAsOptional<::planus::Offset<StoredProgram>>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+                T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+                T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StoredProgram>>
             for StoredProgramBuilder<(
                 T0,
                 T1,
@@ -89065,23 +90081,29 @@ mod root {
         }
 
         impl<
-            T0: ::planus::WriteAsDefault<u16, u16>,
-            T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
-            T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
-            T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::VarBytes>]>>,
-            T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
-            T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
-            T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
-            T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
-            T8: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>>,
-            T9: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>>,
-            T10: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>>,
-            T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
-            T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
-            T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
-            T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
-            T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
-        > ::planus::WriteAsOffset<StoredProgram>
+                T0: ::planus::WriteAsDefault<u16, u16>,
+                T1: ::planus::WriteAs<::planus::Offset<[u16]>>,
+                T2: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkVector>]>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_var::Var>]>>,
+                T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredJumpLabel>]>>,
+                T5: ::planus::WriteAs<::planus::Offset<self::StoredNames>>,
+                T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<super::moor_common::Symbol>]>>,
+                T7: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredScatterArgs>]>>,
+                T8: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForSequenceOperand>]>,
+                >,
+                T9: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredForRangeOperand>]>,
+                >,
+                T10: ::planus::WriteAs<
+                    ::planus::Offset<[::planus::Offset<self::StoredRangeComprehend>]>,
+                >,
+                T11: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredListComprehend>]>>,
+                T12: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                T13: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::StoredProgram>]>>,
+                T14: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::LineSpan>]>>,
+                T15: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::ForkLineSpans>]>>,
+            > ::planus::WriteAsOffset<StoredProgram>
             for StoredProgramBuilder<(
                 T0,
                 T1,
@@ -89143,9 +90165,8 @@ mod root {
             #[inline]
             pub fn literals(
                 &self,
-            ) -> ::planus::Result<
-                ::planus::Vector<'a, ::planus::Result<super::moor_common::VarBytesRef<'a>>>,
-            > {
+            ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<super::moor_var::VarRef<'a>>>>
+            {
                 self.0.access_required(3, "StoredProgram", "literals")
             }
 
@@ -89394,7 +90415,7 @@ mod root {
         /// The table `LineSpan` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `LineSpan` in the file `moor_program.fbs:223`
+        /// * Table `LineSpan` in the file `crates/common/schema/moor_program.fbs:223`
         #[derive(
             Clone,
             Debug,
@@ -89697,7 +90718,7 @@ mod root {
         /// The table `ForkLineSpans` in the namespace `MoorProgram`
         ///
         /// Generated from these locations:
-        /// * Table `ForkLineSpans` in the file `moor_program.fbs:228`
+        /// * Table `ForkLineSpans` in the file `crates/common/schema/moor_program.fbs:228`
         #[derive(
             Clone,
             Debug,

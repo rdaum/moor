@@ -84,6 +84,14 @@ impl<T: ToPrimitive> BitEnum<T> {
         }
     }
 
+    #[must_use]
+    pub fn from_u16(value: u16) -> Self {
+        Self {
+            value,
+            phantom: PhantomData,
+        }
+    }
+
     pub fn new_with(value: T) -> Self {
         let mut s = Self {
             value: 0,

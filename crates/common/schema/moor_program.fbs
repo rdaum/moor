@@ -180,8 +180,8 @@ table StoredProgram {
     // Fork vectors
     fork_vectors: [ForkVector] (required);
 
-    // Literals - each as VarBytes (Var serialized)
-    literals: [MoorCommon.VarBytes] (required);
+    // Literals - each as structured Var (not bincode-serialized)
+    literals: [MoorVar.Var] (required);
 
     // Jump labels
     jump_labels: [StoredJumpLabel] (required);

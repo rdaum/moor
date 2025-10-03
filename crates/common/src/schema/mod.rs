@@ -25,16 +25,19 @@ pub mod var;
 
 pub mod convert {
     pub use crate::schema::{
-        convert_common::*, convert_errors::*, convert_events::*, convert_var::*,
+        convert_common::*, convert_defs::*, convert_errors::*, convert_events::*, convert_var::*,
     };
 }
 
 // Generated schemas
 mod convert_common;
+mod convert_defs;
 mod convert_events;
 // Made public for event_log usage
 mod convert_errors;
 mod convert_var;
 
+pub mod opcode_stream;
+pub mod program_convert;
 #[allow(dead_code, clippy::all)]
 mod schemas_generated;

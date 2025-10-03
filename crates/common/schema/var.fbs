@@ -13,8 +13,10 @@
 
 // FlatBuffer schema for MOO Var type representation
 // Used for RPC serialization where external languages need access
+// Also used for database persistence where lambdas and anonymous objects are allowed
 
 include "common.fbs";
+include "moor_program.fbs";
 
 namespace MoorVar;
 
@@ -34,8 +36,10 @@ union VarUnion {
     VarMap,
     VarSym,
     VarBinary,
-    VarFlyweight
-    // Note: Lambda is intentionally excluded - not transmittable over RPC
+    VarFlyweight,
+    VarLambda
+    // Note: Lambda is not transmittable over RPC (see var_to_flatbuffer)
+    // but is supported for database persistence (see var_to_db_flatbuffer)
 }
 
 table VarNone {
@@ -95,6 +99,13 @@ table VarFlyweight {
     delegate: MoorCommon.Obj (required);
     slots: [FlyweightSlot] (required);
     contents: VarList (required);  // Reuse VarList for contents
+}
+
+table VarLambda {
+    params: MoorProgram.StoredScatterArgs (required);
+    body: MoorProgram.StoredProgram (required);
+    captured_env: [VarList] (required);  // Vec<Vec<Var>> - vector of stack frames
+    self_var: MoorProgram.StoredName;  // Optional self-reference for recursive lambdas
 }
 
 table Var {

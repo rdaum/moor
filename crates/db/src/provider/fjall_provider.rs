@@ -28,13 +28,12 @@
 //!   hold a `ByteView` internally, so encoding just extracts the view via `AsRef<ByteView>` and
 //!   decoding uses `From<ByteView>`.
 //!
-//! - **FlatBuffer types** (`ProgramType`): Uses FlatBuffers via the `planus` crate for efficient
-//!   schema-based serialization with forward/backward compatibility.
+//! - **FlatBuffer types** (`ProgramType`, `Var`, `VerbDefs`, `PropDefs`): Uses FlatBuffers via
+//!   the `planus` crate for efficient schema-based serialization with forward/backward
+//!   compatibility. `Var` uses `var_to_db_flatbuffer` which allows lambdas and anonymous object
+//!   references for DB storage.
 //!
 //! - **UTF-8 types** (`StringHolder`): Direct UTF-8 byte encoding without additional framing.
-//!
-//! - **Bincode types** (`Var`, `VerbDefs`, `PropDefs`): Complex types that need general-purpose
-//!   serialization via `bincode`.
 //!
 //! ## Background Writing
 //!
@@ -58,6 +57,7 @@ use std::{
     time::Duration,
 };
 use tracing::error;
+use planus::{ReadAsRoot, WriteAsOffset};
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
 struct PendingOperations<Domain, Codomain>
@@ -552,24 +552,6 @@ macro_rules! impl_byteview_wrapper_encode {
     };
 }
 
-/// Encoding for types using bincode (via AsByteBuffer) - for complex types
-macro_rules! impl_bincode_encode {
-    ($type:ty) => {
-        impl EncodeFor<$type> for FjallCodec {
-            type Stored = ByteView;
-
-            fn encode(&self, value: &$type) -> Result<Self::Stored, Error> {
-                use moor_var::AsByteBuffer;
-                value.as_bytes().map_err(|_| Error::EncodingFailure)
-            }
-
-            fn decode(&self, stored: Self::Stored) -> Result<$type, Error> {
-                use moor_var::AsByteBuffer;
-                <$type>::from_bytes(stored).map_err(|_| Error::EncodingFailure)
-            }
-        }
-    };
-}
 
 // Zerocopy types - direct byte access, no serialization overhead
 impl_zerocopy_encode!(Obj);
@@ -581,10 +563,84 @@ impl_zerocopy_encode!(BitEnum<ObjFlag>);
 impl_byteview_wrapper_encode!(ObjSet);
 impl_byteview_wrapper_encode!(PropPerms);
 
-// Bincode types - complex types that need serialization
-impl_bincode_encode!(Var);
-impl_bincode_encode!(VerbDefs);
-impl_bincode_encode!(PropDefs);
+// Var - FlatBuffer encoding for DB storage (allows lambdas and anonymous objects)
+impl EncodeFor<Var> for FjallCodec {
+    type Stored = ByteView;
+
+    fn encode(&self, value: &Var) -> Result<Self::Stored, Error> {
+        // Convert to FlatBuffer struct
+        let fb_var = moor_common::schema::convert::var_to_db_flatbuffer(value)
+            .map_err(|_| Error::EncodingFailure)?;
+
+        // Serialize to bytes
+        let mut builder = planus::Builder::new();
+        let offset = fb_var.prepare(&mut builder);
+        let bytes = builder.finish(offset, None);
+
+        Ok(ByteView::from(bytes))
+    }
+
+    fn decode(&self, stored: Self::Stored) -> Result<Var, Error> {
+        // Parse FlatBuffer
+        let fb_ref = moor_common::schema::var::VarRef::read_as_root(&stored)
+            .map_err(|_| Error::EncodingFailure)?;
+
+        // Convert to owned struct
+        let fb_var: moor_common::schema::var::Var = fb_ref.try_into()
+            .map_err(|_| Error::EncodingFailure)?;
+
+        // Decode to Var
+        moor_common::schema::convert::var_from_db_flatbuffer(&fb_var)
+            .map_err(|_| Error::EncodingFailure)
+    }
+}
+
+// FlatBuffer types - VerbDefs and PropDefs
+impl EncodeFor<VerbDefs> for FjallCodec {
+    type Stored = ByteView;
+
+    fn encode(&self, value: &VerbDefs) -> Result<Self::Stored, Error> {
+        let fb_verbdefs = moor_common::schema::convert::verbdefs_to_flatbuffer(value)
+            .map_err(|_| Error::EncodingFailure)?;
+        let mut builder = planus::Builder::new();
+        let offset = fb_verbdefs.prepare(&mut builder);
+        let bytes = builder.finish(offset, None);
+        Ok(ByteView::from(bytes))
+    }
+
+    fn decode(&self, stored: Self::Stored) -> Result<VerbDefs, Error> {
+        let fb_ref = moor_common::schema::common::VerbDefsRef::read_as_root(&stored)
+            .map_err(|_| Error::EncodingFailure)?;
+        let fb_verbdefs: moor_common::schema::common::VerbDefs = fb_ref
+            .try_into()
+            .map_err(|_| Error::EncodingFailure)?;
+        moor_common::schema::convert::verbdefs_from_flatbuffer(&fb_verbdefs)
+            .map_err(|_| Error::EncodingFailure)
+    }
+}
+
+impl EncodeFor<PropDefs> for FjallCodec {
+    type Stored = ByteView;
+
+    fn encode(&self, value: &PropDefs) -> Result<Self::Stored, Error> {
+        let fb_propdefs = moor_common::schema::convert::propdefs_to_flatbuffer(value)
+            .map_err(|_| Error::EncodingFailure)?;
+        let mut builder = planus::Builder::new();
+        let offset = fb_propdefs.prepare(&mut builder);
+        let bytes = builder.finish(offset, None);
+        Ok(ByteView::from(bytes))
+    }
+
+    fn decode(&self, stored: Self::Stored) -> Result<PropDefs, Error> {
+        let fb_ref = moor_common::schema::common::PropDefsRef::read_as_root(&stored)
+            .map_err(|_| Error::EncodingFailure)?;
+        let fb_propdefs: moor_common::schema::common::PropDefs = fb_ref
+            .try_into()
+            .map_err(|_| Error::EncodingFailure)?;
+        moor_common::schema::convert::propdefs_from_flatbuffer(&fb_propdefs)
+            .map_err(|_| Error::EncodingFailure)
+    }
+}
 
 // StringHolder - direct UTF-8 encoding
 impl EncodeFor<StringHolder> for FjallCodec {

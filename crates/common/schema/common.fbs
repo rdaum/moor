@@ -449,6 +449,16 @@ table PropDef {
     name: Symbol (required);
 }
 
+// VerbDefs - Collection of verb definitions
+table VerbDefs {
+    verbs: [VerbDef] (required);
+}
+
+// PropDefs - Collection of property definitions
+table PropDefs {
+    props: [PropDef] (required);
+}
+
 // ObjAttrs - Object attributes with variable-length name
 table ObjAttrs {
     owner: Obj (required);
