@@ -11,11 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{
-    BincodeAsByteBufferExt,
-    program::{names::Variable, program::Program},
-};
-use bincode::{Decode, Encode};
+use crate::program::{names::Variable, program::Program};
 
 pub mod labels;
 pub mod names;
@@ -25,12 +21,10 @@ pub mod stored_program;
 #[allow(clippy::module_inception)]
 pub mod program;
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProgramType {
     MooR(Program),
 }
-
-impl BincodeAsByteBufferExt for ProgramType {}
 
 impl ProgramType {
     pub fn is_empty(&self) -> bool {
@@ -40,7 +34,7 @@ impl ProgramType {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DeclType {
     Global,
     Let,
@@ -53,7 +47,7 @@ pub enum DeclType {
     ForkLabel,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Decl {
     /// The type of declaration, how was it declared?
     pub decl_type: DeclType,

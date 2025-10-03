@@ -15,14 +15,13 @@ use crate::{
     Var,
     program::{opcode::ScatterArgs, program::Program},
 };
-use bincode::{Decode, Encode};
 use std::sync::Arc;
 
 /// Lambda function value containing parameter specification, compiled body, and captured environment
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Lambda(pub Arc<LambdaInner>);
 
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LambdaInner {
     /// Parameter specification (reuses scatter assignment structure)
     pub params: ScatterArgs,

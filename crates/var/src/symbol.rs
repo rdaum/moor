@@ -21,12 +21,6 @@
 //! The implementation is thread-safe and uses lock-free data structures where possible.
 
 use ahash::AHasher;
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use boxcar::Vec as BoxcarVec;
 use once_cell::sync::Lazy;
 use papaya::HashMap;
@@ -406,36 +400,6 @@ impl<'de> Deserialize<'de> for Symbol {
     }
 }
 
-impl Encode for Symbol {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.as_arc_string().encode(encoder)
-    }
-}
-
-impl<C> Decode<C> for Symbol {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let s: String = Decode::decode(decoder)?;
-        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(&s);
-        Ok(Symbol {
-            compare_id,
-            repr_id,
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for Symbol {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        // For simplicity and to ensure correct interning, decode to String first.
-        // True borrowed interning would be more complex.
-        let s: String = Decode::decode(decoder)?;
-        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(&s);
-        Ok(Symbol {
-            compare_id,
-            repr_id,
-        })
-    }
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -565,19 +529,6 @@ mod tests {
 
         assert_eq!(sym, deserialized);
         assert_eq!(sym.as_arc_string(), deserialized.as_arc_string());
-    }
-
-    #[test]
-    fn test_symbol_bincode() {
-        let sym = Symbol::mk("test_bincode");
-
-        let encoded = bincode::encode_to_vec(sym, bincode::config::standard()).unwrap();
-        let decoded: Symbol = bincode::decode_from_slice(&encoded, bincode::config::standard())
-            .unwrap()
-            .0;
-
-        assert_eq!(sym, decoded);
-        assert_eq!(sym.as_arc_string(), decoded.as_arc_string());
     }
 
     #[test]

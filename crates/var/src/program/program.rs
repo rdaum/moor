@@ -12,8 +12,7 @@
 //
 
 use crate::{
-    AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, ErrorCode, Symbol,
-    Var,
+    ErrorCode, Symbol, Var,
     program::{
         labels::{JumpLabel, Label, Offset},
         names::{Name, Names},
@@ -22,8 +21,6 @@ use crate::{
         },
     },
 };
-use bincode::{Decode, Encode};
-use byteview::ByteView;
 use lazy_static::lazy_static;
 use std::{
     fmt::{Display, Formatter},
@@ -35,10 +32,10 @@ lazy_static! {
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Program(pub Arc<PrgInner>);
 
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PrgInner {
     /// All the literals referenced in this program.
     pub literals: Vec<Var>,
@@ -236,51 +233,5 @@ impl Display for Program {
         }
 
         Ok(())
-    }
-}
-
-// Byte buffer representation is just bincoded for now.
-impl AsByteBuffer for Program {
-    fn size_bytes(&self) -> usize
-    where
-        Self: Encode,
-    {
-        // For now be careful with this as we have to bincode the whole thing in order to calculate
-        // this. In the long run with a zero-copy implementation we can just return the size of the
-        // underlying bytes.
-        let mut cw = CountingWriter { count: 0 };
-        bincode::encode_into_writer(self, &mut cw, *BINCODE_CONFIG)
-            .expect("bincode to bytes for counting size");
-        cw.count
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError>
-    where
-        Self: Sized + Encode,
-    {
-        let v = bincode::encode_to_vec(self, *BINCODE_CONFIG)
-            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))?;
-        Ok(f(&v[..]))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>
-    where
-        Self: Sized + Encode,
-    {
-        bincode::encode_to_vec(self, *BINCODE_CONFIG)
-            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
-    where
-        Self: Sized + Decode<()>,
-    {
-        Ok(bincode::decode_from_slice(bytes.as_ref(), *BINCODE_CONFIG)
-            .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?
-            .0)
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.make_copy_as_vec()?))
     }
 }

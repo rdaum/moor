@@ -15,13 +15,12 @@ use crate::{
     model::{CompileError, WorldStateError},
     tasks::TaskId,
 };
-use bincode::{Decode, Encode};
 use moor_var::{Error, Symbol, Var};
 use std::{fmt::Display, time::Duration};
 use strum::Display;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, Decode, Encode, PartialEq, Eq, Display)]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Display)]
 pub enum VerbProgramError {
     NoVerbToProgram,
     CompilationError(CompileError),
@@ -29,7 +28,7 @@ pub enum VerbProgramError {
 }
 
 /// Reasons a task might be aborted for a 'limit'
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AbortLimitReason {
     /// This task hit its allotted tick limit.
     Ticks(usize),
@@ -37,7 +36,7 @@ pub enum AbortLimitReason {
     Time(Duration),
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq)]
 pub enum SchedulerError {
     #[error("Scheduler not responding")]
     SchedulerNotResponding,
@@ -72,7 +71,7 @@ pub enum SchedulerError {
     GarbageCollectionFailed(String),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Exception {
     pub error: Error,
     pub stack: Vec<Var>,
@@ -88,7 +87,7 @@ impl Display for Exception {
 impl std::error::Error for Exception {}
 
 /// Errors related to command matching.
-#[derive(Debug, Error, Clone, Decode, Encode, Eq, PartialEq)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum CommandError {
     #[error("Could not parse command")]
     CouldNotParseCommand,
@@ -102,7 +101,7 @@ pub enum CommandError {
     PermissionDenied,
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode, Eq, PartialEq)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum WorkerError {
     #[error("Permission denied")]
     PermissionDenied(String),

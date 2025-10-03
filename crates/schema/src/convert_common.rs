@@ -17,21 +17,9 @@
 //! that are used across all message types.
 
 use moor_common::model::ObjectRef;
-use moor_var::{AsByteBuffer, Obj, Symbol, Var};
+use moor_var::{Obj, Symbol, Var};
 
-use crate::common;
-use crate::var;
-
-/// Convert from moor_var::Var to flatbuffer VarBytes (serialized)
-pub fn var_to_flatbuffer_bytes(var: &Var) -> Result<Vec<u8>, moor_var::EncodingError> {
-    var.make_copy_as_vec()
-}
-
-/// Convert from flatbuffer VarBytes data to moor_var::Var (deserialized)
-pub fn var_from_flatbuffer_bytes(data: &[u8]) -> Result<Var, moor_var::DecodingError> {
-    let bytes = byteview::ByteView::from(data.to_vec());
-    Var::from_bytes(bytes)
-}
+use crate::{common, var};
 
 /// Convert from moor_var::Symbol to flatbuffer Symbol
 pub fn symbol_to_flatbuffer_struct(symbol: &Symbol) -> common::Symbol {

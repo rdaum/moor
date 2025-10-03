@@ -19,27 +19,13 @@ use std::{
 
 use moor_var::encode::{DecodingError, EncodingError};
 
-use bincode::{Decode, Encode};
-use byteview::ByteView;
-use moor_var::AsByteBuffer;
+use moor_var::ByteSized;
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Encode,
-    Decode,
-    FromBytes,
-    Immutable,
-    IntoBytes,
+    Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, FromBytes, Immutable, IntoBytes,
 )]
 #[repr(transparent)]
 pub struct BitEnum<T: ToPrimitive> {
@@ -166,39 +152,8 @@ impl<T: ToPrimitive> From<T> for BitEnum<T> {
     }
 }
 
-impl<T: ToPrimitive> AsByteBuffer for BitEnum<T> {
+impl<T: ToPrimitive> ByteSized for BitEnum<T> {
     fn size_bytes(&self) -> usize {
         2
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(&self.value.to_le_bytes()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.value.to_le_bytes().to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
-    where
-        Self: Sized,
-    {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 2 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 2 bytes, got {}",
-                bytes.len()
-            )));
-        }
-        let mut buf = [0u8; 2];
-        buf.copy_from_slice(bytes);
-        Ok(Self {
-            value: u16::from_le_bytes(buf),
-            phantom: PhantomData,
-        })
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.value.to_le_bytes().to_vec()))
     }
 }

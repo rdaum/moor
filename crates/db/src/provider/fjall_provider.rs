@@ -502,8 +502,7 @@ use moor_common::{
     model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
     util::BitEnum,
 };
-use moor_schema::convert::var_to_db_flatbuffer;
-use moor_schema::convert::{program_to_stored, stored_to_program};
+use moor_schema::convert::{program_to_stored, stored_to_program, var_to_db_flatbuffer};
 use moor_var::{Obj, Var, program::ProgramType};
 // Per-type encoding implementations
 // Each type can be encoded regardless of whether it's used as Domain or Codomain

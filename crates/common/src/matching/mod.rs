@@ -12,7 +12,6 @@
 //
 
 use crate::model::{ObjSet, PrepSpec, WorldStateError};
-use bincode::{Decode, Encode};
 use moor_var::{Obj, Symbol, Var};
 
 pub mod command_parse;
@@ -39,7 +38,7 @@ pub use prepositions::{Preposition, find_preposition, find_preposition_for_comma
 
 /// Output from command matching, which is then used to match against the verb present in the
 /// environment.
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
     pub verb: Symbol,
     pub argstr: String,
@@ -77,7 +76,7 @@ pub trait MatchEnvironment {
     fn location_of(&self, player: &Obj) -> Result<Obj, WorldStateError>;
 }
 
-#[derive(thiserror::Error, Debug, Clone, Decode, Encode)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum ParseCommandError {
     #[error("Empty command")]
     EmptyCommand,

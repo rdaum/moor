@@ -13,9 +13,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use byteview::ByteView;
 use moor_common::model::{CommitResult, WorldState, WorldStateError, WorldStateSource};
-use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj, Var};
+use moor_var::{ByteSized, EncodingError, Obj, Var};
 use std::{cmp::Ordering, path::Path, sync::Arc};
 
 use uuid::Uuid;
@@ -191,27 +190,9 @@ fn extract_anonymous_refs_recursive(var: &Var, refs: &mut Vec<Obj>) {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StringHolder(pub String);
 
-impl AsByteBuffer for StringHolder {
+impl ByteSized for StringHolder {
     fn size_bytes(&self) -> usize {
         self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_bytes()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_bytes().to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        Ok(Self(
-            String::from_utf8(bytes.to_vec()).expect("Invalid UTF-8"),
-        ))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.0.as_bytes().to_vec()))
     }
 }
 
@@ -229,63 +210,18 @@ impl UUIDHolder {
     }
 }
 
-impl AsByteBuffer for UUIDHolder {
+impl ByteSized for UUIDHolder {
     fn size_bytes(&self) -> usize {
         16
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        // Zero-copy: direct access to the struct's bytes
-        Ok(f(IntoBytes::as_bytes(self)))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        // Zero-copy to Vec
-        Ok(IntoBytes::as_bytes(self).to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 16 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 16 bytes, got {}",
-                bytes.len()
-            )));
-        }
-
-        // Use zerocopy to safely transmute from bytes
-        Self::read_from_bytes(bytes)
-            .map_err(|_| DecodingError::CouldNotDecode("Invalid bytes for UUIDHolder".to_string()))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        // Zero-copy: create ByteView directly from struct bytes
-        Ok(ByteView::from(IntoBytes::as_bytes(self)))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BytesHolder(Vec<u8>);
 
-impl AsByteBuffer for BytesHolder {
+impl ByteSized for BytesHolder {
     fn size_bytes(&self) -> usize {
         self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.clone())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        Ok(Self(bytes.to_vec()))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.0.clone()))
     }
 }
 
@@ -307,39 +243,9 @@ impl SystemTimeHolder {
     }
 }
 
-impl AsByteBuffer for SystemTimeHolder {
+impl ByteSized for SystemTimeHolder {
     fn size_bytes(&self) -> usize {
         16
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        // Zero-copy: direct access to the struct's bytes
-        Ok(f(IntoBytes::as_bytes(self)))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        // Zero-copy to Vec
-        Ok(IntoBytes::as_bytes(self).to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 16 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 16 bytes for SystemTimeHolder, got {}",
-                bytes.len()
-            )));
-        }
-
-        // Use zerocopy to safely transmute from bytes
-        Self::read_from_bytes(bytes).map_err(|_| {
-            DecodingError::CouldNotDecode("Invalid bytes for SystemTimeHolder".to_string())
-        })
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        // Zero-copy: create ByteView directly from struct bytes
-        Ok(ByteView::from(IntoBytes::as_bytes(self)))
     }
 }
 
@@ -468,75 +374,15 @@ impl std::hash::Hash for AnonymousObjectMetadata {
     }
 }
 
-impl AsByteBuffer for AnonymousObjectMetadata {
+impl ByteSized for AnonymousObjectMetadata {
     fn size_bytes(&self) -> usize {
         33 // Fixed size: 1 byte (generation) + 16 bytes (created) + 16 bytes (last_accessed)
     }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        // Zero-copy: direct access to the struct's bytes
-        Ok(f(IntoBytes::as_bytes(self)))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        // Zero-copy to Vec
-        Ok(IntoBytes::as_bytes(self).to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 33 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 33 bytes for AnonymousObjectMetadata, got {}",
-                bytes.len()
-            )));
-        }
-
-        // Use zerocopy to safely transmute from bytes
-        Self::read_from_bytes(bytes).map_err(|_| {
-            DecodingError::CouldNotDecode("Invalid bytes for AnonymousObjectMetadata".to_string())
-        })
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        // Zero-copy: create ByteView directly from struct bytes
-        Ok(ByteView::from(IntoBytes::as_bytes(self).to_vec()))
-    }
 }
 
-impl AsByteBuffer for ObjAndUUIDHolder {
+impl ByteSized for ObjAndUUIDHolder {
     fn size_bytes(&self) -> usize {
         24 // Fixed size: 16 bytes (UUID) + 8 bytes (u64)
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        // Zero-copy: direct access to the struct's bytes
-        Ok(f(IntoBytes::as_bytes(self)))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        // Zero-copy to Vec
-        Ok(IntoBytes::as_bytes(self).to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 24 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 24 bytes for ObjAndUUIDHolder, got {}",
-                bytes.len()
-            )));
-        }
-
-        // Use zerocopy to safely transmute from bytes
-        Self::read_from_bytes(bytes).map_err(|_| {
-            DecodingError::CouldNotDecode("Invalid bytes for ObjAndUUIDHolder".to_string())
-        })
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        // Zero-copy: create ByteView directly from struct bytes
-        Ok(ByteView::from(IntoBytes::as_bytes(self).to_vec()))
     }
 }
 
@@ -619,19 +465,20 @@ impl CacheStats {
 #[cfg(test)]
 mod tests {
     use crate::ObjAndUUIDHolder;
-    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
+    use moor_var::SYSTEM_OBJECT;
     use std::{
         collections::BTreeSet,
         hash::{Hash, Hasher},
     };
     use uuid::Uuid;
+    use zerocopy::{FromBytes, IntoBytes};
 
     #[test]
     fn test_reconstitute_obj_uuid_holder() {
         let u = Uuid::new_v4();
         let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
-        let bytes = oh.as_bytes().unwrap();
-        let oh2 = ObjAndUUIDHolder::from_bytes(bytes).unwrap();
+        let bytes = oh.as_bytes();
+        let oh2 = ObjAndUUIDHolder::read_from_bytes(bytes).unwrap();
         assert_eq!(oh, oh2);
         assert_eq!(oh.uuid(), oh2.uuid());
         assert_eq!(oh.obj(), oh2.obj());

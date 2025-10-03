@@ -32,18 +32,12 @@
 //! `< delegate, [ slot -> value, ... ], contents >`
 
 use crate::{Error, List, Obj, Sequence, Symbol, Var, Variant, error::ErrorCode::E_TYPE};
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use std::{
     fmt::{Debug, Formatter},
     hash::Hash,
 };
 
-#[derive(Clone, Encode, Decode, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Flyweight(Box<Inner>);
 
 #[derive(Clone, PartialOrd, Ord, Eq)]
@@ -69,55 +63,6 @@ impl Hash for Flyweight {
     }
 }
 
-impl Encode for Inner {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.delegate.encode(encoder)?;
-        self.slots.len().encode(encoder)?;
-        for (k, v) in &self.slots {
-            k.encode(encoder)?;
-            v.encode(encoder)?;
-        }
-        self.contents.encode(encoder)
-    }
-}
-
-impl<C> Decode<C> for Inner {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let delegate = Obj::decode(decoder)?;
-        let len = usize::decode(decoder)?;
-        let mut slots = im::Vector::new();
-        for _ in 0..len {
-            let k = Symbol::decode(decoder)?;
-            let v = Var::decode(decoder)?;
-            slots.push_back((k, v));
-        }
-        let contents = List::decode(decoder)?;
-        Ok(Self {
-            delegate,
-            slots,
-            contents,
-        })
-    }
-}
-
-impl<'a, C> BorrowDecode<'a, C> for Inner {
-    fn borrow_decode<D: BorrowDecoder<'a>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let delegate = Obj::borrow_decode(decoder)?;
-        let len = usize::borrow_decode(decoder)?;
-        let mut slots = im::Vector::new();
-        for _ in 0..len {
-            let k = Symbol::borrow_decode(decoder)?;
-            let v = Var::borrow_decode(decoder)?;
-            slots.push_back((k, v));
-        }
-        let contents = List::borrow_decode(decoder)?;
-        Ok(Self {
-            delegate,
-            slots,
-            contents,
-        })
-    }
-}
 impl Debug for Flyweight {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(

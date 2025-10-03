@@ -12,8 +12,7 @@
 //
 
 use crate::{
-    Associative, BincodeAsByteBufferExt, Error, Flyweight, IndexMode, Obj, Sequence, Symbol,
-    TypeClass, VarType,
+    Associative, ByteSized, Error, Flyweight, IndexMode, Obj, Sequence, Symbol, TypeClass, VarType,
     error::{
         ErrorCode,
         ErrorCode::{E_INVARG, E_RANGE, E_TYPE},
@@ -22,7 +21,6 @@ use crate::{
     map,
     variant::Variant,
 };
-use bincode::{Decode, Encode};
 use std::{
     cmp::{Ordering, min},
     fmt::{Debug, Formatter},
@@ -30,10 +28,8 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone)]
 pub struct Var(Variant);
-
-impl BincodeAsByteBufferExt for Var {}
 
 impl Debug for Var {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -895,6 +891,12 @@ impl PartialOrd<Self> for Var {
 impl Hash for Var {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.variant().hash(state)
+    }
+}
+
+impl ByteSized for Var {
+    fn size_bytes(&self) -> usize {
+        self.0.size_bytes()
     }
 }
 

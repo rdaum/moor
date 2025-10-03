@@ -14,12 +14,15 @@
 //! Conversion between moor model types (VerbDef, PropDef, etc.) and FlatBuffers representation
 
 use crate::{common, convert_common};
-use moor_common::matching::Preposition;
-use moor_common::model::{
-    ArgSpec as ModelArgSpec, Defs, HasUuid, Named, PrepSpec as ModelPrepSpec,
-    PropDef as ModelPropDef, ValSet, VerbArgsSpec as ModelVerbArgsSpec, VerbDef as ModelVerbDef,
+use moor_common::{
+    matching::Preposition,
+    model::{
+        ArgSpec as ModelArgSpec, Defs, HasUuid, Named, PrepSpec as ModelPrepSpec,
+        PropDef as ModelPropDef, ValSet, VerbArgsSpec as ModelVerbArgsSpec,
+        VerbDef as ModelVerbDef,
+    },
+    util::BitEnum,
 };
-use moor_common::util::BitEnum;
 use moor_var::Symbol;
 use thiserror::Error;
 use uuid::Uuid;

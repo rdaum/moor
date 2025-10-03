@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -34,7 +33,7 @@ use moor_var::{
 };
 
 /// Specifies the way the object ID should be allocated when creating a new object.
-#[derive(Debug, Clone, Eq, PartialEq, Decode, Encode)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ObjectKind {
     /// Create an object with a specific numeric ID (for create_at).
     Objid(Obj),
@@ -47,7 +46,7 @@ pub enum ObjectKind {
 }
 
 /// Errors related to the world state and operations on it.
-#[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
+#[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub enum WorldStateError {
     #[error("Object not found: {0}")]
     ObjectNotFound(ObjectRef),

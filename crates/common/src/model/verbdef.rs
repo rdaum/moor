@@ -19,19 +19,17 @@ use crate::{
     },
     util::{BitEnum, verbcasecmp},
 };
-use bincode::{Decode, Encode};
-use moor_var::{BincodeAsByteBufferExt, Obj, Symbol};
+use moor_var::{ByteSized, Obj, Symbol};
 use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VerbDef {
     inner: Arc<VerbDefInner>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct VerbDefInner {
-    #[bincode(with_serde)]
     uuid: Uuid,
     location: Obj,
     owner: Obj,
@@ -117,9 +115,19 @@ impl HasUuid for VerbDef {
     }
 }
 
-impl BincodeAsByteBufferExt for VerbDef {}
-
 pub type VerbDefs = Defs<VerbDef>;
+
+impl ByteSized for VerbDef {
+    fn size_bytes(&self) -> usize {
+        size_of::<Uuid>()
+            + self.inner.location.size_bytes()
+            + self.inner.owner.size_bytes()
+            + self.inner.flags.size_bytes()
+            + size_of::<BitEnum<VerbFlag>>()
+            + size_of::<VerbArgsSpec>()
+            + self.inner.names.len() * size_of::<Symbol>()
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -19,6 +19,9 @@
 // Note: This schema is daemon-specific and doesn't need to be shared with
 // other crates since connection records are an internal daemon concern.
 
+include "../../../schema/schema/common.fbs";
+include "../../../schema/schema/var.fbs";
+
 namespace MoorConnections;
 
 // ============================================================================
@@ -32,8 +35,8 @@ table ByteArray {
 
 // Key-value pair for client attributes
 table ClientAttribute {
-    key: ByteArray (required);    // Symbol as bytes
-    value: ByteArray (required);  // Var as bincode bytes
+    key: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
 }
 
 // A single connection record containing client information
@@ -50,7 +53,7 @@ table ConnectionRecord {
     local_port: uint16;
     remote_port: uint16;
     // acceptable_content_types stored as Symbol bytes
-    acceptable_content_types: [ByteArray] (required);
+    acceptable_content_types: [MoorCommon.Symbol] (required);
     // client_attributes as key-value pairs
     client_attributes: [ClientAttribute] (required);
 }

@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
 use strsim::damerau_levenshtein;
 use strum::FromRepr;
 
@@ -21,7 +20,7 @@ use strum::FromRepr;
 ///   Long run a proper table with some sort of dynamic look up and a way to add new ones and
 ///   internationalize and so on.
 #[repr(u16)]
-#[derive(Copy, Clone, Debug, FromRepr, Eq, PartialEq, Hash, Encode, Decode, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, FromRepr, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Preposition {
     WithUsing = 0,
     AtTo = 1,

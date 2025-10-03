@@ -12,7 +12,6 @@
 //
 
 use binary_layout::LayoutAs;
-use bincode::{Decode, Encode};
 use strum::FromRepr;
 
 use crate::{
@@ -21,7 +20,7 @@ use crate::{
 };
 use moor_var::encode::{DecodingError, EncodingError};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd)]
 #[repr(u8)]
 pub enum ArgSpec {
     None = 0,
@@ -81,7 +80,7 @@ pub fn preposition_to_string(ps: &PrepSpec) -> &str {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum PrepSpec {
     Any,
     None,
@@ -123,7 +122,7 @@ impl LayoutAs<i16> for PrepSpec {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct VerbArgsSpec {
     pub dobj: ArgSpec,
     pub prep: PrepSpec,

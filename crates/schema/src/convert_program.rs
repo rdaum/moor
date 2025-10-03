@@ -13,23 +13,19 @@
 
 //! Conversion between Program (runtime) and StoredProgram (FlatBuffer wire format).
 
-use crate::convert_var::{
-    ConversionContext, var_from_flatbuffer_internal, var_to_flatbuffer_internal,
+use crate::{
+    convert_var::{ConversionContext, var_from_flatbuffer_internal, var_to_flatbuffer_internal},
+    opcode_stream::{OpStream, error_code_from_discriminant, error_code_to_discriminant},
+    program as fb,
 };
-use crate::opcode_stream::{OpStream, error_code_from_discriminant, error_code_to_discriminant};
-use crate::program as fb;
 use byteview::ByteView;
-use moor_var::program::labels::{JumpLabel, Offset};
-use moor_var::program::names::VarName;
-use moor_var::program::opcode::ForSequenceOperand;
-use moor_var::program::program::PrgInner;
 use moor_var::{
     ErrorCode,
     program::{
-        labels::Label,
-        names::Name,
-        opcode::{ScatterArgs, ScatterLabel},
-        program::Program,
+        labels::{JumpLabel, Label, Offset},
+        names::{Name, VarName},
+        opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel},
+        program::{PrgInner, Program},
         stored_program::StoredProgram,
     },
 };
@@ -419,8 +415,10 @@ pub fn stored_to_program(stored: &StoredProgram) -> Result<Program, DecodeError>
     let fb_literals = fb_program
         .literals()
         .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read literals: {e}")))?;
-    use crate::convert_var::{ConversionContext, var_from_flatbuffer_internal};
-    use crate::var as fb_var;
+    use crate::{
+        convert_var::{ConversionContext, var_from_flatbuffer_internal},
+        var as fb_var,
+    };
     let literals: Result<Vec<moor_var::Var>, DecodeError> = fb_literals
         .iter()
         .map(|lit_result| {

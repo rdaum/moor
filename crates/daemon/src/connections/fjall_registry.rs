@@ -29,10 +29,11 @@ use byteview::ByteView;
 use eyre::{Error, bail};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_common::tasks::SessionError;
-use moor_var::{AsByteBuffer, Obj, Symbol, Var};
+use moor_var::{Obj, Symbol, Var};
 use rpc_common::RpcMessageError;
 use tracing::info;
 use uuid::Uuid;
+use zerocopy::IntoBytes;
 
 /// Timestamp data for a client connection (cached in memory for performance)
 #[derive(Debug, Clone)]
@@ -167,7 +168,7 @@ impl FjallConnectionRegistry {
 
         // Try to update connection_records
         if let Ok(conn_obj_bytes) = Self::get_connection_obj_for_client_sync(&guard, client_id)
-            && let Ok(Some(bytes)) = guard.connection_records_table.get(conn_obj_bytes.clone())
+            && let Ok(Some(bytes)) = guard.connection_records_table.get(&conn_obj_bytes)
             && let Ok(mut connections_record) = connections_records_from_bytes(&bytes)
             && let Some(cr) = connections_record
                 .connections
@@ -191,9 +192,8 @@ impl FjallConnectionRegistry {
         if let Ok(Some(bytes)) = guard
             .client_player_table
             .get(client_id.as_u128().to_le_bytes())
-            && let Ok(player_obj) = Obj::from_bytes(ByteView::from(bytes.as_ref()))
-            && let Ok(player_oid_bytes) = player_obj.as_bytes()
-            && let Ok(Some(bytes)) = guard.player_clients_table.get(player_oid_bytes.clone())
+            && let Ok(player_obj) = Obj::from_bytes(bytes.as_ref())
+            && let Ok(Some(bytes)) = guard.player_clients_table.get(player_obj.as_bytes())
             && let Ok(mut player_connections) = connections_records_from_bytes(&bytes)
             && let Some(cr) = player_connections
                 .connections
@@ -209,7 +209,7 @@ impl FjallConnectionRegistry {
             if let Ok(encoded) = connections_records_to_bytes(&player_connections) {
                 let _ = guard
                     .player_clients_table
-                    .insert(player_oid_bytes, &encoded);
+                    .insert(player_obj.as_bytes(), &encoded);
             }
         }
     }
@@ -218,17 +218,15 @@ impl FjallConnectionRegistry {
         guard: &FjallInner,
         client_id: Uuid,
     ) -> Result<ByteView, Error> {
-        match guard
+        let v = guard
             .client_connection_table
-            .get(client_id.as_u128().to_le_bytes())?
-        {
-            Some(bytes) => {
-                let obj = Obj::from_bytes(ByteView::from(bytes.as_ref()))?;
-                obj.as_bytes()
-                    .map_err(|e| eyre::eyre!("Failed to serialize obj: {}", e))
-            }
-            None => bail!("No connection found"),
-        }
+            .get(client_id.as_u128().to_le_bytes())?;
+
+        let Some(conn_obj_bytes) = v else {
+            bail!("No connection found for {client_id}")
+        };
+
+        Ok(conn_obj_bytes.into())
     }
 
     fn remove_from_player_connections(inner: &FjallInner, client_uuid: Uuid, client_id: u128) {
@@ -239,15 +237,13 @@ impl FjallConnectionRegistry {
             return;
         };
 
-        let Ok(player_obj) = Obj::from_bytes(ByteView::from(bytes.as_ref())) else {
+        let Ok(player_obj) = Obj::from_bytes(bytes.as_ref()) else {
             return;
         };
 
-        let Ok(player_oid_bytes) = player_obj.as_bytes() else {
-            return;
-        };
+        let player_oid_bytes = player_obj.as_bytes();
 
-        let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes.clone()) else {
+        let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) else {
             return;
         };
 
@@ -273,11 +269,9 @@ impl FjallConnectionRegistry {
     }
 
     fn remove_from_connection_records(inner: &FjallInner, connection_id: Obj, client_id: u128) {
-        let Ok(conn_oid_bytes) = connection_id.as_bytes() else {
-            return;
-        };
+        let conn_oid_bytes = connection_id.as_bytes();
 
-        let Ok(Some(bytes)) = inner.connection_records_table.get(conn_oid_bytes.clone()) else {
+        let Ok(Some(bytes)) = inner.connection_records_table.get(conn_oid_bytes) else {
             return;
         };
 
@@ -304,15 +298,15 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         let inner = self.inner.lock().unwrap();
 
         // Get connection records for this connection_obj
-        let oid_bytes = connection_obj.as_bytes()?;
+        let oid_bytes = connection_obj.as_bytes();
         let connections_record = match inner.connection_records_table.get(oid_bytes)? {
             Some(bytes) => connections_records_from_bytes(&bytes)?,
             None => bail!("No connection found for {:?}", connection_obj),
         };
 
         // Get or create player connections
-        let player_oid_bytes = player_obj.as_bytes()?;
-        let mut player_conns = match inner.player_clients_table.get(player_oid_bytes.clone())? {
+        let player_oid_bytes = player_obj.as_bytes();
+        let mut player_conns = match inner.player_clients_table.get(player_oid_bytes)? {
             Some(bytes) => connections_records_from_bytes(&bytes)?,
             None => ConnectionsRecords {
                 connections: vec![],
@@ -328,14 +322,17 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                 .client_player_table
                 .get(client_id.as_u128().to_le_bytes())?
             {
-                Some(bytes) => Obj::from_bytes(ByteView::from(bytes.as_ref()))? == player_obj,
+                Some(bytes) => {
+                    let oid = Obj::from_bytes(bytes.as_ref())?;
+                    oid == player_obj
+                }
                 None => false,
             };
 
             if !already_associated {
                 inner
                     .client_player_table
-                    .insert(client_id.as_u128().to_le_bytes(), player_obj.as_bytes()?)?;
+                    .insert(client_id.as_u128().to_le_bytes(), player_obj.as_bytes())?;
             }
 
             // Add to player connections if not already there
@@ -365,7 +362,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .client_player_table
             .get(client_id.as_u128().to_le_bytes())?
         {
-            Some(bytes) => Some(Obj::from_bytes(ByteView::from(bytes.as_ref()))?),
+            Some(bytes) => Some(Obj::from_bytes(bytes.as_ref())?),
             None => None,
         };
 
@@ -374,12 +371,12 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .client_connection_table
             .get(client_id.as_u128().to_le_bytes())?
         {
-            Some(bytes) => Obj::from_bytes(ByteView::from(bytes.as_ref()))?,
+            Some(bytes) => Obj::from_bytes(bytes.as_ref())?,
             None => bail!("No connection found for client {:?}", client_id),
         };
 
         // Get the connection record
-        let conn_oid_bytes = connection_obj.as_bytes()?;
+        let conn_oid_bytes = connection_obj.as_bytes();
         let connections_record = match inner.connection_records_table.get(conn_oid_bytes)? {
             Some(bytes) => connections_records_from_bytes(&bytes)?,
             None => bail!("No connection records found"),
@@ -395,12 +392,12 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // Update client -> player mapping
         inner
             .client_player_table
-            .insert(client_id.as_u128().to_le_bytes(), new_player.as_bytes()?)?;
+            .insert(client_id.as_u128().to_le_bytes(), new_player.as_bytes())?;
 
         // Remove from old player's connections if exists
         if let Some(old_player_obj) = old_player {
-            let old_player_bytes = old_player_obj.as_bytes()?;
-            if let Some(bytes) = inner.player_clients_table.get(old_player_bytes.clone())? {
+            let old_player_bytes = old_player_obj.as_bytes();
+            if let Some(bytes) = inner.player_clients_table.get(old_player_bytes)? {
                 let mut old_conns = connections_records_from_bytes(&bytes)?;
                 old_conns
                     .connections
@@ -418,8 +415,8 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         }
 
         // Add to new player's connections
-        let new_player_bytes = new_player.as_bytes()?;
-        let mut new_conns = match inner.player_clients_table.get(new_player_bytes.clone())? {
+        let new_player_bytes = new_player.as_bytes();
+        let mut new_conns = match inner.player_clients_table.get(new_player_bytes)? {
             Some(bytes) => connections_records_from_bytes(&bytes)?,
             None => ConnectionsRecords {
                 connections: vec![],
@@ -478,12 +475,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // Store client -> connection mapping (synchronous - needed for immediate lookup)
         inner
             .client_connection_table
-            .insert(
-                client_id.as_u128().to_le_bytes(),
-                connection_id
-                    .as_bytes()
-                    .map_err(|e| RpcMessageError::InternalError(e.to_string()))?,
-            )
+            .insert(client_id.as_u128().to_le_bytes(), connection_id.as_bytes())
             .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
 
         // Build connection record
@@ -501,13 +493,9 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         };
 
         // Store connection records (synchronous - needed for immediate lookup)
-        let Ok(conn_oid_bytes) = connection_id.as_bytes() else {
-            return Err(RpcMessageError::InternalError(
-                "Failed to serialize connection ID".to_string(),
-            ));
-        };
+        let conn_oid_bytes = connection_id.as_bytes();
 
-        let Ok(existing) = inner.connection_records_table.get(conn_oid_bytes.clone()) else {
+        let Ok(existing) = inner.connection_records_table.get(conn_oid_bytes) else {
             return Err(RpcMessageError::InternalError(
                 "Failed to read connection records".to_string(),
             ));
@@ -546,23 +534,18 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
         // Store client -> player mapping and player connections if needed (synchronous - needed for immediate lookup)
         if let Some(player_obj) = player {
-            let Ok(player_oid_bytes) = player_obj.as_bytes() else {
-                return Err(RpcMessageError::InternalError(
-                    "Failed to serialize player ID".to_string(),
-                ));
-            };
+            let player_oid_bytes = player_obj.as_bytes();
 
             let Ok(()) = inner
                 .client_player_table
-                .insert(client_id.as_u128().to_le_bytes(), player_oid_bytes.clone())
+                .insert(client_id.as_u128().to_le_bytes(), player_oid_bytes)
             else {
                 return Err(RpcMessageError::InternalError(
                     "Failed to write client-player mapping".to_string(),
                 ));
             };
 
-            let Ok(existing_conns) = inner.player_clients_table.get(player_oid_bytes.clone())
-            else {
+            let Ok(existing_conns) = inner.player_clients_table.get(player_oid_bytes) else {
                 return Err(RpcMessageError::InternalError(
                     "Failed to read player connections".to_string(),
                 ));
@@ -670,7 +653,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
                     if let Ok(Some(bytes)) = inner
                         .client_connection_table
                         .get(client_uuid.as_u128().to_le_bytes())
-                        && let Ok(connection_id) = Obj::from_bytes(ByteView::from(bytes.as_ref()))
+                        && let Ok(connection_id) = Obj::from_bytes(bytes.as_ref())
                     {
                         to_remove.push((connection_id, client_uuid.as_u128()));
                     }
@@ -719,12 +702,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let player_oid_bytes = player
-            .as_bytes()
-            .map_err(|_| SessionError::NoConnectionForPlayer(player))?;
+        let player_oid_bytes = player.as_bytes();
 
         let connections_record =
-            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes.clone()) {
+            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) {
                 connections_records_from_bytes(&bytes)
                     .map_err(|_| SessionError::NoConnectionForPlayer(player))?
             } else if let Ok(Some(bytes)) = inner.connection_records_table.get(player_oid_bytes) {
@@ -748,12 +729,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let player_oid_bytes = player
-            .as_bytes()
-            .map_err(|_| SessionError::NoConnectionForPlayer(player))?;
+        let player_oid_bytes = player.as_bytes();
 
         let connections_record =
-            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes.clone()) {
+            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) {
                 connections_records_from_bytes(&bytes)
                     .map_err(|_| SessionError::NoConnectionForPlayer(player))?
             } else if let Ok(Some(bytes)) = inner.connection_records_table.get(player_oid_bytes) {
@@ -780,12 +759,10 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     fn client_ids_for(&self, player: Obj) -> Result<Vec<Uuid>, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let player_oid_bytes = player
-            .as_bytes()
-            .map_err(|_| SessionError::NoConnectionForPlayer(player))?;
+        let player_oid_bytes = player.as_bytes();
 
         let connections_record =
-            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes.clone()) {
+            if let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes) {
                 connections_records_from_bytes(&bytes)
                     .map_err(|_| SessionError::NoConnectionForPlayer(player))?
             } else if let Ok(Some(bytes)) = inner.connection_records_table.get(player_oid_bytes) {
@@ -815,7 +792,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             let Ok((key, _)) = entry else {
                 continue;
             };
-            if let Ok(oid) = Obj::from_bytes(ByteView::from(key.as_ref())) {
+            if let Ok(oid) = Obj::from_bytes(key.as_ref()) {
                 connections.push(oid);
             }
         }
@@ -823,7 +800,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         // Get all player objects
         for entry in inner.player_clients_table.iter() {
             if let Ok((key, _)) = entry
-                && let Ok(oid) = Obj::from_bytes(ByteView::from(key.as_ref()))
+                && let Ok(oid) = Obj::from_bytes(key.as_ref())
             {
                 connections.push(oid);
             }
@@ -840,7 +817,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .client_connection_table
             .get(client_id.as_u128().to_le_bytes())
             .ok()??;
-        Obj::from_bytes(ByteView::from(bytes.as_ref())).ok()
+        Obj::from_bytes(bytes.as_ref()).ok()
     }
 
     fn player_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
@@ -849,7 +826,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .client_player_table
             .get(client_id.as_u128().to_le_bytes())
             .ok()??;
-        Obj::from_bytes(ByteView::from(bytes.as_ref())).ok()
+        Obj::from_bytes(bytes.as_ref()).ok()
     }
 
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
@@ -863,7 +840,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .client_connection_table
             .get(client_id.as_u128().to_le_bytes())?
         {
-            Some(bytes) => Obj::from_bytes(ByteView::from(bytes.as_ref()))?,
+            Some(bytes) => Obj::from_bytes(bytes.as_ref())?,
             None => bail!("No connection to prune found for {:?}", client_id),
         };
 
@@ -871,7 +848,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .client_player_table
             .get(client_id.as_u128().to_le_bytes())?
         {
-            Some(bytes) => Some(Obj::from_bytes(ByteView::from(bytes.as_ref()))?),
+            Some(bytes) => Some(Obj::from_bytes(bytes.as_ref())?),
             None => None,
         };
 
@@ -884,8 +861,8 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .remove(client_id.as_u128().to_le_bytes())?;
 
         // Remove from connection records (flush cached timestamps first)
-        let conn_oid_bytes = connection_obj.as_bytes()?;
-        if let Some(bytes) = inner.connection_records_table.get(conn_oid_bytes.clone())? {
+        let conn_oid_bytes = connection_obj.as_bytes();
+        if let Some(bytes) = inner.connection_records_table.get(conn_oid_bytes)? {
             let mut connections_record = connections_records_from_bytes(&bytes)?;
 
             // Flush cached timestamps before removing
@@ -915,8 +892,8 @@ impl ConnectionRegistry for FjallConnectionRegistry {
 
         // Remove from player connections if logged in (flush cached timestamps first)
         if let Some(player_obj) = player_obj {
-            let player_oid_bytes = player_obj.as_bytes()?;
-            if let Some(bytes) = inner.player_clients_table.get(player_oid_bytes.clone())? {
+            let player_oid_bytes = player_obj.as_bytes();
+            if let Some(bytes) = inner.player_clients_table.get(player_oid_bytes)? {
                 let mut connections_record = connections_records_from_bytes(&bytes)?;
 
                 // Flush cached timestamps before removing
@@ -951,12 +928,9 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     fn acceptable_content_types_for(&self, connection: Obj) -> Result<Vec<Symbol>, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let conn_oid_bytes = connection
-            .as_bytes()
-            .map_err(|_| SessionError::NoConnectionForPlayer(connection))?;
-
+        let conn_oid_bytes = connection.as_bytes();
         let connection_records =
-            if let Ok(Some(bytes)) = inner.connection_records_table.get(conn_oid_bytes.clone()) {
+            if let Ok(Some(bytes)) = inner.connection_records_table.get(conn_oid_bytes) {
                 connections_records_from_bytes(&bytes)
                     .map_err(|_| SessionError::NoConnectionForPlayer(connection))?
             } else if let Ok(Some(bytes)) = inner.player_clients_table.get(conn_oid_bytes) {
@@ -987,19 +961,17 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             .get(client_id.as_u128().to_le_bytes())
             .map_err(|e| RpcMessageError::InternalError(e.to_string()))?
         {
-            Some(bytes) => Obj::from_bytes(ByteView::from(bytes.as_ref()))
+            Some(bytes) => Obj::from_bytes(bytes.as_ref())
                 .map_err(|e| RpcMessageError::InternalError(e.to_string()))?,
             None => return Err(RpcMessageError::NoConnection),
         };
 
         // Update in connection_records
-        let conn_oid_bytes = connection_obj
-            .as_bytes()
-            .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
+        let conn_oid_bytes = connection_obj.as_bytes();
 
         if let Some(bytes) = inner
             .connection_records_table
-            .get(conn_oid_bytes.clone())
+            .get(conn_oid_bytes)
             .map_err(|e| RpcMessageError::InternalError(e.to_string()))?
         {
             let mut connection_records = connections_records_from_bytes(&bytes)
@@ -1031,9 +1003,8 @@ impl ConnectionRegistry for FjallConnectionRegistry {
         if let Ok(Some(bytes)) = inner
             .client_player_table
             .get(client_id.as_u128().to_le_bytes())
-            && let Ok(player_obj) = Obj::from_bytes(ByteView::from(bytes.as_ref()))
-            && let Ok(player_oid_bytes) = player_obj.as_bytes()
-            && let Ok(Some(bytes)) = inner.player_clients_table.get(player_oid_bytes.clone())
+            && let Ok(player_obj) = Obj::from_bytes(bytes.as_ref())
+            && let Ok(Some(bytes)) = inner.player_clients_table.get(player_obj.as_bytes())
             && let Ok(mut player_records) = connections_records_from_bytes(&bytes)
         {
             for record in &mut player_records.connections {
@@ -1053,7 +1024,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
             if let Ok(encoded) = connections_records_to_bytes(&player_records) {
                 let _ = inner
                     .player_clients_table
-                    .insert(player_oid_bytes, &encoded);
+                    .insert(player_obj.as_bytes(), &encoded);
             }
         }
 
@@ -1063,9 +1034,7 @@ impl ConnectionRegistry for FjallConnectionRegistry {
     fn get_client_attributes(&self, obj: Obj) -> Result<HashMap<Symbol, Var>, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let oid_bytes = obj
-            .as_bytes()
-            .map_err(|_| SessionError::NoConnectionForPlayer(obj))?;
+        let oid_bytes = obj.as_bytes();
 
         let connection_records = if !obj.is_positive() {
             // This is a connection object - look in connection_records

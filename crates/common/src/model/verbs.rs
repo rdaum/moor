@@ -13,7 +13,6 @@
 
 use crate::{model::r#match::VerbArgsSpec, util::BitEnum};
 use binary_layout::LayoutAs;
-use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 use moor_var::{
     Obj, Symbol,
@@ -22,7 +21,7 @@ use moor_var::{
 };
 use num_traits::FromPrimitive;
 
-#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
+#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive)]
 pub enum VerbFlag {
     Read = 0,
     Write = 1,
@@ -119,7 +118,7 @@ impl VerbFlag {
         BitEnum::new_with(Self::Debug)
     }
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Vid(pub i64);
 
 #[derive(Clone, Copy, Debug, Primitive)]
@@ -132,7 +131,7 @@ pub enum VerbAttr {
 }
 
 /// The program type encoded for a verb.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Encode, Decode, Primitive)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Primitive)]
 #[repr(u8)]
 pub enum BinaryType {
     /// For builtin functions in stack frames -- or empty code blobs.

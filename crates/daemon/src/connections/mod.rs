@@ -16,6 +16,7 @@
 use moor_var::{Symbol, Var};
 use std::{collections::HashMap, time::SystemTime};
 
+#[allow(dead_code, clippy::all)]
 mod connections_generated;
 mod conversions;
 mod fjall_registry;

@@ -12,12 +12,10 @@
 //
 
 use crate::{
-    AsByteBuffer,
+    ByteSized,
     encode::{DecodingError, EncodingError},
 };
 use binary_layout::LayoutAs;
-use bincode::{Decode, Encode};
-use byteview::ByteView;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -59,8 +57,6 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
     Ord,
     PartialOrd,
     Hash,
-    Encode,
-    Decode,
     Serialize,
     Deserialize,
     IntoBytes,
@@ -96,6 +92,10 @@ impl Obj {
     fn decode_as_objid(&self) -> i32 {
         // Mask out upper 32 bits
         (self.0 & 0x0000_ffff_ffff) as i32
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DecodingError> {
+        Self::read_from_bytes(bytes).map_err(|e| DecodingError::CouldNotDecode(format!("{e:?}")))
     }
 
     const fn encode_as_objid(id: i32) -> Self {
@@ -138,7 +138,7 @@ impl LayoutAs<u64> for Obj {
     type WriteError = EncodingError;
 
     fn try_read(v: u64) -> Result<Self, Self::ReadError> {
-        Ok(Self::from_bytes(v.to_le_bytes().into()).unwrap())
+        Ok(Self(v))
     }
 
     fn try_write(v: Self) -> Result<u64, Self::WriteError> {
@@ -309,41 +309,9 @@ impl Obj {
     }
 }
 
-impl AsByteBuffer for Obj {
+impl ByteSized for Obj {
     fn size_bytes(&self) -> usize {
         size_of::<u64>()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        // Zero-copy: direct access to the struct's bytes
-        Ok(f(IntoBytes::as_bytes(self)))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        // Zero-copy to Vec
-        Ok(IntoBytes::as_bytes(self).to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
-    where
-        Self: Sized,
-    {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 8 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 8 bytes for Obj, got {}",
-                bytes.len()
-            )));
-        }
-
-        // Use zerocopy to safely transmute from bytes
-        Self::read_from_bytes(bytes)
-            .map_err(|_| DecodingError::CouldNotDecode("Invalid bytes for Obj".to_string()))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        // Zero-copy: create ByteView directly from struct bytes
-        Ok(ByteView::from(IntoBytes::as_bytes(self)))
     }
 }
 

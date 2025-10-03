@@ -94,7 +94,6 @@ clap_derive = "4.5"
 figment = { version = "0.10", features = ["yaml", "json"] }
 
 # Serialization & Data Formats
-bincode = { version = "2.0", features = ["serde"] }
 csv = "1.3"
 edn-format = "3.3"
 humantime = "2.2"

@@ -29,7 +29,6 @@ use crate::{
     var::Var,
     variant::Variant,
 };
-use bincode::{Decode, Encode};
 use byteview::ByteView;
 use std::{
     cmp::max,
@@ -84,38 +83,6 @@ impl Binary {
     /// Check if empty
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
-    }
-}
-
-// Manual implementations of Encode and Decode for Binary since ByteView doesn't implement them
-impl Encode for Binary {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        // Encode as Vec<u8>
-        let bytes: Vec<u8> = self.as_bytes().to_vec();
-        bytes.encode(encoder)
-    }
-}
-
-impl<Context> Decode<Context> for Binary {
-    fn decode<D: bincode::de::Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        // Decode as Vec<u8> and convert to Binary
-        let bytes: Vec<u8> = Vec::decode(decoder)?;
-        Ok(Binary::from_bytes(bytes))
-    }
-}
-
-impl<'de, Context> bincode::BorrowDecode<'de, Context> for Binary {
-    fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        // Decode as Vec<u8> and convert to Binary
-        let bytes: Vec<u8> = Vec::borrow_decode(decoder)?;
-        Ok(Binary::from_bytes(bytes))
     }
 }
 

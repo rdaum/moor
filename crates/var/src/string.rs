@@ -17,7 +17,6 @@ use crate::{
     var::Var,
     variant::Variant,
 };
-use bincode::{Decode, Encode};
 use num_traits::ToPrimitive;
 use std::{
     cmp::max,
@@ -26,7 +25,7 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone)]
 pub struct Str(Arc<String>);
 
 impl Str {

@@ -50,7 +50,6 @@ mimalloc.workspace = true
 signal-hook.workspace = true
 
 # Command Line & Configuration
-bincode.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
 figment.workspace = true
@@ -61,6 +60,7 @@ serde_json.workspace = true
 # Database & Persistence
 fjall.workspace = true
 fs2.workspace = true
+zerocopy.workspace = true
 
 # Networking & Communication
 zmq.workspace = true

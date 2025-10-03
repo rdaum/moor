@@ -12,10 +12,9 @@
 //
 
 use crate::program::names::Name;
-use bincode::{Decode, Encode};
 
 /// A JumpLabel is what a labels resolve to in the program.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JumpLabel {
     // The unique id for the jump label, which is also its offset in the jump vector.
     pub id: Label,
@@ -30,7 +29,7 @@ pub struct JumpLabel {
 /// A Label is a unique identifier for a jump position in the program.
 /// A committed, compiled, Label can be resolved to a program offset by looking it up in program's
 /// jump vector at runtime.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Label(pub u16);
 
 impl From<usize> for Label {
@@ -47,7 +46,7 @@ impl From<i32> for Label {
 
 /// An offset is a program offset; a bit like a jump label, but represents a *relative* program
 /// position
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Offset(pub u16);
 
 impl From<usize> for Offset {

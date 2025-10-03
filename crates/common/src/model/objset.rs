@@ -12,17 +12,16 @@
 //
 
 use crate::model::ValSet;
+use binary_layout::LayoutAs;
 use byteview::ByteView;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use moor_var::{
-    AsByteBuffer, Obj,
-    encode::{DecodingError, EncodingError},
-};
+use moor_var::{ByteSized, Obj};
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},
 };
+use zerocopy::IntoBytes;
 // TODO: this won't work for non-objid objects
 
 lazy_static! {
@@ -52,26 +51,9 @@ impl Clone for ObjSet {
     }
 }
 
-impl AsByteBuffer for ObjSet {
+impl ByteSized for ObjSet {
     fn size_bytes(&self) -> usize {
         self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        // TODO: Validate object ids on decode of ObjSet
-        Ok(Self(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(self.0.clone())
     }
 }
 
@@ -110,7 +92,8 @@ impl Iterator for ObjSetIter {
         let bytes = &self
             .buffer
             .slice(self.position..self.position + size_of::<Obj>());
-        let obj = Obj::from_bytes(bytes.to_detached()).unwrap();
+        let o_u64 = u64::from_le_bytes(bytes[..size_of::<u64>()].try_into().unwrap());
+        let obj = Obj::try_read(o_u64).unwrap();
         self.position += size_of::<Obj>();
         Some(obj)
     }
@@ -121,7 +104,7 @@ impl FromIterator<Obj> for ObjSet {
         let mut v = Vec::with_capacity(size_of::<Obj>());
         let mut total = 0usize;
         for item in iter {
-            v.extend_from_slice(&item.as_bytes().unwrap());
+            v.extend_from_slice(item.as_bytes());
             total += 1;
         }
         // If after that, total is 0, don't even bother, just throw away the buffer.
@@ -142,7 +125,7 @@ impl ObjSet {
         // Note, we're stupid and don't check for dupes. It's called a 'set' but it ain't.
         let _capacity = self.len();
         let mut new_buf = self.0.as_ref().to_vec();
-        new_buf.extend_from_slice(&oid.as_bytes().unwrap());
+        new_buf.extend_from_slice(oid.as_bytes());
         Self(ByteView::from(new_buf))
     }
     #[must_use]
@@ -157,8 +140,8 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            let oid_bytes = i.as_bytes().unwrap();
-            new_buf.extend_from_slice(&oid_bytes);
+            let oid_bytes = i.as_bytes();
+            new_buf.extend_from_slice(oid_bytes);
         }
         if !found {
             return self.clone();
@@ -177,7 +160,7 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            new_buf.extend_from_slice(&i.as_bytes().unwrap());
+            new_buf.extend_from_slice(i.as_bytes());
         }
         if !found {
             return self.clone();
@@ -218,7 +201,7 @@ impl ObjSet {
         let mut new_buf = Vec::with_capacity(size_of::<u32>() + (size_of::<Obj>() * new_len));
         new_buf.extend_from_slice(self.0.as_ref());
         for i in values {
-            new_buf.extend_from_slice(&i.as_bytes().unwrap());
+            new_buf.extend_from_slice(i.as_bytes());
         }
         Self(ByteView::from(new_buf))
     }
@@ -235,7 +218,7 @@ impl ValSet<Obj> for ObjSet {
         }
         let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
         for i in oids {
-            v.extend_from_slice(&i.as_bytes().unwrap());
+            v.extend_from_slice(i.as_bytes());
         }
         Self(ByteView::from(v))
     }
@@ -267,7 +250,7 @@ impl Default for ObjSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_var::AsByteBuffer;
+
     use std::collections::HashSet;
 
     #[test]
@@ -275,7 +258,7 @@ mod tests {
         let objset = ObjSet::empty();
         assert!(objset.is_empty());
         assert_eq!(objset.len(), 0);
-        assert_eq!(objset.as_bytes().unwrap().len(), 0);
+        assert_eq!(objset.0.len(), 0);
     }
 
     #[test]

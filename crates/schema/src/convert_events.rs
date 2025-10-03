@@ -15,11 +15,13 @@
 //!
 //! This module handles conversion of narrative events, presentations, and related types.
 
-use crate::common;
-use crate::common::EventUnionRef;
-use crate::convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct};
-use crate::convert_errors::{error_to_flatbuffer_struct, exception_from_ref};
-use crate::convert_var::{var_from_flatbuffer, var_to_flatbuffer};
+use crate::{
+    common,
+    common::EventUnionRef,
+    convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct},
+    convert_errors::{error_to_flatbuffer_struct, exception_from_ref},
+    convert_var::{var_from_flatbuffer, var_to_flatbuffer},
+};
 use moor_common::tasks::{Event, NarrativeEvent, Presentation};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

@@ -16,12 +16,12 @@
 //! This module handles conversion of error types like Error, WorkerError, SchedulerError,
 //! CompileError, CommandError, VerbProgramError, and WorldStateError.
 
-use crate::common;
-use crate::common::CompileErrorUnionRef;
-use crate::convert_common::{
-    symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct,
+use crate::{
+    common,
+    common::CompileErrorUnionRef,
+    convert_common::{symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct},
+    convert_var::{var_from_flatbuffer, var_to_flatbuffer},
 };
-use crate::convert_var::{var_from_flatbuffer, var_to_flatbuffer};
 use moor_common::model::{CompileContext, CompileError};
 use moor_var::Var;
 

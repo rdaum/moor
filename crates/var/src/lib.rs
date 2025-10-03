@@ -28,7 +28,6 @@ mod var;
 mod variant;
 
 pub use binary::Binary;
-use bincode::{Decode, Encode};
 pub use error::{Error, ErrorCode, ErrorCode::*};
 pub use flyweight::Flyweight;
 pub use lambda::Lambda;
@@ -46,14 +45,11 @@ pub use var::{
 };
 pub use variant::Variant;
 
-pub use encode::{
-    AsByteBuffer, BINCODE_CONFIG, BincodeAsByteBufferExt, CountingWriter, DecodingError,
-    EncodingError,
-};
+pub use encode::{ByteSized, DecodingError, EncodingError};
 
 /// Integer encoding of common as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, FromRepr, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 #[allow(non_camel_case_types)]
 pub enum VarType {
     TYPE_INT = 0,

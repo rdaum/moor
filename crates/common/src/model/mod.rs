@@ -23,8 +23,6 @@ pub use crate::model::{
     verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string},
     world_state::{ObjectKind, WorldState, WorldStateSource},
 };
-use bincode::{Decode, Encode};
-use moor_var::AsByteBuffer;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
 use thiserror::Error;
@@ -54,7 +52,7 @@ pub enum CommitResult {
     ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx_management
 }
 
-pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
+pub trait ValSet<V>: FromIterator<V> {
     fn empty() -> Self;
     fn from_items(items: &[V]) -> Self;
     fn iter(&self) -> impl Iterator<Item = V>;
@@ -62,7 +60,7 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn is_empty(&self) -> bool;
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode, PartialEq, Eq, Serialize)]
+#[derive(Debug, Error, Clone, PartialEq, Eq, Serialize)]
 pub struct CompileContext {
     pub line_col: (usize, usize),
 }
@@ -79,7 +77,7 @@ impl Display for CompileContext {
     }
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode, PartialEq, Eq, Serialize)]
+#[derive(Debug, Error, Clone, PartialEq, Eq, Serialize)]
 pub enum CompileError {
     #[error("Failure to parse string @ {0}: {1}")]
     StringLexError(CompileContext, String),

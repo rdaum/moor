@@ -15,7 +15,7 @@
 
 use crate::connections::{ConnectionRecord, ConnectionsRecords, connections_generated};
 use eyre::Error;
-use moor_var::BINCODE_CONFIG;
+use moor_schema::convert as convert_schema;
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -23,26 +23,43 @@ use std::time::{Duration, UNIX_EPOCH};
 pub fn connection_record_to_fb(
     record: &ConnectionRecord,
 ) -> Result<connections_generated::moor_connections::ConnectionRecord, Error> {
-    // Serialize acceptable_content_types as ByteArrays
-    let mut content_types = Vec::new();
-    for symbol in &record.acceptable_content_types {
-        let bytes = bincode::encode_to_vec(symbol, *BINCODE_CONFIG)?;
-        content_types.push(connections_generated::moor_connections::ByteArray { data: bytes });
-    }
+    // Convert acceptable_content_types to FlatBuffer Symbols
+    let content_types: Vec<_> = record
+        .acceptable_content_types
+        .iter()
+        .map(|symbol| connections_generated::moor_common::Symbol {
+            value: symbol.as_string(),
+        })
+        .collect();
 
-    // Serialize client_attributes as ClientAttribute pairs
-    let mut attributes = Vec::new();
-    for (key, value) in &record.client_attributes {
-        let key_bytes = bincode::encode_to_vec(key, *BINCODE_CONFIG)?;
-        let value_bytes = bincode::encode_to_vec(value, *BINCODE_CONFIG)?;
+    // Convert client_attributes to FlatBuffer ClientAttribute pairs
+    let attributes: Result<Vec<_>, Error> = record
+        .client_attributes
+        .iter()
+        .map(|(key, value)| -> Result<_, Error> {
+            // Convert Symbol to connections_generated Symbol
+            let fb_key = connections_generated::moor_common::Symbol {
+                value: key.as_string(),
+            };
 
-        attributes.push(connections_generated::moor_connections::ClientAttribute {
-            key: Box::new(connections_generated::moor_connections::ByteArray { data: key_bytes }),
-            value: Box::new(connections_generated::moor_connections::ByteArray {
-                data: value_bytes,
-            }),
-        });
-    }
+            // Convert Var via serialization: Var -> moor_schema::Var -> bytes -> connections_generated::Var
+            let schema_var = convert_schema::var_to_db_flatbuffer(value)?;
+            let var_bytes = {
+                let mut builder = planus::Builder::new();
+                let offset = planus::WriteAsOffset::prepare(&schema_var, &mut builder);
+                builder.finish(offset, None);
+                builder.as_slice().to_vec()
+            };
+            let fb_value: connections_generated::moor_var::Var =
+                connections_generated::moor_var::VarRef::read_as_root(&var_bytes)?.try_into()?;
+
+            Ok(connections_generated::moor_connections::ClientAttribute {
+                key: Box::new(fb_key),
+                value: Box::new(fb_value),
+            })
+        })
+        .collect();
+    let attributes = attributes?;
 
     // Convert SystemTime to secs/nanos
     let connected = record
@@ -90,22 +107,32 @@ pub fn connection_record_from_fb(
 
     // Deserialize acceptable_content_types
     let mut acceptable_content_types = Vec::new();
-    for byte_array_result in fb.acceptable_content_types()? {
-        let byte_array = byte_array_result?;
-        let data = byte_array.data()?;
-        let (symbol, _) = bincode::decode_from_slice(data, *BINCODE_CONFIG)?;
-        acceptable_content_types.push(symbol);
+    for symbol_ref in fb.acceptable_content_types()? {
+        let symbol_str = symbol_ref?.value()?;
+        acceptable_content_types.push(moor_var::Symbol::mk(symbol_str));
     }
 
     // Deserialize client_attributes
     let mut client_attributes = std::collections::HashMap::new();
     for attr_result in fb.client_attributes()? {
         let attr = attr_result?;
-        let key_data = attr.key()?.data()?;
-        let (key, _) = bincode::decode_from_slice(key_data, *BINCODE_CONFIG)?;
 
-        let value_data = attr.value()?.data()?;
-        let (value, _) = bincode::decode_from_slice(value_data, *BINCODE_CONFIG)?;
+        // Extract Symbol from connections_generated type
+        let key_str = attr.key()?.value()?;
+        let key = moor_var::Symbol::mk(key_str);
+
+        // Convert Var via serialization: connections_generated::Var -> bytes -> moor_schema::Var -> Var
+        let value_ref = attr.value()?;
+        let value_bytes = {
+            let connections_var_owned = connections_generated::moor_var::Var::try_from(value_ref)?;
+            let mut builder = planus::Builder::new();
+            let offset = planus::WriteAsOffset::prepare(&connections_var_owned, &mut builder);
+            builder.finish(offset, None);
+            builder.as_slice().to_vec()
+        };
+        let schema_var_ref = moor_schema::var::VarRef::read_as_root(&value_bytes)?;
+        let value = convert_schema::var_from_ref(schema_var_ref)
+            .map_err(|e| eyre::eyre!("Failed to convert value var: {}", e))?;
 
         client_attributes.insert(key, value);
     }

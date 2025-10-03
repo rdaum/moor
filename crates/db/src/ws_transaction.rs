@@ -28,7 +28,7 @@ use moor_common::{
     util::{BitEnum, PerfTimerGuard},
 };
 use moor_var::{
-    AsByteBuffer, NOTHING, Obj, Symbol, Var, program::ProgramType, v_empty_map, v_map, v_none,
+    ByteSized, NOTHING, Obj, Symbol, Var, program::ProgramType, v_empty_map, v_map, v_none,
 };
 use std::{
     collections::VecDeque,
@@ -422,7 +422,7 @@ impl WorldStateTransaction {
         objects: &[Obj],
         contents_to_move: Vec<Obj>,
         children_to_reparent: Vec<(Obj, Obj)>,
-        properties_to_delete: Vec<(Obj, uuid::Uuid)>,
+        properties_to_delete: Vec<(Obj, Uuid)>,
     ) -> Result<(), WorldStateError> {
         // Bulk update location relationships directly on the relation
         for content in contents_to_move {
@@ -569,10 +569,8 @@ impl WorldStateTransaction {
         Ok(ObjSet::from_items(&contents_vec))
     }
 
+    // This is more of a guestimate.
     pub fn get_object_size_bytes(&self, obj: &Obj) -> Result<usize, WorldStateError> {
-        // Means retrieving the common for all of the objects attributes, and then summing their sizes.
-        // This is remarkably inefficient.
-
         let flags = self.get_object_flags(obj)?;
         let name = self.object_name.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object name: {e:?}"))
@@ -606,7 +604,8 @@ impl WorldStateTransaction {
                 .unwrap_or_default();
         }
         for v in verbs {
-            size += v?.size_bytes();
+            let p = v?;
+            size += size_of_val(&p);
         }
 
         Ok(size)

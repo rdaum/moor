@@ -18,12 +18,10 @@ use crate::{
         names::Name,
     },
 };
-use bincode::{Decode, Encode};
-
-#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash)]
 pub struct BuiltinId(pub u16);
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Op {
     Add,
     And(Label),
@@ -176,7 +174,7 @@ pub enum Op {
     CallLambda,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct ForSequenceOperand {
     pub value_bind: Name,
     pub key_bind: Option<Name>,
@@ -184,14 +182,14 @@ pub struct ForSequenceOperand {
     pub environment_width: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct ForRangeOperand {
     pub loop_variable: Name,
     pub end_label: Label,
     pub environment_width: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct RangeComprehend {
     /// The variable to populate with the result of the current range iteration, which is
     /// declared in the current scope.
@@ -201,7 +199,7 @@ pub struct RangeComprehend {
     pub end_label: Label,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct ListComprehend {
     /// The register (unnamed variable) which holds the current offset into the list
     pub position_register: Name,
@@ -213,20 +211,20 @@ pub struct ListComprehend {
     pub end_label: Label,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum ComprehensionType {
     Range,
     List,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum ScatterLabel {
     Optional(Name, Option<Label>),
     Required(Name),
     Rest(Name),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct ScatterArgs {
     pub labels: Vec<ScatterLabel>,
     pub done: Label,

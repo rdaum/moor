@@ -13,25 +13,32 @@
 
 //! Conversion between kernel task types and FlatBuffer representations
 
-use moor_common::tasks::AbortLimitReason as KernelAbortLimitReason;
-use crate::tasks::{TaskStart as KernelTaskStart, task::Task as KernelTask};
-use crate::tasks::task_q::{SuspendedTask as KernelSuspendedTask, WakeCondition as KernelWakeCondition};
-use crate::vm::{
-    FinallyReason as KernelFinallyReason, Fork,
-    activation::{Activation as KernelActivation, BfFrame as KernelBfFrame, Frame as KernelFrame},
-    exec_state::VMExecState as KernelVMExecState,
-    moo_frame::{
-        CatchType as KernelCatchType, MooStackFrame as KernelMooStackFrame, PcType as KernelPcType,
-        Scope as KernelScope, ScopeType as KernelScopeType,
+use crate::{
+    tasks::{
+        TaskStart as KernelTaskStart,
+        task::Task as KernelTask,
+        task_q::{SuspendedTask as KernelSuspendedTask, WakeCondition as KernelWakeCondition},
     },
-    vm_host::VmHost as KernelVmHost,
+    vm::{
+        FinallyReason as KernelFinallyReason, Fork,
+        activation::{
+            Activation as KernelActivation, BfFrame as KernelBfFrame, Frame as KernelFrame,
+        },
+        exec_state::VMExecState as KernelVMExecState,
+        moo_frame::{
+            CatchType as KernelCatchType, MooStackFrame as KernelMooStackFrame,
+            PcType as KernelPcType, Scope as KernelScope, ScopeType as KernelScopeType,
+        },
+        vm_host::VmHost as KernelVmHost,
+    },
 };
+use moor_common::tasks::AbortLimitReason as KernelAbortLimitReason;
 use moor_compiler::{Label, Offset};
-use moor_schema::common as fb_common;
-use moor_schema::convert as convert_schema;
-use moor_schema::convert_program::{encode_program_to_fb, decode_stored_program_struct};
-use moor_schema::program as fb_program;
-use moor_schema::task as fb;
+use moor_schema::{
+    common as fb_common, convert as convert_schema,
+    convert_program::{decode_stored_program_struct, encode_program_to_fb},
+    program as fb_program, task as fb,
+};
 use moor_var::program::names::Name;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
@@ -80,14 +87,16 @@ fn exception_to_flatbuffer(
         .iter()
         .map(convert_schema::var_to_db_flatbuffer)
         .collect();
-    let fb_stack = fb_stack.map_err(|e| TaskConversionError::VarError(format!("Error encoding stack: {e}")))?;
+    let fb_stack = fb_stack
+        .map_err(|e| TaskConversionError::VarError(format!("Error encoding stack: {e}")))?;
 
     let fb_backtrace: Result<Vec<_>, _> = exception
         .backtrace
         .iter()
         .map(convert_schema::var_to_db_flatbuffer)
         .collect();
-    let fb_backtrace = fb_backtrace.map_err(|e| TaskConversionError::VarError(format!("Error encoding backtrace: {e}")))?;
+    let fb_backtrace = fb_backtrace
+        .map_err(|e| TaskConversionError::VarError(format!("Error encoding backtrace: {e}")))?;
 
     Ok(fb_common::Exception {
         error: Box::new(fb_error),
@@ -107,14 +116,16 @@ fn exception_from_flatbuffer(
         .iter()
         .map(convert_schema::var_from_db_flatbuffer)
         .collect();
-    let stack = stack.map_err(|e| TaskConversionError::VarError(format!("Error decoding stack: {e}")))?;
+    let stack =
+        stack.map_err(|e| TaskConversionError::VarError(format!("Error decoding stack: {e}")))?;
 
     let backtrace: Result<Vec<_>, _> = fb
         .backtrace
         .iter()
         .map(convert_schema::var_from_db_flatbuffer)
         .collect();
-    let backtrace = backtrace.map_err(|e| TaskConversionError::VarError(format!("Error decoding backtrace: {e}")))?;
+    let backtrace = backtrace
+        .map_err(|e| TaskConversionError::VarError(format!("Error decoding backtrace: {e}")))?;
 
     Ok(moor_common::tasks::Exception {
         error,
@@ -130,7 +141,7 @@ fn exception_from_flatbuffer(
 pub(crate) fn wake_condition_to_flatbuffer(
     wake: &KernelWakeCondition,
 ) -> Result<fb::WakeCondition, TaskConversionError> {
-    use fb::{*, WakeConditionUnion::*};
+    use fb::{WakeConditionUnion::*, *};
     use minstant::Instant;
 
     let condition = match wake {
@@ -165,14 +176,10 @@ pub(crate) fn wake_condition_to_flatbuffer(
                 }),
             }))
         }
-        KernelWakeCondition::Immedate => {
-            WakeImmediate(Box::new(fb::WakeImmediate {}))
-        }
-        KernelWakeCondition::Task(task_id) => {
-            WakeTask(Box::new(fb::WakeTask {
-                task_id: *task_id as u64,
-            }))
-        }
+        KernelWakeCondition::Immedate => WakeImmediate(Box::new(fb::WakeImmediate {})),
+        KernelWakeCondition::Task(task_id) => WakeTask(Box::new(fb::WakeTask {
+            task_id: *task_id as u64,
+        })),
         KernelWakeCondition::Worker(uuid) => {
             let uuid_bytes = uuid.as_bytes();
             WakeWorker(Box::new(fb::WakeWorker {
@@ -181,14 +188,10 @@ pub(crate) fn wake_condition_to_flatbuffer(
                 }),
             }))
         }
-        KernelWakeCondition::GCComplete => {
-            WakeGcComplete(Box::new(fb::WakeGcComplete {}))
-        }
+        KernelWakeCondition::GCComplete => WakeGcComplete(Box::new(fb::WakeGcComplete {})),
     };
 
-    Ok(WakeCondition {
-        condition,
-    })
+    Ok(WakeCondition { condition })
 }
 
 pub(crate) fn wake_condition_from_flatbuffer(
@@ -208,11 +211,15 @@ pub(crate) fn wake_condition_from_flatbuffer(
 
             let wake_instant = if epoch_time >= now_system {
                 // Future time
-                let time_diff = epoch_time.duration_since(now_system).unwrap_or(Duration::ZERO);
+                let time_diff = epoch_time
+                    .duration_since(now_system)
+                    .unwrap_or(Duration::ZERO);
                 now_instant + time_diff
             } else {
                 // Past time
-                let time_diff = now_system.duration_since(epoch_time).unwrap_or(Duration::ZERO);
+                let time_diff = now_system
+                    .duration_since(epoch_time)
+                    .unwrap_or(Duration::ZERO);
                 now_instant.checked_sub(time_diff).unwrap_or(now_instant)
             };
 
@@ -250,10 +257,14 @@ pub(crate) fn abort_limit_reason_to_flatbuffer(
 
     let reason_union = match reason {
         KernelAbortLimitReason::Ticks(ticks) => {
-            AbortLimitReasonUnion::AbortTicks(Box::new(AbortTicks { ticks: *ticks as u64 }))
+            AbortLimitReasonUnion::AbortTicks(Box::new(AbortTicks {
+                ticks: *ticks as u64,
+            }))
         }
         KernelAbortLimitReason::Time(duration) => {
-            AbortLimitReasonUnion::AbortTime(Box::new(AbortTime { seconds: duration.as_secs() }))
+            AbortLimitReasonUnion::AbortTime(Box::new(AbortTime {
+                seconds: duration.as_secs(),
+            }))
         }
     };
 
@@ -268,8 +279,12 @@ pub(crate) fn abort_limit_reason_from_flatbuffer(
     use fb::AbortLimitReasonUnion;
 
     match &fb.reason {
-        AbortLimitReasonUnion::AbortTicks(at) => Ok(KernelAbortLimitReason::Ticks(at.ticks as usize)),
-        AbortLimitReasonUnion::AbortTime(at) => Ok(KernelAbortLimitReason::Time(Duration::from_secs(at.seconds))),
+        AbortLimitReasonUnion::AbortTicks(at) => {
+            Ok(KernelAbortLimitReason::Ticks(at.ticks as usize))
+        }
+        AbortLimitReasonUnion::AbortTime(at) => Ok(KernelAbortLimitReason::Time(
+            Duration::from_secs(at.seconds),
+        )),
     }
 }
 
@@ -290,12 +305,12 @@ pub(crate) fn pc_type_to_flatbuffer(pc: &KernelPcType) -> Result<fb::PcType, Tas
         })),
     };
 
-    Ok(PcType {
-        pc_type,
-    })
+    Ok(PcType { pc_type })
 }
 
-pub(crate) fn pc_type_from_flatbuffer(fb: &fb::PcType) -> Result<KernelPcType, TaskConversionError> {
+pub(crate) fn pc_type_from_flatbuffer(
+    fb: &fb::PcType,
+) -> Result<KernelPcType, TaskConversionError> {
     use fb::PcTypeUnion;
 
     match &fb.pc_type {
@@ -329,9 +344,7 @@ pub(crate) fn catch_type_to_flatbuffer(
         }
     };
 
-    Ok(CatchType {
-        catch_type,
-    })
+    Ok(CatchType { catch_type })
 }
 
 pub(crate) fn catch_type_from_flatbuffer(
@@ -404,10 +417,9 @@ pub(crate) fn finally_reason_from_flatbuffer(
     match &fb.reason {
         FinallyReasonUnion::FinallyFallthrough(_) => Ok(KernelFinallyReason::Fallthrough),
         FinallyReasonUnion::FinallyRaise(fr) => {
-            let exception =
-                exception_from_flatbuffer(&fr.exception).map_err(|e| {
-                    TaskConversionError::DecodingError(format!("Error decoding exception: {e}"))
-                })?;
+            let exception = exception_from_flatbuffer(&fr.exception).map_err(|e| {
+                TaskConversionError::DecodingError(format!("Error decoding exception: {e}"))
+            })?;
             Ok(KernelFinallyReason::Raise(Box::new(exception)))
         }
         FinallyReasonUnion::FinallyReturn(fr) => {
@@ -524,9 +536,7 @@ pub(crate) fn scope_type_to_flatbuffer(
         }
     };
 
-    Ok(ScopeType {
-        scope_type,
-    })
+    Ok(ScopeType { scope_type })
 }
 
 pub(crate) fn scope_type_from_flatbuffer(
@@ -573,13 +583,14 @@ pub(crate) fn scope_type_from_flatbuffer(
             })
         }
         ScopeTypeUnion::ScopeForRange(sfr) => {
-            let current_value =
-                convert_schema::var_from_db_flatbuffer(&sfr.current_value).map_err(|e| {
+            let current_value = convert_schema::var_from_db_flatbuffer(&sfr.current_value)
+                .map_err(|e| {
                     TaskConversionError::VarError(format!("Error decoding current_value: {e}"))
                 })?;
-            let end_value = convert_schema::var_from_db_flatbuffer(&sfr.end_value).map_err(|e| {
-                TaskConversionError::VarError(format!("Error decoding end_value: {e}"))
-            })?;
+            let end_value =
+                convert_schema::var_from_db_flatbuffer(&sfr.end_value).map_err(|e| {
+                    TaskConversionError::VarError(format!("Error decoding end_value: {e}"))
+                })?;
             let loop_variable = name_from_stored(&sfr.loop_variable).map_err(|e| {
                 TaskConversionError::ProgramError(format!("Error decoding loop_variable: {e}"))
             })?;
@@ -650,9 +661,10 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
             Ok(fb::EnvironmentScope { vars: vars? })
         })
         .collect();
-    let fb_environment = fb_environment.map_err(|e: moor_schema::convert::VarConversionError| {
-        TaskConversionError::VarError(format!("Error encoding environment: {e}"))
-    })?;
+    let fb_environment =
+        fb_environment.map_err(|e: moor_schema::convert::VarConversionError| {
+            TaskConversionError::VarError(format!("Error encoding environment: {e}"))
+        })?;
 
     let fb_valstack: Result<Vec<_>, _> = frame
         .valstack
@@ -662,11 +674,8 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
     let fb_valstack = fb_valstack
         .map_err(|e| TaskConversionError::VarError(format!("Error encoding valstack: {e}")))?;
 
-    let fb_scope_stack: Result<Vec<_>, _> = frame
-        .scope_stack
-        .iter()
-        .map(scope_to_flatbuffer)
-        .collect();
+    let fb_scope_stack: Result<Vec<_>, _> =
+        frame.scope_stack.iter().map(scope_to_flatbuffer).collect();
     let fb_scope_stack = fb_scope_stack?;
 
     let fb_temp = convert_schema::var_to_db_flatbuffer(&frame.temp)
@@ -735,11 +744,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
                         TaskConversionError::VarError(format!("Error decoding var: {e}"))
                     })?;
                     // Check if this is our None marker
-                    if var.is_none() {
-                        Ok(None)
-                    } else {
-                        Ok(Some(var))
-                    }
+                    Ok((!var.is_none()).then_some(var))
                 })
                 .collect();
             vars
@@ -757,8 +762,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
         .collect();
     let valstack = valstack?;
 
-    let scope_stack: Result<Vec<_>, _> =
-        fb.scope_stack.iter().map(scope_from_flatbuffer).collect();
+    let scope_stack: Result<Vec<_>, _> = fb.scope_stack.iter().map(scope_from_flatbuffer).collect();
     let scope_stack = scope_stack?;
 
     let temp = convert_schema::var_from_db_flatbuffer(&fb.temp)
@@ -810,7 +814,9 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
 // BfFrame Conversion
 // ============================================================================
 
-pub(crate) fn bf_frame_to_flatbuffer(frame: &KernelBfFrame) -> Result<fb::BfFrame, TaskConversionError> {
+pub(crate) fn bf_frame_to_flatbuffer(
+    frame: &KernelBfFrame,
+) -> Result<fb::BfFrame, TaskConversionError> {
     let fb_trampoline_arg = frame
         .bf_trampoline_arg
         .as_ref()
@@ -836,7 +842,9 @@ pub(crate) fn bf_frame_to_flatbuffer(frame: &KernelBfFrame) -> Result<fb::BfFram
     })
 }
 
-pub(crate) fn bf_frame_from_flatbuffer(fb: &fb::BfFrame) -> Result<KernelBfFrame, TaskConversionError> {
+pub(crate) fn bf_frame_from_flatbuffer(
+    fb: &fb::BfFrame,
+) -> Result<KernelBfFrame, TaskConversionError> {
     let bf_trampoline = if fb.has_trampoline {
         Some(fb.bf_trampoline as usize)
     } else {
@@ -887,9 +895,7 @@ pub(crate) fn frame_to_flatbuffer(frame: &KernelFrame) -> Result<fb::Frame, Task
         }
     };
 
-    Ok(fb::Frame {
-        frame: frame_union,
-    })
+    Ok(fb::Frame { frame: frame_union })
 }
 
 pub(crate) fn frame_from_flatbuffer(fb: &fb::Frame) -> Result<KernelFrame, TaskConversionError> {
@@ -926,8 +932,8 @@ pub(crate) fn activation_to_flatbuffer(
         .iter()
         .map(|v| convert_schema::var_to_db_flatbuffer(&v))
         .collect();
-    let fb_args = fb_args
-        .map_err(|e| TaskConversionError::VarError(format!("Error encoding args: {e}")))?;
+    let fb_args =
+        fb_args.map_err(|e| TaskConversionError::VarError(format!("Error encoding args: {e}")))?;
 
     let fb_verb_name = convert_schema::symbol_to_flatbuffer_struct(&activation.verb_name);
 
@@ -973,8 +979,9 @@ pub(crate) fn activation_from_flatbuffer(
     let verbdef = convert_schema::verbdef_from_flatbuffer(&fb.verbdef)
         .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding verbdef: {e}")))?;
 
-    let permissions = convert_schema::obj_from_flatbuffer_struct(&fb.permissions)
-        .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding permissions: {e}")))?;
+    let permissions = convert_schema::obj_from_flatbuffer_struct(&fb.permissions).map_err(|e| {
+        TaskConversionError::DecodingError(format!("Error decoding permissions: {e}"))
+    })?;
 
     Ok(KernelActivation {
         frame,
@@ -994,11 +1001,8 @@ pub(crate) fn activation_from_flatbuffer(
 pub(crate) fn vm_exec_state_to_flatbuffer(
     state: &KernelVMExecState,
 ) -> Result<fb::VmExecState, TaskConversionError> {
-    let fb_activation_stack: Result<Vec<_>, _> = state
-        .stack
-        .iter()
-        .map(activation_to_flatbuffer)
-        .collect();
+    let fb_activation_stack: Result<Vec<_>, _> =
+        state.stack.iter().map(activation_to_flatbuffer).collect();
     let fb_activation_stack = fb_activation_stack?;
 
     let start_time_nanos = state
@@ -1025,10 +1029,7 @@ pub(crate) fn vm_exec_state_from_flatbuffer(
     let stack = stack?;
 
     let start_time = if fb.start_time_nanos > 0 {
-        Some(
-            SystemTime::UNIX_EPOCH
-                + Duration::from_nanos(fb.start_time_nanos),
-        )
+        Some(SystemTime::UNIX_EPOCH + Duration::from_nanos(fb.start_time_nanos))
     } else {
         None
     };
@@ -1052,7 +1053,9 @@ pub(crate) fn vm_exec_state_from_flatbuffer(
 // VmHost Conversion
 // ============================================================================
 
-pub(crate) fn vm_host_to_flatbuffer(host: &KernelVmHost) -> Result<fb::VmHost, TaskConversionError> {
+pub(crate) fn vm_host_to_flatbuffer(
+    host: &KernelVmHost,
+) -> Result<fb::VmHost, TaskConversionError> {
     let fb_exec_state = vm_exec_state_to_flatbuffer(&host.vm_exec_state)?;
 
     Ok(fb::VmHost {
@@ -1064,7 +1067,9 @@ pub(crate) fn vm_host_to_flatbuffer(host: &KernelVmHost) -> Result<fb::VmHost, T
     })
 }
 
-pub(crate) fn vm_host_from_flatbuffer(fb: &fb::VmHost) -> Result<KernelVmHost, TaskConversionError> {
+pub(crate) fn vm_host_from_flatbuffer(
+    fb: &fb::VmHost,
+) -> Result<KernelVmHost, TaskConversionError> {
     let mut exec_state = vm_exec_state_from_flatbuffer(&fb.exec_state)?;
     exec_state.task_id = fb.task_id as usize;
     exec_state.max_ticks = fb.max_ticks as usize;
@@ -1119,7 +1124,10 @@ pub(crate) fn task_start_to_flatbuffer(
         } => {
             let fb_vloc = convert_schema::var_to_db_flatbuffer(vloc)
                 .map_err(|e| TaskConversionError::VarError(format!("Error encoding vloc: {e}")))?;
-            let fb_args: Result<Vec<_>, _> = args.iter().map(|v| convert_schema::var_to_db_flatbuffer(&v)).collect();
+            let fb_args: Result<Vec<_>, _> = args
+                .iter()
+                .map(|v| convert_schema::var_to_db_flatbuffer(&v))
+                .collect();
             let fb_args = fb_args
                 .map_err(|e| TaskConversionError::VarError(format!("Error encoding args: {e}")))?;
 
@@ -1160,9 +1168,7 @@ pub(crate) fn task_start_to_flatbuffer(
         }
     };
 
-    Ok(fb::TaskStart {
-        start: start_union,
-    })
+    Ok(fb::TaskStart { start: start_union })
 }
 
 pub(crate) fn task_start_from_flatbuffer(
@@ -1173,16 +1179,26 @@ pub(crate) fn task_start_from_flatbuffer(
     match &fb.start {
         TaskStartUnion::StartCommandVerb(scv) => Ok(KernelTaskStart::StartCommandVerb {
             handler_object: convert_schema::obj_from_flatbuffer_struct(&scv.handler_object)
-                .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding handler_object: {e}")))?,
-            player: convert_schema::obj_from_flatbuffer_struct(&scv.player)
-                .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding player: {e}")))?,
+                .map_err(|e| {
+                    TaskConversionError::DecodingError(format!(
+                        "Error decoding handler_object: {e}"
+                    ))
+                })?,
+            player: convert_schema::obj_from_flatbuffer_struct(&scv.player).map_err(|e| {
+                TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
+            })?,
             command: scv.command.clone(),
         }),
         TaskStartUnion::StartDoCommand(sdc) => Ok(KernelTaskStart::StartDoCommand {
             handler_object: convert_schema::obj_from_flatbuffer_struct(&sdc.handler_object)
-                .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding handler_object: {e}")))?,
-            player: convert_schema::obj_from_flatbuffer_struct(&sdc.player)
-                .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding player: {e}")))?,
+                .map_err(|e| {
+                    TaskConversionError::DecodingError(format!(
+                        "Error decoding handler_object: {e}"
+                    ))
+                })?,
+            player: convert_schema::obj_from_flatbuffer_struct(&sdc.player).map_err(|e| {
+                TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
+            })?,
             command: sdc.command.clone(),
         }),
         TaskStartUnion::StartVerb(sv) => {
@@ -1200,8 +1216,9 @@ pub(crate) fn task_start_from_flatbuffer(
             let args = moor_var::List::mk_list(&args?);
 
             Ok(KernelTaskStart::StartVerb {
-                player: convert_schema::obj_from_flatbuffer_struct(&sv.player)
-                    .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding player: {e}")))?,
+                player: convert_schema::obj_from_flatbuffer_struct(&sv.player).map_err(|e| {
+                    TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
+                })?,
                 vloc,
                 verb: convert_schema::symbol_from_flatbuffer_struct(&sv.verb),
                 args,
@@ -1223,8 +1240,9 @@ pub(crate) fn task_start_from_flatbuffer(
             })?;
 
             Ok(KernelTaskStart::StartEval {
-                player: convert_schema::obj_from_flatbuffer_struct(&se.player)
-                    .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding player: {e}")))?,
+                player: convert_schema::obj_from_flatbuffer_struct(&se.player).map_err(|e| {
+                    TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
+                })?,
                 program,
             })
         }
@@ -1273,10 +1291,12 @@ pub(crate) fn fork_from_flatbuffer(fb: &fb::Fork) -> Result<Fork, TaskConversion
         .transpose()?;
 
     Ok(Fork {
-        player: convert_schema::obj_from_flatbuffer_struct(&fb.player)
-            .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding player: {e}")))?,
-        progr: convert_schema::obj_from_flatbuffer_struct(&fb.progr)
-            .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding progr: {e}")))?,
+        player: convert_schema::obj_from_flatbuffer_struct(&fb.player).map_err(|e| {
+            TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
+        })?,
+        progr: convert_schema::obj_from_flatbuffer_struct(&fb.progr).map_err(|e| {
+            TaskConversionError::DecodingError(format!("Error decoding progr: {e}"))
+        })?,
         parent_task_id: fb.parent_task_id as usize,
         delay,
         activation,
@@ -1290,7 +1310,12 @@ pub(crate) fn fork_from_flatbuffer(fb: &fb::Fork) -> Result<Fork, TaskConversion
 // ============================================================================
 
 pub(crate) fn pending_timeout_to_flatbuffer(
-    timeout: &(KernelAbortLimitReason, moor_var::Var, moor_var::Symbol, usize),
+    timeout: &(
+        KernelAbortLimitReason,
+        moor_var::Var,
+        moor_var::Symbol,
+        usize,
+    ),
 ) -> Result<fb::PendingTimeout, TaskConversionError> {
     let (reason, this, verb_name, line_number) = timeout;
 
@@ -1309,7 +1334,15 @@ pub(crate) fn pending_timeout_to_flatbuffer(
 
 pub(crate) fn pending_timeout_from_flatbuffer(
     fb: &fb::PendingTimeout,
-) -> Result<(KernelAbortLimitReason, moor_var::Var, moor_var::Symbol, usize), TaskConversionError> {
+) -> Result<
+    (
+        KernelAbortLimitReason,
+        moor_var::Var,
+        moor_var::Symbol,
+        usize,
+    ),
+    TaskConversionError,
+> {
     let reason = abort_limit_reason_from_flatbuffer(&fb.reason)?;
     let this = convert_schema::var_from_db_flatbuffer(&fb.this)
         .map_err(|e| TaskConversionError::VarError(format!("Error decoding this: {e}")))?;
@@ -1384,12 +1417,14 @@ pub(crate) fn task_from_flatbuffer(fb: &fb::Task) -> Result<KernelTask, TaskConv
 
     Ok(KernelTask {
         task_id: fb.task_id as usize,
-        player: convert_schema::obj_from_flatbuffer_struct(&fb.player)
-            .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding player: {e}")))?,
+        player: convert_schema::obj_from_flatbuffer_struct(&fb.player).map_err(|e| {
+            TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
+        })?,
         task_start,
         vm_host,
-        perms: convert_schema::obj_from_flatbuffer_struct(&fb.perms)
-            .map_err(|e| TaskConversionError::DecodingError(format!("Error decoding perms: {e}")))?,
+        perms: convert_schema::obj_from_flatbuffer_struct(&fb.perms).map_err(|e| {
+            TaskConversionError::DecodingError(format!("Error decoding perms: {e}"))
+        })?,
         kill_switch: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         retries: fb.retries,
         retry_state,

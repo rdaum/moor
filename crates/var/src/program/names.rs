@@ -18,12 +18,11 @@ use crate::{
         names::VarName::{Named, Register},
     },
 };
-use bincode::{Decode, Encode};
 use std::collections::HashMap;
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
 /// A Name is a unique identifier for a variable or register in the program's environment.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Name(
     pub u16, /* offset */
     pub u8,  /* scope depth */
@@ -49,14 +48,14 @@ pub enum GlobalName {
 }
 
 /// Either a "name" or a register, but with a unique (across scopes) identifier.
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct Variable {
     pub id: u16,
     pub scope_id: u16,
     pub nr: VarName,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum VarName {
     Named(Symbol),
     Register(u16),
@@ -71,7 +70,7 @@ impl Variable {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Names {
     /// The size of the global scope, e.g. the size the environment should be when the frame
     /// is first created.

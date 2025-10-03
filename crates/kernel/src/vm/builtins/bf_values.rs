@@ -20,8 +20,8 @@ use crate::{
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
-    AsByteBuffer, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Sequence, Variant, v_err, v_float, v_int,
-    v_obj, v_objid, v_str, v_sym,
+    ByteSized, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Sequence, Variant, v_err, v_float, v_int, v_obj,
+    v_objid, v_str, v_sym,
 };
 
 /// MOO: `int typeof(any value)`

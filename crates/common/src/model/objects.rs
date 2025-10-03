@@ -15,10 +15,9 @@ use binary_layout::{Field, binary_layout};
 use std::fmt::{Display, Formatter};
 
 use crate::util::BitEnum;
-use bincode::{Decode, Encode};
 use byteview::ByteView;
 use enum_primitive_derive::Primitive;
-use moor_var::{AsByteBuffer, DecodingError, EncodingError, NOTHING, Obj, Symbol};
+use moor_var::{ByteSized, NOTHING, Obj, Symbol};
 use serde::{Deserialize, Serialize};
 
 /// A reference to an object in the system, used in external interface (RPC, etc.) to refer to
@@ -30,7 +29,7 @@ use serde::{Deserialize, Serialize};
 ///    sysobj:ident[.subident] -> $ident[.subident] ObjectRef::SysObj(["ident", "subident"])
 ///    match("phrase") -> env match onn "phrase" ObjectRef::Match("phrase")
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ObjectRef {
     /// An absolute numeric object reference (e.g. #1234)
     Id(Obj),
@@ -98,7 +97,7 @@ impl Display for ObjectRef {
     }
 }
 
-#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
+#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive)]
 pub enum ObjFlag {
     User = 0,
     Programmer = 1,
@@ -161,7 +160,7 @@ pub fn obj_flags_string(flags: BitEnum<ObjFlag>) -> String {
 }
 
 // The set of built-in object attributes
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, Primitive, Decode, Encode)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, Primitive)]
 pub enum ObjAttr {
     Owner = 0,
     Name = 1,
@@ -341,27 +340,8 @@ impl Default for ObjAttrs {
     }
 }
 
-impl AsByteBuffer for ObjAttrs {
+impl ByteSized for ObjAttrs {
     fn size_bytes(&self) -> usize {
         self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
-    where
-        Self: Sized,
-    {
-        Ok(Self(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(self.0.clone())
     }
 }

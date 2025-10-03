@@ -17,12 +17,6 @@ use crate::{
     var::Var,
     variant::Variant,
 };
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use std::{cmp::Ordering, hash::Hash};
 
 #[derive(Clone)]
@@ -251,41 +245,6 @@ impl Hash for Map {
             item.0.hash(state);
             item.1.hash(state);
         }
-    }
-}
-
-impl Encode for Map {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // encode the length followed by the elements in sequence
-        self.len().encode(encoder)?;
-        for pair in self.iter() {
-            pair.encode(encoder)?;
-        }
-        Ok(())
-    }
-}
-
-impl<Context> Decode<Context> for Map {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
-        for _ in 0..len {
-            let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
-            l.push_back(pair);
-        }
-        Ok(Map(Box::new(l)))
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for Map {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
-        for _ in 0..len {
-            let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
-            l.push_back(pair);
-        }
-        Ok(Map(Box::new(l)))
     }
 }
 

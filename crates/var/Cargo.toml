@@ -27,8 +27,6 @@ harness = false
 
 [dependencies]
 # Serialization & Data Formats
-bincode.workspace = true
-planus.workspace = true
 serde.workspace = true
 
 # Async Runtime & Concurrency

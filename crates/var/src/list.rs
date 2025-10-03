@@ -17,12 +17,6 @@ use crate::{
     v_list_iter,
     variant::Variant,
 };
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use num_traits::ToPrimitive;
 use std::{
     cmp::{max, min},
@@ -343,39 +337,6 @@ impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
         let l: im::Vector<Var> = im::Vector::from_iter(iter);
         Var::from_variant(Variant::List(List(Box::new(l))))
-    }
-}
-
-impl Encode for List {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // encode the length followed by the elements in sequence
-        self.len().encode(encoder)?;
-        for v in self.iter() {
-            v.encode(encoder)?;
-        }
-        Ok(())
-    }
-}
-
-impl<Context> Decode<Context> for List {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
-        for _ in 0..len {
-            l.push_back(Var::decode(decoder)?);
-        }
-        Ok(List(Box::new(l)))
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for List {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
-        for _ in 0..len {
-            l.push_back(Var::borrow_decode(decoder)?);
-        }
-        Ok(List(Box::new(l)))
     }
 }
 

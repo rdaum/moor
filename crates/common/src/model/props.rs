@@ -13,12 +13,11 @@
 
 use crate::util::BitEnum;
 use binary_layout::binary_layout;
-use bincode::{Decode, Encode};
 use byteview::ByteView;
 use enum_primitive_derive::Primitive;
-use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj, Symbol, Var};
+use moor_var::{ByteSized, Obj, Symbol, Var};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive)]
 pub enum PropFlag {
     Read = 0,
     Write = 1,
@@ -166,25 +165,9 @@ impl From<ByteView> for PropPerms {
     }
 }
 
-impl AsByteBuffer for PropPerms {
+impl ByteSized for PropPerms {
     fn size_bytes(&self) -> usize {
         self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
-        Ok(Self(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(self.0.clone())
     }
 }
 

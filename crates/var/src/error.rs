@@ -13,14 +13,13 @@
 
 use crate::{Symbol, var::Var};
 use ErrorCode::*;
-use bincode::{Decode, Encode};
 use std::{
     fmt::{Debug, Display, Formatter},
     hash::{Hash, Hasher},
     ops::Deref,
 };
 
-#[derive(Clone, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Eq, Ord, PartialOrd)]
 pub struct Error {
     pub err_type: ErrorCode,
     pub msg: Option<Box<String>>,
@@ -62,7 +61,7 @@ impl Display for Error {
         }
     }
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[allow(non_camel_case_types)]
 pub enum ErrorCode {
     E_NONE,

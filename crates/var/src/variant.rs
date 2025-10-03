@@ -12,10 +12,9 @@
 //
 
 use crate::{
-    Associative, Error, Obj, Sequence, Symbol, binary::Binary, flyweight::Flyweight,
-    lambda::Lambda, list::List, map, string,
+    Associative, ByteSized, Error, ErrorCode, Obj, Sequence, Symbol, binary::Binary,
+    flyweight::Flyweight, lambda::Lambda, list::List, map, string,
 };
-use bincode::{Decode, Encode};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Formatter},
@@ -24,7 +23,7 @@ use std::{
 };
 
 /// Our series of types
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone)]
 pub enum Variant {
     None,
     Bool(bool),
@@ -183,4 +182,32 @@ impl PartialEq<Self> for Variant {
     }
 }
 
+impl ByteSized for Variant {
+    fn size_bytes(&self) -> usize {
+        match self {
+            Variant::List(l) => l.iter().map(|e| e.size_bytes()).sum::<usize>(),
+            Variant::Str(s) => s.as_arc_string().len(),
+            Variant::Map(m) => m
+                .iter()
+                .map(|(k, v)| k.size_bytes() + v.size_bytes())
+                .sum::<usize>(),
+            Variant::Err(e) => {
+                e.msg.as_ref().map(|s| s.len()).unwrap_or(0)
+                    + e.value.as_ref().map(|s| s.size_bytes()).unwrap_or(0)
+                    + size_of::<ErrorCode>()
+            }
+            Variant::Flyweight(f) => {
+                size_of::<Obj>()
+                    + f.contents().iter().map(|e| e.size_bytes()).sum::<usize>()
+                    + f.slots()
+                        .iter()
+                        .map(|(_, v)| size_of::<Symbol>() + v.size_bytes())
+                        .sum::<usize>()
+            }
+            Variant::Binary(b) => b.as_byte_view().len(),
+            Variant::Lambda(l) => size_of_val(l),
+            _ => size_of::<Variant>(),
+        }
+    }
+}
 impl Eq for Variant {}

@@ -12,7 +12,6 @@
 //
 
 use crate::tasks::Exception;
-use bincode::{Decode, Encode};
 use moor_var::{Symbol, Var};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
@@ -20,10 +19,9 @@ use uuid::Uuid;
 
 /// A narrative event is a record of something that happened in the world, and is what `bf_notify`
 /// or similar ultimately create.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NarrativeEvent {
     /// Chronologically-ordered unique identifier for this event (UUID v7 with embedded timestamp)
-    #[bincode(with_serde)]
     pub event_id: Uuid,
     /// When the event happened, in the server's system time.
     pub timestamp: SystemTime,
@@ -34,7 +32,7 @@ pub struct NarrativeEvent {
 }
 
 /// Types of events we can send to the session.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// The typical "something happened" descriptive event.
     /// Value, Content-Type, no_flush, no_newline
@@ -60,7 +58,7 @@ pub enum Event {
 /// A recommended "presentation" to the client. E.g. a pop-up, a panel, widget, etc. Not necessarily
 /// "momentary" event in the narrative like a "notify" event, but something that should be placed
 /// in the user interface in a client-interpreted fashion.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Presentation {
     /// A unique identifier for this presentation. If a new presentation is sent with the same id,
     /// the client should replace the existing presentation with the new one.
