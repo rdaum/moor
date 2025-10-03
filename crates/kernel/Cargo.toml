@@ -55,6 +55,7 @@ moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-moot = { path = "../testing/moot", features = ["colors"] }
 moor-objdef = { path = "../objdef" }
+moor-schema = { path = "../schema" }
 moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 
@@ -63,7 +64,6 @@ gdt-cpus.workspace = true
 libc.workspace = true
 
 # Serialization & Data Formats
-bincode.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 xml-rs.workspace = true

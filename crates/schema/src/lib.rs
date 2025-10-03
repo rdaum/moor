@@ -21,6 +21,7 @@ pub mod common;
 pub mod event_log;
 pub mod program;
 pub mod rpc;
+pub mod task;
 pub mod var;
 pub mod convert {
     pub use crate::{

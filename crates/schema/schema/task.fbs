@@ -1,0 +1,407 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// FlatBuffer schema for suspended task persistence
+//
+// This schema represents everything needed to reconstitute a suspended MOO task,
+// including its VM state, call stack, and execution context.
+
+include "common.fbs";
+include "var.fbs";
+include "moor_program.fbs";
+
+namespace MoorTask;
+
+// ============================================================================
+// Version
+// ============================================================================
+// Schema version for migrations - increment when making breaking changes
+
+// ============================================================================
+// Time Representation
+// ============================================================================
+// Use monotonic time as nanos since system boot for WakeCondition::Time
+// This matches minstant::Instant's serialization approach
+
+table WakeTime {
+    nanos: uint64;
+}
+
+union WakeConditionUnion {
+    WakeTime,
+    WakeNever,
+    WakeInput,
+    WakeImmediate,
+    WakeTask,
+    WakeWorker,
+    WakeGCComplete
+}
+
+table WakeNever {}
+
+table WakeInput {
+    uuid: MoorCommon.Uuid (required);
+}
+
+table WakeImmediate {}
+
+table WakeTask {
+    task_id: uint64;
+}
+
+table WakeWorker {
+    uuid: MoorCommon.Uuid (required);
+}
+
+table WakeGCComplete {}
+
+table WakeCondition {
+    condition: WakeConditionUnion (required);
+}
+
+// ============================================================================
+// TaskStart - What initiated this task
+// ============================================================================
+
+union TaskStartUnion {
+    StartCommandVerb,
+    StartDoCommand,
+    StartVerb,
+    StartFork,
+    StartEval
+}
+
+table StartCommandVerb {
+    handler_object: MoorCommon.Obj (required);
+    player: MoorCommon.Obj (required);
+    command: string (required);
+}
+
+table StartDoCommand {
+    handler_object: MoorCommon.Obj (required);
+    player: MoorCommon.Obj (required);
+    command: string (required);
+}
+
+table StartVerb {
+    player: MoorCommon.Obj (required);
+    vloc: MoorVar.Var (required);
+    verb: MoorCommon.Symbol (required);
+    args: [MoorVar.Var] (required);
+    argstr: string (required);
+}
+
+table Fork {
+    player: MoorCommon.Obj (required);
+    progr: MoorCommon.Obj (required);
+    parent_task_id: uint64;
+    delay_nanos: uint64;  // Use 0 for None
+    has_delay: bool;
+    activation: Activation (required);
+    fork_vector_offset: uint64;
+    task_id: MoorProgram.StoredName;  // Optional
+}
+
+table StartFork {
+    fork_request: Fork (required);
+    suspended_nanos: uint64;
+}
+
+table StartEval {
+    player: MoorCommon.Obj (required);
+    program: MoorProgram.StoredProgram (required);
+}
+
+table TaskStart {
+    start: TaskStartUnion (required);
+}
+
+// ============================================================================
+// Timeout/Abort State
+// ============================================================================
+
+union AbortLimitReasonUnion {
+    AbortTicks,
+    AbortTime
+}
+
+table AbortTicks {
+    ticks: uint64;
+}
+
+table AbortTime {
+    seconds: uint64;
+}
+
+table AbortLimitReason {
+    reason: AbortLimitReasonUnion (required);
+}
+
+table PendingTimeout {
+    reason: AbortLimitReason (required);
+    this: MoorVar.Var (required);
+    verb_name: MoorCommon.Symbol (required);
+    line_number: uint64;
+}
+
+// ============================================================================
+// VM Execution Frames
+// ============================================================================
+
+// PC location type
+union PcTypeUnion {
+    PcMain,
+    PcForkVector,
+    PcLambda
+}
+
+table PcMain {}
+
+table PcForkVector {
+    offset: uint64;
+}
+
+table PcLambda {
+    offset: uint64;
+}
+
+table PcType {
+    pc_type: PcTypeUnion (required);
+}
+
+// Catch handling
+union CatchTypeUnion {
+    CatchAny,
+    CatchErrors
+}
+
+table CatchAny {}
+
+table CatchErrors {
+    errors: [MoorCommon.Error] (required);
+}
+
+table CatchType {
+    catch_type: CatchTypeUnion (required);
+}
+
+table CatchHandler {
+    catch_type: CatchType (required);
+    label: uint16;
+}
+
+// FinallyReason - why a finally block is executing
+union FinallyReasonUnion {
+    FinallyFallthrough,
+    FinallyRaise,
+    FinallyReturn,
+    FinallyAbort,
+    FinallyExit
+}
+
+table FinallyFallthrough {}
+
+table FinallyRaise {
+    exception: MoorCommon.Exception (required);
+}
+
+table FinallyReturn {
+    value: MoorVar.Var (required);
+}
+
+table FinallyAbort {}
+
+table FinallyExit {
+    stack: uint64;
+    label: uint16;
+}
+
+table FinallyReason {
+    reason: FinallyReasonUnion (required);
+}
+
+// Scope types - block scopes for control flow
+union ScopeTypeUnion {
+    ScopeTryFinally,
+    ScopeTryCatch,
+    ScopeIf,
+    ScopeEif,
+    ScopeWhile,
+    ScopeFor,
+    ScopeForSequence,
+    ScopeForRange,
+    ScopeBlock,
+    ScopeComprehension
+}
+
+table ScopeTryFinally {
+    label: uint16;
+}
+
+table ScopeTryCatch {
+    handlers: [CatchHandler] (required);
+}
+
+table ScopeIf {}
+table ScopeEif {}
+table ScopeWhile {}
+table ScopeFor {}
+
+table ScopeForSequence {
+    sequence: MoorVar.Var (required);
+    current_index: uint64;
+    value_bind: MoorProgram.StoredName (required);
+    key_bind: MoorProgram.StoredName;  // Optional
+    end_label: uint16;
+}
+
+table ScopeForRange {
+    current_value: MoorVar.Var (required);
+    end_value: MoorVar.Var (required);
+    loop_variable: MoorProgram.StoredName (required);
+    end_label: uint16;
+}
+
+table ScopeBlock {}
+table ScopeComprehension {}
+
+table ScopeType {
+    scope_type: ScopeTypeUnion (required);
+}
+
+table Scope {
+    scope_type: ScopeType (required);
+    valstack_pos: uint64;
+    start_pos: uint64;
+    end_pos: uint64;
+    has_environment: bool;
+}
+
+// Environment: Vec<Vec<Option<Var>>>
+// Each scope has a list of optional variables
+table EnvironmentScope {
+    vars: [MoorVar.Var] (required);  // Empty Var represents None
+}
+
+// Capture stack: Vec<(Name, Var)> for lambda closures
+table CapturedVar {
+    name: MoorProgram.StoredName (required);
+    value: MoorVar.Var (required);
+}
+
+// ============================================================================
+// Frame Types
+// ============================================================================
+
+table BfFrame {
+    bf_id: uint16;
+    bf_trampoline: uint64;  // Use 0 for None
+    has_trampoline: bool;
+    bf_trampoline_arg: MoorVar.Var;  // Optional - empty if None
+    return_value: MoorVar.Var;  // Optional - empty if None
+}
+
+table MooStackFrame {
+    program: MoorProgram.StoredProgram (required);
+    pc: uint64;
+    pc_type: PcType (required);
+    environment: [EnvironmentScope] (required);
+    valstack: [MoorVar.Var] (required);
+    scope_stack: [Scope] (required);
+    temp: MoorVar.Var (required);
+    catch_stack: [CatchHandler] (required);
+    finally_stack: [FinallyReason] (required);
+    capture_stack: [CapturedVar] (required);
+}
+
+union FrameUnion {
+    MooFrame,
+    BfFrame
+}
+
+table MooFrame {
+    frame: MooStackFrame (required);
+}
+
+table BfFrameWrapper {
+    frame: BfFrame (required);
+}
+
+table Frame {
+    frame: FrameUnion (required);
+}
+
+// ============================================================================
+// Activation (Call Stack Frame)
+// ============================================================================
+
+table Activation {
+    frame: Frame (required);
+    this: MoorVar.Var (required);
+    player: MoorCommon.Obj (required);
+    args: [MoorVar.Var] (required);
+    verb_name: MoorCommon.Symbol (required);
+    verbdef: MoorCommon.VerbDef (required);
+    permissions: MoorCommon.Obj (required);
+}
+
+// ============================================================================
+// VM Execution State
+// ============================================================================
+
+table VMExecState {
+    activation_stack: [Activation] (required);
+    tick_count: uint64;
+    start_time_nanos: uint64;
+}
+
+table VmHost {
+    task_id: uint64;
+    max_stack_depth: uint64;
+    max_ticks: uint64;
+    max_time_ms: uint64;
+    exec_state: VMExecState (required);
+}
+
+// ============================================================================
+// Task
+// ============================================================================
+
+table Task {
+    // Schema version for migrations
+    version: uint16;
+
+    task_id: uint64;
+    player: MoorCommon.Obj (required);
+    task_start: TaskStart (required);
+    vm_host: VmHost (required);
+    perms: MoorCommon.Obj (required);
+    retries: uint8;
+    retry_state: VMExecState (required);
+    handling_uncaught_error: bool;
+    pending_exception: MoorCommon.Exception;  // Optional - empty if None
+    handling_task_timeout: bool;
+    pending_timeout: PendingTimeout;  // Optional - empty if None
+}
+
+// ============================================================================
+// Suspended Task (Top Level)
+// ============================================================================
+
+table SuspendedTask {
+    // Schema version for migrations
+    version: uint16;
+
+    wake_condition: WakeCondition (required);
+    task: Task (required);
+}

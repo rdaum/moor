@@ -13,7 +13,6 @@
 
 use std::time::Duration;
 
-use bincode::{Decode, Encode};
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
@@ -34,11 +33,11 @@ pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
 pub mod builtins;
-mod moo_frame;
+pub(crate) mod moo_frame;
 pub mod vm_host;
 
 /// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone)]
 pub struct Fork {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit

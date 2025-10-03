@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
 use moor_var::{NOTHING, Obj, Symbol, Var, v_obj};
 use std::time::{Duration, SystemTime};
 
@@ -33,7 +32,7 @@ pub struct Caller {
 }
 
 /// Represents the state of VM execution for a given task.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug)]
 pub(crate) struct VMExecState {
     /// The task ID of the task that for current stack of activations.
     pub(crate) task_id: TaskId,
@@ -54,7 +53,7 @@ pub(crate) struct VMExecState {
     /// Pending error to raise when execution resumes
     pub(crate) pending_raise_error: Option<moor_var::Error>,
 
-    unsync: PhantomUnsync,
+    pub(crate) unsync: PhantomUnsync,
 }
 
 impl VMExecState {

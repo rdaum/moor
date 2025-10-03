@@ -12,12 +12,6 @@
 //
 
 use ahash::AHasher;
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use flume::{Receiver, Sender};
 use hierarchical_hash_wheel_timer::wheels::{
     TimerEntryWithDelay,
@@ -29,7 +23,7 @@ use std::{
     collections::HashMap,
     hash::BuildHasherDefault,
     sync::{Arc, atomic::AtomicBool},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -51,7 +45,7 @@ impl TimerEntryWithDelay for TimerEntry {
     }
 }
 use crate::tasks::{TaskDescription, TaskResult, TaskStart, TasksDb};
-use moor_common::tasks::{NoopClientSession, SchedulerError, Session, SessionFactory, TaskId};
+use moor_common::tasks::{SchedulerError, Session, SessionFactory, TaskId};
 
 /// The internal state of the task queue.
 pub struct TaskQ {
@@ -209,7 +203,6 @@ pub enum WakeCondition {
 }
 
 #[repr(u8)]
-#[derive(Encode, Decode, Debug)]
 pub enum WakeConditionType {
     Never = 0,
     Time = 1,
@@ -639,165 +632,6 @@ impl SuspensionQ {
             .collect::<Vec<_>>();
         for task_id in to_remove {
             self.remove_task(task_id);
-        }
-    }
-}
-
-fn from_epoch_micros_to_instant(time_since_epoch_micros: u128) -> Instant {
-    // Convert stored epoch micros back to SystemTime
-    let stored_system_time =
-        UNIX_EPOCH + Duration::from_micros(time_since_epoch_micros.min(u64::MAX as u128) as u64);
-
-    // Calculate how far in the future (or past) this time is relative to now
-    let now_system = SystemTime::now();
-    let now_instant = Instant::now();
-
-    match stored_system_time.cmp(&now_system) {
-        std::cmp::Ordering::Greater => {
-            // Future time - add the difference
-            let time_diff = stored_system_time
-                .duration_since(now_system)
-                .unwrap_or(Duration::ZERO);
-            now_instant + time_diff
-        }
-        std::cmp::Ordering::Less => {
-            // Past time - subtract the difference (but don't go negative)
-            let time_diff = now_system
-                .duration_since(stored_system_time)
-                .unwrap_or(Duration::ZERO);
-            now_instant.checked_sub(time_diff).unwrap_or(now_instant)
-        }
-        std::cmp::Ordering::Equal => {
-            // Same time
-            now_instant
-        }
-    }
-}
-
-impl Encode for SuspendedTask {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // We only care about the task and wake condition. The session & result sender are not
-        // encoded, as they are transient and re-constituted as no-op versions.
-
-        self.wake_condition.encode(encoder)?;
-        self.task.encode(encoder)?;
-        Ok(())
-    }
-}
-
-impl<C> Decode<C> for SuspendedTask {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let wake_condition = WakeCondition::decode(decoder)?;
-        let task = Box::new(Task::decode(decoder)?);
-        Ok(SuspendedTask {
-            wake_condition,
-            task,
-            session: Arc::new(NoopClientSession::new()),
-            result_sender: None,
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for SuspendedTask {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let wake_condition = WakeCondition::borrow_decode(decoder)?;
-        let task = Box::new(Task::borrow_decode(decoder)?);
-        Ok(SuspendedTask {
-            wake_condition,
-            task,
-            session: Arc::new(NoopClientSession::new()),
-            result_sender: None,
-        })
-    }
-}
-
-impl Encode for WakeCondition {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let type_code = self.condition_type();
-        type_code.encode(encoder)?;
-        match self {
-            WakeCondition::Never => Ok(()),
-            WakeCondition::Time(t) => {
-                // Convert Instant to absolute epoch time for storage
-                let now_system = SystemTime::now();
-                let now_instant = Instant::now();
-
-                let epoch_time = if *t >= now_instant {
-                    // Future time - add the difference
-                    let time_diff = t.duration_since(now_instant);
-                    now_system + time_diff
-                } else {
-                    // Past time - subtract the difference (but don't go before epoch)
-                    let time_diff = now_instant.duration_since(*t);
-                    now_system.checked_sub(time_diff).unwrap_or(UNIX_EPOCH)
-                };
-
-                let time_since_epoch = epoch_time
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or(Duration::ZERO);
-                time_since_epoch.as_micros().encode(encoder)
-            }
-            WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
-            WakeCondition::Task(task_id) => task_id.encode(encoder),
-            WakeCondition::Worker(worker_request_id) => worker_request_id.as_u128().encode(encoder),
-            WakeCondition::Immedate => Ok(()),
-            WakeCondition::GCComplete => Ok(()),
-        }
-    }
-}
-
-impl<C> Decode<C> for WakeCondition {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let type_code: WakeConditionType = Decode::decode(decoder)?;
-        match type_code {
-            WakeConditionType::Never => Ok(WakeCondition::Never),
-            WakeConditionType::Time => {
-                let time_since_epoch_micros: u128 = Decode::decode(decoder)?;
-                let wake_time = from_epoch_micros_to_instant(time_since_epoch_micros);
-                Ok(WakeCondition::Time(wake_time))
-            }
-            WakeConditionType::Input => {
-                let uuid = Uuid::from_u128(Decode::decode(decoder)?);
-                Ok(WakeCondition::Input(uuid))
-            }
-            WakeConditionType::Task => {
-                let task_id = TaskId::decode(decoder)?;
-                Ok(WakeCondition::Task(task_id))
-            }
-            WakeConditionType::Worker => {
-                let worker_request_id = Uuid::from_u128(Decode::decode(decoder)?);
-                Ok(WakeCondition::Worker(worker_request_id))
-            }
-            WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
-            WakeConditionType::GCComplete => Ok(WakeCondition::GCComplete),
-        }
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for WakeCondition {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let type_code: WakeConditionType = Decode::decode(decoder)?;
-        match type_code {
-            WakeConditionType::Never => Ok(WakeCondition::Never),
-            WakeConditionType::Time => {
-                let time_since_epoch_micros: u128 = Decode::decode(decoder)?;
-                let wake_time = from_epoch_micros_to_instant(time_since_epoch_micros);
-                Ok(WakeCondition::Time(wake_time))
-            }
-            WakeConditionType::Input => {
-                let uuid = Uuid::from_u128(Decode::decode(decoder)?);
-                Ok(WakeCondition::Input(uuid))
-            }
-            WakeConditionType::Task => {
-                let task_id = TaskId::borrow_decode(decoder)?;
-                Ok(WakeCondition::Task(task_id))
-            }
-            WakeConditionType::Worker => {
-                let worker_request_id = Uuid::from_u128(Decode::decode(decoder)?);
-                Ok(WakeCondition::Worker(worker_request_id))
-            }
-            WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
-            WakeConditionType::GCComplete => Ok(WakeCondition::GCComplete),
         }
     }
 }

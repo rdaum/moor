@@ -16,12 +16,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use tracing::{debug, error, warn};
 
 #[cfg(feature = "trace_events")]
@@ -123,16 +117,16 @@ pub(crate) enum ExecutionResult {
 pub struct VmHost {
     /// Where we store current execution state for this host. Includes all activations and the
     /// interpreter-specific frames inside them.
-    vm_exec_state: VMExecState,
+    pub(crate) vm_exec_state: VMExecState,
     /// The maximum stack depth for this task
-    max_stack_depth: usize,
+    pub(crate) max_stack_depth: usize,
     /// The amount of ticks (opcode executions) allotted to this task
-    max_ticks: usize,
+    pub(crate) max_ticks: usize,
     /// The maximum amount of time allotted to this task
-    max_time: Duration,
-    running: bool,
+    pub(crate) max_time: Duration,
+    pub(crate) running: bool,
 
-    unsync: PhantomUnsync,
+    pub(crate) unsync: PhantomUnsync,
 }
 
 impl Debug for VmHost {
@@ -596,55 +590,5 @@ impl VmHost {
     }
     pub fn args(&self) -> &List {
         &self.vm_exec_state.top().args
-    }
-}
-
-impl Encode for VmHost {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // The VM is not something we need to serialize.
-        self.vm_exec_state.encode(encoder)?;
-        self.max_stack_depth.encode(encoder)?;
-        self.max_ticks.encode(encoder)?;
-        self.max_time.as_secs().encode(encoder)?;
-
-        // 'running' is a transient state, so we don't encode it, it will always be `true`
-        // when we decode
-        Ok(())
-    }
-}
-
-impl<C> Decode<C> for VmHost {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let vm_exec_state = VMExecState::decode(decoder)?;
-        let max_stack_depth = Decode::decode(decoder)?;
-        let max_ticks = Decode::decode(decoder)?;
-        let max_time = Duration::from_secs(Decode::decode(decoder)?);
-
-        Ok(Self {
-            vm_exec_state,
-            max_stack_depth,
-            max_ticks,
-            max_time,
-            running: true,
-            unsync: Default::default(),
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for VmHost {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let vm_exec_state = VMExecState::borrow_decode(decoder)?;
-        let max_stack_depth = BorrowDecode::borrow_decode(decoder)?;
-        let max_ticks = BorrowDecode::borrow_decode(decoder)?;
-        let max_time = Duration::from_secs(BorrowDecode::borrow_decode(decoder)?);
-
-        Ok(Self {
-            vm_exec_state,
-            max_stack_depth,
-            max_ticks,
-            max_time,
-            running: true,
-            unsync: Default::default(),
-        })
     }
 }

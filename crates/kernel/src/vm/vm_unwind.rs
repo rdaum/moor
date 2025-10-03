@@ -21,7 +21,6 @@ use crate::vm::{
 
 #[cfg(feature = "trace_events")]
 use crate::{trace_builtin_end, trace_stack_unwind, trace_verb_end};
-use bincode::{Decode, Encode};
 use moor_common::{
     model::{Named, VerbFlag},
     tasks::Exception,
@@ -33,7 +32,7 @@ use moor_var::{
 };
 use tracing::warn;
 
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FinallyReason {
     Fallthrough,
     Raise(Box<Exception>),

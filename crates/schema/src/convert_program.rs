@@ -45,8 +45,8 @@ fn encode_name(name: &Name) -> fb::StoredName {
     }
 }
 
-// Helper to convert a Program to FlatBuffer StoredProgram struct (for recursive encoding)
-fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, EncodeError> {
+// Convert a Program to FlatBuffer StoredProgram struct (for embedding in other schemas)
+pub fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, EncodeError> {
     // 1. Encode main_vector using OpStream
     let mut main_stream = OpStream::new();
     for op in program.main_vector() {
@@ -327,6 +327,18 @@ fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, EncodeEr
         line_number_spans,
         fork_line_number_spans,
     })
+}
+
+/// Convert a FlatBuffer StoredProgram struct to a Program (runtime format)
+pub fn decode_stored_program_struct(stored: &fb::StoredProgram) -> Result<Program, DecodeError> {
+    // Convert owned struct to bytes and back to ref for decoding
+    // This is a bit inefficient but works with the existing decode logic
+    let mut builder = planus::Builder::new();
+    let offset = stored.prepare(&mut builder);
+    let bytes = builder.finish(offset, None);
+    let fb_ref = fb::StoredProgramRef::read_as_root(bytes)
+        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read StoredProgram: {e}")))?;
+    decode_fb_program(fb_ref)
 }
 
 /// Convert a Program to a StoredProgram (FlatBuffer format)
@@ -694,7 +706,7 @@ fn decode_names_from_fb(
     })
 }
 
-fn decode_fb_program(fb_prog_ref: fb::StoredProgramRef) -> Result<Program, DecodeError> {
+pub fn decode_fb_program(fb_prog_ref: fb::StoredProgramRef) -> Result<Program, DecodeError> {
     // This is essentially the same as stored_to_program but takes a Ref
     // For simplicity, we can convert to owned and then encode/decode
     // Or we can duplicate the logic - let's duplicate for now

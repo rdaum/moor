@@ -12,12 +12,6 @@
 //
 
 use crate::vm::FinallyReason;
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
     Error, Var,
@@ -59,14 +53,14 @@ pub(crate) struct MooStackFrame {
     pub(crate) capture_stack: Vec<(Name, Var)>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PcType {
     Main,
     ForkVector(Offset),
     Lambda(Offset),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CatchType {
     Any,
     Errors(Vec<Error>),
@@ -74,7 +68,7 @@ pub enum CatchType {
 
 /// The kinds of block scopes that can be entered and exited, which far now are just catch and
 /// finally blocks.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ScopeType {
     /// A scope that attempts to execute a block of code, and then executes the block of code at
     /// "Label" regardless of whether the block of code succeeded or failed.
@@ -108,7 +102,7 @@ pub(crate) enum ScopeType {
 /// enter and exit scopes.
 /// On entry, the current size of the valstack is stored in `valstack_pos`.
 /// On exit, the valstack is eaten back to that size.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Scope {
     pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
@@ -403,74 +397,5 @@ impl MooStackFrame {
             }
         }
         None
-    }
-}
-
-impl Encode for MooStackFrame {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.program.encode(encoder)?;
-        self.pc.encode(encoder)?;
-        self.pc_type.encode(encoder)?;
-        self.environment.encode(encoder)?;
-        self.valstack.encode(encoder)?;
-        self.scope_stack.encode(encoder)?;
-        self.temp.encode(encoder)?;
-        self.catch_stack.encode(encoder)?;
-        self.finally_stack.encode(encoder)?;
-        self.capture_stack.encode(encoder)
-    }
-}
-
-impl<C> Decode<C> for MooStackFrame {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::decode(decoder)?;
-        let pc = usize::decode(decoder)?;
-        let pc_type = PcType::decode(decoder)?;
-        let environment = Vec::decode(decoder)?;
-        let valstack = Vec::decode(decoder)?;
-        let scope_stack = Vec::decode(decoder)?;
-        let temp = Var::decode(decoder)?;
-        let catch_stack = Vec::decode(decoder)?;
-        let finally_stack = Vec::decode(decoder)?;
-        let capture_stack = Vec::decode(decoder)?;
-        Ok(Self {
-            program,
-            pc,
-            pc_type,
-            environment,
-            valstack,
-            scope_stack,
-            temp,
-            catch_stack,
-            finally_stack,
-            capture_stack,
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::borrow_decode(decoder)?;
-        let pc = usize::borrow_decode(decoder)?;
-        let pc_type = PcType::borrow_decode(decoder)?;
-        let environment = Vec::borrow_decode(decoder)?;
-        let valstack = Vec::borrow_decode(decoder)?;
-        let scope_stack = Vec::borrow_decode(decoder)?;
-        let temp = Var::borrow_decode(decoder)?;
-        let catch_stack = Vec::borrow_decode(decoder)?;
-        let finally_stack = Vec::borrow_decode(decoder)?;
-        let capture_stack = Vec::borrow_decode(decoder)?;
-        Ok(Self {
-            program,
-            pc,
-            pc_type,
-            environment,
-            valstack,
-            scope_stack,
-            temp,
-            catch_stack,
-            finally_stack,
-            capture_stack,
-        })
     }
 }

@@ -32,12 +32,6 @@ use crate::task_context::{
     with_current_transaction_mut, with_new_transaction,
 };
 
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use flume::Sender;
 use lazy_static::lazy_static;
 use rand::Rng;
@@ -1002,86 +996,6 @@ fn find_verb_for_command(
         }
     }
     Ok(None)
-}
-
-impl Encode for Task {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // We encode everything but the kill switch, which is transient and always decoded to 'true'
-        self.task_id.encode(encoder)?;
-        self.player.encode(encoder)?;
-        self.task_start.encode(encoder)?;
-        self.vm_host.encode(encoder)?;
-        self.perms.encode(encoder)?;
-        self.retries.encode(encoder)?;
-        self.retry_state.encode(encoder)?;
-        self.handling_uncaught_error.encode(encoder)?;
-        self.pending_exception.encode(encoder)?;
-        self.handling_task_timeout.encode(encoder)?;
-        self.pending_timeout.encode(encoder)
-    }
-}
-
-impl<C> Decode<C> for Task {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let task_id = TaskId::decode(decoder)?;
-        let player = Obj::decode(decoder)?;
-        let task_start = TaskStart::decode(decoder)?;
-        let vm_host = VmHost::decode(decoder)?;
-        let perms = Obj::decode(decoder)?;
-        let retries = u8::decode(decoder)?;
-        let retry_state = VMExecState::decode(decoder)?;
-        let handling_uncaught_error = bool::decode(decoder)?;
-        let pending_exception = Option::<Exception>::decode(decoder)?;
-        let handling_task_timeout = bool::decode(decoder)?;
-        let pending_timeout = Option::<(AbortLimitReason, Var, Symbol, usize)>::decode(decoder)?;
-        let kill_switch = Arc::new(AtomicBool::new(false));
-        Ok(Task {
-            task_id,
-            player,
-            task_start,
-            vm_host,
-            perms,
-            kill_switch,
-            retries,
-            retry_state,
-            handling_uncaught_error,
-            pending_exception,
-            handling_task_timeout,
-            pending_timeout,
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for Task {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let task_id = TaskId::borrow_decode(decoder)?;
-        let player = Obj::borrow_decode(decoder)?;
-        let task_start = TaskStart::decode(decoder)?;
-        let vm_host = VmHost::borrow_decode(decoder)?;
-        let perms = Obj::borrow_decode(decoder)?;
-        let retries = u8::decode(decoder)?;
-        let retry_state = VMExecState::decode(decoder)?;
-        let handling_uncaught_error = bool::decode(decoder)?;
-        let pending_exception = Option::<Exception>::decode(decoder)?;
-        let handling_task_timeout = bool::decode(decoder)?;
-        let pending_timeout = Option::<(AbortLimitReason, Var, Symbol, usize)>::decode(decoder)?;
-        let kill_switch = Arc::new(AtomicBool::new(false));
-
-        Ok(Task {
-            task_id,
-            player,
-            task_start,
-            vm_host,
-            perms,
-            kill_switch,
-            retries,
-            retry_state,
-            handling_uncaught_error,
-            pending_exception,
-            handling_task_timeout,
-            pending_timeout,
-        })
-    }
 }
 
 // TODO: a battery of unit tests here. Which will likely involve setting up a standalone VM running

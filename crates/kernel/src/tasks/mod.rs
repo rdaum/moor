@@ -13,7 +13,6 @@
 
 use std::{fmt::Debug, time::SystemTime};
 
-use bincode::{Decode, Encode};
 use flume::Receiver;
 use lazy_static::lazy_static;
 use moor_compiler::{Program, to_literal};
@@ -28,6 +27,7 @@ use moor_common::{
 
 pub mod scheduler;
 
+pub mod convert_task;
 pub(crate) mod gc_thread;
 pub(crate) mod scheduler_client;
 pub(crate) mod task;
@@ -114,7 +114,7 @@ pub struct TaskDescription {
 
 /// The set of options that can be configured for the server via core $server_options.
 /// bf_load_server_options refreshes the server options from the database.
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone)]
 pub struct ServerOptions {
     /// The number of seconds allotted to background tasks.
     pub bg_seconds: u64,
@@ -223,7 +223,7 @@ impl SchedulerPerfCounters {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone)]
 pub enum TaskStart {
     /// The scheduler is telling the task to parse a command and execute whatever verbs are
     /// associated with it.

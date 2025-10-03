@@ -11,13 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
-use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
@@ -27,8 +20,8 @@ use moor_common::{
 };
 use moor_compiler::{BuiltinId, Program, ScatterLabel};
 use moor_var::{
-    AsByteBuffer, Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_arc_string, v_empty_list,
-    v_empty_str, v_list, v_obj, v_str, v_string,
+    Error, Lambda, List, NOTHING, Obj, Symbol, Var, v_arc_string, v_empty_list, v_empty_str,
+    v_list, v_obj, v_str, v_string,
 };
 
 use crate::vm::{VerbCall, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
@@ -113,73 +106,7 @@ pub(crate) struct Activation {
     pub(crate) permissions: Obj,
 }
 
-impl Encode for Activation {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // Everything is standard bincodable except verbdef, which is a flatbuffer.
-        // TODO: this is temporary, and should be replaced with a flatbuffer encoding.
-        self.frame.encode(encoder)?;
-        self.this.encode(encoder)?;
-        self.player.encode(encoder)?;
-        self.args.encode(encoder)?;
-        self.verb_name.encode(encoder)?;
-        self.permissions.encode(encoder)?;
-
-        // verbdef gets encoded as its raw bytes from the flatbuffer
-        let verbdef_bytes = self.verbdef.as_bytes().unwrap();
-        verbdef_bytes.encode(encoder)
-    }
-}
-
-impl<C> Decode<C> for Activation {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let frame = Frame::decode(decoder)?;
-        let this = Var::decode(decoder)?;
-        let player = Obj::decode(decoder)?;
-        let args = Vec::<Var>::decode(decoder)?;
-        let verb_name = Symbol::decode(decoder)?;
-        let permissions = Obj::decode(decoder)?;
-
-        let verbdef_bytes = Vec::<u8>::decode(decoder)?;
-        let verbdef_bytes = ByteView::from(verbdef_bytes);
-        let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
-
-        Ok(Self {
-            frame,
-            this,
-            player,
-            args: List::mk_list(&args),
-            verb_name,
-            verbdef,
-            permissions,
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for Activation {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let frame = Frame::borrow_decode(decoder)?;
-        let this = Var::borrow_decode(decoder)?;
-        let player = Obj::borrow_decode(decoder)?;
-        let args = Vec::<Var>::borrow_decode(decoder)?;
-        let verb_name = Symbol::borrow_decode(decoder)?;
-        let permissions = Obj::borrow_decode(decoder)?;
-
-        let verbdef_bytes = Vec::<u8>::borrow_decode(decoder)?;
-        let verbdef_bytes = ByteView::from(verbdef_bytes);
-        let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
-
-        Ok(Self {
-            frame,
-            this,
-            player,
-            args: List::mk_list(&args),
-            verb_name,
-            verbdef,
-            permissions,
-        })
-    }
-}
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug)]
 pub enum Frame {
     Moo(Box<MooStackFrame>),
     Bf(BfFrame),
@@ -244,7 +171,7 @@ impl Frame {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BfFrame {
     /// The index of the built-in function being called.
     pub(crate) bf_id: BuiltinId,

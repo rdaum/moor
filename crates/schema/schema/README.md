@@ -86,11 +86,11 @@ paths:
 serialization via `verbdefs_to_flatbuffer` / `verbdefs_from_flatbuffer` and
 `propdefs_to_flatbuffer` / `propdefs_from_flatbuffer` in `convert_defs.rs`.
 
+**Task Migration Complete:** Task persistence now uses FlatBuffer serialization via
+`suspended_task_to_flatbuffer` / `suspended_task_from_flatbuffer` in
+`crates/kernel/src/tasks/convert_task.rs`. The `FjallTasksDB` implementation uses this for
+zero-copy task persistence with schema evolution support.
+
 Program literals also use structured Var FlatBuffers instead of bincode.
 
-**Still using bincode:**
-
-- **`crates/kernel/src/tasks/tasks_db.rs`**: Some task persistence structures
-
-Future migration of these types to FlatBuffers would provide zero-copy deserialization and better
-schema evolution.
+**Migration complete!** All major persistence paths now use FlatBuffers instead of bincode.

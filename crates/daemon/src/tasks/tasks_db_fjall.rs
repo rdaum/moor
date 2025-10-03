@@ -15,9 +15,12 @@ use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_common::tasks::TaskId;
 use moor_kernel::{
     SuspendedTask,
-    tasks::{TasksDb, TasksDbError},
+    tasks::{
+        TasksDb, TasksDbError,
+        convert_task::{suspended_task_from_flatbuffer, suspended_task_to_flatbuffer},
+    },
 };
-use moor_var::BINCODE_CONFIG;
+use planus::{ReadAsRoot, WriteAsOffset};
 use std::path::Path;
 use tracing::error;
 
@@ -54,13 +57,27 @@ impl TasksDb for FjallTasksDB {
                 TasksDbError::CouldNotLoadTasks
             })?);
             let tasks_bytes = entry.1.as_ref();
-            let (task, _): (SuspendedTask, usize) =
-                bincode::decode_from_slice(tasks_bytes, *BINCODE_CONFIG)
-                    .map_err(|e| {
-                        error!("Failed to deserialize SuspendedTask record: {:?}", e);
-                        TasksDbError::CouldNotLoadTasks
-                    })
-                    .expect("Failed to deserialize record");
+
+            // Deserialize FlatBuffer
+            let fb_task = moor_schema::task::SuspendedTaskRef::read_as_root(tasks_bytes)
+                .map_err(|e| {
+                    error!("Failed to read FlatBuffer: {:?}", e);
+                    TasksDbError::CouldNotLoadTasks
+                })?;
+
+            // Convert owned struct to bytes for conversion (inefficient but works with current API)
+            let owned_fb: moor_schema::task::SuspendedTask = fb_task.try_into()
+                .map_err(|e| {
+                    error!("Failed to convert FlatBuffer ref to owned: {:?}", e);
+                    TasksDbError::CouldNotLoadTasks
+                })?;
+
+            let task = suspended_task_from_flatbuffer(&owned_fb)
+                .map_err(|e| {
+                    error!("Failed to convert FlatBuffer to SuspendedTask: {:?}", e);
+                    TasksDbError::CouldNotLoadTasks
+                })?;
+
             if task_id != task.task.task_id {
                 panic!("Task ID mismatch: {:?} != {:?}", task_id, task.task.task_id);
             }
@@ -71,13 +88,20 @@ impl TasksDb for FjallTasksDB {
 
     fn save_task(&self, task: &SuspendedTask) -> Result<(), TasksDbError> {
         let task_id = task.task.task_id.to_le_bytes();
-        let task_bytes = bincode::encode_to_vec(task, *BINCODE_CONFIG).map_err(|e| {
-            error!("Failed to serialize record: {:?}", e);
+
+        // Convert to FlatBuffer
+        let fb_task = suspended_task_to_flatbuffer(task).map_err(|e| {
+            error!("Failed to convert task to FlatBuffer: {:?}", e);
             TasksDbError::CouldNotSaveTask
         })?;
 
+        // Serialize to bytes using planus
+        let mut builder = planus::Builder::new();
+        let offset = fb_task.prepare(&mut builder);
+        let task_bytes = builder.finish(offset, None);
+
         self.tasks_partition
-            .insert(task_id, &task_bytes)
+            .insert(task_id, task_bytes)
             .map_err(|e| {
                 error!("Failed to insert record: {:?}", e);
                 TasksDbError::CouldNotSaveTask
