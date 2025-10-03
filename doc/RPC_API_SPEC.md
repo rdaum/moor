@@ -45,8 +45,8 @@ including rooms, items, players, and even abstract concepts. Objects have:
 - **Permissions**: Every object, property, and verb has an owner and permission flags controlling
   who can read, write, or execute them
 
-The system maintains a **shared, persistent database** of these objects that all users interact
-with simultaneously.
+The system maintains a **shared, persistent database** of these objects that all users interact with
+simultaneously.
 
 ### Fundamental Data Types
 
@@ -106,8 +106,8 @@ Used for efficiently transmitting MOO values over the wire.
 
 #### Symbol
 
-Interned string identifiers used for property names, verb names, etc. These are transmitted as strings but become
-interned on the daemon side.
+Interned string identifiers used for property names, verb names, etc. These are transmitted as
+strings but become interned on the daemon side.
 
 ```flatbuffers
 table Symbol {
@@ -124,9 +124,9 @@ When you submit a command or verb invocation:
 1. **Submit Request**: Send a message like `Command` or `InvokeVerb`
 2. **Immediate Response**: Receive `TaskSubmitted` with a `task_id`
 3. **Wait for Events**: The actual result arrives later via PUB/SUB events:
-    - `TaskSuccessEvent(task_id, result)` - Task completed successfully
-    - `TaskErrorEvent(task_id, error)` - Task failed
-    - `NarrativeEvent(...)` - Output generated during execution
+   - `TaskSuccessEvent(task_id, result)` - Task completed successfully
+   - `TaskErrorEvent(task_id, error)` - Task failed
+   - `NarrativeEvent(...)` - Output generated during execution
 
 **Why asynchronous?** MOO code execution can:
 
@@ -155,23 +155,23 @@ under heavy concurrent load.
 Understanding the distinction between connections and players is essential:
 
 1. **Initial Connection** (`ConnectionEstablish`):
-    - Creates a **connection object** with a negative Obj ID (e.g., `#-1`)
-    - Represents an unauthenticated session
-    - Given a `ClientToken` for subsequent requests
+   - Creates a **connection object** with a negative Obj ID (e.g., `#-1`)
+   - Represents an unauthenticated session
+   - Given a `ClientToken` for subsequent requests
 
 2. **Authentication** (`LoginCommand`):
-    - Executes MOO code (typically `#0:do_login_command`)
-    - On success, associates the connection with a **player object** (positive ID)
-    - Returns an `AuthToken` for authenticated requests
+   - Executes MOO code (typically `#0:do_login_command`)
+   - On success, associates the connection with a **player object** (positive ID)
+   - Returns an `AuthToken` for authenticated requests
 
 3. **Authenticated Operations**:
-    - Most operations require both `ClientToken` and `AuthToken`
-    - Commands execute with the player's permissions
-    - Multiple connections can share the same player (multi-session)
+   - Most operations require both `ClientToken` and `AuthToken`
+   - Commands execute with the player's permissions
+   - Multiple connections can share the same player (multi-session)
 
 4. **Disconnection** (`Detach`):
-    - Removes the connection
-    - Optionally triggers `user_disconnected` MOO verb
+   - Removes the connection
+   - Optionally triggers `user_disconnected` MOO verb
 
 ### Common API Usage Patterns
 

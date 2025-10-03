@@ -12,8 +12,8 @@ description = "FlatBuffer entities used for RPC and persistence, and conversions
 
 [dependencies]
 # Internal Dependencies
-moor-var = { path = "../var" }
 moor-common = { path = "../common" }
+moor-var = { path = "../var" }
 
 # Serialization & Data Formats & Util
 byteview.workspace = true
@@ -28,4 +28,3 @@ thiserror.workspace = true
 # Tracing & Logging
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-

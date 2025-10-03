@@ -74,23 +74,3 @@ When you modify any `.fbs` schema file, regenerate using:
 planus rust -o ./crates/schema/src/schemas_generated.rs ./crates/schema/schema/all_schemas.fbs
 ```
 
-### Migration Status
-
-**Var Migration Complete:** The core `Var` type now uses FlatBuffer serialization with two conversion
-paths:
-
-- **RPC**: `var_to_flatbuffer` / `var_from_flatbuffer` - rejects lambdas and anonymous objects
-- **Database**: `var_to_db_flatbuffer` / `var_from_db_flatbuffer` - allows lambdas and anonymous objects
-
-**VerbDefs/PropDefs Migration Complete:** Property and verb definition collections now use FlatBuffer
-serialization via `verbdefs_to_flatbuffer` / `verbdefs_from_flatbuffer` and
-`propdefs_to_flatbuffer` / `propdefs_from_flatbuffer` in `convert_defs.rs`.
-
-**Task Migration Complete:** Task persistence now uses FlatBuffer serialization via
-`suspended_task_to_flatbuffer` / `suspended_task_from_flatbuffer` in
-`crates/kernel/src/tasks/convert_task.rs`. The `FjallTasksDB` implementation uses this for
-zero-copy task persistence with schema evolution support.
-
-Program literals also use structured Var FlatBuffers instead of bincode.
-
-**Migration complete!** All major persistence paths now use FlatBuffers instead of bincode.
