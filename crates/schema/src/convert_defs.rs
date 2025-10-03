@@ -72,7 +72,7 @@ fn prepspec_from_i16(value: i16) -> ModelPrepSpec {
             // Convert to Preposition - this is safe as long as the value is valid
             ModelPrepSpec::Other(
                 Preposition::from_repr(v as u16)
-                    .unwrap_or_else(|| panic!("Invalid preposition value: {}", v)),
+                    .unwrap_or_else(|| panic!("Invalid preposition value: {v}")),
             )
         }
         _ => ModelPrepSpec::None, // Fallback for invalid values
