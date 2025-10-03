@@ -14,6 +14,7 @@ description = "Common entities used for 0MQ based RPC communication with the dae
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../../common" }
+moor-schema = { path = "../../schema" }
 moor-var = { path = "../../var" }
 
 # Command Line & Configuration

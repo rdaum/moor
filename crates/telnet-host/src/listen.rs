@@ -15,7 +15,7 @@ use crate::{connection::TelnetConnection, connection_codec::ConnectionCodec};
 use eyre::bail;
 use futures_util::StreamExt;
 use hickory_resolver::TokioResolver;
-use moor_common::schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
+use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use rpc_async_client::{ListenersClient, ListenersMessage, rpc_client::RpcSendClient};
 use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg};

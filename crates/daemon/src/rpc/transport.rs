@@ -27,15 +27,13 @@ use uuid::Uuid;
 use zmq::Socket;
 
 use super::message_handler::MessageHandler;
-use moor_common::{
-    schema::{
-        convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
-        rpc as moor_rpc,
-    },
-    tasks::NarrativeEvent,
-};
+use moor_common::tasks::NarrativeEvent;
 use moor_kernel::SchedulerClient;
 use moor_rpc::{HostToDaemonMessageRef, MessageTypeRef};
+use moor_schema::{
+    convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
+    rpc as moor_rpc,
+};
 use moor_var::Obj;
 use rpc_common::{CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError};
 /// Trait for the transport layer that handles communication between hosts and the daemon

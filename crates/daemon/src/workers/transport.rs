@@ -14,7 +14,7 @@
 //! ZMQ transport layer for workers, separated from business logic
 
 use eyre::Context;
-use moor_common::schema::rpc as moor_rpc;
+use moor_schema::rpc as moor_rpc;
 use planus::{Builder, ReadAsRoot};
 use std::sync::{
     Arc,

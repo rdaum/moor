@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::schema::rpc;
+use moor_schema::rpc;
 
 use crate::RpcMessageError;
 

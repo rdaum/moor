@@ -14,15 +14,13 @@
 use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt, stream::SplitSink};
-use moor_common::{
-    schema::{
-        convert::{narrative_event_from_ref, var_from_flatbuffer},
-        rpc as moor_rpc, var as moor_var_schema,
-    },
-    tasks::{
-        AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
-        VerbProgramError,
-    },
+use moor_common::tasks::{
+    AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
+    VerbProgramError,
+};
+use moor_schema::{
+    convert::{narrative_event_from_ref, var_from_flatbuffer},
+    rpc as moor_rpc, var as moor_var_schema,
 };
 use moor_var::{Obj, Var, v_obj};
 use planus::ReadAsRoot;

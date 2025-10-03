@@ -16,11 +16,11 @@
 //! This module handles conversion of basic types like Var, Obj, Symbol, Uuid, Error
 //! that are used across all message types.
 
-use crate::{
-    model::ObjectRef,
-    schema::{common, var},
-};
+use moor_common::model::ObjectRef;
 use moor_var::{AsByteBuffer, Obj, Symbol, Var};
+
+use crate::common;
+use crate::var;
 
 /// Convert from moor_var::Var to flatbuffer VarBytes (serialized)
 pub fn var_to_flatbuffer_bytes(var: &Var) -> Result<Vec<u8>, moor_var::EncodingError> {
@@ -142,7 +142,7 @@ pub fn symbol_from_ref(symbol_ref: common::SymbolRef<'_>) -> Result<Symbol, Stri
 /// Convert from FlatBuffer VarBytesRef to moor_var::Var
 pub fn var_from_ref(var_ref: var::VarRef<'_>) -> Result<Var, String> {
     let var_struct = var::Var::try_from(var_ref).map_err(|_| "Failed to convert var ref")?;
-    crate::schema::convert_var::var_from_flatbuffer(&var_struct)
+    crate::convert_var::var_from_flatbuffer(&var_struct)
         .map_err(|e| format!("Failed to decode var: {e}"))
 }
 

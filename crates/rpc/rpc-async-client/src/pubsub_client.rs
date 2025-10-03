@@ -16,7 +16,7 @@ use futures_util::StreamExt;
 use tmq::subscribe::Subscribe;
 use uuid::Uuid;
 
-use moor_common::schema::{
+use moor_schema::{
     convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
     rpc, var as moor_var_schema,
 };

@@ -58,9 +58,9 @@ This organization keeps the massive generated file private while providing clean
 through modules like:
 
 ```rust
-use moor_common::schema::rpc::DaemonToWorkerReply;
-use moor_common::schema::var::Var;
-use moor_common::schema::convert::{var_to_flatbuffer, var_to_db_flatbuffer};
+use moor_schema::rpc::DaemonToWorkerReply;
+use moor_schema::var::Var;
+use moor_schema::convert::{var_to_flatbuffer, var_to_db_flatbuffer};
 ```
 
 ### Generating Code
@@ -71,13 +71,14 @@ automatically.
 When you modify any `.fbs` schema file, regenerate using:
 
 ```shell
-planus rust -o ./crates/common/src/schema/schemas_generated.rs ./crates/common/schema/all_schemas.fbs
+planus rust -o ./crates/schema/src/schemas_generated.rs ./crates/schema/schema/all_schemas.fbs
 ```
 
 ### Migration Status
 
 **Var Migration Complete:** The core `Var` type now uses FlatBuffer serialization with two conversion
 paths:
+
 - **RPC**: `var_to_flatbuffer` / `var_from_flatbuffer` - rejects lambdas and anonymous objects
 - **Database**: `var_to_db_flatbuffer` / `var_from_db_flatbuffer` - allows lambdas and anonymous objects
 
@@ -88,6 +89,7 @@ serialization via `verbdefs_to_flatbuffer` / `verbdefs_from_flatbuffer` and
 Program literals also use structured Var FlatBuffers instead of bincode.
 
 **Still using bincode:**
+
 - **`crates/kernel/src/tasks/tasks_db.rs`**: Some task persistence structures
 
 Future migration of these types to FlatBuffers would provide zero-copy deserialization and better

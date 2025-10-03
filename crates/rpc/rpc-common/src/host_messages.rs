@@ -13,7 +13,7 @@
 
 //! Host message builders for HostToDaemon messages
 
-use moor_common::schema::rpc;
+use moor_schema::rpc;
 
 /// Build a RequestPerformanceCounters message
 #[inline]

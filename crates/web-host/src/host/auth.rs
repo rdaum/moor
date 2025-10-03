@@ -21,7 +21,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_common::schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
+use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
 use serde_derive::Deserialize;

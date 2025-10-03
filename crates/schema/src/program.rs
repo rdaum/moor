@@ -11,11 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Event log persistence types
+//! Program domain types
 //!
-//! FlatBuffer types for persisting narrative events and presentations
-//! in the event log database. These replace bincode serialization for:
-//! - LoggedNarrativeEvent (narrative events with player info)
-//! - PlayerPresentations (current presentation state per player)
+//! FlatBuffer types for compiled MOO program storage including:
+//! - Stored programs with opcode streams
+//! - Variable names and declarations
+//! - Jump labels and control flow metadata
+//! - Lambda programs and comprehensions
 
-pub use crate::schema::schemas_generated::moor_event_log::*;
+pub use crate::schemas_generated::moor_program::*;

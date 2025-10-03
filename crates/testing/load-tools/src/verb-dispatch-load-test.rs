@@ -24,7 +24,8 @@ use crate::setup::{
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
-use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
+use moor_common::model::ObjectRef;
+use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, Symbol, Var, v_int};
 use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
@@ -42,6 +43,7 @@ use tmq::request;
 use tokio::sync::{Mutex, Notify};
 use tracing::info;
 use uuid::Uuid;
+
 type TaskResults = Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>;
 
 #[derive(Clone, Parser, Debug)]

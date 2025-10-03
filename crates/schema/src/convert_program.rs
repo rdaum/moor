@@ -13,13 +13,11 @@
 
 //! Conversion between Program (runtime) and StoredProgram (FlatBuffer wire format).
 
-use crate::schema::convert_var::{
+use crate::convert_var::{
     ConversionContext, var_from_flatbuffer_internal, var_to_flatbuffer_internal,
 };
-use crate::schema::opcode_stream::{
-    OpStream, error_code_from_discriminant, error_code_to_discriminant,
-};
-use crate::schema::program as fb;
+use crate::opcode_stream::{OpStream, error_code_from_discriminant, error_code_to_discriminant};
+use crate::program as fb;
 use byteview::ByteView;
 use moor_var::program::labels::{JumpLabel, Offset};
 use moor_var::program::names::VarName;
@@ -74,7 +72,7 @@ fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, EncodeEr
         .collect();
 
     // 3. Encode literals as Var FlatBuffers (not bincode)
-    let literals: Result<Vec<crate::schema::var::Var>, EncodeError> = program
+    let literals: Result<Vec<crate::var::Var>, EncodeError> = program
         .literals()
         .iter()
         .map(|lit| {
@@ -127,7 +125,7 @@ fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, EncodeEr
             let var_name_union = match decl.identifier.nr {
                 VarName::Named(sym) => {
                     fb::StoredVarNameUnion::StoredNamedVar(Box::new(fb::StoredNamedVar {
-                        symbol: Box::new(crate::schema::common::Symbol {
+                        symbol: Box::new(crate::common::Symbol {
                             value: sym.as_string(),
                         }),
                     }))
@@ -171,7 +169,7 @@ fn encode_program_to_fb(program: &Program) -> Result<fb::StoredProgram, EncodeEr
     });
 
     // 6. Build symbol table (for now, empty - could be used for deduplication in future)
-    let symbol_table: Vec<crate::schema::common::Symbol> = vec![];
+    let symbol_table: Vec<crate::common::Symbol> = vec![];
 
     // 7. Encode scatter tables
     let scatter_tables: Vec<fb::StoredScatterArgs> = program
@@ -409,8 +407,8 @@ pub fn stored_to_program(stored: &StoredProgram) -> Result<Program, DecodeError>
     let fb_literals = fb_program
         .literals()
         .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read literals: {e}")))?;
-    use crate::schema::convert_var::{ConversionContext, var_from_flatbuffer_internal};
-    use crate::schema::var as fb_var;
+    use crate::convert_var::{ConversionContext, var_from_flatbuffer_internal};
+    use crate::var as fb_var;
     let literals: Result<Vec<moor_var::Var>, DecodeError> = fb_literals
         .iter()
         .map(|lit_result| {
@@ -762,7 +760,7 @@ fn decode_fb_program(fb_prog_ref: fb::StoredProgramRef) -> Result<Program, Decod
     let fork_vectors = fork_vectors?;
 
     // Decode literals
-    use crate::schema::var as fb_var;
+    use crate::var as fb_var;
     let fb_literals = fb_prog_ref
         .literals()
         .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read lambda literals: {e}")))?;

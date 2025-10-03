@@ -26,12 +26,12 @@ use futures_util::{
 };
 use moor_common::{
     model::{CompileError, ObjectRef},
-    schema::{
-        convert::{compilation_error_from_ref, narrative_event_from_ref, obj_from_ref},
-        rpc as moor_rpc,
-    },
     tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError},
     util::parse_into_words,
+};
+use moor_schema::{
+    convert::{compilation_error_from_ref, narrative_event_from_ref, obj_from_ref},
+    rpc as moor_rpc,
 };
 use moor_var::{Obj, Symbol, Var, Variant, v_str};
 use planus::ReadAsRoot;

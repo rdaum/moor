@@ -13,13 +13,13 @@
 
 //! Conversion between moor model types (VerbDef, PropDef, etc.) and FlatBuffers representation
 
-use crate::matching::Preposition;
-use crate::model::{
+use crate::{common, convert_common};
+use moor_common::matching::Preposition;
+use moor_common::model::{
     ArgSpec as ModelArgSpec, Defs, HasUuid, Named, PrepSpec as ModelPrepSpec,
     PropDef as ModelPropDef, ValSet, VerbArgsSpec as ModelVerbArgsSpec, VerbDef as ModelVerbDef,
 };
-use crate::schema::{common, convert_common};
-use crate::util::BitEnum;
+use moor_common::util::BitEnum;
 use moor_var::Symbol;
 use thiserror::Error;
 use uuid::Uuid;
@@ -142,7 +142,9 @@ pub fn verbdef_from_flatbuffer(fb: &common::VerbDef) -> Result<ModelVerbDef, Def
     let flags = BitEnum::from_u16(fb.flags);
     let args = verb_args_spec_from_flatbuffer(&fb.args);
 
-    Ok(ModelVerbDef::new(uuid, location, owner, &names, flags, args))
+    Ok(ModelVerbDef::new(
+        uuid, location, owner, &names, flags, args,
+    ))
 }
 
 // ============================================================================

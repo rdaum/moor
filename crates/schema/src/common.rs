@@ -11,8 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Var FlatBuffer types
+//! Common domain types
 //!
-//! FlatBuffer representation of moor_var::Var for RPC serialization
+//! Shared FlatBuffer types used across multiple schemas including:
+//! - Basic primitives (VarBytes, Symbol, Uuid, Obj)
+//! - Errors (Error, Exception, CompileError, WorldStateError)
+//! - Narrative events and presentations
+//! - Object references
+//! - Property and verb metadata
 
-pub use crate::schema::schemas_generated::moor_var::*;
+pub use crate::schemas_generated::moor_common::*;

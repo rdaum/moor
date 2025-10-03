@@ -36,6 +36,7 @@ moor-common = { path = "../../common" }
 moor-compiler = { path = "../../compiler" }
 moor-db = { path = "../../db" }
 moor-kernel = { path = "../../kernel" }
+moor-schema = { path = "../../schema" }
 moor-var = { path = "../../var" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
 rpc-common = { path = "../../rpc/rpc-common" }

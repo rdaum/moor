@@ -15,13 +15,12 @@ use crate::{
     WorkerRpcSendClient, attach_worker,
     pubsub_client::{WorkerMessage, workers_events_recv},
 };
-use moor_common::{
-    schema::{
-        convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
-        rpc as moor_rpc, var as moor_var_schema,
-    },
-    tasks::WorkerError,
+use moor_common::tasks::WorkerError;
+use moor_schema::{
+    convert::{obj_from_flatbuffer_struct, var_from_flatbuffer},
+    rpc as moor_rpc, var as moor_var_schema,
 };
+
 use moor_var::{Obj, Symbol, Var};
 use rpc_common::{WORKER_BROADCAST_TOPIC, WorkerToken};
 use std::{

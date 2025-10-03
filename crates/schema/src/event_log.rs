@@ -11,13 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Common domain types
+//! Event log persistence types
 //!
-//! Shared FlatBuffer types used across multiple schemas including:
-//! - Basic primitives (VarBytes, Symbol, Uuid, Obj)
-//! - Errors (Error, Exception, CompileError, WorldStateError)
-//! - Narrative events and presentations
-//! - Object references
-//! - Property and verb metadata
+//! FlatBuffer types for persisting narrative events and presentations
+//! in the event log database. These replace bincode serialization for:
+//! - LoggedNarrativeEvent (narrative events with player info)
+//! - PlayerPresentations (current presentation state per player)
 
-pub use crate::schema::schemas_generated::moor_common::*;
+pub use crate::schemas_generated::moor_event_log::*;

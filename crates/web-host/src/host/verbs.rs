@@ -19,14 +19,12 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_common::{
-    model::ObjectRef,
-    schema::{
-        convert::{
-            compilation_error_from_ref, obj_from_flatbuffer_struct, symbol_from_flatbuffer_struct,
-        },
-        rpc as moor_rpc,
+use moor_common::model::ObjectRef;
+use moor_schema::{
+    convert::{
+        compilation_error_from_ref, obj_from_flatbuffer_struct, symbol_from_flatbuffer_struct,
     },
+    rpc as moor_rpc,
 };
 use moor_var::Symbol;
 use planus::ReadAsRoot;

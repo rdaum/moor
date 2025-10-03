@@ -39,6 +39,7 @@ moor-common = { path = "../common" }
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
 moor-objdef = { path = "../objdef" }
+moor-schema = { path = "../schema" }
 moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 rpc-common = { path = "../rpc/rpc-common" }

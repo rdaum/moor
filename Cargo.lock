@@ -2918,6 +2918,7 @@ dependencies = [
  "moor-db",
  "moor-kernel",
  "moor-objdef",
+ "moor-schema",
  "moor-textdump",
  "moor-var",
  "oneshot",
@@ -2958,6 +2959,7 @@ dependencies = [
  "moor-bench-utils",
  "moor-common",
  "moor-compiler",
+ "moor-schema",
  "moor-var",
  "oneshot",
  "paste",
@@ -3045,6 +3047,7 @@ dependencies = [
  "moor-compiler",
  "moor-db",
  "moor-kernel",
+ "moor-schema",
  "moor-var",
  "planus",
  "rand 0.8.5",
@@ -3091,6 +3094,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-schema"
+version = "0.9.0-alpha"
+dependencies = [
+ "byteview",
+ "eyre",
+ "moor-common",
+ "moor-var",
+ "planus",
+ "serde",
+ "thiserror 2.0.16",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.18.1",
+]
+
+[[package]]
 name = "moor-telnet-host"
 version = "0.9.0-alpha"
 dependencies = [
@@ -3105,6 +3124,7 @@ dependencies = [
  "hickory-resolver",
  "moor-common",
  "moor-moot",
+ "moor-schema",
  "moor-var",
  "planus",
  "rpc-async-client",
@@ -3180,6 +3200,7 @@ dependencies = [
  "futures-util",
  "hickory-resolver",
  "moor-common",
+ "moor-schema",
  "moor-var",
  "planus",
  "rpc-async-client",
@@ -4181,6 +4202,7 @@ version = "0.9.0-alpha"
 dependencies = [
  "futures-util",
  "moor-common",
+ "moor-schema",
  "moor-var",
  "planus",
  "rpc-common",
@@ -4201,6 +4223,7 @@ dependencies = [
  "clap_derive",
  "ed25519-dalek",
  "moor-common",
+ "moor-schema",
  "moor-var",
  "planus",
  "rusty_paseto",

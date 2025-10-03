@@ -17,7 +17,7 @@ use crate::{
     WorkerToken,
     helpers::{mk_worker_token, obj_fb, symbol_fb, uuid_fb},
 };
-use moor_common::schema::rpc;
+use moor_schema::{rpc, var};
 use moor_var::{Obj, Symbol};
 use uuid::Uuid;
 
@@ -40,7 +40,7 @@ pub fn mk_worker_request_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
     perms: &Obj,
-    request: Vec<moor_common::schema::var::Var>,
+    request: Vec<var::Var>,
     timeout_ms: u64,
 ) -> rpc::DaemonToWorkerMessage {
     rpc::DaemonToWorkerMessage {
@@ -184,7 +184,7 @@ pub fn mk_detach_worker_msg(worker_token: &WorkerToken) -> rpc::WorkerToDaemonMe
 pub fn mk_request_result_msg(
     worker_token: &WorkerToken,
     request_id: Uuid,
-    result: moor_common::schema::var::Var,
+    result: var::Var,
 ) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::RequestResult(Box::new(rpc::RequestResult {

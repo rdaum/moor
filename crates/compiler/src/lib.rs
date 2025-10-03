@@ -42,10 +42,6 @@ pub use crate::{
 pub use moor_common::builtins::{
     ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
 };
-pub use moor_common::schema::opcode_stream::OpStream;
-pub use moor_common::schema::program_convert::{
-    DecodeError, EncodeError, program_to_stored, stored_to_program,
-};
 pub use moor_var::program::{
     labels::{JumpLabel, Label, Offset},
     opcode::{Op, ScatterLabel},

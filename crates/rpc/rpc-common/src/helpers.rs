@@ -16,15 +16,13 @@
 //! These helpers prioritize zero-copy and move semantics to avoid unnecessary allocations.
 
 use crate::{AuthToken, ClientToken, WorkerToken};
-use moor_common::{
-    model::ObjectRef,
-    schema::{
-        convert::{
-            obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_to_flatbuffer_struct,
-            var_to_flatbuffer,
-        },
-        rpc, var,
+use moor_common::model::ObjectRef;
+use moor_schema::{
+    convert::{
+        obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_to_flatbuffer_struct,
+        var_to_flatbuffer,
     },
+    rpc, var,
 };
 use moor_var::{Obj, Symbol, Var};
 

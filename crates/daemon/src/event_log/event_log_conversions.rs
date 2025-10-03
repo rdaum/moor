@@ -13,12 +13,10 @@
 
 //! Conversions between domain types and FlatBuffer event log types
 
-use moor_common::{
-    schema::{
-        convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
-        event_log::LoggedNarrativeEvent,
-    },
-    tasks::{NarrativeEvent, Presentation},
+use moor_common::tasks::{NarrativeEvent, Presentation};
+use moor_schema::{
+    convert::{narrative_event_to_flatbuffer_struct, obj_to_flatbuffer_struct},
+    event_log::LoggedNarrativeEvent,
 };
 use moor_var::Obj;
 
@@ -38,7 +36,7 @@ pub fn logged_narrative_event_to_flatbuffer(
 
 /// Convert from FlatBuffer Presentation to domain Presentation
 pub fn presentation_from_flatbuffer(
-    pres: &moor_common::schema::common::Presentation,
+    pres: &moor_schema::common::Presentation,
 ) -> Result<Presentation, String> {
     Ok(Presentation {
         id: pres.id.to_string(),

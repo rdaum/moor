@@ -31,19 +31,16 @@ mod tests {
         rpc::RpcServer,
         testing::{MockEventLog, MockTransport},
     };
-    use moor_common::{
-        model::CommitResult,
-        schema::{
-            common::EventUnion,
-            convert::{narrative_event_from_ref, obj_from_flatbuffer_struct},
-            rpc as moor_rpc,
-        },
-        tasks::Event,
-    };
+    use moor_common::{model::CommitResult, tasks::Event};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::{
         config::{Config, ImportExportFormat},
         tasks::{NoopTasksDb, scheduler::Scheduler},
+    };
+    use moor_schema::{
+        common::EventUnion,
+        convert::{narrative_event_from_ref, obj_from_flatbuffer_struct},
+        rpc as moor_rpc,
     };
     use moor_textdump::textdump_load;
     use moor_var::{Obj, SYSTEM_OBJECT};
@@ -106,8 +103,7 @@ mod tests {
                 let mut builder = planus::Builder::new();
                 let event_bytes = builder.finish(&e.event, None);
                 let event_ref =
-                    match moor_common::schema::common::NarrativeEventRef::read_as_root(event_bytes)
-                    {
+                    match moor_schema::common::NarrativeEventRef::read_as_root(event_bytes) {
                         Ok(r) => r,
                         Err(_) => continue,
                     };

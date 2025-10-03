@@ -35,6 +35,7 @@ tempfile.workspace = true
 # Internal Dependencies
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
+moor-schema = { path = "../schema" }
 moor-var = { path = "../var" }
 
 # Core Runtime & System

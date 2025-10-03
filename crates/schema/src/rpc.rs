@@ -19,11 +19,11 @@
 //! These types are the binary wire format for the moor distributed system.
 
 // Re-export everything from the MoorRpc namespace
-pub use crate::schema::schemas_generated::moor_rpc::*;
+pub use crate::schemas_generated::moor_rpc::*;
 
 // Re-export common types that are frequently used with RPC types
 // This provides a convenient namespace for RPC code
-pub use crate::schema::common::{
+pub use crate::common::{
     // Object types and their variants
     AnonymousObjId,
     // Error/Exception types

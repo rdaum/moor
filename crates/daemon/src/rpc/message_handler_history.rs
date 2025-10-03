@@ -12,7 +12,7 @@
 //
 
 use crate::rpc::message_handler::RpcMessageHandler;
-use moor_common::schema::{
+use moor_schema::{
     convert::{uuid_from_ref, uuid_to_flatbuffer_struct},
     rpc as moor_rpc,
 };

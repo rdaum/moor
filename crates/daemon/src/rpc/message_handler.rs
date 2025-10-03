@@ -17,14 +17,14 @@ use ahash::AHasher;
 use eyre::Error;
 use flume::Sender;
 use lazy_static::lazy_static;
-use moor_common::schema::{
-    common, rpc as moor_rpc,
-    rpc::{HostClientToDaemonMessageUnionRef, ListenerRef},
-};
 use moor_rpc::{
     ClientEvent, ClientEventUnion, DaemonToClientReply, DaemonToClientReplyUnion,
     DaemonToHostReply, DaemonToHostReplyUnion, HistoryResponseReply, HostClientToDaemonMessageRef,
     VerbProgramResponseReply, VerbProgramResponseUnion,
+};
+use moor_schema::{
+    common, rpc as moor_rpc,
+    rpc::{HostClientToDaemonMessageUnionRef, ListenerRef},
 };
 use papaya::HashMap as PapayaHashMap;
 use std::{
@@ -53,7 +53,7 @@ use moor_kernel::{
     SchedulerClient, config::Config, tasks::sched_counters, vm::builtins::bf_perf_counters,
 };
 
-use moor_common::schema::convert::{
+use moor_schema::convert::{
     obj_from_ref, obj_to_flatbuffer_struct, presentation_to_flatbuffer_struct,
     uuid_to_flatbuffer_struct, var_from_ref,
 };

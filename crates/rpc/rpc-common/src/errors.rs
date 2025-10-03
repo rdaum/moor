@@ -13,17 +13,16 @@
 
 use moor_common::{
     model::WorldStateError,
-    schema::{
-        common,
-        convert::{
-            compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
-            obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct,
-            symbol_from_flatbuffer_struct, symbol_to_flatbuffer_struct, uuid_from_ref,
-            var_to_flatbuffer,
-        },
-        rpc,
-    },
     tasks::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError, WorkerError},
+};
+use moor_schema::{
+    common,
+    convert::{
+        compilation_error_to_flatbuffer_struct, error_to_flatbuffer_struct, exception_from_ref,
+        obj_to_flatbuffer_struct, objectref_to_flatbuffer_struct, symbol_from_flatbuffer_struct,
+        symbol_to_flatbuffer_struct, uuid_from_ref, var_to_flatbuffer,
+    },
+    rpc,
 };
 use std::time::Duration;
 

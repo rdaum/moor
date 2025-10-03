@@ -11,12 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Program domain types
+//! Var FlatBuffer types
 //!
-//! FlatBuffer types for compiled MOO program storage including:
-//! - Stored programs with opcode streams
-//! - Variable names and declarations
-//! - Jump labels and control flow metadata
-//! - Lambda programs and comprehensions
+//! FlatBuffer representation of moor_var::Var for RPC serialization
 
-pub use crate::schema::schemas_generated::moor_program::*;
+pub use crate::schemas_generated::moor_var::*;

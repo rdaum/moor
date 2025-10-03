@@ -14,12 +14,10 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #[cfg_attr(coverage_nightly, coverage(off))]
 use eyre::{anyhow, bail};
-use moor_common::{
-    model::ObjectRef,
-    schema::{
-        convert::{obj_from_ref, var_from_flatbuffer},
-        rpc as moor_rpc, var as moor_var_schema,
-    },
+use moor_common::model::ObjectRef;
+use moor_schema::{
+    convert::{obj_from_ref, var_from_flatbuffer},
+    rpc as moor_rpc, var as moor_var_schema,
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use planus::ReadAsRoot;

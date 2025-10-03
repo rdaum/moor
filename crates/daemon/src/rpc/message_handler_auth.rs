@@ -12,15 +12,13 @@
 //
 
 use crate::rpc::{message_handler::RpcMessageHandler, session::RpcSession};
-use moor_common::{
-    model::ObjectRef,
-    schema::{
-        convert::{obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref},
-        rpc as moor_rpc,
-        rpc::DaemonToClientReply,
-    },
-};
+use moor_common::model::ObjectRef;
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
+use moor_schema::{
+    convert::{obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref},
+    rpc as moor_rpc,
+    rpc::DaemonToClientReply,
+};
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str};
 use rpc_common::{
     AuthToken, ClientToken, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,

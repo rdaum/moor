@@ -20,13 +20,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use moor_common::{
-    schema::{
-        common::{EventUnion, ObjUnion},
-        convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
-        event_log::LoggedNarrativeEvent,
-    },
-    tasks::Presentation,
+use moor_common::tasks::Presentation;
+use moor_schema::{
+    common::{EventUnion, ObjUnion},
+    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
+    event_log::LoggedNarrativeEvent,
 };
 use moor_var::Obj;
 
@@ -62,8 +60,8 @@ impl MockEventLog {
 
     /// Helper to compare FlatBuffer Obj with domain Obj
     fn obj_matches(
-        player_fb: &moor_common::schema::common::Obj,
-        event_player: &moor_common::schema::common::Obj,
+        player_fb: &moor_schema::common::Obj,
+        event_player: &moor_schema::common::Obj,
     ) -> bool {
         match (&player_fb.obj, &event_player.obj) {
             (ObjUnion::ObjId(a), ObjUnion::ObjId(b)) => a.id == b.id,

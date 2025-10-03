@@ -13,7 +13,7 @@
 
 //! Helper functions for constructing RPC reply messages
 
-use moor_common::schema::{
+use moor_schema::{
     convert::{obj_to_flatbuffer_struct, var_to_flatbuffer},
     rpc, var,
 };

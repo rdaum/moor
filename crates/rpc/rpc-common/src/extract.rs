@@ -14,14 +14,12 @@
 //! Helper functions for extracting and converting FlatBuffer message fields
 
 use crate::RpcMessageError;
-use moor_common::{
-    model::ObjectRef,
-    schema::{
-        convert::{
-            obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer,
-        },
-        rpc, var,
+use moor_common::model::ObjectRef;
+use moor_schema::{
+    convert::{
+        obj_from_ref, objectref_from_ref, symbol_from_ref, uuid_from_ref, var_from_flatbuffer,
     },
+    rpc, var,
 };
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;

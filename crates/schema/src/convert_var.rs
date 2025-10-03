@@ -13,15 +13,16 @@
 
 //! Conversion between moor_var::Var and FlatBuffers Var representation
 
-use crate::schema::{convert_common, convert_errors, program as fb_program, var};
+use crate::{convert_common, convert_errors, program as fb_program, var};
 use moor_var::{
-    Var, Variant, v_binary, v_bool, v_empty_list, v_error, v_float, v_flyweight, v_int, v_list,
-    v_map, v_none, v_obj, v_str, v_sym,
+    Var, Variant,
     program::{
         names::Name,
         opcode::{ScatterArgs, ScatterLabel},
         program::Program,
     },
+    v_binary, v_bool, v_empty_list, v_error, v_float, v_flyweight, v_int, v_list, v_map, v_none,
+    v_obj, v_str, v_sym,
 };
 use thiserror::Error;
 use var::VarUnion;
@@ -60,12 +61,15 @@ fn name_from_flatbuffer(stored: &fb_program::StoredName) -> Name {
 }
 
 /// Convert Program to FlatBuffer StoredProgram struct
-fn program_to_flatbuffer(program: &Program, _context: ConversionContext) -> Result<fb_program::StoredProgram, VarConversionError> {
-    use crate::schema::program_convert::program_to_stored;
+fn program_to_flatbuffer(
+    program: &Program,
+    _context: ConversionContext,
+) -> Result<fb_program::StoredProgram, VarConversionError> {
+    use crate::convert_program::program_to_stored;
     use planus::ReadAsRoot;
 
     // Convert Program to StoredProgram (ByteView wrapper)
-    // TODO: This still uses bincode for Var literals - we'll update program_convert.rs next
+    // TODO: This still uses bincode for Var literals - we'll update convert_program next
     let stored = program_to_stored(program)
         .map_err(|e| VarConversionError::EncodingError(format!("Failed to encode program: {e}")))?;
 
@@ -73,19 +77,23 @@ fn program_to_flatbuffer(program: &Program, _context: ConversionContext) -> Resu
     let bytes = stored.as_bytes();
 
     // Parse bytes to get FlatBuffer struct reference
-    let fb_ref = fb_program::StoredProgramRef::read_as_root(bytes)
-        .map_err(|e| VarConversionError::DecodingError(format!("Failed to parse stored program: {e}")))?;
+    let fb_ref = fb_program::StoredProgramRef::read_as_root(bytes).map_err(|e| {
+        VarConversionError::DecodingError(format!("Failed to parse stored program: {e}"))
+    })?;
 
     // Convert to owned struct using TryInto
-    fb_ref.try_into()
-        .map_err(|e| VarConversionError::DecodingError(format!("Failed to convert StoredProgramRef: {e}")))
+    fb_ref.try_into().map_err(|e| {
+        VarConversionError::DecodingError(format!("Failed to convert StoredProgramRef: {e}"))
+    })
 }
 
 /// Convert FlatBuffer StoredProgram struct to Program
-fn program_from_flatbuffer(stored: fb_program::StoredProgram) -> Result<Program, VarConversionError> {
-    use crate::schema::program_convert::stored_to_program;
-    use moor_var::program::stored_program::StoredProgram;
+fn program_from_flatbuffer(
+    stored: fb_program::StoredProgram,
+) -> Result<Program, VarConversionError> {
+    use crate::convert_program::stored_to_program;
     use byteview::ByteView;
+    use moor_var::program::stored_program::StoredProgram;
     use planus::WriteAs;
 
     // Serialize the FlatBuffer struct to bytes
@@ -97,7 +105,7 @@ fn program_from_flatbuffer(stored: fb_program::StoredProgram) -> Result<Program,
     let stored_wrapper = StoredProgram::from(ByteView::from(bytes));
 
     // Convert to Program
-    // TODO: This still uses bincode for Var literals - we'll update program_convert.rs next
+    // TODO: This still uses bincode for Var literals - we'll update convert_program next
     stored_to_program(&stored_wrapper)
         .map_err(|e| VarConversionError::DecodingError(format!("Failed to decode program: {e}")))
 }
@@ -125,13 +133,11 @@ fn scatter_args_to_flatbuffer(args: &ScatterArgs) -> fb_program::StoredScatterAr
                         },
                     ))
                 }
-                ScatterLabel::Rest(name) => {
-                    fb_program::StoredScatterLabelUnion::StoredScatterRest(Box::new(
-                        fb_program::StoredScatterRest {
-                            name: Box::new(name_to_flatbuffer(name)),
-                        },
-                    ))
-                }
+                ScatterLabel::Rest(name) => fb_program::StoredScatterLabelUnion::StoredScatterRest(
+                    Box::new(fb_program::StoredScatterRest {
+                        name: Box::new(name_to_flatbuffer(name)),
+                    }),
+                ),
             };
             fb_program::StoredScatterLabel { label: fb_label }
         })
@@ -184,7 +190,7 @@ fn scatter_args_from_flatbuffer(
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ConversionContext {
+pub enum ConversionContext {
     Rpc,      // Reject lambdas and anonymous objects
     Database, // Allow everything
 }
@@ -207,7 +213,7 @@ pub fn var_to_db_flatbuffer(v: &Var) -> Result<var::Var, VarConversionError> {
 
 /// Internal conversion function with context
 /// Exposed as pub(crate) so program_convert can use it for literals
-pub(crate) fn var_to_flatbuffer_internal(
+pub fn var_to_flatbuffer_internal(
     v: &Var,
     context: ConversionContext,
 ) -> Result<var::Var, VarConversionError> {
@@ -250,8 +256,10 @@ pub(crate) fn var_to_flatbuffer_internal(
         })),
 
         Variant::List(l) => {
-            let elements: Result<Vec<_>, _> =
-                l.iter().map(|elem| var_to_flatbuffer_internal(&elem, context)).collect();
+            let elements: Result<Vec<_>, _> = l
+                .iter()
+                .map(|elem| var_to_flatbuffer_internal(&elem, context))
+                .collect();
             VarUnion::VarList(Box::new(var::VarList {
                 elements: elements?,
             }))
@@ -323,7 +331,11 @@ pub(crate) fn var_to_flatbuffer_internal(
                 .collect();
 
             // Convert optional self_var
-            let self_var = lambda.0.self_var.as_ref().map(|name| Box::new(name_to_flatbuffer(name)));
+            let self_var = lambda
+                .0
+                .self_var
+                .as_ref()
+                .map(|name| Box::new(name_to_flatbuffer(name)));
 
             VarUnion::VarLambda(Box::new(var::VarLambda {
                 params: Box::new(params),
@@ -353,7 +365,7 @@ pub fn var_from_db_flatbuffer(fb_var: &var::Var) -> Result<Var, VarConversionErr
 
 /// Internal conversion function with context
 /// Exposed as pub(crate) so program_convert can use it for literals
-pub(crate) fn var_from_flatbuffer_internal(
+pub fn var_from_flatbuffer_internal(
     fb_var: &var::Var,
     context: ConversionContext,
 ) -> Result<Var, VarConversionError> {
@@ -391,7 +403,11 @@ pub(crate) fn var_from_flatbuffer_internal(
             if l.elements.is_empty() {
                 return Ok(v_empty_list());
             }
-            let elements: Result<Vec<_>, _> = l.elements.iter().map(|e| var_from_flatbuffer_internal(e, context)).collect();
+            let elements: Result<Vec<_>, _> = l
+                .elements
+                .iter()
+                .map(|e| var_from_flatbuffer_internal(e, context))
+                .collect();
             Ok(v_list(&elements?))
         }
 

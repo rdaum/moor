@@ -18,7 +18,6 @@ use shadow_rs::shadow;
 pub mod builtins;
 pub mod matching;
 pub mod model;
-pub mod schema;
 pub mod tasks;
 pub mod tracing;
 pub mod util;

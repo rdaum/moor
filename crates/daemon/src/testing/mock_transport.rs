@@ -17,8 +17,9 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 use crate::rpc::{MessageHandler, Transport};
-use moor_common::{schema::rpc as moor_rpc, tasks::NarrativeEvent};
+use moor_common::tasks::NarrativeEvent;
 use moor_kernel::SchedulerClient;
+use moor_schema::rpc as moor_rpc;
 use moor_var::Obj;
 use planus::ReadAsRoot;
 use rpc_common::{HostToken, RpcMessageError};

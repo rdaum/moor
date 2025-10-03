@@ -28,7 +28,7 @@ mod tests {
         tasks::task_monitor::TaskMonitor,
         testing::{MockEventLog, MockTransport},
     };
-    use moor_common::schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
+    use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
     use moor_var::{Obj, SYSTEM_OBJECT};
     use planus::ReadAsRoot;
     use rpc_common::{

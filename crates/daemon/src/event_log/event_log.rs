@@ -22,14 +22,12 @@ use uuid::Uuid;
 use crate::event_log::presentation_from_flatbuffer;
 use fjall::{CompressionType, Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use flume::{Receiver, Sender};
-use moor_common::{
-    schema::{
-        common as fb_common,
-        common::{EventUnion, ObjUnion, ObjUnionRef},
-        convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
-        event_log::{LoggedNarrativeEvent, PlayerPresentations},
-    },
-    tasks::Presentation,
+use moor_common::tasks::Presentation;
+use moor_schema::{
+    common as fb_common,
+    common::{EventUnion, ObjUnion, ObjUnionRef},
+    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
+    event_log::{LoggedNarrativeEvent, PlayerPresentations},
 };
 use moor_var::Obj;
 use tracing::{debug, error, info};
@@ -70,7 +68,7 @@ pub trait EventLogOps: Send + Sync {
 }
 
 // LoggedNarrativeEvent and PlayerPresentations are now imported from
-// moor_common::schema::event_log and are FlatBuffer-generated types
+// moor_schema::event_log and are FlatBuffer-generated types
 
 /// Messages for the background persistence thread
 #[derive(Debug)]
@@ -169,7 +167,7 @@ impl EventPersistence {
     }
 
     // Helper to convert FlatBuffer Obj to a string key
-    fn obj_to_key(obj: &moor_common::schema::common::Obj) -> String {
+    fn obj_to_key(obj: &moor_schema::common::Obj) -> String {
         // Use the obj's union variant to create a unique key
         match &obj.obj {
             ObjUnion::ObjId(id) => format!("id:{}", id.id),
@@ -180,8 +178,8 @@ impl EventPersistence {
 
     // Helper to compare two FlatBuffer Obj types (used by trait implementation)
     pub(crate) fn obj_matches(
-        obj1: &moor_common::schema::common::Obj,
-        obj2: &moor_common::schema::common::Obj,
+        obj1: &moor_schema::common::Obj,
+        obj2: &moor_schema::common::Obj,
     ) -> bool {
         match (&obj1.obj, &obj2.obj) {
             (ObjUnion::ObjId(a), ObjUnion::ObjId(b)) => a.id == b.id,
@@ -195,8 +193,8 @@ impl EventPersistence {
 
     // Helper to compare FlatBuffer Obj with ObjRef (used internally)
     fn obj_matches_ref(
-        obj: &moor_common::schema::common::Obj,
-        obj_ref: &moor_common::schema::common::ObjRef,
+        obj: &moor_schema::common::Obj,
+        obj_ref: &moor_schema::common::ObjRef,
     ) -> bool {
         let obj_ref_union = obj_ref.obj().ok();
         match (&obj.obj, obj_ref_union) {
@@ -253,7 +251,7 @@ impl EventPersistence {
                 let (_, value) = entry?;
                 // Deserialize using planus from FlatBuffer bytes
                 let event_ref =
-                    <moor_common::schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+                    <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
                 // Convert from Ref to owned type
                 let event: LoggedNarrativeEvent = event_ref.try_into()?;
                 events.push(event);
@@ -266,7 +264,7 @@ impl EventPersistence {
                 let (_key, value) = entry?;
                 // Deserialize using planus from FlatBuffer bytes
                 let event_ref =
-                    <moor_common::schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+                    <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
                 // Convert from Ref to owned type
                 let event: LoggedNarrativeEvent = event_ref.try_into()?;
                 events.push(event);
@@ -295,7 +293,7 @@ impl EventPersistence {
             let (_, value) = entry?;
             // Deserialize using planus from FlatBuffer bytes
             let event_ref =
-                <moor_common::schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+                <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
             // Convert from Ref to owned type
             let event: LoggedNarrativeEvent = event_ref.try_into()?;
             events.push(event);
@@ -325,7 +323,7 @@ impl EventPersistence {
 
             // Deserialize using planus from FlatBuffer bytes
             let event_ref =
-                <moor_common::schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+                <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
 
             // Check if player matches and timestamp is after cutoff
             let event_player_ref = event_ref.player()?;
@@ -356,7 +354,7 @@ impl EventPersistence {
         if let Some(value) = self.presentations_partition.get(player_key.as_bytes())? {
             // Deserialize using planus from FlatBuffer bytes
             let presentations_ref =
-                <moor_common::schema::event_log::PlayerPresentationsRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+                <moor_schema::event_log::PlayerPresentationsRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
             // Convert from Ref to owned type
             let presentations: PlayerPresentations = presentations_ref.try_into()?;
             Ok(Some(presentations))
@@ -489,7 +487,7 @@ impl EventLog {
     /// This is done synchronously to ensure consistency with reads
     fn update_presentation_state(
         &self,
-        player: &moor_common::schema::common::Obj,
+        player: &moor_schema::common::Obj,
         add_presentation: Option<Presentation>,
         remove_id: Option<String>,
     ) {

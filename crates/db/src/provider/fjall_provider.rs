@@ -50,6 +50,7 @@ use fjall::UserValue;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_common::util::PerfTimerGuard;
+use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, RwLock, atomic::AtomicBool},
@@ -57,7 +58,6 @@ use std::{
     time::Duration,
 };
 use tracing::error;
-use planus::{ReadAsRoot, WriteAsOffset};
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
 struct PendingOperations<Domain, Codomain>
@@ -502,6 +502,8 @@ use moor_common::{
     model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
     util::BitEnum,
 };
+use moor_schema::convert::var_to_db_flatbuffer;
+use moor_schema::convert::{program_to_stored, stored_to_program};
 use moor_var::{Obj, Var, program::ProgramType};
 // Per-type encoding implementations
 // Each type can be encoded regardless of whether it's used as Domain or Codomain
@@ -552,7 +554,6 @@ macro_rules! impl_byteview_wrapper_encode {
     };
 }
 
-
 // Zerocopy types - direct byte access, no serialization overhead
 impl_zerocopy_encode!(Obj);
 impl_zerocopy_encode!(ObjAndUUIDHolder);
@@ -569,8 +570,7 @@ impl EncodeFor<Var> for FjallCodec {
 
     fn encode(&self, value: &Var) -> Result<Self::Stored, Error> {
         // Convert to FlatBuffer struct
-        let fb_var = moor_common::schema::convert::var_to_db_flatbuffer(value)
-            .map_err(|_| Error::EncodingFailure)?;
+        let fb_var = var_to_db_flatbuffer(value).map_err(|_| Error::EncodingFailure)?;
 
         // Serialize to bytes
         let mut builder = planus::Builder::new();
@@ -582,16 +582,15 @@ impl EncodeFor<Var> for FjallCodec {
 
     fn decode(&self, stored: Self::Stored) -> Result<Var, Error> {
         // Parse FlatBuffer
-        let fb_ref = moor_common::schema::var::VarRef::read_as_root(&stored)
-            .map_err(|_| Error::EncodingFailure)?;
+        let fb_ref =
+            moor_schema::var::VarRef::read_as_root(&stored).map_err(|_| Error::EncodingFailure)?;
 
         // Convert to owned struct
-        let fb_var: moor_common::schema::var::Var = fb_ref.try_into()
-            .map_err(|_| Error::EncodingFailure)?;
+        let fb_var: moor_schema::var::Var =
+            fb_ref.try_into().map_err(|_| Error::EncodingFailure)?;
 
         // Decode to Var
-        moor_common::schema::convert::var_from_db_flatbuffer(&fb_var)
-            .map_err(|_| Error::EncodingFailure)
+        moor_schema::convert::var_from_db_flatbuffer(&fb_var).map_err(|_| Error::EncodingFailure)
     }
 }
 
@@ -600,7 +599,7 @@ impl EncodeFor<VerbDefs> for FjallCodec {
     type Stored = ByteView;
 
     fn encode(&self, value: &VerbDefs) -> Result<Self::Stored, Error> {
-        let fb_verbdefs = moor_common::schema::convert::verbdefs_to_flatbuffer(value)
+        let fb_verbdefs = moor_schema::convert::verbdefs_to_flatbuffer(value)
             .map_err(|_| Error::EncodingFailure)?;
         let mut builder = planus::Builder::new();
         let offset = fb_verbdefs.prepare(&mut builder);
@@ -609,12 +608,11 @@ impl EncodeFor<VerbDefs> for FjallCodec {
     }
 
     fn decode(&self, stored: Self::Stored) -> Result<VerbDefs, Error> {
-        let fb_ref = moor_common::schema::common::VerbDefsRef::read_as_root(&stored)
+        let fb_ref = moor_schema::common::VerbDefsRef::read_as_root(&stored)
             .map_err(|_| Error::EncodingFailure)?;
-        let fb_verbdefs: moor_common::schema::common::VerbDefs = fb_ref
-            .try_into()
-            .map_err(|_| Error::EncodingFailure)?;
-        moor_common::schema::convert::verbdefs_from_flatbuffer(&fb_verbdefs)
+        let fb_verbdefs: moor_schema::common::VerbDefs =
+            fb_ref.try_into().map_err(|_| Error::EncodingFailure)?;
+        moor_schema::convert::verbdefs_from_flatbuffer(&fb_verbdefs)
             .map_err(|_| Error::EncodingFailure)
     }
 }
@@ -623,7 +621,7 @@ impl EncodeFor<PropDefs> for FjallCodec {
     type Stored = ByteView;
 
     fn encode(&self, value: &PropDefs) -> Result<Self::Stored, Error> {
-        let fb_propdefs = moor_common::schema::convert::propdefs_to_flatbuffer(value)
+        let fb_propdefs = moor_schema::convert::propdefs_to_flatbuffer(value)
             .map_err(|_| Error::EncodingFailure)?;
         let mut builder = planus::Builder::new();
         let offset = fb_propdefs.prepare(&mut builder);
@@ -632,12 +630,11 @@ impl EncodeFor<PropDefs> for FjallCodec {
     }
 
     fn decode(&self, stored: Self::Stored) -> Result<PropDefs, Error> {
-        let fb_ref = moor_common::schema::common::PropDefsRef::read_as_root(&stored)
+        let fb_ref = moor_schema::common::PropDefsRef::read_as_root(&stored)
             .map_err(|_| Error::EncodingFailure)?;
-        let fb_propdefs: moor_common::schema::common::PropDefs = fb_ref
-            .try_into()
-            .map_err(|_| Error::EncodingFailure)?;
-        moor_common::schema::convert::propdefs_from_flatbuffer(&fb_propdefs)
+        let fb_propdefs: moor_schema::common::PropDefs =
+            fb_ref.try_into().map_err(|_| Error::EncodingFailure)?;
+        moor_schema::convert::propdefs_from_flatbuffer(&fb_propdefs)
             .map_err(|_| Error::EncodingFailure)
     }
 }
@@ -668,7 +665,6 @@ impl EncodeFor<ProgramType> for FjallCodec {
     fn encode(&self, program: &ProgramType) -> Result<Self::Stored, Error> {
         match program {
             ProgramType::MooR(prog) => {
-                use moor_compiler::program_to_stored;
                 let stored = program_to_stored(prog)
                     .map_err(|e| Error::StorageFailure(format!("Failed to encode program: {e}")))?;
                 // StoredProgram is a ByteView wrapper - extract the inner ByteView
@@ -678,7 +674,6 @@ impl EncodeFor<ProgramType> for FjallCodec {
     }
 
     fn decode(&self, stored: Self::Stored) -> Result<ProgramType, Error> {
-        use moor_compiler::stored_to_program;
         use moor_var::program::stored_program::StoredProgram;
 
         let stored_program = StoredProgram::from(stored);

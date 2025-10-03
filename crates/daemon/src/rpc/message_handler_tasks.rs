@@ -19,12 +19,9 @@ use crate::rpc::{
     session::RpcSession,
 };
 use eyre::{Context, Error};
-use moor_common::{
-    model::ObjectRef,
-    schema::{convert::var_to_flatbuffer, rpc as moor_rpc},
-    util::parse_into_words,
-};
+use moor_common::{model::ObjectRef, util::parse_into_words};
 use moor_kernel::{SchedulerClient, tasks::TaskResult};
+use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
 use rpc_common::RpcMessageError;
 use std::sync::Arc;

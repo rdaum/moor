@@ -12,7 +12,7 @@
 //
 
 use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcSendClient};
-use moor_common::schema::{
+use moor_schema::{
     convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
     rpc as moor_rpc,
 };

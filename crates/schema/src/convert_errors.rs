@@ -16,17 +16,13 @@
 //! This module handles conversion of error types like Error, WorkerError, SchedulerError,
 //! CompileError, CommandError, VerbProgramError, and WorldStateError.
 
-use crate::{
-    model::{CompileContext, CompileError},
-    schema::{
-        common,
-        common::CompileErrorUnionRef,
-        convert_common::{
-            symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct,
-        },
-        convert_var::{var_from_flatbuffer, var_to_flatbuffer},
-    },
+use crate::common;
+use crate::common::CompileErrorUnionRef;
+use crate::convert_common::{
+    symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct,
 };
+use crate::convert_var::{var_from_flatbuffer, var_to_flatbuffer};
+use moor_common::model::{CompileContext, CompileError};
 use moor_var::Var;
 
 /// Convert from moor_var::Error to flatbuffer Error struct
@@ -164,7 +160,7 @@ pub fn error_from_ref(error_ref: common::ErrorRef<'_>) -> Result<moor_var::Error
         .map(|s| Box::new(s.to_string()));
 
     let value = if let Ok(Some(value_var_ref)) = error_ref.value() {
-        let var_struct = crate::schema::var::Var::try_from(value_var_ref)
+        let var_struct = crate::var::Var::try_from(value_var_ref)
             .map_err(|e| format!("Failed to convert value ref: {e}"))?;
         Some(Box::new(
             var_from_flatbuffer(&var_struct)
@@ -184,7 +180,7 @@ pub fn error_from_ref(error_ref: common::ErrorRef<'_>) -> Result<moor_var::Error
 /// Convert from FlatBuffer ExceptionRef to Exception
 pub fn exception_from_ref(
     exception_ref: common::ExceptionRef<'_>,
-) -> Result<crate::tasks::Exception, String> {
+) -> Result<moor_common::tasks::Exception, String> {
     let error_ref = exception_ref.error().map_err(|_| "Missing error")?;
     let error_value = error_from_ref(error_ref)?;
 
@@ -193,7 +189,7 @@ pub fn exception_from_ref(
         .iter()
         .map(|var_ref_result| -> Result<Var, String> {
             let var_ref = var_ref_result.map_err(|e| format!("Failed to get stack item: {e}"))?;
-            let var_struct = crate::schema::var::Var::try_from(var_ref)
+            let var_struct = crate::var::Var::try_from(var_ref)
                 .map_err(|e| format!("Failed to convert stack item: {e}"))?;
             var_from_flatbuffer(&var_struct).map_err(|e| format!("Failed to decode stack var: {e}"))
         })
@@ -206,7 +202,7 @@ pub fn exception_from_ref(
         .map(|var_ref_result| -> Result<Var, String> {
             let var_ref =
                 var_ref_result.map_err(|e| format!("Failed to get backtrace item: {e}"))?;
-            let var_struct = crate::schema::var::Var::try_from(var_ref)
+            let var_struct = crate::var::Var::try_from(var_ref)
                 .map_err(|e| format!("Failed to convert backtrace item: {e}"))?;
             var_from_flatbuffer(&var_struct)
                 .map_err(|e| format!("Failed to decode backtrace var: {e}"))
@@ -214,7 +210,7 @@ pub fn exception_from_ref(
         .collect();
     let backtrace = backtrace?;
 
-    Ok(crate::tasks::Exception {
+    Ok(moor_common::tasks::Exception {
         error: error_value,
         stack,
         backtrace,

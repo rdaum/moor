@@ -17,7 +17,8 @@ use crate::{
     AuthToken, ClientToken,
     helpers::{auth_token_fb, client_token_fb, obj_fb, objectref_fb, symbol_fb, uuid_fb, var_fb},
 };
-use moor_common::{model::ObjectRef, schema::rpc};
+use moor_common::model::ObjectRef;
+use moor_schema::{rpc, var};
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
@@ -384,8 +385,7 @@ pub fn mk_invoke_verb_msg(
     verb_name: &Symbol,
     args: Vec<&Var>,
 ) -> Option<rpc::HostClientToDaemonMessage> {
-    let args_fb: Vec<moor_common::schema::var::Var> =
-        args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
+    let args_fb: Vec<var::Var> = args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
 
     if args_fb.len() != args.len() {
         return None;

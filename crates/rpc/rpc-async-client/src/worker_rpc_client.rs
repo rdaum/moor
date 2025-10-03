@@ -11,10 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::{
-    schema::{convert::var_to_flatbuffer, rpc as moor_rpc},
-    tasks::WorkerError,
-};
+use moor_common::tasks::WorkerError;
+use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Symbol, Var};
 use planus::{Builder, ReadAsRoot};
 use rpc_common::{

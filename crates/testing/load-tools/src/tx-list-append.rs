@@ -29,7 +29,7 @@ use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
 use futures::{StreamExt, stream::FuturesUnordered};
-use moor_common::{model::ObjectRef, schema::rpc as moor_rpc};
+use moor_common::model::ObjectRef;
 use moor_var::{List, Obj, Sequence, Symbol, Var, v_int, v_list};
 use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
@@ -48,6 +48,7 @@ use tmq::request;
 use tokio::sync::{Mutex, Notify};
 
 type TaskResults = Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>;
+use moor_schema::rpc as moor_rpc;
 use tracing::{debug, info};
 use uuid::Uuid;
 

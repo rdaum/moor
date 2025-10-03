@@ -24,16 +24,13 @@ use axum::{
 use eyre::eyre;
 use hickory_resolver::TokioResolver;
 
-use moor_common::{
-    model::ObjectRef,
-    schema::{
-        convert::{
-            narrative_event_from_ref, obj_from_flatbuffer_struct, presentation_from_ref,
-            var_from_flatbuffer,
-        },
-        rpc as moor_rpc, var as moor_var_schema,
+use moor_common::{model::ObjectRef, tasks::Event};
+use moor_schema::{
+    convert::{
+        narrative_event_from_ref, obj_from_flatbuffer_struct, presentation_from_ref,
+        var_from_flatbuffer,
     },
-    tasks::Event,
+    rpc as moor_rpc, var as moor_var_schema,
 };
 use moor_var::{E_INVIND, Obj, Symbol, Var, v_err, v_obj};
 use rpc_async_client::rpc_client::RpcSendClient;

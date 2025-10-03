@@ -14,13 +14,12 @@
 //! Message handler for workers business logic, separated from transport concerns
 
 use eyre::Context;
-use moor_common::{
-    schema::{
-        convert::{symbol_from_ref, uuid_from_ref, var_from_ref, var_to_flatbuffer},
-        rpc as moor_rpc,
-    },
-    tasks::WorkerError,
+use moor_common::tasks::WorkerError;
+use moor_schema::{
+    convert::{symbol_from_ref, uuid_from_ref, var_from_ref, var_to_flatbuffer},
+    rpc as moor_rpc,
 };
+
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use moor_var::{Obj, Symbol, Var};
 use planus::Builder;

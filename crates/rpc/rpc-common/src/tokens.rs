@@ -16,7 +16,7 @@ use ed25519_dalek::{
     SigningKey, VerifyingKey,
     pkcs8::{DecodePrivateKey, DecodePublicKey},
 };
-use moor_common::schema::rpc;
+use moor_schema::rpc;
 use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use std::path::Path;
 use thiserror::Error;

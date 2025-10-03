@@ -1,0 +1,31 @@
+[package]
+name = "moor-schema"
+version = "0.9.0-alpha"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "FlatBuffer entities used for RPC and persistence, and conversions to/from"
+
+[dependencies]
+# Internal Dependencies
+moor-var = { path = "../var" }
+moor-common = { path = "../common" }
+
+# Serialization & Data Formats & Util
+byteview.workspace = true
+planus.workspace = true
+serde.workspace = true
+uuid.workspace = true
+
+# Error Handling
+eyre.workspace = true
+thiserror.workspace = true
+
+# Tracing & Logging
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+

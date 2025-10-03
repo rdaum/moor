@@ -24,11 +24,9 @@ use uuid::Uuid;
 
 use crate::rpc::SessionActions;
 use flume::Sender;
-use moor_common::{
-    schema::{convert::var_to_flatbuffer, rpc as moor_rpc},
-    tasks::{SchedulerError, TaskId},
-};
+use moor_common::tasks::{SchedulerError, TaskId};
 use moor_kernel::tasks::TaskHandle;
+use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use tracing::info;
 
 /// Monitors task completions and handles their lifecycle

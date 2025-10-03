@@ -15,16 +15,12 @@
 //!
 //! This module handles conversion of narrative events, presentations, and related types.
 
-use crate::{
-    schema::{
-        common,
-        common::EventUnionRef,
-        convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct},
-        convert_errors::{error_to_flatbuffer_struct, exception_from_ref},
-        convert_var::{var_from_flatbuffer, var_to_flatbuffer},
-    },
-    tasks::{Event, NarrativeEvent, Presentation},
-};
+use crate::common;
+use crate::common::EventUnionRef;
+use crate::convert_common::{symbol_from_ref, uuid_from_ref, uuid_to_flatbuffer_struct};
+use crate::convert_errors::{error_to_flatbuffer_struct, exception_from_ref};
+use crate::convert_var::{var_from_flatbuffer, var_to_flatbuffer};
+use moor_common::tasks::{Event, NarrativeEvent, Presentation};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Convert from FlatBuffer NarrativeEventRef to NarrativeEvent
@@ -36,7 +32,7 @@ pub fn narrative_event_from_ref(
     let timestamp = UNIX_EPOCH + Duration::from_nanos(timestamp_nanos);
     let author_ref = event_ref.author().map_err(|_| "Missing author")?;
     let author_struct =
-        crate::schema::var::Var::try_from(author_ref).map_err(|_| "Failed to convert author")?;
+        crate::var::Var::try_from(author_ref).map_err(|_| "Failed to convert author")?;
     let author = var_from_flatbuffer(&author_struct).map_err(|e| e.to_string())?;
     let event = event_from_ref(event_ref.event().map_err(|_| "Missing event")?)?;
 
@@ -56,8 +52,8 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
     {
         EventUnionRef::NotifyEvent(notify) => {
             let value_ref = notify.value().map_err(|_| "Missing value")?;
-            let value_struct = crate::schema::var::Var::try_from(value_ref)
-                .map_err(|_| "Failed to convert value")?;
+            let value_struct =
+                crate::var::Var::try_from(value_ref).map_err(|_| "Failed to convert value")?;
             let value = var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
             let content_type = notify
                 .content_type()

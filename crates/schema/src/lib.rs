@@ -22,10 +22,10 @@ pub mod event_log;
 pub mod program;
 pub mod rpc;
 pub mod var;
-
 pub mod convert {
-    pub use crate::schema::{
-        convert_common::*, convert_defs::*, convert_errors::*, convert_events::*, convert_var::*,
+    pub use crate::{
+        convert_common::*, convert_defs::*, convert_errors::*, convert_events::*,
+        convert_program::*, convert_var::*,
     };
 }
 
@@ -37,7 +37,7 @@ mod convert_events;
 mod convert_errors;
 mod convert_var;
 
+pub mod convert_program;
 pub mod opcode_stream;
-pub mod program_convert;
 #[allow(dead_code, clippy::all)]
 mod schemas_generated;
