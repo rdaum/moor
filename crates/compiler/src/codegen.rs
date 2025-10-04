@@ -493,6 +493,7 @@ impl CodegenState {
                     BinaryOp::BitXor => Op::BitXor,
                     BinaryOp::BitShl => Op::BitShl,
                     BinaryOp::BitShr => Op::BitShr,
+                    BinaryOp::BitLShr => Op::BitLShr,
                 };
                 self.emit(binop);
                 self.pop_stack(1);

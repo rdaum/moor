@@ -567,7 +567,8 @@ impl Decompile {
             | Op::BitOr
             | Op::BitXor
             | Op::BitShl
-            | Op::BitShr => {
+            | Op::BitShr
+            | Op::BitLShr => {
                 let right = self.pop_expr()?;
                 let left = self.pop_expr()?;
                 let operator = BinaryOp::from_binary_opcode(opcode);

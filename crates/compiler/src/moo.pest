@@ -103,6 +103,7 @@ infix    = _{
   | eq
   | neq
   | bitshl
+  | bitlshr
   | bitshr
   | lte
   | gte
@@ -133,6 +134,7 @@ bitand   =  { "&." }
 bitor    =  { "|." }
 bitxor   =  { "^." }
 bitshl   =  { "<<" }
+bitlshr  =  { ">>>" }
 bitshr   =  { ">>" }
 
 prefix = _{ neg | not | bitnot | scatter_assign }

@@ -124,8 +124,9 @@ const OP_CONTINUE_COMPREHENSION: u16 = 88;
 const OP_CAPTURE: u16 = 89;
 const OP_MAKE_LAMBDA: u16 = 90;
 const OP_CALL_LAMBDA: u16 = 91;
+const OP_BIT_LSHR: u16 = 92;
 
-// Reserve 92-999 for future opcodes
+// Reserve 93-999 for future opcodes
 // Reserve 1000-65535 for extensions
 
 // ============================================================================
@@ -265,6 +266,7 @@ impl OpStream {
             Op::BitXor => self.words.push(OP_BIT_XOR),
             Op::BitShl => self.words.push(OP_BIT_SHL),
             Op::BitShr => self.words.push(OP_BIT_SHR),
+            Op::BitLShr => self.words.push(OP_BIT_LSHR),
             Op::BitNot => self.words.push(OP_BIT_NOT),
 
             Op::Eq => self.words.push(OP_EQ),
@@ -614,6 +616,7 @@ impl OpStream {
             OP_BIT_XOR => Ok(Op::BitXor),
             OP_BIT_SHL => Ok(Op::BitShl),
             OP_BIT_SHR => Ok(Op::BitShr),
+            OP_BIT_LSHR => Ok(Op::BitLShr),
             OP_BIT_NOT => Ok(Op::BitNot),
 
             OP_EQ => Ok(Op::Eq),

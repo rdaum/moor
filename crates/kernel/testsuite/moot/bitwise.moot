@@ -53,7 +53,7 @@
 ; return 0 << 5;
 0
 
-// test_right_shift
+// test_right_shift (arithmetic)
 ; return 16 >> 2;
 4
 
@@ -65,6 +65,36 @@
 
 ; return 0 >> 5;
 0
+
+// test_right_shift with negative numbers (arithmetic shift preserves sign)
+; return -8 >> 1;
+-4
+
+; return -16 >> 2;
+-4
+
+// test_logical_right_shift (unsigned shift)
+; return 16 >>> 2;
+4
+
+; return 8 >>> 1;
+4
+
+; return 28 >>> 2;
+7
+
+; return 0 >>> 5;
+0
+
+// test_logical_right_shift with negative numbers (logical shift fills with zeros)
+; return -1 >>> 1;
+9223372036854775807
+
+; return -8 >>> 1;
+9223372036854775804
+
+; return -16 >>> 2;
+4611686018427387900
 
 // test_bitwise_not
 ; return ~5;

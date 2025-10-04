@@ -30,6 +30,7 @@ pub enum Op {
     BitXor,
     BitShl,
     BitShr,
+    BitLShr,
     BitNot,
     CallVerb,
     CheckListForSplice,

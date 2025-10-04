@@ -78,6 +78,7 @@ macro_rules! rule_to_expr_mapping {
                 (Rule::lte, Expr::Binary(BinaryOp::LtE, _, _)) => true,
                 (Rule::in_range, Expr::Binary(BinaryOp::In, _, _)) => true,
                 (Rule::bitshl, Expr::Binary(BinaryOp::BitShl, _, _)) => true,
+                (Rule::bitlshr, Expr::Binary(BinaryOp::BitLShr, _, _)) => true,
                 (Rule::bitshr, Expr::Binary(BinaryOp::BitShr, _, _)) => true,
                 (Rule::add, Expr::Binary(BinaryOp::Add, _, _)) => true,
                 (Rule::sub, Expr::Binary(BinaryOp::Sub, _, _)) => true,
@@ -214,7 +215,7 @@ define_operators! {
         infix(left): [eq, neq, gt, lt, gte, lte, in_range],
     ],
     BitwiseShift => [
-        infix(left): [bitshl, bitshr],
+        infix(left): [bitshl, bitlshr, bitshr],
     ],
     Arithmetic => [
         infix(left): [add, sub],
@@ -942,6 +943,11 @@ impl TreeTransformer {
                 )),
                 Rule::bitshr => Ok(Expr::Binary(
                     BinaryOp::BitShr,
+                    Box::new(lhs?),
+                    Box::new(rhs.unwrap()),
+                )),
+                Rule::bitlshr => Ok(Expr::Binary(
+                    BinaryOp::BitLShr,
                     Box::new(lhs?),
                     Box::new(rhs.unwrap()),
                 )),

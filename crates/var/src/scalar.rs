@@ -201,6 +201,23 @@ impl Var {
             .ok_or_else(|| E_INVARG.msg("Integer overflow in right shift"))
     }
 
+    pub fn bitlshr(&self, v: &Self) -> Result<Self, Error> {
+        let (Variant::Int(l), Variant::Int(r)) = (self.variant(), v.variant()) else {
+            return Ok(v_error(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot logical right shift type {} by {}",
+                    self.type_code().to_literal(),
+                    v.type_code().to_literal()
+                )
+            })));
+        };
+        if *r < 0 || *r > 63 {
+            return Ok(v_error(E_INVARG.msg("Invalid shift amount")));
+        }
+        // Logical (unsigned) right shift: cast to u64, shift, cast back to i64
+        Ok(v_int(((*l as u64) >> (*r as u32)) as i64))
+    }
+
     pub fn bitnot(&self) -> Result<Self, Error> {
         let Variant::Int(l) = self.variant() else {
             return Ok(v_error(E_TYPE.with_msg(|| {

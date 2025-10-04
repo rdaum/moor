@@ -689,6 +689,9 @@ pub fn moo_frame_execute(
             Op::BitShr => {
                 binary_var_op!(self, f, state, bitshr);
             }
+            Op::BitLShr => {
+                binary_var_op!(self, f, state, bitlshr);
+            }
             Op::BitNot => {
                 let v = f.peek_top();
                 match v.bitnot() {
