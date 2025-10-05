@@ -110,3 +110,4 @@ rand.workspace = true
 semver.workspace = true
 strum.workspace = true
 uuid.workspace = true
+v8.workspace = true

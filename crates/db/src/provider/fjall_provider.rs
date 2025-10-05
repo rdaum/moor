@@ -669,6 +669,10 @@ impl EncodeFor<ProgramType> for FjallCodec {
                 // StoredProgram is a ByteView wrapper - extract the inner ByteView
                 Ok(AsRef::<ByteView>::as_ref(&stored).clone())
             }
+            ProgramType::JavaScript(source) => {
+                // Store JavaScript source as UTF-8 bytes
+                Ok(ByteView::from(source.as_bytes()))
+            }
         }
     }
 

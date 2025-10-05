@@ -24,7 +24,7 @@ use moor_var::{
     v_list, v_obj, v_str, v_string,
 };
 
-use crate::vm::{VerbCall, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
+use crate::vm::{VerbCall, js_frame::JSFrame, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
 use moor_var::program::{
     ProgramType,
     names::{GlobalName, Name},
@@ -110,6 +110,7 @@ pub(crate) struct Activation {
 pub enum Frame {
     Moo(Box<MooStackFrame>),
     Bf(BfFrame),
+    JavaScript(Box<JSFrame>),
 }
 
 impl Frame {
@@ -118,6 +119,7 @@ impl Frame {
         match self {
             Frame::Moo(frame) => frame.find_line_no(frame.pc),
             Frame::Bf(_) => None,
+            Frame::JavaScript(_) => None, // TODO: Could track line numbers from V8 stack traces
         }
     }
 
@@ -130,6 +132,9 @@ impl Frame {
             Frame::Bf(_) => {
                 panic!("set_variable called for a built-in function frame")
             }
+            Frame::JavaScript(_) => {
+                panic!("set_variable called for a JavaScript frame")
+            }
         }
     }
 
@@ -139,6 +144,9 @@ impl Frame {
             Frame::Bf(_) => {
                 panic!("set_global_variable called for a built-in function frame")
             }
+            Frame::JavaScript(_) => {
+                panic!("set_global_variable called for a JavaScript frame")
+            }
         }
     }
 
@@ -146,6 +154,7 @@ impl Frame {
         match self {
             Frame::Moo(frame) => frame.get_gvar(gname),
             Frame::Bf(_) => None,
+            Frame::JavaScript(_) => None,
         }
     }
 
@@ -157,6 +166,9 @@ impl Frame {
             Frame::Bf(bf_frame) => {
                 bf_frame.return_value = Some(value);
             }
+            Frame::JavaScript(js_frame) => {
+                js_frame.set_return_value(value);
+            }
         }
     }
 
@@ -167,6 +179,10 @@ impl Frame {
                 .return_value
                 .clone()
                 .expect("No return value set for built-in function"),
+            Frame::JavaScript(js_frame) => js_frame
+                .return_value
+                .clone()
+                .expect("No return value set for JavaScript frame"),
         }
     }
 }
@@ -202,23 +218,35 @@ impl Activation {
     ) -> Self {
         let verb_owner = resolved_verb.owner();
 
-        let ProgramType::MooR(program) = program else {
-            unimplemented!("Only MOO programs are supported")
+        let mut frame = match program {
+            ProgramType::MooR(program) => {
+                let moo_frame = Box::new(MooStackFrame::new(program));
+                Frame::Moo(moo_frame)
+            }
+            ProgramType::JavaScript(source) => {
+                // For JavaScript, we'll set up global variables when we initialize the V8 context
+                let args: Vec<Var> = call.args.iter().collect();
+                let js_frame = Box::new(JSFrame::new(source, args));
+                Frame::JavaScript(js_frame)
+            }
         };
-        let frame = Box::new(MooStackFrame::new(program));
-        let mut frame = Frame::Moo(frame);
-        frame.set_global_variable(GlobalName::this, call.this.clone());
-        frame.set_global_variable(GlobalName::player, v_obj(call.player));
-        frame.set_global_variable(GlobalName::caller, call.caller.clone());
-        frame.set_global_variable(
-            GlobalName::verb,
-            v_arc_string(call.verb_name.as_arc_string()),
-        );
-        frame.set_global_variable(GlobalName::args, call.args.clone().into());
+
+        // Set global variables only for MOO frames
+        // JavaScript frames will get these via V8 global object setup
+        if matches!(frame, Frame::Moo(_)) {
+            frame.set_global_variable(GlobalName::this, call.this.clone());
+            frame.set_global_variable(GlobalName::player, v_obj(call.player));
+            frame.set_global_variable(GlobalName::caller, call.caller.clone());
+            frame.set_global_variable(
+                GlobalName::verb,
+                v_arc_string(call.verb_name.as_arc_string()),
+            );
+            frame.set_global_variable(GlobalName::args, call.args.clone().into());
+        }
 
         // Inherit parsing variables from the current activation, if any
         // This maintains LambdaMOO-compatible behavior where parsing variables persist across verb calls
-        if let Some(current_activation) = current_activation {
+        if matches!(frame, Frame::Moo(_)) && let Some(current_activation) = current_activation {
             // Copy parsing variables from the calling activation
             if let Some(argstr) = current_activation
                 .frame
@@ -273,7 +301,7 @@ impl Activation {
             } else {
                 frame.set_global_variable(GlobalName::iobjstr, v_str(""));
             }
-        } else {
+        } else if matches!(frame, Frame::Moo(_)) {
             // No current activation, use defaults (this happens for initial command activation)
             frame.set_global_variable(GlobalName::argstr, v_string(call.argstr.clone()));
             frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));

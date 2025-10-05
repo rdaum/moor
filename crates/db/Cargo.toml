@@ -74,5 +74,8 @@ zerocopy.workspace = true
 # Testing & Development
 tempfile.workspace = true
 
+# JS execution
+v8.workspace = true
+
 [features]
 relbox = []

@@ -27,8 +27,12 @@ pub use vm_unwind::FinallyReason;
 
 pub(crate) mod activation;
 pub(crate) mod exec_state;
+pub(crate) mod js_builtins;
+pub(crate) mod js_execute;
+pub(crate) mod js_frame;
 pub(crate) mod moo_execute;
 pub(crate) mod scatter_assign;
+pub(crate) mod v8_host;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
@@ -233,6 +237,16 @@ fn extract_anonymous_refs_from_activation(
             }
             // Check return value
             if let Some(return_value) = &bf_frame.return_value {
+                extract_anonymous_refs_from_var(return_value, refs);
+            }
+        }
+        Frame::JavaScript(js_frame) => {
+            // Check JavaScript frame arguments
+            for arg in &js_frame.args {
+                extract_anonymous_refs_from_var(arg, refs);
+            }
+            // Check return value
+            if let Some(return_value) = &js_frame.return_value {
                 extract_anonymous_refs_from_var(return_value, refs);
             }
         }

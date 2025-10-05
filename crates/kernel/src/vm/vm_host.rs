@@ -469,6 +469,12 @@ impl VmHost {
                     .reenter_builtin_function(vm_exec_params, session);
                 (result, tick_count)
             }
+            Frame::JavaScript(js_fr) => {
+                // Execute JavaScript using the V8 engine
+                use crate::vm::js_execute::execute_js_frame;
+                let result = execute_js_frame(js_fr, &activation.this, activation.player, tick_slice);
+                (result, tick_count)
+            }
         };
         self.vm_exec_state.tick_count = new_tick_count;
 

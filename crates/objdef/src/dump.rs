@@ -529,11 +529,18 @@ fn dump_verb(
     };
 
     // decompile the verb
-    let ProgramType::MooR(program) = &v.program;
-    let decompiled =
-        program_to_tree(program).map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
-    let unparsed = unparse(&decompiled, false, true)
-        .map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?;
+    let unparsed = match &v.program {
+        ProgramType::MooR(program) => {
+            let decompiled = program_to_tree(program)
+                .map_err(|_| ObjectDumpError::DecompileError { obj: *obj })?;
+            unparse(&decompiled, false, true)
+                .map_err(|_| ObjectDumpError::UnparseError { obj: *obj })?
+        }
+        ProgramType::JavaScript(source) => {
+            // For JavaScript verbs, just output the source as-is
+            source.lines().map(|s| s.to_string()).collect()
+        }
+    };
 
     verb_lines.push(format!(
         "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\""

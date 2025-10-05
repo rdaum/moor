@@ -85,6 +85,24 @@ impl VMExecState {
                         v_none(),
                     ]
                 }
+                Frame::JavaScript(_) => {
+                    vec![
+                        a.this.clone(),
+                        v_str(
+                            a.verbdef
+                                .names()
+                                .iter()
+                                .map(|s| s.as_string())
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                                .as_str(),
+                        ),
+                        v_obj(a.permissions),
+                        v_obj(a.verb_definer()),
+                        v_obj(a.player),
+                        line_no,
+                    ]
+                }
             };
 
             stack_list.push(v_list(&traceback_entry));
@@ -110,6 +128,9 @@ impl VMExecState {
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     pieces.push(format!("builtin {bf_name}",));
+                }
+                Frame::JavaScript(_) => {
+                    pieces.push(format!("{}:{} [js]", a.verb_definer(), a.verb_name));
                 }
             }
             if v_obj(a.verb_definer()) != a.this {
@@ -266,6 +287,10 @@ impl VMExecState {
                     //   `return_value` (and maybe error state/) and propagates it up the stack.
                     //   This way things like push_bf_err can be removed.
                     //   This might involve encompassing some of the stuff below, too.
+                }
+                Frame::JavaScript(_) => {
+                    // TODO: JavaScript try/catch/finally handling
+                    // For now, just pop the frame like Bf does
                 }
             }
 

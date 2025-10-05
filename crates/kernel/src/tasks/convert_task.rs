@@ -56,6 +56,9 @@ pub enum TaskConversionError {
 
     #[error("Program conversion error: {0}")]
     ProgramError(String),
+
+    #[error("Unsupported frame type: {0}")]
+    UnsupportedFrameType(String),
 }
 
 const CURRENT_TASK_VERSION: u16 = 1;
@@ -892,6 +895,13 @@ pub(crate) fn frame_to_flatbuffer(frame: &KernelFrame) -> Result<fb::Frame, Task
         KernelFrame::Bf(bf_frame) => {
             let fb_bf = bf_frame_to_flatbuffer(bf_frame)?;
             FrameUnion::BfFrame(Box::new(fb_bf))
+        }
+        KernelFrame::JavaScript(_js_frame) => {
+            // JavaScript frames cannot be suspended/serialized yet
+            // This is a limitation we'll address when implementing full JS support
+            return Err(TaskConversionError::UnsupportedFrameType(
+                "JavaScript frames not yet serializable".to_string(),
+            ));
         }
     };
 

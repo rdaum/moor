@@ -24,12 +24,14 @@ pub mod program;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProgramType {
     MooR(Program),
+    JavaScript(String),
 }
 
 impl ProgramType {
     pub fn is_empty(&self) -> bool {
         match self {
             ProgramType::MooR(p) => p.main_vector().is_empty(),
+            ProgramType::JavaScript(s) => s.is_empty(),
         }
     }
 }

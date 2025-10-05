@@ -201,3 +201,6 @@ unindent = "0.2"
 
 # Terminal & UI
 termimad = "0.34"
+
+# JS exec
+v8 = "139.0"
