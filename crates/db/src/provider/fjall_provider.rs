@@ -676,9 +676,26 @@ impl EncodeFor<ProgramType> for FjallCodec {
         use moor_var::program::stored_program::StoredProgram;
 
         let stored_program = StoredProgram::from(stored);
-        let program = stored_to_program(&stored_program)
-            .map_err(|e| Error::StorageFailure(format!("Failed to decode program: {e}")))?;
-        Ok(ProgramType::MooR(program))
+
+        // Read the FlatBuffer and extract the language union
+        use moor_schema::program as fb;
+        use planus::ReadAsRoot;
+
+        let fb_program = fb::StoredProgramRef::read_as_root(stored_program.as_bytes())
+            .map_err(|e| Error::StorageFailure(format!("Failed to read program: {e}")))?;
+
+        let language = fb_program.language()
+            .map_err(|e| Error::StorageFailure(format!("Failed to read language union: {e}")))?;
+
+        // Match on language variant and construct appropriate ProgramType
+        match language {
+            fb::StoredProgramLanguageRef::StoredMooRProgram(_moor_ref) => {
+                // Decode the full program using the existing function
+                let program = stored_to_program(&stored_program)
+                    .map_err(|e| Error::StorageFailure(format!("Failed to decode MooR program: {e}")))?;
+                Ok(ProgramType::MooR(program))
+            }
+        }
     }
 }
 

@@ -170,7 +170,8 @@ table ForkVector {
 // Main Program structure
 // ============================================================================
 
-table StoredProgram {
+// MOO-specific program representation
+table StoredMooRProgram {
     // Schema version for migrations
     version: uint16;
 
@@ -211,13 +212,24 @@ table StoredProgram {
     error_operands: [uint8] (required);
 
     // Lambda programs (recursive)
-    lambda_programs: [StoredProgram] (required);
+    lambda_programs: [StoredMooRProgram] (required);
 
     // Line number spans (offset, line_number)
     line_number_spans: [LineSpan] (required);
 
     // Fork line number spans
     fork_line_number_spans: [ForkLineSpans] (required);
+}
+
+// Union for different program language implementations
+union StoredProgramLanguage {
+    StoredMooRProgram
+    // Future: StoredJavaScriptProgram, StoredLuaProgram, etc.
+}
+
+// Top-level program wrapper matching Rust ProgramType enum
+table StoredProgram {
+    language: StoredProgramLanguage (required);
 }
 
 table LineSpan {
