@@ -37,6 +37,64 @@ thread_local! {
     pub(crate) static JS_PERMISSIONS: RefCell<Option<Obj>> = RefCell::new(None);
 }
 
+/// Validate JavaScript source code by attempting to compile it with V8.
+/// Returns Ok(()) if valid, or Err with a list of error messages.
+pub fn validate_javascript(source: &str) -> Result<(), Vec<String>> {
+    initialize_v8();
+
+    // Acquire isolate from thread-local pool
+    let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
+
+    let mut errors = Vec::new();
+
+    {
+        let scope = &mut v8::HandleScope::new(&mut isolate);
+        let context = v8::Context::new(scope, Default::default());
+        let scope = &mut v8::ContextScope::new(scope, context);
+        let tc_scope = &mut v8::TryCatch::new(scope);
+
+        // Wrap in async function like we do during execution
+        let wrapped_source = format!("(async function() {{\n{}\n}})();", source);
+        let source_str = v8::String::new(tc_scope, &wrapped_source).unwrap();
+
+        // Try to compile
+        if v8::Script::compile(tc_scope, source_str, None).is_none() {
+            // Compilation failed - extract error message
+            if let Some(exception) = tc_scope.exception() {
+                let exception_str = exception.to_string(tc_scope).unwrap();
+                let error_msg = exception_str.to_rust_string_lossy(tc_scope);
+
+                // Try to get more detailed error info
+                if let Some(message) = tc_scope.message() {
+                    let line = message.get_line_number(tc_scope).unwrap_or(0);
+                    let source_line = message
+                        .get_source_line(tc_scope)
+                        .map(|s| s.to_rust_string_lossy(tc_scope))
+                        .unwrap_or_default();
+
+                    errors.push(format!("Line {}: {}", line.saturating_sub(1), error_msg));
+                    if !source_line.is_empty() {
+                        errors.push(format!("  {}", source_line.trim()));
+                    }
+                } else {
+                    errors.push(error_msg);
+                }
+            } else {
+                errors.push("JavaScript compilation failed".to_string());
+            }
+        }
+    }
+
+    // Release isolate back to pool
+    V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().release(isolate));
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 /// Execute a JavaScript frame
 /// Acquires an isolate from the thread-local pool, creates a context, and runs the JS code
 pub fn execute_js_frame(
