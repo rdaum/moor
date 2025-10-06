@@ -13,7 +13,7 @@
 
 //! VM testing utilities for executing verbs, eval, and forks in test environments
 
-use std::{sync::Arc, time::Duration};
+use std::{sync::{Arc, atomic::AtomicBool}, time::Duration};
 
 use moor_common::model::WorldState;
 use moor_compiler::Program;
@@ -52,7 +52,7 @@ fn execute_fork(
 ) -> ExecResult {
     // For testing, forks execute in the same transaction context as the parent
 
-    let mut vm_host = VmHost::new(task_id, 20, 90_000, Duration::from_secs(5));
+    let mut vm_host = VmHost::new(task_id, 20, 90_000, Duration::from_secs(5), Arc::new(AtomicBool::new(false)));
 
     vm_host.start_fork(task_id, &fork_request, false);
 
@@ -110,7 +110,7 @@ fn execute<F>(
 where
     F: FnOnce(&mut VmHost),
 {
-    let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
+    let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5), Arc::new(AtomicBool::new(false)));
 
     let _tx_guard = setup_task_context(world_state);
 

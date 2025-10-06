@@ -133,6 +133,7 @@ impl Task {
             max_stack_depth,
             max_ticks,
             Duration::from_secs(max_seconds),
+            kill_switch.clone(),
         );
 
         let retry_state = vm_host.snapshot_state();

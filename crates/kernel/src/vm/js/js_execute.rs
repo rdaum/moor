@@ -16,10 +16,15 @@
 
 use crate::vm::js::js_builtins::install_builtins_on_template;
 use crate::vm::js::js_frame::{JSContinuation, JSFrame, PendingDispatch};
+use crate::vm::js::js_watchdog::{register_execution, is_watchdog_exception, WatchdogAbortReason, WatchdogGuard};
 use crate::vm::js::v8_host::{V8_ISOLATE_POOL, initialize_v8, v8_to_var, var_to_v8};
 use crate::vm::vm_host::ExecutionResult;
+use moor_common::tasks::{AbortLimitReason, TaskId};
 use moor_var::{Obj, Var, v_none};
 use std::cell::RefCell;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 use tracing::info;
 use v8;
 
@@ -102,7 +107,10 @@ pub fn execute_js_frame(
     this: &Var,
     player: Obj,
     permissions: Obj,
-    _tick_slice: usize,
+    task_id: TaskId,
+    ticks_remaining: usize,
+    time_remaining: Duration,
+    kill_flag: Arc<AtomicBool>,
 ) -> ExecutionResult {
     // Initialize V8 if needed
     initialize_v8();
@@ -111,17 +119,17 @@ pub fn execute_js_frame(
     match &js_frame.continuation {
         JSContinuation::Initial => {
             // First time execution - run the JavaScript
-            execute_js_initial(js_frame, this, player, permissions)
+            execute_js_initial(js_frame, this, player, permissions, task_id, ticks_remaining, time_remaining, kill_flag)
         }
         JSContinuation::AwaitingVerbCall { .. } => {
             // Resuming from a verb call - re-execute with cached result
             // call_verb will see the cached result and return a resolved Promise
-            execute_js_resume(js_frame, this, player, permissions)
+            execute_js_resume(js_frame, this, player, permissions, task_id, ticks_remaining, time_remaining, kill_flag)
         }
         JSContinuation::AwaitingBuiltinCall { .. } => {
             // Resuming from a builtin call - re-execute with cached result
             // call_builtin will see the cached result and return a resolved Promise
-            execute_js_resume(js_frame, this, player, permissions)
+            execute_js_resume(js_frame, this, player, permissions, task_id, ticks_remaining, time_remaining, kill_flag)
         }
         JSContinuation::AwaitingPromise { .. } => {
             // Resuming from a promise - not yet implemented
@@ -144,6 +152,10 @@ fn execute_js_initial(
     this: &Var,
     player: Obj,
     permissions: Obj,
+    task_id: TaskId,
+    ticks_remaining: usize,
+    time_remaining: Duration,
+    kill_flag: Arc<AtomicBool>,
 ) -> ExecutionResult {
     info!(
         "execute_js_initial: Starting execution of JS source: {:?}",
@@ -156,6 +168,15 @@ fn execute_js_initial(
 
     // Acquire isolate from thread-local pool
     let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
+
+    // Get thread-safe handle for watchdog
+    let isolate_handle = isolate.thread_safe_handle();
+
+    // Register with watchdog for time/tick limit enforcement
+    register_execution(task_id, isolate_handle, ticks_remaining, time_remaining, kill_flag);
+
+    // Guard ensures unregister happens on any return path
+    let _guard = WatchdogGuard::new(task_id);
 
     // Execute within a scope so all borrows end before we release the isolate
     let result = {
@@ -195,18 +216,58 @@ fn execute_js_initial(
         };
 
         // Execute the script (returns a Promise from the async function)
+        // Wrap in TryCatch to handle watchdog interrupts and other exceptions
         info!("execute_js_initial: Running script");
-        let promise_value = match script.run(scope) {
+        let tc_scope = &mut v8::TryCatch::new(scope);
+        let promise_value = match script.run(tc_scope) {
             Some(value) => value,
             None => {
-                // Execution failed - check for exception
+                // Execution failed - could be watchdog termination or an actual error
+                // If there's no exception, it's likely watchdog termination via terminate_execution()
+                // Let the outer exec_interpreter check limits and report the proper abort reason
+                let Some(exception) = tc_scope.exception() else {
+                    // No exception - likely watchdog termination
+                    return ExecutionResult::PushError(moor_var::Error::new(
+                        moor_var::E_QUOTA,
+                        Some("JavaScript execution exceeded time or tick limit".to_string()),
+                        None,
+                    ));
+                };
+
+                // There is an exception - check if it's watchdog-related or a real error
+                let Some(exception_str) = exception.to_string(tc_scope) else {
+                    // Can't convert to string, but there was an exception - regular failure
+                    return ExecutionResult::PushError(moor_var::Error::new(
+                        moor_var::E_INVARG,
+                        Some("JavaScript execution failed".to_string()),
+                        None,
+                    ));
+                };
+
+                let exception_msg = exception_str.to_rust_string_lossy(tc_scope);
+
+                // Check if it's a watchdog termination (terminate_execution creates "null" exception)
+                // or one of our custom watchdog exceptions
+                if exception_msg == "null" || is_watchdog_exception(&exception_msg).is_some() {
+                    // Watchdog interrupted - a limit was exceeded
+                    // Return an appropriate error message
+                    return ExecutionResult::PushError(moor_var::Error::new(
+                        moor_var::E_QUOTA,
+                        Some("JavaScript execution exceeded time or tick limit".to_string()),
+                        None,
+                    ));
+                }
+
+                // Real JavaScript exception
                 return ExecutionResult::PushError(moor_var::Error::new(
                     moor_var::E_INVARG,
-                    Some("JavaScript execution failed".to_string()),
+                    Some(format!("JavaScript error: {}", exception_msg)),
                     None,
                 ));
             }
         };
+
+        let scope = tc_scope;
 
         // Process microtasks to allow Promise to resolve
         info!("execute_js_initial: Processing microtasks");
@@ -352,6 +413,10 @@ fn execute_js_resume(
     this: &Var,
     player: Obj,
     permissions: Obj,
+    task_id: TaskId,
+    ticks_remaining: usize,
+    time_remaining: Duration,
+    kill_flag: Arc<AtomicBool>,
 ) -> ExecutionResult {
     // Extract the call result and update the continuation
     match js_frame.continuation.clone() {
@@ -378,6 +443,15 @@ fn execute_js_resume(
 
     // Acquire isolate from thread-local pool
     let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
+
+    // Get thread-safe handle for watchdog
+    let isolate_handle = isolate.thread_safe_handle();
+
+    // Register with watchdog for time/tick limit enforcement
+    register_execution(task_id, isolate_handle, ticks_remaining, time_remaining, kill_flag);
+
+    // Guard ensures unregister happens on any return path
+    let _guard = WatchdogGuard::new(task_id);
 
     // Execute within a scope so all borrows end before we release the isolate
     let result = {
@@ -412,17 +486,57 @@ fn execute_js_resume(
         };
 
         // Execute the script (returns a Promise from the async function)
-        let promise_value = match script.run(scope) {
+        // Wrap in TryCatch to handle watchdog interrupts and other exceptions
+        let tc_scope = &mut v8::TryCatch::new(scope);
+        let promise_value = match script.run(tc_scope) {
             Some(value) => value,
             None => {
-                // Execution failed - check for exception
+                // Execution failed - could be watchdog termination or an actual error
+                // If there's no exception, it's likely watchdog termination via terminate_execution()
+                // Let the outer exec_interpreter check limits and report the proper abort reason
+                let Some(exception) = tc_scope.exception() else {
+                    // No exception - likely watchdog termination
+                    return ExecutionResult::PushError(moor_var::Error::new(
+                        moor_var::E_QUOTA,
+                        Some("JavaScript execution exceeded time or tick limit".to_string()),
+                        None,
+                    ));
+                };
+
+                // There is an exception - check if it's watchdog-related or a real error
+                let Some(exception_str) = exception.to_string(tc_scope) else {
+                    // Can't convert to string, but there was an exception - regular failure
+                    return ExecutionResult::PushError(moor_var::Error::new(
+                        moor_var::E_INVARG,
+                        Some("JavaScript execution failed".to_string()),
+                        None,
+                    ));
+                };
+
+                let exception_msg = exception_str.to_rust_string_lossy(tc_scope);
+
+                // Check if it's a watchdog termination (terminate_execution creates "null" exception)
+                // or one of our custom watchdog exceptions
+                if exception_msg == "null" || is_watchdog_exception(&exception_msg).is_some() {
+                    // Watchdog interrupted - a limit was exceeded
+                    // Return an appropriate error message
+                    return ExecutionResult::PushError(moor_var::Error::new(
+                        moor_var::E_QUOTA,
+                        Some("JavaScript execution exceeded time or tick limit".to_string()),
+                        None,
+                    ));
+                }
+
+                // Real JavaScript exception
                 return ExecutionResult::PushError(moor_var::Error::new(
                     moor_var::E_INVARG,
-                    Some("JavaScript execution failed".to_string()),
+                    Some(format!("JavaScript error: {}", exception_msg)),
                     None,
                 ));
             }
         };
+
+        let scope = tc_scope;
 
         // Process microtasks to allow Promise to resolve
         scope.perform_microtask_checkpoint();

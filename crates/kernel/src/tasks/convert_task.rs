@@ -40,7 +40,10 @@ use moor_schema::{
     program as fb_program, task as fb,
 };
 use moor_var::program::names::Name;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    sync::{Arc, atomic::AtomicBool},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -1090,6 +1093,7 @@ pub(crate) fn vm_host_from_flatbuffer(
         max_stack_depth: fb.max_stack_depth as usize,
         max_ticks: fb.max_ticks as usize,
         max_time: Duration::from_millis(fb.max_time_ms),
+        kill_switch: Arc::new(AtomicBool::new(false)),  // Create new kill switch on deserialization
         running: true,
         unsync: Default::default(),
     };

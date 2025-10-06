@@ -13,6 +13,7 @@
 
 use std::{
     fmt::{Debug, Formatter},
+    sync::{Arc, atomic::AtomicBool},
     time::{Duration, SystemTime},
 };
 
@@ -28,6 +29,7 @@ use moor_common::{
 use moor_compiler::{BuiltinId, CompileOptions, Offset, Program, compile};
 use moor_var::{E_MAXREC, Error, List, Obj, Symbol, Var, v_none};
 
+use crate::vm::js::js_execute::execute_js_frame;
 use crate::{
     PhantomUnsync,
     config::FeaturesConfig,
@@ -124,6 +126,8 @@ pub struct VmHost {
     pub(crate) max_ticks: usize,
     /// The maximum amount of time allotted to this task
     pub(crate) max_time: Duration,
+    /// Kill switch to signal this task should stop
+    pub(crate) kill_switch: Arc<AtomicBool>,
     pub(crate) running: bool,
 
     pub(crate) unsync: PhantomUnsync,
@@ -146,6 +150,7 @@ impl VmHost {
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
+        kill_switch: Arc<AtomicBool>,
     ) -> Self {
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
 
@@ -155,6 +160,7 @@ impl VmHost {
             max_stack_depth,
             max_ticks,
             max_time,
+            kill_switch,
             running: false,
             unsync: Default::default(),
         }
@@ -454,6 +460,10 @@ impl VmHost {
         // Pick the right kind of execution flow depending on the activation -- builtin or MOO?
         let mut tick_count = self.vm_exec_state.tick_count;
         let tick_slice = self.vm_exec_state.tick_slice;
+        let task_id = self.vm_exec_state.task_id;
+        let max_ticks = self.max_ticks;
+        let time_remaining = self.vm_exec_state.time_left().unwrap_or(Duration::ZERO);
+        let kill_switch = self.kill_switch.clone();
         let activation = self.vm_exec_state.top_mut();
 
         let (result, new_tick_count) = match &mut activation.frame {
@@ -475,13 +485,17 @@ impl VmHost {
             }
             Frame::JavaScript(js_fr) => {
                 // Execute JavaScript using the V8 engine
-                use crate::vm::js::js_execute::execute_js_frame;
+                let ticks_rem = max_ticks.saturating_sub(tick_count);
+
                 let result = execute_js_frame(
                     js_fr,
                     &activation.this,
                     activation.player,
                     activation.permissions,
-                    tick_slice,
+                    task_id,
+                    ticks_rem,
+                    time_remaining,
+                    kill_switch.clone(),
                 );
                 tracing::info!("run_interpreter: JavaScript frame returned: {:?}", result);
                 (result, tick_count)
