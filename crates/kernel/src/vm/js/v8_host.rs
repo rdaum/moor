@@ -42,7 +42,8 @@ thread_local! {
 /// Safe to call multiple times - initialization happens only once.
 pub fn initialize_v8() {
     V8_INIT.call_once(|| {
-        let platform = v8::new_default_platform(0, false).make_shared();
+        // Use unprotected platform to avoid PKU-related crashes on non-main threads
+        let platform = v8::new_unprotected_default_platform(0, false).make_shared();
         v8::V8::initialize_platform(platform.clone());
         v8::V8::initialize();
 
@@ -76,6 +77,9 @@ impl V8IsolatePool {
         if let Some(isolate) = pool.pop() {
             isolate
         } else {
+            // Drop pool lock before creating isolate to avoid holding it during creation
+            drop(pool);
+
             // Create new isolate with default parameters
             v8::Isolate::new(Default::default())
         }
@@ -90,6 +94,16 @@ impl V8IsolatePool {
         }
         // Otherwise, just drop it (isolate goes out of scope)
     }
+}
+
+/// Acquire an isolate from the thread-local pool
+pub fn acquire_isolate() -> v8::OwnedIsolate {
+    V8_ISOLATE_POOL.with(|pool| pool.borrow().acquire())
+}
+
+/// Release an isolate back to the thread-local pool
+pub fn release_isolate(isolate: v8::OwnedIsolate) {
+    V8_ISOLATE_POOL.with(|pool| pool.borrow().release(isolate));
 }
 
 /// Deleter callback for Binary ArrayBuffer backing stores
