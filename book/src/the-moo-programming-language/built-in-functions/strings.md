@@ -112,38 +112,6 @@ strtr("xXxX", "xXxX", "1234", 0)    ⇒    "4444"
 strtr("xXxX", "xXxX", "1234", 1)    ⇒    "3434"
 ```
 
-### `decode_binary`
-
-Returns a list of strings and/or integers representing the bytes in the binary string `bin_string` in order.
-
-If `fully` is false or omitted, the list contains an integer only for each non-printing, non-space byte; all other
-characters are grouped into the longest possible contiguous substrings. If `fully` is provided and true, the list
-contains
-only integers, one for each byte represented in `bin_string`. Raises `E_INVARG` if `bin_string` is not a properly-formed
-binary string.
-
-```
-decode_binary("foo")               =>   {"foo"}
-decode_binary("~~foo")             =>   {"~foo"}
-decode_binary("foo~0D~0A")         =>   {"foo", 13, 10}
-decode_binary("foo~0Abar~0Abaz")   =>   {"foo", 10, "bar", 10, "baz"}
-decode_binary("foo~0D~0A", 1)      =>   {102, 111, 111, 13, 10}
-```
-
-### `encode_binary`
-
-Translates each integer and string in turn into its binary string equivalent, returning the concatenation of all these
-substrings into a single binary string.
-
-Each argument must be an integer between 0 and 255, a string, or a list containing only legal arguments for this
-function.
-
-```
-encode_binary("~foo")                     =>   "~7Efoo"
-encode_binary({"foo", 10}, {"bar", 13})   =>   "foo~0Abar~0D"
-encode_binary("foo", 10, "bar", 13)       =>   "foo~0Abar~0D"
-```
-
 ### `decode_base64`
 
 `decode_base64(base64 [, safe])`

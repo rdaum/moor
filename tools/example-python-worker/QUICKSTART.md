@@ -83,10 +83,12 @@ cargo run --bin moor-daemon
 ```
 
 The daemon uses IPC sockets by default:
+
 - Workers request: `ipc:///tmp/moor_workers_request.sock`
 - Workers response: `ipc:///tmp/moor_workers_response.sock`
 
 For TCP (Docker), the ports are typically:
+
 - Workers request: `tcp://localhost:7896`
 - Workers response: `tcp://localhost:7897`
 
@@ -100,7 +102,8 @@ The easiest way to run the worker:
 ./run_worker.sh
 ```
 
-This script handles venv activation and uses sensible defaults. You can override settings with environment variables:
+This script handles venv activation and uses sensible defaults. You can override settings with
+environment variables:
 
 ```bash
 WORKER_PUBLIC_KEY=/path/to/key.pem WORKER_PRIVATE_KEY=/path/to/key.pem ./run_worker.sh
@@ -191,4 +194,5 @@ This implementation is working with basic functionality:
 - ✓ Returns list with "echo_response" prepended to arguments
 - ⚠ Other Var types return placeholders
 
-The worker successfully demonstrates cross-language FlatBuffer support and is functional for basic use cases!
+The worker successfully demonstrates cross-language FlatBuffer support and is functional for basic
+use cases!

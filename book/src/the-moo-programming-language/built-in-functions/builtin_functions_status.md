@@ -193,7 +193,7 @@ outbound connections.
 
 | Name                                                           | Complete | Notes                                                                                                                                         |
 |----------------------------------------------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| [`set_connection_option`](server.md#set_connection_option)     | &check;  | Basic support for "client-echo" option. Works only for connections, not player objects, since moor has multiple connections per player.     |
+| [`set_connection_option`](server.md#set_connection_option)     | &check;  | Supports binary, hold-input, disable-oob, client-echo, flush-command options. See [networking](../networking.md) for details.                |
 | [`connection_option`](server.md#connection_option)             | &check;  | Works only for connections, not player objects, since moor has multiple connections per player. `connections(player)` returns all connections |
 | [`connection_options`](server.md#connection_options)           | &check;  | Works only for connections, not player objects, since moor has multiple connections per player. `connections(player)` returns all connections |
 | [`open_network_connection`](server.md#open_network_connection) |          | Not planned - use worker system instead                                                                                                       |

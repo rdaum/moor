@@ -261,6 +261,181 @@ Out-of-band commands are intended for use by fancy client programs that may gene
 server must be notified. Since the client cannot, in general, know the state of the player's connection (logged-in or
 not, reading task or not), out-of-band commands provide the only reliable client-to-server communications channel.
 
+## Connection Options
+
+Connection options control various behaviors associated with individual network connections. These options allow fine-grained
+control over input handling, echo behavior, binary data transmission, and input flushing.
+
+> **Note**: The connection options documented here apply specifically to **telnet connections** handled by the `telnet-host`.
+> Other connection types (such as WebSocket connections or custom host implementations) may support different sets of
+> connection options or handle these options differently. Always check the documentation for the specific host type you're
+> working with.
+
+### `set_connection_option(conn, option, value)`
+
+Controls optional behaviors for a specific connection.
+
+**Syntax**: `set_connection_option(conn, option, value)`
+
+**Parameters**:
+- `conn`: The connection object (negative ID) to configure
+- `option`: A string naming the option to set
+- `value`: The value to set for the option (type depends on the option)
+
+**Returns**: None
+
+**Raises**:
+- `E_INVARG`: If `conn` does not specify a current connection
+- `E_PERM`: If the programmer is neither `conn` nor a wizard
+
+**Supported Options**:
+
+#### `"hold-input"`
+
+If `value` is true, input received on this connection will never be treated as a command. Instead, it will remain in the
+queue until retrieved by a call to `read()`. This is useful for implementing custom input handlers or mini-parsers within
+your MOO code.
+
+```moo
+// Enable hold-input mode to read raw input
+set_connection_option(player, "hold-input", 1);
+line = read();  // Will return the next line of input
+set_connection_option(player, "hold-input", 0);  // Restore normal command processing
+```
+
+#### `"client-echo"`
+
+Sends the Telnet Protocol `WONT ECHO` or `WILL ECHO` command, depending on whether `value` is true or false, respectively.
+For clients that support the Telnet Protocol, this should toggle whether or not the client echoes locally the characters
+typed by the user. Note that the server itself never echoes input characters under any circumstances.
+
+- `value = true` (1): Server sends `WONT ECHO` - client should echo characters locally (normal mode)
+- `value = false` (0): Server sends `WILL ECHO` - client should not echo characters (password mode)
+
+```moo
+// Disable client echo for password entry
+set_connection_option(player, "client-echo", 0);
+password = read();
+set_connection_option(player, "client-echo", 1);  // Re-enable echo
+```
+
+> Note: This option is only available under TCP/IP networking configurations (telnet connections).
+
+#### `"binary"`
+
+If `value` is true, the connection switches to binary mode where arbitrary bytes can be transmitted. Input from a connection
+in binary mode is not broken into lines at all; it is delivered to either the `read()` function or the built-in command
+parser as binary values (where `typeof(x) == BINARY`), in whatever size chunks come back from the operating system.
+
+When sending output to a connection in binary mode using `notify()`, you can send either:
+- **Binary values** (where `typeof(x) == BINARY`) - sent as raw bytes to the connection
+- **Strings** - must be valid UTF-8, sent as UTF-8 bytes to the connection
+
+```moo
+// Enable binary mode
+set_connection_option(player, "binary", 1);
+
+// Send binary data (arbitrary bytes including non-UTF8)
+notify(player, b"AAECA");  // Binary literal
+
+// Can also send regular UTF-8 strings
+notify(player, "Hello, world!");
+
+// Reading returns binary values (not line-delimited)
+binary_input = read();  // Returns binary value like b"SGVsbG8="
+typeof(binary_input);   // Returns BINARY
+```
+
+> Note: In classic LambdaMOO, the second argument to `notify()` must be a binary string in binary mode, or `E_INVARG` is
+> raised. mooR is more flexible and accepts both binary values and UTF-8 strings.
+>
+> mooR uses a distinct binary type represented as `b"base64data"` where the content is base64-encoded.
+> Regular strings are always valid UTF-8. See the [Binary Type](../the-database/moo-value-types.md#binary-type) section
+> for details on working with binary data.
+
+#### `"flush-command"`
+
+If `value` is a non-empty string, it becomes the new flush command for this connection, by which the player can flush all
+queued input that has not yet been processed by the server. If `value` is not a non-empty string, then the connection is
+set to have no flush command at all.
+
+The default value of this option can be set via the property `$server_options.default_flush_command`.
+
+```moo
+// Set a custom flush command
+set_connection_option(player, "flush-command", ".clear");
+// Player can now type ".clear" to flush queued input
+
+// Disable flush command entirely
+set_connection_option(player, "flush-command", "");
+```
+
+#### `"disable-oob"`
+
+If `value` is true, out-of-band command processing is disabled for this connection. Lines beginning with the out-of-band
+prefix will be treated as normal input instead of triggering calls to `$do_out_of_band_command()`.
+
+```moo
+// Disable out-of-band processing
+set_connection_option(player, "disable-oob", 1);
+```
+
+### `connection_option(conn, option)`
+
+Retrieves the current value of a specific connection option.
+
+**Syntax**: `connection_option(conn, option)`
+
+**Parameters**:
+- `conn`: The connection object (negative ID) to query
+- `option`: A string naming the option to retrieve
+
+**Returns**: The current value of the specified option
+
+**Raises**:
+- `E_INVARG`: If `conn` does not specify a current connection
+- `E_PERM`: If the programmer is neither `conn` nor a wizard
+
+```moo
+// Check if hold-input is enabled
+if (connection_option(player, "hold-input"))
+    notify(player, "Input is being held for read() calls");
+endif
+```
+
+### `connection_options(conn)`
+
+Returns a list of all connection options and their current values.
+
+**Syntax**: `connection_options(conn)`
+
+**Parameters**:
+- `conn`: The connection object (negative ID) to query
+
+**Returns**: A list of `{name, value}` pairs describing the current settings of all allowed options
+
+**Raises**:
+- `E_INVARG`: If `conn` does not specify a current connection
+- `E_PERM`: If the programmer is neither `conn` nor a wizard
+
+```moo
+// Display all connection options
+for opt in (connection_options(player))
+    {name, value} = opt;
+    notify(player, tostr(name, " = ", toliteral(value)));
+endfor
+// Example output:
+// "hold-input" = 0
+// "client-echo" = 1
+// "binary" = 0
+// "flush-command" = ".flush"
+// "disable-oob" = 0
+```
+
+> **Important**: In mooR, connection options work only with connection objects (negative IDs), not player objects. Since
+> mooR supports multiple simultaneous connections per player, each connection maintains its own independent set of options.
+> Use the `connections()` function to get the connection objects associated with a player.
+
 ## Player Input Handlers
 
 **$do_out_of_band_command**

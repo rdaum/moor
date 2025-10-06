@@ -1,7 +1,7 @@
 # mooR Python Worker Example
 
-This is a proof-of-concept Python worker implementation for mooR, demonstrating cross-language worker support using
-FlatBuffers and ZeroMQ.
+This is a proof-of-concept Python worker implementation for mooR, demonstrating cross-language
+worker support using FlatBuffers and ZeroMQ.
 
 ## Purpose
 
@@ -99,7 +99,8 @@ python3 echo_worker.py \
 
 ### Using the Same Keypair as Rust Workers
 
-The Python worker uses the same Ed25519 keypair format as the Rust workers. You can use the same key files:
+The Python worker uses the same Ed25519 keypair format as the Rust workers. You can use the same key
+files:
 
 ```bash
 python3 echo_worker.py \
@@ -161,16 +162,16 @@ v4.public.<base64-payload>.<base64-signature>?key-id:moor_worker
 ### FlatBuffer Message Flow
 
 1. **Attach**: Worker → Daemon
-    - Message: `AttachWorker { worker_token, worker_type, worker_id }`
-    - Response: Acknowledgment
+   - Message: `AttachWorker { worker_token, worker_type, worker_id }`
+   - Response: Acknowledgment
 
 2. **Subscribe**: Worker listens on PUB/SUB channel
 
 3. **Work Request**: Daemon → Worker
-    - Message: `WorkerRequest { request_id, worker_type, perms, arguments, timeout }`
+   - Message: `WorkerRequest { request_id, worker_type, perms, arguments, timeout }`
 
 4. **Work Response**: Worker → Daemon
-    - Message: `WorkerResult { request_id, result }` or `WorkerError { request_id, error }`
+   - Message: `WorkerResult { request_id, result }` or `WorkerError { request_id, error }`
 
 ## Current Behavior
 

@@ -73,4 +73,3 @@ When you modify any `.fbs` schema file, regenerate using:
 ```shell
 planus rust -o ./crates/schema/src/schemas_generated.rs ./crates/schema/schema/all_schemas.fbs
 ```
-
