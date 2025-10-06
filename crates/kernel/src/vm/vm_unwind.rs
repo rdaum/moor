@@ -310,6 +310,9 @@ impl VMExecState {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     trace_builtin_end!(self.task_id, bf_name);
                 }
+                Frame::JavaScript(_) => {
+                    trace_verb_end!(self.task_id, &popped_frame.verb_name.as_string());
+                }
             }
 
             // No more frames to unwind, so break out and handle final exit.

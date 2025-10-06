@@ -14,33 +14,64 @@
 //! JavaScript builtin function wrappers.
 //! Exposes MOO builtin functions to JavaScript code.
 
-use crate::vm::{
-    js_execute::{CURRENT_JS_FRAME, PENDING_VERB_CALL},
-    js_frame::{JSContinuation, PendingVerbCall},
-    v8_host::{v8_to_var, var_to_v8},
-};
-use moor_var::{v_int, v_list, Symbol};
+use crate::task_context::with_current_transaction;
+use crate::vm::js::js_execute::{CURRENT_JS_FRAME, JS_PERMISSIONS, PENDING_VERB_CALL};
+use crate::vm::js::js_frame::{JSContinuation, PendingVerbCall};
+use crate::vm::js::v8_host::{v8_to_var, var_to_v8};
+use moor_var::{Symbol, v_int, v_list};
 use v8;
 
-/// Install builtin functions into the JavaScript global scope
-pub fn install_builtins(scope: &mut v8::HandleScope) {
-    let global = scope.get_current_context().global(scope);
-
+/// Install builtin functions onto an object template
+/// This is called during context creation for efficiency
+pub fn install_builtins_on_template<'s>(
+    scope: &mut v8::HandleScope<'s, ()>,
+    template: v8::Local<'s, v8::ObjectTemplate>,
+) {
     // Install typeof builtin
-    install_typeof(scope, global);
+    let typeof_fn = v8::FunctionTemplate::new(scope, typeof_callback);
+    let typeof_key = v8::String::new(scope, "moo_typeof").unwrap();
+    template.set(typeof_key.into(), typeof_fn.into());
 
     // Install tostr builtin
-    install_tostr(scope, global);
+    let tostr_fn = v8::FunctionTemplate::new(scope, tostr_callback);
+    let tostr_key = v8::String::new(scope, "tostr").unwrap();
+    template.set(tostr_key.into(), tostr_fn.into());
 
-    // Install call_verb builtin for JS->MOO verb calls
-    install_call_verb(scope, global);
+    // Install call_verb builtin
+    let call_verb_fn = v8::FunctionTemplate::new(scope, call_verb_callback);
+    let call_verb_key = v8::String::new(scope, "call_verb").unwrap();
+    template.set(call_verb_key.into(), call_verb_fn.into());
 
-    // Install obj() helper for creating object references
-    install_obj(scope, global);
+    // Install obj() helper
+    let obj_fn = v8::FunctionTemplate::new(scope, obj_callback);
+    let obj_key = v8::String::new(scope, "obj").unwrap();
+    template.set(obj_key.into(), obj_fn.into());
+
+    // Install get_prop() for property access
+    let get_prop_fn = v8::FunctionTemplate::new(scope, get_prop_callback);
+    let get_prop_key = v8::String::new(scope, "get_prop").unwrap();
+    template.set(get_prop_key.into(), get_prop_fn.into());
+}
+
+/// Helper function for tests: install builtins on an existing context's global object
+#[cfg(test)]
+fn install_builtins(scope: &mut v8::HandleScope) {
+    let global = scope.get_current_context().global(scope);
+
+    let typeof_fn = v8::FunctionTemplate::new(scope, typeof_callback);
+    let typeof_val = typeof_fn.get_function(scope).unwrap();
+    let typeof_key = v8::String::new(scope, "moo_typeof").unwrap();
+    global.set(scope, typeof_key.into(), typeof_val.into());
+
+    let tostr_fn = v8::FunctionTemplate::new(scope, tostr_callback);
+    let tostr_val = tostr_fn.get_function(scope).unwrap();
+    let tostr_key = v8::String::new(scope, "tostr").unwrap();
+    global.set(scope, tostr_key.into(), tostr_val.into());
 }
 
 /// Install the `typeof` builtin function
 /// Note: Using `moo_typeof` to avoid collision with JavaScript's built-in `typeof` operator
+#[cfg(test)]
 fn install_typeof(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let typeof_fn = v8::FunctionTemplate::new(scope, typeof_callback);
     let typeof_val = typeof_fn
@@ -80,6 +111,7 @@ fn typeof_callback<'a>(
 }
 
 /// Install the `tostr` builtin function
+#[cfg(test)]
 fn install_tostr(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let tostr_fn = v8::FunctionTemplate::new(scope, tostr_callback);
     let tostr_val = tostr_fn
@@ -96,7 +128,7 @@ fn tostr_callback<'a>(
     args: v8::FunctionCallbackArguments<'a>,
     mut rv: v8::ReturnValue,
 ) {
-    use moor_var::{v_str, Variant};
+    use moor_var::{Variant, v_str};
 
     let mut result = String::new();
 
@@ -129,6 +161,7 @@ fn tostr_callback<'a>(
 }
 
 /// Install the `call_verb` builtin function for JS->MOO verb calls
+#[cfg(test)]
 fn install_call_verb(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let call_verb_fn = v8::FunctionTemplate::new(scope, call_verb_callback);
     let call_verb_val = call_verb_fn
@@ -148,7 +181,11 @@ fn call_verb_callback<'a>(
 ) {
     // Check argument count - need at least object and verb_name
     if args.length() < 2 {
-        let msg = v8::String::new(scope, "call_verb requires at least 2 arguments (object, verb_name)").unwrap();
+        let msg = v8::String::new(
+            scope,
+            "call_verb requires at least 2 arguments (object, verb_name)",
+        )
+        .unwrap();
         let exception = v8::Exception::type_error(scope, msg);
         scope.throw_exception(exception);
         return;
@@ -226,6 +263,7 @@ fn call_verb_callback<'a>(
 }
 
 /// Install the `obj` helper function for creating object references
+#[cfg(test)]
 fn install_obj(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let obj_fn = v8::FunctionTemplate::new(scope, obj_callback);
     let obj_val = obj_fn
@@ -270,10 +308,95 @@ fn obj_callback<'a>(
     rv.set(obj.into());
 }
 
+/// JavaScript callback for `get_prop(object, prop_name)` - reads a MOO property
+/// Synchronously retrieves a property value from the world state
+fn get_prop_callback<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    args: v8::FunctionCallbackArguments<'a>,
+    mut rv: v8::ReturnValue,
+) {
+    // Check argument count
+    if args.length() != 2 {
+        let msg = v8::String::new(
+            scope,
+            "get_prop requires 2 arguments (object, property_name)",
+        )
+        .unwrap();
+        let exception = v8::Exception::type_error(scope, msg);
+        scope.throw_exception(exception);
+        return;
+    }
+
+    // Parse object argument
+    let obj_arg = v8_to_var(scope, args.get(0));
+    let obj = match obj_arg.variant() {
+        moor_var::Variant::Obj(o) => o,
+        _ => {
+            let msg = v8::String::new(scope, "get_prop: first argument must be an object").unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            return;
+        }
+    };
+
+    // Parse property name argument
+    let prop_name_arg = v8_to_var(scope, args.get(1));
+    let prop_name = match prop_name_arg.variant() {
+        moor_var::Variant::Str(s) => Symbol::mk(s.as_str()),
+        _ => {
+            let msg = v8::String::new(scope, "get_prop: property name must be a string").unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            return;
+        }
+    };
+
+    // Get permissions from thread-local (set by execute_js_frame)
+    let perms = JS_PERMISSIONS.with(|p| {
+        p.borrow()
+            .expect("JS_PERMISSIONS not set - execute_js_frame must be called first")
+    });
+
+    // Retrieve the property from world state
+    let result = with_current_transaction(|ws| ws.retrieve_property(&perms, obj, prop_name));
+
+    match result {
+        Ok(value) => {
+            // Convert and return the property value
+            let v8_value = var_to_v8(scope, &value);
+            rv.set(v8_value);
+        }
+        Err(ws_err) => {
+            // Convert WorldStateError to MOO Error
+            let moo_error = ws_err.to_error();
+
+            // Create JavaScript Error object with MOO error encoded
+            let error_msg_str = moo_error
+                .msg
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or("Error");
+            let error_msg = v8::String::new(scope, error_msg_str).unwrap();
+            let exception = v8::Exception::error(scope, error_msg);
+
+            // Add MOO error code and value as properties for extraction later
+            if let Some(err_obj) = exception.to_object(scope) {
+                // Store the full error as a Var for proper reconstruction
+                let err_var_key = v8::String::new(scope, "moo_error_var").unwrap();
+                let err_var = moor_var::v_error(moo_error);
+                let err_var_val = var_to_v8(scope, &err_var);
+                err_obj.set(scope, err_var_key.into(), err_var_val);
+            }
+
+            scope.throw_exception(exception);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vm::v8_host::initialize_v8;
+    use crate::vm::js::v8_host::initialize_v8;
     use moor_var::{v_int, v_str};
 
     #[test]

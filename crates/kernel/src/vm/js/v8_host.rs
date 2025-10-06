@@ -17,7 +17,7 @@
 use lazy_static::lazy_static;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex, Once};
-use moor_var::{Var, Variant, v_int, v_float, v_str, v_string, v_objid, v_none, v_list, v_bool};
+use moor_var::{Var, Variant, v_int, v_float, v_str, v_string, v_objid, v_none, v_list, v_bool, v_binary};
 use v8;
 
 static V8_INIT: Once = Once::new();
@@ -86,11 +86,6 @@ impl V8IsolatePool {
         }
         // Otherwise, just drop it (isolate goes out of scope)
     }
-
-    /// Get the current pool size
-    pub fn size(&self) -> usize {
-        self.isolates.lock().unwrap().len()
-    }
 }
 
 /// Convert a MOO Var to a V8 value
@@ -154,10 +149,39 @@ pub fn var_to_v8<'s>(
             }
             obj.into()
         }
+        Variant::Binary(_) => {
+            // Binary data cannot safely cross the JavaScript boundary yet
+            // TODO: Implement zero-copy buffer wrapper similar to Deno's ZeroCopyBuf
+            //   - Needs v8::External + finalizer callbacks to manage Rust ownership
+            //   - Should provide accessor methods (get, slice, etc.) without copying
+            //   - Must prevent both V8 GC and Rust drop while in use
+            let msg = v8::String::new(scope, "Binary data cannot be passed to JavaScript").unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            v8::undefined(scope).into()
+        }
+        Variant::Lambda(_) => {
+            // Lambda functions cannot safely cross the JavaScript boundary
+            // They contain references to MOO code that JS can't execute
+            let msg = v8::String::new(scope, "Lambda functions cannot be passed to JavaScript").unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            v8::undefined(scope).into()
+        }
+        Variant::Flyweight(_) => {
+            // Anonymous/flyweight objects cannot safely cross the boundary
+            // They're temporary and don't have stable identities
+            let msg = v8::String::new(scope, "Anonymous objects cannot be passed to JavaScript").unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            v8::undefined(scope).into()
+        }
         _ => {
-            // For other types (Lambda, FlyweightSet, etc.), convert to string representation
-            let s = format!("{:?}", var);
-            v8::String::new(scope, &s).unwrap().into()
+            // Catch-all for any remaining types
+            let msg = v8::String::new(scope, &format!("Cannot convert {:?} to JavaScript", var.type_code())).unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            v8::undefined(scope).into()
         }
     }
 }
@@ -205,6 +229,32 @@ pub fn v8_to_var<'s>(
         }
 
         return v_list(&items);
+    }
+
+    // Check for typed arrays (Uint8Array, etc.) - convert to Binary
+    if value.is_typed_array() {
+        if let Ok(typed_array) = v8::Local::<v8::TypedArray>::try_from(value) {
+            let byte_length = typed_array.byte_length();
+            let mut bytes = vec![0u8; byte_length];
+            let copied = typed_array.copy_contents(&mut bytes);
+            if copied == byte_length {
+                return v_binary(bytes);
+            }
+        }
+    }
+
+    // Check for ArrayBuffer - convert to Binary
+    if value.is_array_buffer() {
+        if let Ok(array_buffer) = v8::Local::<v8::ArrayBuffer>::try_from(value) {
+            let backing_store = array_buffer.get_backing_store();
+            let bytes = unsafe {
+                std::slice::from_raw_parts(
+                    backing_store.data().unwrap().as_ptr() as *const u8,
+                    backing_store.byte_length(),
+                )
+            };
+            return v_binary(bytes.to_vec());
+        }
     }
 
     if value.is_object() {
@@ -285,16 +335,4 @@ mod tests {
         // Should not panic
     }
 
-    #[test]
-    fn test_isolate_pool() {
-        let pool = V8IsolatePool::new(2);
-
-        let iso1 = pool.acquire();
-        let iso2 = pool.acquire();
-
-        pool.release(iso1);
-        pool.release(iso2);
-
-        assert_eq!(pool.size(), 2);
-    }
 }

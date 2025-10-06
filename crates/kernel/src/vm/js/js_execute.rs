@@ -14,12 +14,10 @@
 //! JavaScript execution engine for MOO verbs.
 //! Handles V8 context creation, global setup, and execution.
 
-use crate::vm::{
-    js_builtins::install_builtins,
-    js_frame::{JSContinuation, JSFrame, PendingVerbCall},
-    v8_host::{initialize_v8, var_to_v8, v8_to_var, V8_ISOLATE_POOL},
-    vm_host::ExecutionResult,
-};
+use crate::vm::js::js_builtins::install_builtins_on_template;
+use crate::vm::js::js_frame::{JSContinuation, JSFrame, PendingVerbCall};
+use crate::vm::js::v8_host::{V8_ISOLATE_POOL, initialize_v8, v8_to_var, var_to_v8};
+use crate::vm::vm_host::ExecutionResult;
 use moor_var::{Obj, Var, v_none};
 use std::cell::RefCell;
 use tracing::info;
@@ -33,6 +31,10 @@ thread_local! {
     /// Thread-local reference to the current JSFrame being executed
     /// Allows builtins to check continuation state for cached results
     pub(crate) static CURRENT_JS_FRAME: RefCell<Option<*const JSFrame>> = RefCell::new(None);
+
+    /// Thread-local storage for the permissions of the current JavaScript execution
+    /// Used by property access and other operations that need permissions
+    pub(crate) static JS_PERMISSIONS: RefCell<Option<Obj>> = RefCell::new(None);
 }
 
 /// Execute a JavaScript frame
@@ -41,6 +43,7 @@ pub fn execute_js_frame(
     js_frame: &mut JSFrame,
     this: &Var,
     player: Obj,
+    permissions: Obj,
     _tick_slice: usize,
 ) -> ExecutionResult {
     // Initialize V8 if needed
@@ -50,12 +53,12 @@ pub fn execute_js_frame(
     match &js_frame.continuation {
         JSContinuation::Initial => {
             // First time execution - run the JavaScript
-            execute_js_initial(js_frame, this, player)
+            execute_js_initial(js_frame, this, player, permissions)
         }
         JSContinuation::AwaitingVerbCall { .. } => {
             // Resuming from a verb call - re-execute with cached result
             // call_verb will see the cached result and return a resolved Promise
-            execute_js_resume(js_frame, this, player)
+            execute_js_resume(js_frame, this, player, permissions)
         }
         JSContinuation::AwaitingPromise { .. } => {
             // Resuming from a promise - not yet implemented
@@ -73,11 +76,20 @@ pub fn execute_js_frame(
 }
 
 /// Execute JavaScript for the first time
-fn execute_js_initial(js_frame: &mut JSFrame, this: &Var, player: Obj) -> ExecutionResult {
-    info!("execute_js_initial: Starting execution of JS source: {:?}", &js_frame.source);
+fn execute_js_initial(
+    js_frame: &mut JSFrame,
+    this: &Var,
+    player: Obj,
+    permissions: Obj,
+) -> ExecutionResult {
+    info!(
+        "execute_js_initial: Starting execution of JS source: {:?}",
+        &js_frame.source
+    );
 
-    // Store reference to current frame for builtins to access
+    // Store reference to current frame and permissions for builtins to access
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = Some(js_frame as *const JSFrame));
+    JS_PERMISSIONS.with(|p| *p.borrow_mut() = Some(permissions));
 
     // Acquire isolate from thread-local pool
     let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
@@ -87,21 +99,18 @@ fn execute_js_initial(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Execut
         // Create a handle scope for V8 handles
         let scope = &mut v8::HandleScope::new(&mut isolate);
 
-        // Create a new context
-        let context = v8::Context::new(scope, Default::default());
+        // Create a new context with builtins pre-installed via template
+        let context = create_context_with_builtins(scope);
         let scope = &mut v8::ContextScope::new(scope, context);
 
-        // Set up global variables
+        // Set up global variables (self, player, args)
         setup_globals(scope, this, player, &js_frame.args);
 
-        // Install builtin functions (including call_verb for cross-language calls)
-        install_builtins(scope);
+        // Install JavaScript helpers (like Proxy-based obj() wrapper for method syntax)
+        install_js_helpers(scope);
 
         // Wrap user code in an async function to support return statements and await
-        let wrapped_source = format!(
-            "(async function() {{\n{}\n}})();",
-            js_frame.source
-        );
+        let wrapped_source = format!("(async function() {{\n{}\n}})();", js_frame.source);
         info!("execute_js_initial: Wrapped source: {:?}", &wrapped_source);
 
         // Compile the JavaScript source
@@ -154,11 +163,54 @@ fn execute_js_initial(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Execut
                     converted
                 }
                 v8::PromiseState::Rejected => {
-                    // Promise rejected - treat as error
+                    // Promise rejected - extract the MOO error if present
                     info!("execute_js_initial: Promise is Rejected");
+                    let rejection_value = promise.result(scope);
+
+                    // Check if this is a MOO error (has moo_error_var property)
+                    if rejection_value.is_object() {
+                        let obj = rejection_value.to_object(scope).unwrap();
+                        let err_var_key = v8::String::new(scope, "moo_error_var").unwrap();
+
+                        if let Some(err_var_val) = obj.get(scope, err_var_key.into()) {
+                            // This is a MOO error - extract it
+                            let err_var = v8_to_var(scope, err_var_val);
+                            if let moor_var::Variant::Err(moo_err) = err_var.variant() {
+                                return ExecutionResult::PushError(moo_err.as_ref().clone());
+                            }
+                        }
+                    }
+
+                    // Not a MOO error - extract generic error message
+                    let error_msg = if rejection_value.is_string() {
+                        rejection_value
+                            .to_string(scope)
+                            .map(|s| s.to_rust_string_lossy(scope))
+                            .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                    } else if rejection_value.is_object() {
+                        let obj = rejection_value.to_object(scope).unwrap();
+                        let message_key = v8::String::new(scope, "message").unwrap();
+                        if let Some(msg_val) = obj.get(scope, message_key.into()) {
+                            msg_val
+                                .to_string(scope)
+                                .map(|s| s.to_rust_string_lossy(scope))
+                                .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                        } else {
+                            rejection_value
+                                .to_string(scope)
+                                .map(|s| s.to_rust_string_lossy(scope))
+                                .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                        }
+                    } else {
+                        rejection_value
+                            .to_string(scope)
+                            .map(|s| s.to_rust_string_lossy(scope))
+                            .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                    };
+
                     return ExecutionResult::PushError(moor_var::Error::new(
                         moor_var::E_INVARG,
-                        Some("JavaScript Promise rejected".to_string()),
+                        Some(error_msg),
                         None,
                     ));
                 }
@@ -182,8 +234,9 @@ fn execute_js_initial(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Execut
     // Check if there's a pending verb call from JavaScript
     let pending_call = PENDING_VERB_CALL.with(|pc| pc.borrow_mut().take());
 
-    // Clear current frame reference
+    // Clear current frame reference and permissions
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = None);
+    JS_PERMISSIONS.with(|p| *p.borrow_mut() = None);
 
     if let Some(call_info) = pending_call {
         // Store the pending call in the frame and return PrepareVerbDispatch
@@ -191,7 +244,9 @@ fn execute_js_initial(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Execut
         info!("  this: {:?}", call_info.this);
         info!("  verb_name: {:?}", call_info.verb_name);
         info!("  args: {:?}", call_info.args);
-        js_frame.continuation = JSContinuation::AwaitingVerbCall { call_info: call_info.clone() };
+        js_frame.continuation = JSContinuation::AwaitingVerbCall {
+            call_info: call_info.clone(),
+        };
 
         return ExecutionResult::PrepareVerbDispatch {
             this: call_info.this,
@@ -201,14 +256,22 @@ fn execute_js_initial(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Execut
     }
 
     // No pending call - execution completed normally
-    info!("execute_js_initial: Execution complete with result: {:?}", result);
+    info!(
+        "execute_js_initial: Execution complete with result: {:?}",
+        result
+    );
     js_frame.set_return_value(result.clone());
     ExecutionResult::Return(result)
 }
 
 /// Resume JavaScript execution after a verb call completes
 /// Re-executes the entire script, but call_verb will see the cached result
-fn execute_js_resume(js_frame: &mut JSFrame, this: &Var, player: Obj) -> ExecutionResult {
+fn execute_js_resume(
+    js_frame: &mut JSFrame,
+    this: &Var,
+    player: Obj,
+    permissions: Obj,
+) -> ExecutionResult {
     // Extract the verb call result and update the continuation
     if let JSContinuation::AwaitingVerbCall { mut call_info } = js_frame.continuation.clone() {
         // Get the verb result from the frame's return value
@@ -218,8 +281,9 @@ fn execute_js_resume(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Executi
         }
     }
 
-    // Store reference to current frame for builtins to access
+    // Store reference to current frame and permissions for builtins to access
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = Some(js_frame as *const JSFrame));
+    JS_PERMISSIONS.with(|p| *p.borrow_mut() = Some(permissions));
 
     // Acquire isolate from thread-local pool
     let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
@@ -229,21 +293,18 @@ fn execute_js_resume(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Executi
         // Create a handle scope for V8 handles
         let scope = &mut v8::HandleScope::new(&mut isolate);
 
-        // Create a new context
-        let context = v8::Context::new(scope, Default::default());
+        // Create a new context with builtins pre-installed via template
+        let context = create_context_with_builtins(scope);
         let scope = &mut v8::ContextScope::new(scope, context);
 
-        // Set up global variables
+        // Set up global variables (self, player, args)
         setup_globals(scope, this, player, &js_frame.args);
 
-        // Install builtin functions (including call_verb)
-        install_builtins(scope);
+        // Install JavaScript helpers (like Proxy-based obj() wrapper for method syntax)
+        install_js_helpers(scope);
 
         // Wrap user code in an async function to support return statements and await
-        let wrapped_source = format!(
-            "(async function() {{\n{}\n}})();",
-            js_frame.source
-        );
+        let wrapped_source = format!("(async function() {{\n{}\n}})();", js_frame.source);
 
         // Compile the JavaScript source
         let source_str = v8::String::new(scope, &wrapped_source).unwrap();
@@ -285,10 +346,53 @@ fn execute_js_resume(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Executi
                     v8_to_var(scope, result_val)
                 }
                 v8::PromiseState::Rejected => {
-                    // Promise rejected - treat as error
+                    // Promise rejected - extract the MOO error if present
+                    let rejection_value = promise.result(scope);
+
+                    // Check if this is a MOO error (has moo_error_var property)
+                    if rejection_value.is_object() {
+                        let obj = rejection_value.to_object(scope).unwrap();
+                        let err_var_key = v8::String::new(scope, "moo_error_var").unwrap();
+
+                        if let Some(err_var_val) = obj.get(scope, err_var_key.into()) {
+                            // This is a MOO error - extract it
+                            let err_var = v8_to_var(scope, err_var_val);
+                            if let moor_var::Variant::Err(moo_err) = err_var.variant() {
+                                return ExecutionResult::PushError(moo_err.as_ref().clone());
+                            }
+                        }
+                    }
+
+                    // Not a MOO error - extract generic error message
+                    let error_msg = if rejection_value.is_string() {
+                        rejection_value
+                            .to_string(scope)
+                            .map(|s| s.to_rust_string_lossy(scope))
+                            .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                    } else if rejection_value.is_object() {
+                        let obj = rejection_value.to_object(scope).unwrap();
+                        let message_key = v8::String::new(scope, "message").unwrap();
+                        if let Some(msg_val) = obj.get(scope, message_key.into()) {
+                            msg_val
+                                .to_string(scope)
+                                .map(|s| s.to_rust_string_lossy(scope))
+                                .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                        } else {
+                            rejection_value
+                                .to_string(scope)
+                                .map(|s| s.to_rust_string_lossy(scope))
+                                .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                        }
+                    } else {
+                        rejection_value
+                            .to_string(scope)
+                            .map(|s| s.to_rust_string_lossy(scope))
+                            .unwrap_or_else(|| "JavaScript Promise rejected".to_string())
+                    };
+
                     return ExecutionResult::PushError(moor_var::Error::new(
                         moor_var::E_INVARG,
-                        Some("JavaScript Promise rejected".to_string()),
+                        Some(error_msg),
                         None,
                     ));
                 }
@@ -310,12 +414,15 @@ fn execute_js_resume(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Executi
     // Check if there's another pending verb call from JavaScript
     let pending_call = PENDING_VERB_CALL.with(|pc| pc.borrow_mut().take());
 
-    // Clear current frame reference
+    // Clear current frame reference and permissions
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = None);
+    JS_PERMISSIONS.with(|p| *p.borrow_mut() = None);
 
     if let Some(call_info) = pending_call {
         // Store the pending call in the frame and return PrepareVerbDispatch
-        js_frame.continuation = JSContinuation::AwaitingVerbCall { call_info: call_info.clone() };
+        js_frame.continuation = JSContinuation::AwaitingVerbCall {
+            call_info: call_info.clone(),
+        };
 
         return ExecutionResult::PrepareVerbDispatch {
             this: call_info.this,
@@ -329,13 +436,81 @@ fn execute_js_resume(js_frame: &mut JSFrame, this: &Var, player: Obj) -> Executi
     ExecutionResult::Return(result)
 }
 
+/// Create a V8 context with builtins pre-installed via object template
+/// This is more efficient than installing builtins after context creation
+fn create_context_with_builtins<'s>(
+    scope: &mut v8::HandleScope<'s, ()>,
+) -> v8::Local<'s, v8::Context> {
+    // Create global object template with builtins
+    let global_template = v8::ObjectTemplate::new(scope);
+    install_builtins_on_template(scope, global_template);
+
+    // Create context with this global template
+    let mut context_options = v8::ContextOptions::default();
+    context_options.global_template = Some(global_template);
+    v8::Context::new(scope, context_options)
+}
+
+/// Install JavaScript helper functions (executed as JS code in the context)
+/// This includes the Proxy-based obj() wrapper for method syntax
+fn install_js_helpers(scope: &mut v8::HandleScope) {
+    // JavaScript code that wraps the native obj() to support method syntax
+    // This allows: obj(1).verb_name() instead of call_verb(obj(1), 'verb_name')
+    let helper_code = r#"
+        (function() {
+            // Save reference to native obj() function
+            const native_obj = obj;
+
+            // Replace with Proxy-wrapped version for method syntax
+            obj = function(id) {
+                const moo_obj = native_obj(id);
+
+                return new Proxy(moo_obj, {
+                    get(target, prop) {
+                        // Return actual properties if they exist
+                        if (prop in target) {
+                            return target[prop];
+                        }
+
+                        // Don't intercept special JavaScript properties
+                        // These cause issues with async/await and other JS internals
+                        if (prop === 'then' || prop === 'catch' || prop === 'finally' ||
+                            prop === 'constructor' || prop === 'toString' || prop === 'valueOf' ||
+                            typeof prop === 'symbol') {
+                            return undefined;
+                        }
+
+                        // Otherwise, return a function that calls the verb
+                        return function(...args) {
+                            return call_verb(target, String(prop), ...args);
+                        };
+                    }
+                });
+            };
+
+            // Create $ helper for #0 property/verb access
+            // Usage: $("room") reads #0.room property and wraps objects for chaining
+            globalThis.$ = function(prop_name) {
+                // Called as a function - read property from #0
+                const value = get_prop(obj(0), prop_name);
+
+                // If it's a MOO object, wrap it with obj() for Proxy support
+                if (value && typeof value === 'object' && '__moo_obj' in value) {
+                    return obj(value.__moo_obj);
+                }
+
+                return value;
+            };
+        })();
+    "#;
+
+    let code = v8::String::new(scope, helper_code).unwrap();
+    let script = v8::Script::compile(scope, code, None).unwrap();
+    script.run(scope);
+}
+
 /// Set up global variables in the V8 context
-fn setup_globals(
-    scope: &mut v8::HandleScope,
-    this: &Var,
-    player: Obj,
-    args: &[Var],
-) {
+fn setup_globals(scope: &mut v8::HandleScope, this: &Var, player: Obj, args: &[Var]) {
     let global = scope.get_current_context().global(scope);
 
     // Set 'self' global (can't use 'this' - it's a JavaScript keyword that refers to function context)
@@ -378,8 +553,9 @@ mod tests {
         // Execute it
         let this = v_int(0);
         let player = moor_var::Obj::mk_id(1);
+        let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, 1000);
+        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
 
         // Check result
         match result {
@@ -401,8 +577,9 @@ mod tests {
 
         let this = v_str("test_value");
         let player = moor_var::Obj::mk_id(1);
+        let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, 1000);
+        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
 
         match result {
             ExecutionResult::Return(value) => {
@@ -423,8 +600,9 @@ mod tests {
 
         let this = v_int(0);
         let player = moor_var::Obj::mk_id(1);
+        let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, 1000);
+        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
 
         match result {
             ExecutionResult::Return(value) => {
@@ -445,8 +623,9 @@ mod tests {
 
         let this = v_int(0);
         let player = moor_var::Obj::mk_id(1);
+        let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, 1000);
+        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
 
         match result {
             ExecutionResult::Return(value) => {
@@ -468,8 +647,9 @@ mod tests {
 
         let this = v_int(0);
         let player = moor_var::Obj::mk_id(1);
+        let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, 1000);
+        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
 
         match result {
             ExecutionResult::Return(value) => {
@@ -479,4 +659,3 @@ mod tests {
         }
     }
 }
-

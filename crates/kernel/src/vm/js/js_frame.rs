@@ -62,6 +62,8 @@ pub enum JSContinuation {
 
     /// Waiting for a Promise to resolve (from builtin or suspend)
     /// Context is destroyed at this point - will be recreated on resume
+    /// NOTE: Not yet implemented - reserved for future functionality
+    #[allow(dead_code)]
     AwaitingPromise {
         /// Name of the builtin we're waiting on (for debugging)
         waiting_on: String,
@@ -85,11 +87,6 @@ impl JSFrame {
         }
     }
 
-    /// Get the current continuation state
-    pub fn continuation(&self) -> &JSContinuation {
-        &self.continuation
-    }
-
     /// Set the return value for this frame
     pub fn set_return_value(&mut self, value: Var) {
         self.return_value = Some(value.clone());
@@ -104,10 +101,5 @@ impl JSFrame {
                 self.continuation = JSContinuation::Complete { result: value };
             }
         }
-    }
-
-    /// Check if execution is complete
-    pub fn is_complete(&self) -> bool {
-        matches!(self.continuation, JSContinuation::Complete { .. })
     }
 }

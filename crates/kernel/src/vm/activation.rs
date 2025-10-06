@@ -24,7 +24,8 @@ use moor_var::{
     v_list, v_obj, v_str, v_string,
 };
 
-use crate::vm::{VerbCall, js_frame::JSFrame, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
+use crate::vm::js::js_frame::JSFrame;
+use crate::vm::{VerbCall, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
 use moor_var::program::{
     ProgramType,
     names::{GlobalName, Name},
@@ -246,7 +247,9 @@ impl Activation {
 
         // Inherit parsing variables from the current activation, if any
         // This maintains LambdaMOO-compatible behavior where parsing variables persist across verb calls
-        if matches!(frame, Frame::Moo(_)) && let Some(current_activation) = current_activation {
+        if matches!(frame, Frame::Moo(_))
+            && let Some(current_activation) = current_activation
+        {
             // Copy parsing variables from the calling activation
             if let Some(argstr) = current_activation
                 .frame

@@ -27,16 +27,13 @@ pub use vm_unwind::FinallyReason;
 
 pub(crate) mod activation;
 pub(crate) mod exec_state;
-pub(crate) mod js_builtins;
-pub(crate) mod js_execute;
-pub(crate) mod js_frame;
 pub(crate) mod moo_execute;
 pub(crate) mod scatter_assign;
-pub(crate) mod v8_host;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
 pub mod builtins;
+mod js;
 pub(crate) mod moo_frame;
 pub mod vm_host;
 
