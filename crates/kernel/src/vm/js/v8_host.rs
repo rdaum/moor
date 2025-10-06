@@ -95,11 +95,17 @@ pub fn var_to_v8<'s>(
 ) -> v8::Local<'s, v8::Value> {
     match var.variant() {
         Variant::None => v8::null(scope).into(),
+        Variant::Bool(b) => v8::Boolean::new(scope, *b).into(),
         Variant::Int(i) => v8::Number::new(scope, *i as f64).into(),
         Variant::Float(f) => v8::Number::new(scope, *f).into(),
         Variant::Str(s) => {
             let s = s.as_str();
             v8::String::new(scope, s).unwrap().into()
+        }
+        Variant::Sym(s) => {
+            // JavaScript doesn't have MOO-style symbols, convert to string
+            let s_str = s.as_string();
+            v8::String::new(scope, &s_str).unwrap().into()
         }
         Variant::Obj(o) => {
             // Objects represented as { __moo_obj: number }
@@ -124,6 +130,7 @@ pub fn var_to_v8<'s>(
             for (k, v) in m.iter() {
                 let key_str = match k.variant() {
                     Variant::Str(s) => s.as_str().to_string(),
+                    Variant::Sym(s) => s.as_string(),
                     Variant::Int(i) => i.to_string(),
                     _ => format!("{:?}", k),
                 };
@@ -172,13 +179,6 @@ pub fn var_to_v8<'s>(
             // Anonymous/flyweight objects cannot safely cross the boundary
             // They're temporary and don't have stable identities
             let msg = v8::String::new(scope, "Anonymous objects cannot be passed to JavaScript").unwrap();
-            let exception = v8::Exception::type_error(scope, msg);
-            scope.throw_exception(exception);
-            v8::undefined(scope).into()
-        }
-        _ => {
-            // Catch-all for any remaining types
-            let msg = v8::String::new(scope, &format!("Cannot convert {:?} to JavaScript", var.type_code())).unwrap();
             let exception = v8::Exception::type_error(scope, msg);
             scope.throw_exception(exception);
             v8::undefined(scope).into()

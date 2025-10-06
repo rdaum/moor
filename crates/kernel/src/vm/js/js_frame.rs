@@ -14,6 +14,7 @@
 //! JavaScript frame execution using V8.
 //! Implements async/await based suspend/resume for JavaScript verbs.
 
+use moor_compiler::BuiltinId;
 use moor_var::{List, Symbol, Var};
 
 /// Information about a pending verb call from JavaScript
@@ -29,9 +30,28 @@ pub struct PendingVerbCall {
     pub result: Option<Var>,
 }
 
+/// Information about a pending builtin call from JavaScript
+#[derive(Clone, Debug)]
+pub struct PendingBuiltinCall {
+    /// The builtin function to call
+    pub builtin_id: BuiltinId,
+    /// Arguments to pass to the builtin
+    pub args: List,
+    /// Result from the builtin (filled in when call completes)
+    pub result: Option<Var>,
+}
+
+/// Pending dispatch operation from JavaScript
+#[derive(Clone, Debug)]
+pub enum PendingDispatch {
+    /// Pending verb call
+    VerbCall(PendingVerbCall),
+    /// Pending builtin call
+    BuiltinCall(PendingBuiltinCall),
+}
+
 /// JavaScript execution frame state.
 /// Stores the continuation point for async JavaScript execution.
-/// NOTE: No V8 isolate stored here - isolates are acquired from thread-local pool on execution.
 #[derive(Clone, Debug)]
 pub struct JSFrame {
     /// The JavaScript source code for this verb
@@ -60,12 +80,19 @@ pub enum JSContinuation {
         call_info: PendingVerbCall,
     },
 
-    /// Waiting for a Promise to resolve (from builtin or suspend)
+    /// Waiting for a builtin function call to complete
+    /// Context is destroyed at this point - will be recreated on resume
+    AwaitingBuiltinCall {
+        /// Information about the builtin call in progress
+        call_info: PendingBuiltinCall,
+    },
+
+    /// Waiting for a Promise to resolve (from suspend or other async operation)
     /// Context is destroyed at this point - will be recreated on resume
     /// NOTE: Not yet implemented - reserved for future functionality
     #[allow(dead_code)]
     AwaitingPromise {
-        /// Name of the builtin we're waiting on (for debugging)
+        /// Name of the operation we're waiting on (for debugging)
         waiting_on: String,
     },
 
@@ -91,10 +118,11 @@ impl JSFrame {
     pub fn set_return_value(&mut self, value: Var) {
         self.return_value = Some(value.clone());
 
-        // Only mark as Complete if we're not awaiting a verb call
-        // (preserve AwaitingVerbCall state for resume logic)
+        // Only mark as Complete if we're not awaiting a dispatch operation
+        // (preserve Awaiting* state for resume logic)
         match &self.continuation {
-            JSContinuation::AwaitingVerbCall { .. } => {
+            JSContinuation::AwaitingVerbCall { .. }
+            | JSContinuation::AwaitingBuiltinCall { .. } => {
                 // Don't change continuation - execute_js_resume will handle this
             }
             _ => {

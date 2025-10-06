@@ -15,8 +15,8 @@
 //! Exposes MOO builtin functions to JavaScript code.
 
 use crate::task_context::with_current_transaction;
-use crate::vm::js::js_execute::{CURRENT_JS_FRAME, JS_PERMISSIONS, PENDING_VERB_CALL};
-use crate::vm::js::js_frame::{JSContinuation, PendingVerbCall};
+use crate::vm::js::js_execute::{CURRENT_JS_FRAME, JS_PERMISSIONS, PENDING_DISPATCH};
+use crate::vm::js::js_frame::{JSContinuation, PendingDispatch, PendingVerbCall};
 use crate::vm::js::v8_host::{v8_to_var, var_to_v8};
 use moor_var::{Symbol, v_int, v_list};
 use v8;
@@ -51,6 +51,11 @@ pub fn install_builtins_on_template<'s>(
     let get_prop_fn = v8::FunctionTemplate::new(scope, get_prop_callback);
     let get_prop_key = v8::String::new(scope, "get_prop").unwrap();
     template.set(get_prop_key.into(), get_prop_fn.into());
+
+    // Install call_builtin() for calling MOO builtins
+    let call_builtin_fn = v8::FunctionTemplate::new(scope, call_builtin_callback);
+    let call_builtin_key = v8::String::new(scope, "call_builtin").unwrap();
+    template.set(call_builtin_key.into(), call_builtin_fn.into());
 }
 
 /// Helper function for tests: install builtins on an existing context's global object
@@ -196,14 +201,11 @@ fn call_verb_callback<'a>(
     let verb_name_arg = v8_to_var(scope, args.get(1));
 
     // Convert verb_name to Symbol
-    let verb_name = match verb_name_arg.variant() {
-        moor_var::Variant::Str(s) => Symbol::mk(s.as_str()),
-        _ => {
-            let msg = v8::String::new(scope, "verb_name must be a string").unwrap();
-            let exception = v8::Exception::type_error(scope, msg);
-            scope.throw_exception(exception);
-            return;
-        }
+    let Ok(verb_name) = verb_name_arg.as_symbol() else {
+        let msg = v8::String::new(scope, "Invalid verb name (must be string or symbol)").unwrap();
+        let exception = v8::Exception::type_error(scope, msg);
+        scope.throw_exception(exception);
+        return;
     };
 
     // Collect remaining arguments into a List
@@ -235,13 +237,25 @@ fn call_verb_callback<'a>(
     });
 
     if let Some(result) = cached_result {
-        // We have a cached result - return a resolved Promise
+        // We have a cached result - try to convert it and return a Promise
         let resolver = v8::PromiseResolver::new(scope).unwrap();
         let promise = resolver.get_promise(scope);
 
-        let result_v8 = var_to_v8(scope, &result);
-        resolver.resolve(scope, result_v8);
+        // Use TryCatch to detect if var_to_v8 throws an exception
+        let tc_scope = &mut v8::TryCatch::new(scope);
+        let result_v8 = var_to_v8(tc_scope, &result);
 
+        if tc_scope.has_caught() {
+            // var_to_v8 threw an exception (Binary/Lambda/Flyweight)
+            // Reject the Promise with the exception
+            if let Some(exception) = tc_scope.exception() {
+                resolver.reject(tc_scope, exception);
+            }
+            rv.set(promise.into());
+            return;
+        }
+
+        resolver.resolve(tc_scope, result_v8);
         rv.set(promise.into());
     } else {
         // No cached result - create pending Promise and store call info
@@ -249,13 +263,13 @@ fn call_verb_callback<'a>(
         let promise = resolver.get_promise(scope);
 
         // Store the pending verb call for execute_js_initial to find
-        PENDING_VERB_CALL.with(|pc| {
-            *pc.borrow_mut() = Some(PendingVerbCall {
+        PENDING_DISPATCH.with(|pd| {
+            *pd.borrow_mut() = Some(PendingDispatch::VerbCall(PendingVerbCall {
                 this: this_arg,
                 verb_name,
                 args: verb_args_list,
                 result: None,
-            });
+            }));
         });
 
         rv.set(promise.into());
@@ -390,6 +404,108 @@ fn get_prop_callback<'a>(
 
             scope.throw_exception(exception);
         }
+    }
+}
+
+/// JavaScript callback for `call_builtin(builtin_name, ...args)` - calls a MOO builtin
+/// Returns a Promise that resolves with the builtin result
+fn call_builtin_callback<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    args: v8::FunctionCallbackArguments<'a>,
+    mut rv: v8::ReturnValue,
+) {
+    use crate::vm::js::js_frame::PendingBuiltinCall;
+    use moor_compiler::BUILTINS;
+
+    // Check argument count - need at least builtin name
+    if args.length() < 1 {
+        let msg = v8::String::new(scope, "call_builtin requires at least 1 argument (builtin_name)").unwrap();
+        let exception = v8::Exception::type_error(scope, msg);
+        scope.throw_exception(exception);
+        return;
+    }
+
+    // Parse builtin name argument
+    let builtin_name_arg = v8_to_var(scope, args.get(0));
+    let Ok(builtin_name) = builtin_name_arg.as_symbol() else {
+        let msg = v8::String::new(scope, "Builtin name must be a string or symbol").unwrap();
+        let exception = v8::Exception::type_error(scope, msg);
+        scope.throw_exception(exception);
+        return;
+    };
+
+    // Look up the builtin ID
+    let Some(builtin_id) = BUILTINS.find_builtin(builtin_name) else {
+        let msg = v8::String::new(scope, &format!("Unknown builtin: {}", builtin_name)).unwrap();
+        let exception = v8::Exception::error(scope, msg);
+        scope.throw_exception(exception);
+        return;
+    };
+
+    // Collect remaining arguments into a List
+    let mut builtin_args = Vec::new();
+    for i in 1..args.length() {
+        builtin_args.push(v8_to_var(scope, args.get(i)));
+    }
+    let builtin_args_var = v_list(&builtin_args);
+    let builtin_args_list = match builtin_args_var.variant() {
+        moor_var::Variant::List(l) => l.clone(),
+        _ => unreachable!("v_list should always return a List variant"),
+    };
+
+    // Check if we have a cached result (resuming from builtin call)
+    let cached_result = CURRENT_JS_FRAME.with(|frame_ref| {
+        let frame_ptr = frame_ref.borrow();
+        if let Some(ptr) = *frame_ptr {
+            unsafe {
+                let frame = &*ptr;
+                if let JSContinuation::AwaitingBuiltinCall { call_info } = &frame.continuation {
+                    call_info.result.clone()
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    });
+
+    if let Some(result) = cached_result {
+        // We have a cached result - try to convert it and return a Promise
+        let resolver = v8::PromiseResolver::new(scope).unwrap();
+        let promise = resolver.get_promise(scope);
+
+        // Use TryCatch to detect if var_to_v8 throws an exception
+        let tc_scope = &mut v8::TryCatch::new(scope);
+        let result_v8 = var_to_v8(tc_scope, &result);
+
+        if tc_scope.has_caught() {
+            // var_to_v8 threw an exception (Binary/Lambda/Flyweight)
+            // Reject the Promise with the exception
+            if let Some(exception) = tc_scope.exception() {
+                resolver.reject(tc_scope, exception);
+            }
+            rv.set(promise.into());
+            return;
+        }
+
+        resolver.resolve(tc_scope, result_v8);
+        rv.set(promise.into());
+    } else {
+        // No cached result - create pending Promise and store call info
+        let resolver = v8::PromiseResolver::new(scope).unwrap();
+        let promise = resolver.get_promise(scope);
+
+        // Store the pending builtin call for execute_js_initial to find
+        PENDING_DISPATCH.with(|pd| {
+            *pd.borrow_mut() = Some(PendingDispatch::BuiltinCall(PendingBuiltinCall {
+                builtin_id,
+                args: builtin_args_list,
+                result: None,
+            }));
+        });
+
+        rv.set(promise.into());
     }
 }
 

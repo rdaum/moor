@@ -15,7 +15,7 @@
 //! Handles V8 context creation, global setup, and execution.
 
 use crate::vm::js::js_builtins::install_builtins_on_template;
-use crate::vm::js::js_frame::{JSContinuation, JSFrame, PendingVerbCall};
+use crate::vm::js::js_frame::{JSContinuation, JSFrame, PendingDispatch};
 use crate::vm::js::v8_host::{V8_ISOLATE_POOL, initialize_v8, v8_to_var, var_to_v8};
 use crate::vm::vm_host::ExecutionResult;
 use moor_var::{Obj, Var, v_none};
@@ -24,9 +24,9 @@ use tracing::info;
 use v8;
 
 thread_local! {
-    /// Thread-local storage for pending verb calls initiated from JavaScript
-    /// The call_verb builtin stores pending calls here, and execute_js_initial checks it
-    pub(crate) static PENDING_VERB_CALL: RefCell<Option<PendingVerbCall>> = RefCell::new(None);
+    /// Thread-local storage for pending dispatch operations (verb or builtin calls) from JavaScript
+    /// The call_verb and call_builtin functions store pending calls here
+    pub(crate) static PENDING_DISPATCH: RefCell<Option<PendingDispatch>> = RefCell::new(None);
 
     /// Thread-local reference to the current JSFrame being executed
     /// Allows builtins to check continuation state for cached results
@@ -58,6 +58,11 @@ pub fn execute_js_frame(
         JSContinuation::AwaitingVerbCall { .. } => {
             // Resuming from a verb call - re-execute with cached result
             // call_verb will see the cached result and return a resolved Promise
+            execute_js_resume(js_frame, this, player, permissions)
+        }
+        JSContinuation::AwaitingBuiltinCall { .. } => {
+            // Resuming from a builtin call - re-execute with cached result
+            // call_builtin will see the cached result and return a resolved Promise
             execute_js_resume(js_frame, this, player, permissions)
         }
         JSContinuation::AwaitingPromise { .. } => {
@@ -231,28 +236,46 @@ fn execute_js_initial(
     // Release isolate back to pool
     V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().release(isolate));
 
-    // Check if there's a pending verb call from JavaScript
-    let pending_call = PENDING_VERB_CALL.with(|pc| pc.borrow_mut().take());
+    // Check if there's a pending dispatch operation from JavaScript
+    let pending_dispatch = PENDING_DISPATCH.with(|pd| pd.borrow_mut().take());
 
     // Clear current frame reference and permissions
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = None);
     JS_PERMISSIONS.with(|p| *p.borrow_mut() = None);
 
-    if let Some(call_info) = pending_call {
-        // Store the pending call in the frame and return PrepareVerbDispatch
-        info!("execute_js_initial: Pending verb call detected, suspending for dispatch");
-        info!("  this: {:?}", call_info.this);
-        info!("  verb_name: {:?}", call_info.verb_name);
-        info!("  args: {:?}", call_info.args);
-        js_frame.continuation = JSContinuation::AwaitingVerbCall {
-            call_info: call_info.clone(),
-        };
+    if let Some(dispatch) = pending_dispatch {
+        match dispatch {
+            PendingDispatch::VerbCall(call_info) => {
+                // Store the pending verb call in the frame and return PrepareVerbDispatch
+                info!("execute_js_initial: Pending verb call detected, suspending for dispatch");
+                info!("  this: {:?}", call_info.this);
+                info!("  verb_name: {:?}", call_info.verb_name);
+                info!("  args: {:?}", call_info.args);
+                js_frame.continuation = JSContinuation::AwaitingVerbCall {
+                    call_info: call_info.clone(),
+                };
 
-        return ExecutionResult::PrepareVerbDispatch {
-            this: call_info.this,
-            verb_name: call_info.verb_name,
-            args: call_info.args,
-        };
+                return ExecutionResult::PrepareVerbDispatch {
+                    this: call_info.this,
+                    verb_name: call_info.verb_name,
+                    args: call_info.args,
+                };
+            }
+            PendingDispatch::BuiltinCall(call_info) => {
+                // Store the pending builtin call in the frame and return DispatchBuiltin
+                info!("execute_js_initial: Pending builtin call detected, suspending for dispatch");
+                info!("  builtin_id: {:?}", call_info.builtin_id);
+                info!("  args: {:?}", call_info.args);
+                js_frame.continuation = JSContinuation::AwaitingBuiltinCall {
+                    call_info: call_info.clone(),
+                };
+
+                return ExecutionResult::DispatchBuiltin {
+                    builtin: call_info.builtin_id,
+                    arguments: call_info.args,
+                };
+            }
+        }
     }
 
     // No pending call - execution completed normally
@@ -272,13 +295,23 @@ fn execute_js_resume(
     player: Obj,
     permissions: Obj,
 ) -> ExecutionResult {
-    // Extract the verb call result and update the continuation
-    if let JSContinuation::AwaitingVerbCall { mut call_info } = js_frame.continuation.clone() {
-        // Get the verb result from the frame's return value
-        if let Some(result) = js_frame.return_value.clone() {
-            call_info.result = Some(result);
-            js_frame.continuation = JSContinuation::AwaitingVerbCall { call_info };
+    // Extract the call result and update the continuation
+    match js_frame.continuation.clone() {
+        JSContinuation::AwaitingVerbCall { mut call_info } => {
+            // Get the verb result from the frame's return value
+            if let Some(result) = js_frame.return_value.clone() {
+                call_info.result = Some(result);
+                js_frame.continuation = JSContinuation::AwaitingVerbCall { call_info };
+            }
         }
+        JSContinuation::AwaitingBuiltinCall { mut call_info } => {
+            // Get the builtin result from the frame's return value
+            if let Some(result) = js_frame.return_value.clone() {
+                call_info.result = Some(result);
+                js_frame.continuation = JSContinuation::AwaitingBuiltinCall { call_info };
+            }
+        }
+        _ => {}
     }
 
     // Store reference to current frame and permissions for builtins to access
@@ -411,24 +444,39 @@ fn execute_js_resume(
     // Release isolate back to pool
     V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().release(isolate));
 
-    // Check if there's another pending verb call from JavaScript
-    let pending_call = PENDING_VERB_CALL.with(|pc| pc.borrow_mut().take());
+    // Check if there's another pending dispatch operation from JavaScript
+    let pending_dispatch = PENDING_DISPATCH.with(|pd| pd.borrow_mut().take());
 
     // Clear current frame reference and permissions
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = None);
     JS_PERMISSIONS.with(|p| *p.borrow_mut() = None);
 
-    if let Some(call_info) = pending_call {
-        // Store the pending call in the frame and return PrepareVerbDispatch
-        js_frame.continuation = JSContinuation::AwaitingVerbCall {
-            call_info: call_info.clone(),
-        };
+    if let Some(dispatch) = pending_dispatch {
+        match dispatch {
+            PendingDispatch::VerbCall(call_info) => {
+                // Store the pending verb call in the frame and return PrepareVerbDispatch
+                js_frame.continuation = JSContinuation::AwaitingVerbCall {
+                    call_info: call_info.clone(),
+                };
 
-        return ExecutionResult::PrepareVerbDispatch {
-            this: call_info.this,
-            verb_name: call_info.verb_name,
-            args: call_info.args,
-        };
+                return ExecutionResult::PrepareVerbDispatch {
+                    this: call_info.this,
+                    verb_name: call_info.verb_name,
+                    args: call_info.args,
+                };
+            }
+            PendingDispatch::BuiltinCall(call_info) => {
+                // Store the pending builtin call in the frame and return DispatchBuiltin
+                js_frame.continuation = JSContinuation::AwaitingBuiltinCall {
+                    call_info: call_info.clone(),
+                };
+
+                return ExecutionResult::DispatchBuiltin {
+                    builtin: call_info.builtin_id,
+                    arguments: call_info.args,
+                };
+            }
+        }
     }
 
     // No pending call - execution completed normally
