@@ -399,6 +399,7 @@ impl VmHost {
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
+                    tracing::info!("exec_interpreter: ExecutionResult::Complete with value: {:?}", a);
                     return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
@@ -473,11 +474,13 @@ impl VmHost {
                 // Execute JavaScript using the V8 engine
                 use crate::vm::js_execute::execute_js_frame;
                 let result = execute_js_frame(js_fr, &activation.this, activation.player, tick_slice);
+                tracing::info!("run_interpreter: JavaScript frame returned: {:?}", result);
                 (result, tick_count)
             }
         };
         self.vm_exec_state.tick_count = new_tick_count;
 
+        tracing::info!("run_interpreter: Returning result: {:?}", result);
         result
     }
 

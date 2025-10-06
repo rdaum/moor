@@ -230,7 +230,6 @@ pub fn v8_to_var<'s>(
                     .map(|s| s.to_rust_string_lossy(scope));
 
                 // Convert code to ErrorCode - match common error codes
-                use moor_var::ErrorCode;
                 let error_code = match code {
                     0 => moor_var::E_NONE,
                     1 => moor_var::E_TYPE,

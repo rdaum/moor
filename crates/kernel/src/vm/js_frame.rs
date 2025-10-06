@@ -14,7 +14,20 @@
 //! JavaScript frame execution using V8.
 //! Implements async/await based suspend/resume for JavaScript verbs.
 
-use moor_var::Var;
+use moor_var::{List, Symbol, Var};
+
+/// Information about a pending verb call from JavaScript
+#[derive(Clone, Debug)]
+pub struct PendingVerbCall {
+    /// The object to call the verb on
+    pub this: Var,
+    /// The verb name to call
+    pub verb_name: Symbol,
+    /// Arguments to pass to the verb
+    pub args: List,
+    /// Result from the verb (filled in when verb completes)
+    pub result: Option<Var>,
+}
 
 /// JavaScript execution frame state.
 /// Stores the continuation point for async JavaScript execution.
@@ -39,6 +52,13 @@ pub struct JSFrame {
 pub enum JSContinuation {
     /// Initial state - need to start executing the function
     Initial,
+
+    /// Waiting for a MOO verb call to complete
+    /// Context is destroyed at this point - will be recreated on resume
+    AwaitingVerbCall {
+        /// Information about the verb call in progress
+        call_info: PendingVerbCall,
+    },
 
     /// Waiting for a Promise to resolve (from builtin or suspend)
     /// Context is destroyed at this point - will be recreated on resume
@@ -73,7 +93,17 @@ impl JSFrame {
     /// Set the return value for this frame
     pub fn set_return_value(&mut self, value: Var) {
         self.return_value = Some(value.clone());
-        self.continuation = JSContinuation::Complete { result: value };
+
+        // Only mark as Complete if we're not awaiting a verb call
+        // (preserve AwaitingVerbCall state for resume logic)
+        match &self.continuation {
+            JSContinuation::AwaitingVerbCall { .. } => {
+                // Don't change continuation - execute_js_resume will handle this
+            }
+            _ => {
+                self.continuation = JSContinuation::Complete { result: value };
+            }
+        }
     }
 
     /// Check if execution is complete
