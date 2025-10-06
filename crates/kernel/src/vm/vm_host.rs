@@ -405,10 +405,6 @@ impl VmHost {
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
-                    tracing::info!(
-                        "exec_interpreter: ExecutionResult::Complete with value: {:?}",
-                        a
-                    );
                     return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
@@ -497,13 +493,11 @@ impl VmHost {
                     time_remaining,
                     kill_switch.clone(),
                 );
-                tracing::info!("run_interpreter: JavaScript frame returned: {:?}", result);
                 (result, tick_count)
             }
         };
         self.vm_exec_state.tick_count = new_tick_count;
 
-        tracing::info!("run_interpreter: Returning result: {:?}", result);
         result
     }
 

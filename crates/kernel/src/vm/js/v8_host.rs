@@ -15,17 +15,20 @@
 //! Manages V8 platform initialization, isolate pooling, and type conversions.
 
 use lazy_static::lazy_static;
+use moor_var::{
+    Binary, Var, Variant, v_binary, v_bool, v_float, v_int, v_list, v_none, v_objid, v_str,
+    v_string,
+};
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex, Once};
-use moor_var::{Var, Variant, v_int, v_float, v_str, v_string, v_objid, v_none, v_list, v_bool, v_binary};
+use std::sync::{Mutex, Once};
 use v8;
 
 static V8_INIT: Once = Once::new();
 
 lazy_static! {
     /// Global V8 platform instance
-    static ref V8_PLATFORM: Arc<Mutex<Option<v8::SharedRef<v8::Platform>>>> = {
-        Arc::new(Mutex::new(None))
+    static ref V8_PLATFORM: Mutex<Option<v8::SharedRef<v8::Platform>>> = {
+        Mutex::new(None)
     };
 }
 
@@ -50,8 +53,9 @@ pub fn initialize_v8() {
 
 /// Pool of V8 isolates for reuse.
 /// Each isolate is expensive to create, so we pool them.
+/// This is thread-local, so we don't need Arc - just Mutex for interior mutability.
 pub struct V8IsolatePool {
-    isolates: Arc<Mutex<Vec<v8::OwnedIsolate>>>,
+    isolates: Mutex<Vec<v8::OwnedIsolate>>,
     max_isolates: usize,
 }
 
@@ -60,7 +64,7 @@ impl V8IsolatePool {
     pub fn new(max_isolates: usize) -> Self {
         initialize_v8();
         Self {
-            isolates: Arc::new(Mutex::new(Vec::new())),
+            isolates: Mutex::new(Vec::new()),
             max_isolates,
         }
     }
@@ -88,11 +92,22 @@ impl V8IsolatePool {
     }
 }
 
+/// Deleter callback for Binary ArrayBuffer backing stores
+/// Called by V8 when the ArrayBuffer is garbage collected
+unsafe extern "C" fn binary_deleter(
+    _data_ptr: *mut std::ffi::c_void,
+    _byte_len: usize,
+    deleter_data: *mut std::ffi::c_void,
+) {
+    // Reconstruct and drop the Box<Binary>
+    // Safety: deleter_data was created from Box::into_raw in var_to_v8
+    unsafe {
+        let _ = Box::from_raw(deleter_data as *mut Binary);
+    }
+}
+
 /// Convert a MOO Var to a V8 value
-pub fn var_to_v8<'s>(
-    scope: &mut v8::HandleScope<'s>,
-    var: &Var,
-) -> v8::Local<'s, v8::Value> {
+pub fn var_to_v8<'s>(scope: &mut v8::HandleScope<'s>, var: &Var) -> v8::Local<'s, v8::Value> {
     match var.variant() {
         Variant::None => v8::null(scope).into(),
         Variant::Bool(b) => v8::Boolean::new(scope, *b).into(),
@@ -108,6 +123,14 @@ pub fn var_to_v8<'s>(
             v8::String::new(scope, &s_str).unwrap().into()
         }
         Variant::Obj(o) => {
+            // Reject anonymous objects - they're temporary and would leak references
+            if o.is_anonymous() {
+                let msg = v8::String::new(scope, "Anonymous objects cannot be passed to JavaScript").unwrap();
+                let exception = v8::Exception::type_error(scope, msg);
+                scope.throw_exception(exception);
+                return v8::undefined(scope).into();
+            }
+
             // Objects represented as { __moo_obj: number }
             let obj = v8::Object::new(scope);
             let key = v8::String::new(scope, "__moo_obj").unwrap();
@@ -156,21 +179,45 @@ pub fn var_to_v8<'s>(
             }
             obj.into()
         }
-        Variant::Binary(_) => {
-            // Binary data cannot safely cross the JavaScript boundary yet
-            // TODO: Implement zero-copy buffer wrapper similar to Deno's ZeroCopyBuf
-            //   - Needs v8::External + finalizer callbacks to manage Rust ownership
-            //   - Should provide accessor methods (get, slice, etc.) without copying
-            //   - Must prevent both V8 GC and Rust drop while in use
-            let msg = v8::String::new(scope, "Binary data cannot be passed to JavaScript").unwrap();
-            let exception = v8::Exception::type_error(scope, msg);
-            scope.throw_exception(exception);
-            v8::undefined(scope).into()
+        Variant::Binary(b) => {
+            // Zero-copy wrapper: expose Binary as Uint8Array backed by Binary's data
+            // Binary is CoW (uses ByteView), so cloning is cheap
+            let binary = (**b).clone();
+
+            // Box the Binary to keep it alive while JS holds the ArrayBuffer
+            let boxed_binary = Box::new(binary);
+
+            // Get pointer to the bytes AFTER boxing (important - pointer is stable in Box)
+            let byte_slice = boxed_binary.as_bytes();
+            let byte_len = byte_slice.len();
+            let data_ptr = byte_slice.as_ptr() as *mut u8;
+
+            let binary_ptr = Box::into_raw(boxed_binary) as *mut std::ffi::c_void;
+
+            // Create backing store with deleter callback
+            // Safety: data_ptr points to bytes owned by boxed_binary
+            // Deleter will drop boxed_binary when V8 GCs the ArrayBuffer
+            let backing_store = unsafe {
+                v8::ArrayBuffer::new_backing_store_from_ptr(
+                    data_ptr as *mut std::ffi::c_void,
+                    byte_len,
+                    binary_deleter,
+                    binary_ptr,
+                )
+            };
+
+            let backing_store_shared = backing_store.make_shared();
+            let array_buffer = v8::ArrayBuffer::with_backing_store(scope, &backing_store_shared);
+
+            // Expose as Uint8Array for JavaScript TypedArray API
+            let uint8_array = v8::Uint8Array::new(scope, array_buffer, 0, byte_len).unwrap();
+            uint8_array.into()
         }
         Variant::Lambda(_) => {
             // Lambda functions cannot safely cross the JavaScript boundary
             // They contain references to MOO code that JS can't execute
-            let msg = v8::String::new(scope, "Lambda functions cannot be passed to JavaScript").unwrap();
+            let msg =
+                v8::String::new(scope, "Lambda functions cannot be passed to JavaScript").unwrap();
             let exception = v8::Exception::type_error(scope, msg);
             scope.throw_exception(exception);
             v8::undefined(scope).into()
@@ -178,7 +225,8 @@ pub fn var_to_v8<'s>(
         Variant::Flyweight(_) => {
             // Anonymous/flyweight objects cannot safely cross the boundary
             // They're temporary and don't have stable identities
-            let msg = v8::String::new(scope, "Anonymous objects cannot be passed to JavaScript").unwrap();
+            let msg =
+                v8::String::new(scope, "Anonymous objects cannot be passed to JavaScript").unwrap();
             let exception = v8::Exception::type_error(scope, msg);
             scope.throw_exception(exception);
             v8::undefined(scope).into()
@@ -187,32 +235,50 @@ pub fn var_to_v8<'s>(
 }
 
 /// Convert a V8 value to a MOO Var
+/// Returns Err if the conversion fails (e.g., Infinity or NaN)
 pub fn v8_to_var<'s>(
     scope: &mut v8::HandleScope<'s>,
     value: v8::Local<'s, v8::Value>,
-) -> Var {
+) -> Result<Var, moor_var::Error> {
     if value.is_null() || value.is_undefined() {
-        return v_none();
+        return Ok(v_none());
     }
 
     if value.is_boolean() {
         let b = value.boolean_value(scope);
-        return v_bool(b);
+        return Ok(v_bool(b));
     }
 
     if value.is_number() {
         let n = value.number_value(scope).unwrap();
-        if n.fract() == 0.0 && n.is_finite() {
-            return v_int(n as i64);
-        } else {
-            return v_float(n);
+
+        // MOO doesn't support Infinity or NaN - return errors
+        if n.is_infinite() {
+            return Err(moor_var::Error::new(
+                moor_var::E_DIV,
+                Some("Division by zero".to_string()),
+                None,
+            ));
         }
+        if n.is_nan() {
+            return Err(moor_var::Error::new(
+                moor_var::E_FLOAT,
+                Some("Floating point error (NaN)".to_string()),
+                None,
+            ));
+        }
+
+        return if n.fract() == 0.0 && n.is_finite() {
+            Ok(v_int(n as i64))
+        } else {
+            Ok(v_float(n))
+        };
     }
 
     if value.is_string() {
         let s = value.to_string(scope).unwrap();
         let s = s.to_rust_string_lossy(scope);
-        return v_string(s);
+        return Ok(v_string(s));
     }
 
     if value.is_array() {
@@ -222,39 +288,39 @@ pub fn v8_to_var<'s>(
 
         for i in 0..len {
             if let Some(item) = array.get_index(scope, i) {
-                items.push(v8_to_var(scope, item));
+                items.push(v8_to_var(scope, item)?);
             } else {
                 items.push(v_none());
             }
         }
 
-        return v_list(&items);
+        return Ok(v_list(&items));
     }
 
     // Check for typed arrays (Uint8Array, etc.) - convert to Binary
-    if value.is_typed_array() {
-        if let Ok(typed_array) = v8::Local::<v8::TypedArray>::try_from(value) {
-            let byte_length = typed_array.byte_length();
-            let mut bytes = vec![0u8; byte_length];
-            let copied = typed_array.copy_contents(&mut bytes);
-            if copied == byte_length {
-                return v_binary(bytes);
-            }
+    if value.is_typed_array()
+        && let Ok(typed_array) = v8::Local::<v8::TypedArray>::try_from(value)
+    {
+        let byte_length = typed_array.byte_length();
+        let mut bytes = vec![0u8; byte_length];
+        let copied = typed_array.copy_contents(&mut bytes);
+        if copied == byte_length {
+            return Ok(v_binary(bytes));
         }
     }
 
     // Check for ArrayBuffer - convert to Binary
-    if value.is_array_buffer() {
-        if let Ok(array_buffer) = v8::Local::<v8::ArrayBuffer>::try_from(value) {
-            let backing_store = array_buffer.get_backing_store();
-            let bytes = unsafe {
-                std::slice::from_raw_parts(
-                    backing_store.data().unwrap().as_ptr() as *const u8,
-                    backing_store.byte_length(),
-                )
-            };
-            return v_binary(bytes.to_vec());
-        }
+    if value.is_array_buffer()
+        && let Ok(array_buffer) = v8::Local::<v8::ArrayBuffer>::try_from(value)
+    {
+        let backing_store = array_buffer.get_backing_store();
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                backing_store.data().unwrap().as_ptr() as *const u8,
+                backing_store.byte_length(),
+            )
+        };
+        return Ok(v_binary(bytes.to_vec()));
     }
 
     if value.is_object() {
@@ -262,49 +328,52 @@ pub fn v8_to_var<'s>(
 
         // Check for special MOO object marker
         let moo_obj_key = v8::String::new(scope, "__moo_obj").unwrap();
-        if let Some(moo_obj_val) = obj.get(scope, moo_obj_key.into()) {
-            if moo_obj_val.is_number() {
-                let n = moo_obj_val.number_value(scope).unwrap() as i32;
-                return v_objid(n);
-            }
+        if let Some(moo_obj_val) = obj.get(scope, moo_obj_key.into())
+            && moo_obj_val.is_number()
+        {
+            let n = moo_obj_val.number_value(scope).unwrap() as i32;
+            return Ok(v_objid(n));
         }
 
         // Check for MOO error marker
         let moo_err_key = v8::String::new(scope, "__moo_error").unwrap();
-        if let Some(moo_err_val) = obj.get(scope, moo_err_key.into()) {
-            if moo_err_val.is_number() {
-                let code = moo_err_val.number_value(scope).unwrap() as i32;
-                let msg_key = v8::String::new(scope, "msg").unwrap();
-                let msg = obj.get(scope, msg_key.into())
-                    .and_then(|v| v.to_string(scope))
-                    .map(|s| s.to_rust_string_lossy(scope));
+        if let Some(moo_err_val) = obj.get(scope, moo_err_key.into())
+            && moo_err_val.is_number()
+        {
+            let code = moo_err_val.number_value(scope).unwrap() as i32;
+            let msg_key = v8::String::new(scope, "msg").unwrap();
+            let msg = obj
+                .get(scope, msg_key.into())
+                .and_then(|v| v.to_string(scope))
+                .map(|s| s.to_rust_string_lossy(scope));
 
-                // Convert code to ErrorCode - match common error codes
-                let error_code = match code {
-                    0 => moor_var::E_NONE,
-                    1 => moor_var::E_TYPE,
-                    2 => moor_var::E_DIV,
-                    3 => moor_var::E_PERM,
-                    4 => moor_var::E_PROPNF,
-                    5 => moor_var::E_VERBNF,
-                    6 => moor_var::E_VARNF,
-                    7 => moor_var::E_INVIND,
-                    8 => moor_var::E_RECMOVE,
-                    9 => moor_var::E_MAXREC,
-                    10 => moor_var::E_RANGE,
-                    11 => moor_var::E_ARGS,
-                    12 => moor_var::E_NACC,
-                    13 => moor_var::E_INVARG,
-                    14 => moor_var::E_QUOTA,
-                    15 => moor_var::E_FLOAT,
-                    _ => moor_var::E_ARGS,
-                };
-                return Var::mk_error(moor_var::Error::new(error_code, msg, None));
-            }
+            // Convert code to ErrorCode - match common error codes
+            let error_code = match code {
+                0 => moor_var::E_NONE,
+                1 => moor_var::E_TYPE,
+                2 => moor_var::E_DIV,
+                3 => moor_var::E_PERM,
+                4 => moor_var::E_PROPNF,
+                5 => moor_var::E_VERBNF,
+                6 => moor_var::E_VARNF,
+                7 => moor_var::E_INVIND,
+                8 => moor_var::E_RECMOVE,
+                9 => moor_var::E_MAXREC,
+                10 => moor_var::E_RANGE,
+                11 => moor_var::E_ARGS,
+                12 => moor_var::E_NACC,
+                13 => moor_var::E_INVARG,
+                14 => moor_var::E_QUOTA,
+                15 => moor_var::E_FLOAT,
+                _ => moor_var::E_ARGS,
+            };
+            return Ok(Var::mk_error(moor_var::Error::new(error_code, msg, None)));
         }
 
         // Regular object - convert to map
-        let property_names = obj.get_own_property_names(scope, Default::default()).unwrap();
+        let property_names = obj
+            .get_own_property_names(scope, Default::default())
+            .unwrap();
         let len = property_names.length();
         let mut pairs = Vec::new();
 
@@ -313,16 +382,16 @@ pub fn v8_to_var<'s>(
                 let key_str = key.to_string(scope).unwrap();
                 let key_rust = key_str.to_rust_string_lossy(scope);
                 if let Some(val) = obj.get(scope, key) {
-                    pairs.push((v_str(&key_rust), v8_to_var(scope, val)));
+                    pairs.push((v_str(&key_rust), v8_to_var(scope, val)?));
                 }
             }
         }
 
-        return moor_var::v_map(&pairs);
+        return Ok(moor_var::v_map(&pairs));
     }
 
     // Fallback
-    v_none()
+    Ok(v_none())
 }
 
 #[cfg(test)]
@@ -334,5 +403,4 @@ mod tests {
         initialize_v8();
         // Should not panic
     }
-
 }

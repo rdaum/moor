@@ -56,7 +56,13 @@ pub fn prepare_call_verb(
     args: List,
     max_ticks: usize,
 ) -> VmHost {
-    let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(1000));
+    let mut vm_host = VmHost::new(
+        0,
+        20,
+        max_ticks,
+        Duration::from_secs(1000),
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
 
     let verb_name = Symbol::mk(verb_name);
     let (program, verbdef) = world_state

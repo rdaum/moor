@@ -18,8 +18,30 @@ use crate::task_context::with_current_transaction;
 use crate::vm::js::js_execute::{CURRENT_JS_FRAME, JS_PERMISSIONS, PENDING_DISPATCH};
 use crate::vm::js::js_frame::{JSContinuation, PendingDispatch, PendingVerbCall};
 use crate::vm::js::v8_host::{v8_to_var, var_to_v8};
-use moor_var::{Symbol, v_int, v_list};
+use moor_var::{Symbol, Var, v_int, v_list};
 use v8;
+
+/// Helper to convert V8 value to Var, throwing a JavaScript exception on error
+fn v8_to_var_or_throw<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    value: v8::Local<'s, v8::Value>,
+    context: &str,
+) -> Option<Var> {
+    match v8_to_var(scope, value) {
+        Ok(var) => Some(var),
+        Err(err) => {
+            let msg_text = format!(
+                "{}: {}",
+                context,
+                err.msg.as_ref().map(|s| s.as_str()).unwrap_or("unknown error")
+            );
+            let msg = v8::String::new(scope, &msg_text).unwrap();
+            let exception = v8::Exception::type_error(scope, msg);
+            scope.throw_exception(exception);
+            None
+        }
+    }
+}
 
 /// Install builtin functions onto an object template
 /// This is called during context creation for efficiency
@@ -56,6 +78,23 @@ pub fn install_builtins_on_template<'s>(
     let call_builtin_fn = v8::FunctionTemplate::new(scope, call_builtin_callback);
     let call_builtin_key = v8::String::new(scope, "call_builtin").unwrap();
     template.set(call_builtin_key.into(), call_builtin_fn.into());
+
+    // Install moo_error() constructor for creating MOO error objects
+    let moo_error_fn = v8::FunctionTemplate::new(scope, moo_error_callback);
+
+    // Add prototype methods
+    let proto_template = moo_error_fn.prototype_template(scope);
+
+    // Add .is(code) method
+    let is_method = v8::FunctionTemplate::new(scope, moo_error_is_callback);
+    let is_key = v8::String::new(scope, "is").unwrap();
+    proto_template.set(is_key.into(), is_method.into());
+
+    // Add .code getter property (using set instead of set_accessor for simplicity)
+    // We'll just expose __moo_error as .code via JavaScript helper code
+
+    let moo_error_key = v8::String::new(scope, "moo_error").unwrap();
+    template.set(moo_error_key.into(), moo_error_fn.into());
 }
 
 /// Helper function for tests: install builtins on an existing context's global object
@@ -77,6 +116,7 @@ fn install_builtins(scope: &mut v8::HandleScope) {
 /// Install the `typeof` builtin function
 /// Note: Using `moo_typeof` to avoid collision with JavaScript's built-in `typeof` operator
 #[cfg(test)]
+#[allow(dead_code)]
 fn install_typeof(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let typeof_fn = v8::FunctionTemplate::new(scope, typeof_callback);
     let typeof_val = typeof_fn
@@ -104,7 +144,9 @@ fn typeof_callback<'a>(
 
     // Convert V8 value to MOO Var
     let arg = args.get(0);
-    let moo_var = v8_to_var(scope, arg);
+    let Some(moo_var) = v8_to_var_or_throw(scope, arg, "Error converting argument") else {
+        return;
+    };
 
     // Get type code
     let type_code = moo_var.type_code() as i64;
@@ -117,6 +159,7 @@ fn typeof_callback<'a>(
 
 /// Install the `tostr` builtin function
 #[cfg(test)]
+#[allow(dead_code)]
 fn install_tostr(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let tostr_fn = v8::FunctionTemplate::new(scope, tostr_callback);
     let tostr_val = tostr_fn
@@ -140,7 +183,9 @@ fn tostr_callback<'a>(
     // Convert all arguments to strings and concatenate
     for i in 0..args.length() {
         let arg = args.get(i);
-        let moo_var = v8_to_var(scope, arg);
+        let Some(moo_var) = v8_to_var_or_throw(scope, arg, "Error converting argument") else {
+            return;
+        };
 
         // Convert to string representation (similar to bf_tostr logic)
         match moo_var.variant() {
@@ -167,6 +212,7 @@ fn tostr_callback<'a>(
 
 /// Install the `call_verb` builtin function for JS->MOO verb calls
 #[cfg(test)]
+#[allow(dead_code)]
 fn install_call_verb(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let call_verb_fn = v8::FunctionTemplate::new(scope, call_verb_callback);
     let call_verb_val = call_verb_fn
@@ -197,8 +243,12 @@ fn call_verb_callback<'a>(
     }
 
     // Parse arguments
-    let this_arg = v8_to_var(scope, args.get(0));
-    let verb_name_arg = v8_to_var(scope, args.get(1));
+    let Some(this_arg) = v8_to_var_or_throw(scope, args.get(0), "Error converting 'this' argument") else {
+        return;
+    };
+    let Some(verb_name_arg) = v8_to_var_or_throw(scope, args.get(1), "Error converting verb_name argument") else {
+        return;
+    };
 
     // Convert verb_name to Symbol
     let Ok(verb_name) = verb_name_arg.as_symbol() else {
@@ -211,7 +261,10 @@ fn call_verb_callback<'a>(
     // Collect remaining arguments into a List
     let mut verb_args = Vec::new();
     for i in 2..args.length() {
-        verb_args.push(v8_to_var(scope, args.get(i)));
+        let Some(arg) = v8_to_var_or_throw(scope, args.get(i), &format!("Error converting argument {}", i)) else {
+            return;
+        };
+        verb_args.push(arg);
     }
     let verb_args_var = v_list(&verb_args);
     let verb_args_list = match verb_args_var.variant() {
@@ -278,6 +331,7 @@ fn call_verb_callback<'a>(
 
 /// Install the `obj` helper function for creating object references
 #[cfg(test)]
+#[allow(dead_code)]
 fn install_obj(scope: &mut v8::HandleScope, global: v8::Local<v8::Object>) {
     let obj_fn = v8::FunctionTemplate::new(scope, obj_callback);
     let obj_val = obj_fn
@@ -342,7 +396,9 @@ fn get_prop_callback<'a>(
     }
 
     // Parse object argument
-    let obj_arg = v8_to_var(scope, args.get(0));
+    let Some(obj_arg) = v8_to_var_or_throw(scope, args.get(0), "Error converting object argument") else {
+        return;
+    };
     let obj = match obj_arg.variant() {
         moor_var::Variant::Obj(o) => o,
         _ => {
@@ -354,7 +410,9 @@ fn get_prop_callback<'a>(
     };
 
     // Parse property name argument
-    let prop_name_arg = v8_to_var(scope, args.get(1));
+    let Some(prop_name_arg) = v8_to_var_or_throw(scope, args.get(1), "Error converting property name argument") else {
+        return;
+    };
     let prop_name = match prop_name_arg.variant() {
         moor_var::Variant::Str(s) => Symbol::mk(s.as_str()),
         _ => {
@@ -426,7 +484,9 @@ fn call_builtin_callback<'a>(
     }
 
     // Parse builtin name argument
-    let builtin_name_arg = v8_to_var(scope, args.get(0));
+    let Some(builtin_name_arg) = v8_to_var_or_throw(scope, args.get(0), "Error converting builtin name argument") else {
+        return;
+    };
     let Ok(builtin_name) = builtin_name_arg.as_symbol() else {
         let msg = v8::String::new(scope, "Builtin name must be a string or symbol").unwrap();
         let exception = v8::Exception::type_error(scope, msg);
@@ -445,7 +505,10 @@ fn call_builtin_callback<'a>(
     // Collect remaining arguments into a List
     let mut builtin_args = Vec::new();
     for i in 1..args.length() {
-        builtin_args.push(v8_to_var(scope, args.get(i)));
+        let Some(arg) = v8_to_var_or_throw(scope, args.get(i), &format!("Error converting argument {}", i)) else {
+            return;
+        };
+        builtin_args.push(arg);
     }
     let builtin_args_var = v_list(&builtin_args);
     let builtin_args_list = match builtin_args_var.variant() {
@@ -509,6 +572,98 @@ fn call_builtin_callback<'a>(
     }
 }
 
+/// JavaScript callback for `moo_error(code, message?)`
+/// Creates a MOO error object that can be thrown or returned
+fn moo_error_callback<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    args: v8::FunctionCallbackArguments<'a>,
+    mut rv: v8::ReturnValue,
+) {
+    // Check argument count
+    if args.length() < 1 {
+        let msg = v8::String::new(scope, "moo_error requires at least 1 argument (error code)").unwrap();
+        let exception = v8::Exception::type_error(scope, msg);
+        scope.throw_exception(exception);
+        return;
+    }
+
+    // Get error code
+    let code_arg = args.get(0);
+    if !code_arg.is_number() {
+        let msg = v8::String::new(scope, "moo_error: first argument must be a number (error code)").unwrap();
+        let exception = v8::Exception::type_error(scope, msg);
+        scope.throw_exception(exception);
+        return;
+    }
+    let code = code_arg.number_value(scope).unwrap() as i32;
+
+    // Get optional message
+    let message = if args.length() >= 2 {
+        let msg_arg = args.get(1);
+        if msg_arg.is_string() {
+            let msg_str = msg_arg.to_string(scope).unwrap();
+            Some(msg_str.to_rust_string_lossy(scope))
+        } else if msg_arg.is_null() || msg_arg.is_undefined() {
+            None
+        } else {
+            // Convert to string
+            let msg_str = msg_arg.to_string(scope).unwrap();
+            Some(msg_str.to_rust_string_lossy(scope))
+        }
+    } else {
+        None
+    };
+
+    // Create error object in the format expected by v8_to_var
+    let obj = v8::Object::new(scope);
+
+    // Set __moo_error field
+    let error_key = v8::String::new(scope, "__moo_error").unwrap();
+    let error_val = v8::Number::new(scope, code as f64);
+    obj.set(scope, error_key.into(), error_val.into());
+
+    // Set msg field if provided
+    if let Some(msg) = message {
+        let msg_key = v8::String::new(scope, "msg").unwrap();
+        let msg_val = v8::String::new(scope, &msg).unwrap();
+        obj.set(scope, msg_key.into(), msg_val.into());
+    }
+
+    rv.set(obj.into());
+}
+
+/// JavaScript callback for MooError.is(code) method
+/// Checks if this error matches the given error code
+fn moo_error_is_callback<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    args: v8::FunctionCallbackArguments<'a>,
+    mut rv: v8::ReturnValue,
+) {
+    // Get 'this' (the error object)
+    let this = args.this();
+
+    // Check argument
+    if args.length() < 1 || !args.get(0).is_number() {
+        rv.set(v8::Boolean::new(scope, false).into());
+        return;
+    }
+
+    let check_code = args.get(0).number_value(scope).unwrap() as i32;
+
+    // Get __moo_error field from this
+    let error_key = v8::String::new(scope, "__moo_error").unwrap();
+    if let Some(error_val) = this.get(scope, error_key.into())
+        && error_val.is_number()
+    {
+        let this_code = error_val.number_value(scope).unwrap() as i32;
+        rv.set(v8::Boolean::new(scope, this_code == check_code).into());
+        return;
+    }
+
+    rv.set(v8::Boolean::new(scope, false).into());
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,7 +688,7 @@ mod tests {
         let script = v8::Script::compile(scope, code, None).unwrap();
         let result = script.run(scope).unwrap();
 
-        let moo_result = v8_to_var(scope, result);
+        let moo_result = v8_to_var(scope, result).unwrap();
 
         // Type code for Int should be 0
         assert_eq!(moo_result, v_int(0));
@@ -555,7 +710,7 @@ mod tests {
         let script = v8::Script::compile(scope, code, None).unwrap();
         let result = script.run(scope).unwrap();
 
-        let moo_result = v8_to_var(scope, result);
+        let moo_result = v8_to_var(scope, result).unwrap();
         assert_eq!(moo_result, v_str("Hello World 42"));
     }
 }

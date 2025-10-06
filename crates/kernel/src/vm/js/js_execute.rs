@@ -16,10 +16,10 @@
 
 use crate::vm::js::js_builtins::install_builtins_on_template;
 use crate::vm::js::js_frame::{JSContinuation, JSFrame, PendingDispatch};
-use crate::vm::js::js_watchdog::{register_execution, is_watchdog_exception, WatchdogAbortReason, WatchdogGuard};
-use crate::vm::js::v8_host::{V8_ISOLATE_POOL, initialize_v8, v8_to_var, var_to_v8};
+use crate::vm::js::js_watchdog::{register_execution, is_watchdog_exception, WatchdogGuard};
+use crate::vm::js::v8_host::{acquire_isolate, initialize_v8, release_isolate, v8_to_var, var_to_v8};
 use crate::vm::vm_host::ExecutionResult;
-use moor_common::tasks::{AbortLimitReason, TaskId};
+use moor_common::tasks::TaskId;
 use moor_var::{Obj, Var, v_none};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -31,15 +31,15 @@ use v8;
 thread_local! {
     /// Thread-local storage for pending dispatch operations (verb or builtin calls) from JavaScript
     /// The call_verb and call_builtin functions store pending calls here
-    pub(crate) static PENDING_DISPATCH: RefCell<Option<PendingDispatch>> = RefCell::new(None);
+    pub(crate) static PENDING_DISPATCH: RefCell<Option<PendingDispatch>> = const { RefCell::new(None) };
 
     /// Thread-local reference to the current JSFrame being executed
     /// Allows builtins to check continuation state for cached results
-    pub(crate) static CURRENT_JS_FRAME: RefCell<Option<*const JSFrame>> = RefCell::new(None);
+    pub(crate) static CURRENT_JS_FRAME: RefCell<Option<*const JSFrame>> = const { RefCell::new(None) };
 
     /// Thread-local storage for the permissions of the current JavaScript execution
     /// Used by property access and other operations that need permissions
-    pub(crate) static JS_PERMISSIONS: RefCell<Option<Obj>> = RefCell::new(None);
+    pub(crate) static JS_PERMISSIONS: RefCell<Option<Obj>> = const { RefCell::new(None) };
 }
 
 /// Validate JavaScript source code by attempting to compile it with V8.
@@ -47,8 +47,8 @@ thread_local! {
 pub fn validate_javascript(source: &str) -> Result<(), Vec<String>> {
     initialize_v8();
 
-    // Acquire isolate from thread-local pool
-    let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
+    // Acquire the global isolate
+    let mut isolate = acquire_isolate();
 
     let mut errors = Vec::new();
 
@@ -91,7 +91,7 @@ pub fn validate_javascript(source: &str) -> Result<(), Vec<String>> {
     }
 
     // Release isolate back to pool
-    V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().release(isolate));
+    release_isolate(isolate);
 
     if errors.is_empty() {
         Ok(())
@@ -102,6 +102,7 @@ pub fn validate_javascript(source: &str) -> Result<(), Vec<String>> {
 
 /// Execute a JavaScript frame
 /// Acquires an isolate from the thread-local pool, creates a context, and runs the JS code
+#[allow(clippy::too_many_arguments)]
 pub fn execute_js_frame(
     js_frame: &mut JSFrame,
     this: &Var,
@@ -147,6 +148,7 @@ pub fn execute_js_frame(
 }
 
 /// Execute JavaScript for the first time
+#[allow(clippy::too_many_arguments)]
 fn execute_js_initial(
     js_frame: &mut JSFrame,
     this: &Var,
@@ -166,8 +168,8 @@ fn execute_js_initial(
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = Some(js_frame as *const JSFrame));
     JS_PERMISSIONS.with(|p| *p.borrow_mut() = Some(permissions));
 
-    // Acquire isolate from thread-local pool
-    let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
+    // Acquire the global isolate
+    let mut isolate = acquire_isolate();
 
     // Get thread-safe handle for watchdog
     let isolate_handle = isolate.thread_safe_handle();
@@ -282,9 +284,16 @@ fn execute_js_initial(
                     // Promise resolved - get the value
                     info!("execute_js_initial: Promise is Fulfilled");
                     let result_val = promise.result(scope);
-                    let converted = v8_to_var(scope, result_val);
-                    info!("execute_js_initial: Converted result: {:?}", converted);
-                    converted
+                    match v8_to_var(scope, result_val) {
+                        Ok(converted) => {
+                            info!("execute_js_initial: Converted result: {:?}", converted);
+                            converted
+                        }
+                        Err(err) => {
+                            // Conversion error (e.g., Infinity/NaN) - treat as exception
+                            return ExecutionResult::PushError(err);
+                        }
+                    }
                 }
                 v8::PromiseState::Rejected => {
                     // Promise rejected - extract the MOO error if present
@@ -298,9 +307,15 @@ fn execute_js_initial(
 
                         if let Some(err_var_val) = obj.get(scope, err_var_key.into()) {
                             // This is a MOO error - extract it
-                            let err_var = v8_to_var(scope, err_var_val);
-                            if let moor_var::Variant::Err(moo_err) = err_var.variant() {
-                                return ExecutionResult::PushError(moo_err.as_ref().clone());
+                            match v8_to_var(scope, err_var_val) {
+                                Ok(err_var) => {
+                                    if let moor_var::Variant::Err(moo_err) = err_var.variant() {
+                                        return ExecutionResult::PushError(moo_err.as_ref().clone());
+                                    }
+                                }
+                                Err(err) => {
+                                    return ExecutionResult::PushError(err);
+                                }
                             }
                         }
                     }
@@ -348,19 +363,25 @@ fn execute_js_initial(
         } else {
             // Not a Promise - just convert the value
             info!("execute_js_initial: Result is not a Promise");
-            v8_to_var(scope, promise_value)
+            match v8_to_var(scope, promise_value) {
+                Ok(converted) => converted,
+                Err(err) => {
+                    // Conversion error (e.g., Infinity/NaN) - treat as exception
+                    return ExecutionResult::PushError(err);
+                }
+            }
         }
     }; // All scopes dropped here, isolate no longer borrowed
 
     // Release isolate back to pool
-    V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().release(isolate));
-
-    // Check if there's a pending dispatch operation from JavaScript
-    let pending_dispatch = PENDING_DISPATCH.with(|pd| pd.borrow_mut().take());
+    release_isolate(isolate);
 
     // Clear current frame reference and permissions
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = None);
     JS_PERMISSIONS.with(|p| *p.borrow_mut() = None);
+
+    // Check if there's a pending dispatch operation from JavaScript
+    let pending_dispatch = PENDING_DISPATCH.with(|pd| pd.borrow_mut().take());
 
     if let Some(dispatch) = pending_dispatch {
         match dispatch {
@@ -408,6 +429,7 @@ fn execute_js_initial(
 
 /// Resume JavaScript execution after a verb call completes
 /// Re-executes the entire script, but call_verb will see the cached result
+#[allow(clippy::too_many_arguments)]
 fn execute_js_resume(
     js_frame: &mut JSFrame,
     this: &Var,
@@ -441,8 +463,8 @@ fn execute_js_resume(
     CURRENT_JS_FRAME.with(|f| *f.borrow_mut() = Some(js_frame as *const JSFrame));
     JS_PERMISSIONS.with(|p| *p.borrow_mut() = Some(permissions));
 
-    // Acquire isolate from thread-local pool
-    let mut isolate = V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().acquire());
+    // Acquire the global isolate
+    let mut isolate = acquire_isolate();
 
     // Get thread-safe handle for watchdog
     let isolate_handle = isolate.thread_safe_handle();
@@ -548,7 +570,13 @@ fn execute_js_resume(
                 v8::PromiseState::Fulfilled => {
                     // Promise resolved - get the value
                     let result_val = promise.result(scope);
-                    v8_to_var(scope, result_val)
+                    match v8_to_var(scope, result_val) {
+                        Ok(converted) => converted,
+                        Err(err) => {
+                            // Conversion error (e.g., Infinity/NaN) - treat as exception
+                            return ExecutionResult::PushError(err);
+                        }
+                    }
                 }
                 v8::PromiseState::Rejected => {
                     // Promise rejected - extract the MOO error if present
@@ -561,9 +589,15 @@ fn execute_js_resume(
 
                         if let Some(err_var_val) = obj.get(scope, err_var_key.into()) {
                             // This is a MOO error - extract it
-                            let err_var = v8_to_var(scope, err_var_val);
-                            if let moor_var::Variant::Err(moo_err) = err_var.variant() {
-                                return ExecutionResult::PushError(moo_err.as_ref().clone());
+                            match v8_to_var(scope, err_var_val) {
+                                Ok(err_var) => {
+                                    if let moor_var::Variant::Err(moo_err) = err_var.variant() {
+                                        return ExecutionResult::PushError(moo_err.as_ref().clone());
+                                    }
+                                }
+                                Err(err) => {
+                                    return ExecutionResult::PushError(err);
+                                }
                             }
                         }
                     }
@@ -609,12 +643,18 @@ fn execute_js_resume(
             }
         } else {
             // Not a Promise - just convert the value
-            v8_to_var(scope, promise_value)
+            match v8_to_var(scope, promise_value) {
+                Ok(converted) => converted,
+                Err(err) => {
+                    // Conversion error (e.g., Infinity/NaN) - treat as exception
+                    return ExecutionResult::PushError(err);
+                }
+            }
         }
     }; // All scopes dropped here, isolate no longer borrowed
 
     // Release isolate back to pool
-    V8_ISOLATE_POOL.with(|pool| pool.borrow_mut().release(isolate));
+    release_isolate(isolate);
 
     // Check if there's another pending dispatch operation from JavaScript
     let pending_dispatch = PENDING_DISPATCH.with(|pd| pd.borrow_mut().take());
@@ -666,8 +706,10 @@ fn create_context_with_builtins<'s>(
     install_builtins_on_template(scope, global_template);
 
     // Create context with this global template
-    let mut context_options = v8::ContextOptions::default();
-    context_options.global_template = Some(global_template);
+    let context_options = v8::ContextOptions {
+        global_template: Some(global_template),
+        ..Default::default()
+    };
     v8::Context::new(scope, context_options)
 }
 
@@ -721,6 +763,18 @@ fn install_js_helpers(scope: &mut v8::HandleScope) {
 
                 return value;
             };
+
+            // Add .code getter to moo_error objects for cleaner error code access
+            // This allows: err.code instead of err.__moo_error
+            const original_moo_error = moo_error;
+            moo_error = function(code, msg) {
+                const err = original_moo_error(code, msg);
+                Object.defineProperty(err, 'code', {
+                    get() { return this.__moo_error; },
+                    enumerable: true
+                });
+                return err;
+            };
         })();
     "#;
 
@@ -752,7 +806,32 @@ fn setup_globals(scope: &mut v8::HandleScope, this: &Var, player: Obj, args: &[V
     }
     global.set(scope, args_key.into(), args_array.into());
 
-    // TODO: Add builtin functions (typeof, read, etc.)
+    // Set error code constants as globals
+    // These match the numeric values used in v8_to_var for error conversion
+    let error_constants = [
+        ("E_NONE", 0),
+        ("E_TYPE", 1),
+        ("E_DIV", 2),
+        ("E_PERM", 3),
+        ("E_PROPNF", 4),
+        ("E_VERBNF", 5),
+        ("E_VARNF", 6),
+        ("E_INVIND", 7),
+        ("E_RECMOVE", 8),
+        ("E_MAXREC", 9),
+        ("E_RANGE", 10),
+        ("E_ARGS", 11),
+        ("E_NACC", 12),
+        ("E_INVARG", 13),
+        ("E_QUOTA", 14),
+        ("E_FLOAT", 15),
+    ];
+
+    for (name, code) in error_constants {
+        let key = v8::String::new(scope, name).unwrap();
+        let val = v8::Number::new(scope, code as f64);
+        global.set(scope, key.into(), val.into());
+    }
 }
 
 #[cfg(test)]
@@ -766,7 +845,7 @@ mod tests {
         initialize_v8();
 
         // Create a simple JavaScript frame that returns a number
-        let source = "42".to_string();
+        let source = "return 42;".to_string();
         let args = vec![];
         let mut js_frame = JSFrame::new(source, args);
 
@@ -775,7 +854,16 @@ mod tests {
         let player = moor_var::Obj::mk_id(1);
         let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
+        let result = execute_js_frame(
+            &mut js_frame,
+            &this,
+            player,
+            permissions,
+            0,
+            90000,
+            Duration::from_secs(5),
+            Arc::new(AtomicBool::new(false)),
+        );
 
         // Check result
         match result {
@@ -790,8 +878,8 @@ mod tests {
     fn test_js_with_globals() {
         initialize_v8();
 
-        // JavaScript that accesses the 'this' global
-        let source = "this".to_string();
+        // JavaScript that accesses the 'self' global (can't use 'this' - it's a JavaScript keyword)
+        let source = "return self;".to_string();
         let args = vec![];
         let mut js_frame = JSFrame::new(source, args);
 
@@ -799,7 +887,16 @@ mod tests {
         let player = moor_var::Obj::mk_id(1);
         let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
+        let result = execute_js_frame(
+            &mut js_frame,
+            &this,
+            player,
+            permissions,
+            0,
+            90000,
+            Duration::from_secs(5),
+            Arc::new(AtomicBool::new(false)),
+        );
 
         match result {
             ExecutionResult::Return(value) => {
@@ -814,7 +911,7 @@ mod tests {
         initialize_v8();
 
         // JavaScript that accesses args
-        let source = "args[0] + args[1]".to_string();
+        let source = "return args[0] + args[1];".to_string();
         let args = vec![v_int(10), v_int(32)];
         let mut js_frame = JSFrame::new(source, args);
 
@@ -822,7 +919,16 @@ mod tests {
         let player = moor_var::Obj::mk_id(1);
         let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
+        let result = execute_js_frame(
+            &mut js_frame,
+            &this,
+            player,
+            permissions,
+            0,
+            90000,
+            Duration::from_secs(5),
+            Arc::new(AtomicBool::new(false)),
+        );
 
         match result {
             ExecutionResult::Return(value) => {
@@ -837,7 +943,7 @@ mod tests {
         initialize_v8();
 
         // JavaScript that calls MOO builtin
-        let source = "moo_typeof(42)".to_string();
+        let source = "return moo_typeof(42);".to_string();
         let args = vec![];
         let mut js_frame = JSFrame::new(source, args);
 
@@ -845,7 +951,16 @@ mod tests {
         let player = moor_var::Obj::mk_id(1);
         let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
+        let result = execute_js_frame(
+            &mut js_frame,
+            &this,
+            player,
+            permissions,
+            0,
+            90000,
+            Duration::from_secs(5),
+            Arc::new(AtomicBool::new(false)),
+        );
 
         match result {
             ExecutionResult::Return(value) => {
@@ -861,7 +976,7 @@ mod tests {
         initialize_v8();
 
         // JavaScript that calls tostr
-        let source = "tostr('The answer is ', 42)".to_string();
+        let source = "return tostr('The answer is ', 42);".to_string();
         let args = vec![];
         let mut js_frame = JSFrame::new(source, args);
 
@@ -869,7 +984,16 @@ mod tests {
         let player = moor_var::Obj::mk_id(1);
         let permissions = moor_var::Obj::mk_id(1);
 
-        let result = execute_js_frame(&mut js_frame, &this, player, permissions, 1000);
+        let result = execute_js_frame(
+            &mut js_frame,
+            &this,
+            player,
+            permissions,
+            0,
+            90000,
+            Duration::from_secs(5),
+            Arc::new(AtomicBool::new(false)),
+        );
 
         match result {
             ExecutionResult::Return(value) => {
