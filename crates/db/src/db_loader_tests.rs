@@ -22,7 +22,7 @@ mod tests {
     };
     use moor_common::util::BitEnum;
     use moor_var::{
-        NOTHING, Obj, SYSTEM_OBJECT, Symbol,
+        NOTHING, SYSTEM_OBJECT, Symbol,
         program::{ProgramType, program::Program},
         v_int, v_str,
     };

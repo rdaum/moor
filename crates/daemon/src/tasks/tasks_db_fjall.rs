@@ -137,7 +137,7 @@ mod tests {
         SuspendedTask, Task, WakeCondition,
         tasks::{ServerOptions, TaskStart, TasksDb},
     };
-    use moor_var::SYSTEM_OBJECT;
+    use moor_var::{SYSTEM_OBJECT, v_int};
     use std::{
         sync::{Arc, atomic::AtomicBool},
         time::Duration,
@@ -391,7 +391,7 @@ mod tests {
                 3 => WakeCondition::Time(now.checked_sub(Duration::from_secs(1)).unwrap_or(now)),
                 4 => WakeCondition::Never,
                 5 => WakeCondition::Input(input_uuid),
-                6 => WakeCondition::Immedate,
+                6 => WakeCondition::Immediate(v_int(0)),
                 _ => unreachable!(),
             };
 
@@ -451,7 +451,7 @@ mod tests {
                     (WakeCondition::Input(uuid1), WakeCondition::Input(uuid2)) => {
                         assert_eq!(uuid1, uuid2, "Input UUID mismatch for {original_name}");
                     }
-                    (WakeCondition::Immedate, WakeCondition::Immedate) => {}
+                    (WakeCondition::Immediate(_), WakeCondition::Immediate(_)) => {}
                     _ => panic!(
                         "Wake condition type mismatch for {}: {:?} vs {:?}",
                         original_name, original_task.wake_condition, loaded_task.wake_condition

@@ -195,7 +195,7 @@ pub enum WakeCondition {
     /// This task will wake up when the given task is completed.
     Task(TaskId),
     /// Wake immediately with the given return value. This is used for tasks that performed a commit().
-    Immedate(Var),
+    Immediate(Var),
     /// Wake when a worker responds to this request id
     Worker(Uuid),
     /// Wake when garbage collection completes
@@ -220,7 +220,7 @@ impl WakeCondition {
             WakeCondition::Time(_) => WakeConditionType::Time,
             WakeCondition::Input(_) => WakeConditionType::Input,
             WakeCondition::Task(_) => WakeConditionType::Task,
-            WakeCondition::Immedate(_) => WakeConditionType::Immediate,
+            WakeCondition::Immediate(_) => WakeConditionType::Immediate,
             WakeCondition::Worker(_) => WakeConditionType::Worker,
             WakeCondition::GCComplete => WakeConditionType::GCComplete,
         }
@@ -352,7 +352,7 @@ impl SuspensionQ {
                         }
                     }
                 }
-                WakeCondition::Immedate(_) => {
+                WakeCondition::Immediate(_) => {
                     if let Err(e) = self.immediate_wake_sender.send(task_id) {
                         error!(
                             ?e,
@@ -427,7 +427,7 @@ impl SuspensionQ {
                     false
                 }
             }
-            WakeCondition::Immedate(_) => {
+            WakeCondition::Immediate(_) => {
                 if let Err(e) = self.immediate_wake_sender.send(task_id) {
                     error!(
                         ?e,
@@ -482,7 +482,7 @@ impl SuspensionQ {
                     // Timer wheel handles removal automatically when tasks expire
                     // No manual cleanup needed
                 }
-                WakeCondition::Immedate(_) => {
+                WakeCondition::Immediate(_) => {
                     // No cleanup needed for channel - scheduler will ignore messages
                     // for tasks no longer in the suspended tasks map
                 }

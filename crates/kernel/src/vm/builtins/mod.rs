@@ -15,6 +15,7 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use thiserror::Error;
 
+use crate::vm::builtins::bf_obj_load::register_bf_obj_load;
 use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
@@ -53,6 +54,7 @@ mod bf_flyweights;
 mod bf_list_sets;
 mod bf_maps;
 mod bf_num;
+mod bf_obj_load;
 mod bf_objects;
 mod bf_properties;
 pub mod bf_server;
@@ -120,6 +122,7 @@ impl BuiltinRegistry {
         register_bf_list_sets(&mut builtins);
         register_bf_maps(&mut builtins);
         register_bf_objects(&mut builtins);
+        register_bf_obj_load(&mut builtins);
         register_bf_verbs(&mut builtins);
         register_bf_properties(&mut builtins);
         register_bf_flyweights(&mut builtins);

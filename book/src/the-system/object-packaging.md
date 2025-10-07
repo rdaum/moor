@@ -410,6 +410,192 @@ new_obj = load_object(definition, [
 ]);
 ```
 
+### Batch Mutations
+
+The `mutate_objects` function provides a powerful way to apply multiple atomic mutations across one or more objects in a
+single transaction. Unlike `load_object` which works with complete object definitions, `mutate_objects` lets you apply
+specific targeted changes (like defining properties, updating verbs, or changing object attributes) to multiple objects
+efficiently.
+
+**Function:** `mutate_objects(list changelist)`
+**Returns:** Map containing per-object results with success/failure details
+**Permissions:** Wizard only
+
+#### Basic Usage
+
+```moo
+// Define a property on a single object
+result = mutate_objects({
+    {#123, {
+        {'define_property, 'description, #2, "rwc", "A red ball"}
+    }}
+});
+
+// Apply multiple mutations to one object
+result = mutate_objects({
+    {$my_object, {
+        {'define_property, 'version, #2, "rc", "1.0.0"},
+        {'set_property_value, 'name, "Updated Widget"},
+        {'set_object_flags, "upw"}
+    }}
+});
+
+// Mutate multiple objects in one transaction
+result = mutate_objects({
+    {#100, {{'define_property, 'locked, #2, "rc", 0}}},
+    {#101, {{'define_property, 'locked, #2, "rc", 0}}},
+    {#102, {{'define_property, 'locked, #2, "rc", 0}}}
+});
+```
+
+#### Changelist Format
+
+The changelist is a list of `{target_object, mutations}` pairs:
+
+```moo
+{
+    {object1, {mutation1, mutation2, ...}},
+    {object2, {mutation1, mutation2, ...}},
+    ...
+}
+```
+
+Each mutation is a list starting with a mutation action symbol, followed by action-specific arguments.
+
+#### Available Mutation Actions
+
+**Property Operations:**
+
+- `{'define_property, name, owner, flags, value}` - Create a new property with initial value
+- `{'delete_property, name}` - Remove a property definition
+- `{'set_property_value, name, value}` - Change property value
+- `{'set_property_flags, name, owner, flags}` - Update property permissions
+- `{'clear_property, name}` - Reset property to inherited value
+
+**Verb Operations:**
+
+- `{'define_verb, {names}, owner, flags, argspec, program}` - Create a new verb
+    - `names`: List of symbols like `{'look, 'l, 'examine}`
+    - `argspec`: List like `{"this", "none", "this"}`
+    - `program`: String containing verb code
+- `{'delete_verb, {names}}` - Remove a verb
+- `{'update_verb_code, {names}, program}` - Change verb code only
+- `{'update_verb_metadata, {names}, new_names, owner, flags, argspec}` - Update verb properties
+    - Any of `new_names`, `owner`, `flags`, or `argspec` can be `0` to leave unchanged
+
+**Object Operations:**
+
+- `{'set_object_flags, flags}` - Change object permission flags (e.g., "upw" for user/programmer/wizard)
+- `{'set_parent, parent_obj}` - Change object's parent
+- `{'set_location, location_obj}` - Move object to new location
+
+#### Result Format
+
+The function returns a map with detailed per-object results:
+
+```moo
+{
+    ['results -> {
+        ['index -> 1, 'success -> true],
+        ['index -> 2, 'success -> false, 'error -> E_INVARG]
+    },
+    'target -> #123,
+    'success -> false  // Overall success (false if any mutation failed)
+}
+```
+
+Each result includes:
+
+- `target` - The object that was mutated
+- `success` - Boolean indicating if all mutations succeeded
+- `results` - List of per-mutation results with:
+    - `index` - 1-based index of the mutation in the list
+    - `success` - Boolean indicating if this specific mutation succeeded
+    - `error` - MOO error code if mutation failed (E_INVARG, E_PROPNF, etc.)
+
+#### Error Handling
+
+Common errors returned in results:
+
+- `E_INVARG` - Invalid argument (e.g., duplicate property definition, invalid flags)
+- `E_PROPNF` - Property not found (when updating non-existent property)
+- `E_VERBNF` - Verb not found (when updating non-existent verb)
+- `E_TYPE` - Type mismatch in arguments
+- `E_PERM` - Permission denied (shouldn't occur for wizard)
+
+#### Example: Checking Results
+
+```moo
+result = mutate_objects(changelist);
+
+if (result['success])
+    player:tell("All mutations succeeded!");
+else
+    player:tell("Some mutations failed:");
+    for mutation_result in (result['results])
+        if (!mutation_result['success])
+            player:tell("  Mutation ", mutation_result['index],
+                       " failed with ", mutation_result['error]);
+        endif
+    endfor
+endif
+```
+
+#### Use Cases
+
+**Bulk Property Initialization:**
+
+```moo
+// Add the same property to many objects at once
+objects = children($thing);
+changelist = {};
+for obj in (objects)
+    changelist = {@changelist, {obj, {
+        {'define_property, 'initialized, #2, "rc", time()}
+    }}};
+endfor
+mutate_objects(changelist);
+```
+
+**Atomic Multi-Object Updates:**
+
+```moo
+// Update multiple related objects atomically
+mutate_objects({
+    {$config, {{'set_property_value, 'version, "2.0"}}},
+    {$system, {{'update_verb_code, {'init}, "/* new code */"}}},
+    {$registry, {{'clear_property, 'cache}}}
+});
+```
+
+**Safe Verb Deployment:**
+
+```moo
+// Update verbs across multiple objects, check for failures
+result = mutate_objects({
+    {$handler1, {{'update_verb_code, {'process}, new_code}}},
+    {$handler2, {{'update_verb_code, {'process}, new_code}}},
+    {$handler3, {{'update_verb_code, {'process}, new_code}}}
+});
+
+if (!result['success])
+    // Rollback is automatic - transaction was not committed
+    player:tell("Deployment failed, all changes rolled back");
+endif
+```
+
+#### Important Notes
+
+- **Atomic Transactions**: All mutations across all objects happen in a single transaction. If any mutation fails, the
+  entire operation is automatically rolled back and no changes are committed to the database.
+- **All-or-Nothing**: The function only commits if every single mutation succeeds. Even one failure causes a complete
+  rollback.
+- **Transactional Isolation**: On success, `mutate_objects` commits its transaction before returning, ensuring changes
+  are immediately visible to subsequent operations.
+- **Wizard Only**: This function requires wizard permissions as it bypasses normal permission checks.
+- **Performance**: More efficient than individual mutation operations for bulk updates since it batches all changes into
+  a single transaction.
+
 ## Advanced Loading Options
 
 The `load_object` function accepts an optional second argument - a map of options that control how the loading process
@@ -1006,19 +1192,3 @@ except error (ANY)
 endtry
 ```
 
-## Summary
-
-The object definition system in mooR provides:
-
-- **Human-readable object format** as an alternative to binary textdumps
-- **Individual file per object** for better version control and collaboration
-- **Complete object serialization** with `dump_object`
-- **Flexible loading options** with `load_object`
-- **Conflict detection and resolution** for safe object updates
-- **Selective updates** to preserve local customizations
-- **Development and testing support** with dry-run modes
-- **Integration capabilities** with constants and targeted loading
-
-This system enables sophisticated database management, version control, and development workflows. It also provides the
-foundation for building package management systems, automated deployment tools, and other advanced MOO administration
-utilities.

@@ -27,7 +27,10 @@ use std::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_common::model::{CommitResult, ObjectRef, Perms, WorldState};
+use moor_common::model::{
+    BatchMutationResult, CommitResult, ObjectMutation, ObjectRef, Perms, WorldState,
+    loader::batch_mutate,
+};
 use moor_compiler::to_literal;
 use moor_db::Database;
 
@@ -998,7 +1001,7 @@ impl Scheduler {
                     TaskSuspend::Never => WakeCondition::Never,
                     TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
-                    TaskSuspend::Commit(return_value) => WakeCondition::Immedate(return_value),
+                    TaskSuspend::Commit(return_value) => WakeCondition::Immediate(return_value),
                     TaskSuspend::WorkerRequest(worker_type, args, timeout) => {
                         let worker_request_id = Uuid::new_v4();
                         // Send out a message over the workers channel.
@@ -1273,6 +1276,12 @@ impl Scheduler {
                     self.gc_force_collect = true;
                 }
             }
+            TaskControlMsg::BatchMutate { changelist, reply } => {
+                let result = self.handle_batch_mutate(changelist);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send batch mutate reply to requester");
+                }
+            }
         }
     }
 
@@ -1360,6 +1369,41 @@ impl Scheduler {
         Ok(results)
     }
 
+    fn handle_batch_mutate(
+        &self,
+        changelist: Vec<(Obj, Vec<ObjectMutation>)>,
+    ) -> Result<Vec<BatchMutationResult>, Error> {
+        // Get a loader client from the database
+        let loader_client = self
+            .database
+            .loader_client()
+            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to create loader client: {e:?}")))?;
+        let mut loader_client = loader_client;
+
+        // Apply batch mutations for each object in the changelist
+        let mut results = Vec::new();
+        let mut any_errors = false;
+        for (target, mutations) in changelist {
+            let result = batch_mutate(loader_client.as_mut(), &target, &mutations);
+            // Check if any mutations failed for this object
+            if !result.all_succeeded() {
+                any_errors = true;
+            }
+            results.push(result);
+        }
+
+        // Only commit if all mutations succeeded, otherwise drop to rollback
+        if !any_errors {
+            loader_client.commit().map_err(|e| {
+                E_INVARG.with_msg(|| format!("Failed to commit batch mutations: {e:?}"))
+            })?;
+        }
+        // If any_errors is true, loader_client will be dropped here,
+        // automatically rolling back the transaction
+
+        Ok(results)
+    }
+
     fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {
         let Some(workers_sender) = self.worker_request_send.as_ref() else {
             warn!("No workers configured for scheduler; returning empty worker list");
@@ -1409,7 +1453,7 @@ impl Scheduler {
         if let Some(sr) = self.task_q.suspended.remove_task(task_id) {
             // Extract the return value from the wake condition
             let return_value = match sr.wake_condition {
-                WakeCondition::Immedate(val) => val,
+                WakeCondition::Immediate(val) => val,
                 _ => {
                     error!(
                         ?task_id,

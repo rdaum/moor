@@ -183,7 +183,7 @@ pub(crate) fn wake_condition_to_flatbuffer(
                 }),
             }))
         }
-        KernelWakeCondition::Immedate(return_value) => {
+        KernelWakeCondition::Immediate(return_value) => {
             let return_value_fb = var_to_db_flatbuffer(return_value)?;
             WakeImmediate(Box::new(fb::WakeImmediate {
                 return_value: Box::new(return_value_fb),
@@ -247,7 +247,7 @@ pub(crate) fn wake_condition_from_flatbuffer(
         }
         WakeConditionUnion::WakeImmediate(wi) => {
             let return_value = var_from_db_flatbuffer(&wi.return_value)?;
-            Ok(KernelWakeCondition::Immedate(return_value))
+            Ok(KernelWakeCondition::Immediate(return_value))
         }
         WakeConditionUnion::WakeTask(wt) => Ok(KernelWakeCondition::Task(wt.task_id as usize)),
         WakeConditionUnion::WakeWorker(ww) => {
