@@ -684,15 +684,17 @@ impl EncodeFor<ProgramType> for FjallCodec {
         let fb_program = fb::StoredProgramRef::read_as_root(stored_program.as_bytes())
             .map_err(|e| Error::StorageFailure(format!("Failed to read program: {e}")))?;
 
-        let language = fb_program.language()
+        let language = fb_program
+            .language()
             .map_err(|e| Error::StorageFailure(format!("Failed to read language union: {e}")))?;
 
         // Match on language variant and construct appropriate ProgramType
         match language {
             fb::StoredProgramLanguageRef::StoredMooRProgram(_moor_ref) => {
                 // Decode the full program using the existing function
-                let program = stored_to_program(&stored_program)
-                    .map_err(|e| Error::StorageFailure(format!("Failed to decode MooR program: {e}")))?;
+                let program = stored_to_program(&stored_program).map_err(|e| {
+                    Error::StorageFailure(format!("Failed to decode MooR program: {e}"))
+                })?;
                 Ok(ProgramType::MooR(program))
             }
         }

@@ -557,6 +557,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("connections", Q(0), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("connection", Q(0), Q(0), vec![], true),
         mk_builtin("error_message", Q(1), Q(1), vec![Typed(TYPE_ERR)], true),
         mk_builtin("error_code", Q(1), Q(1), vec![Typed(TYPE_ERR)], true),
         mk_builtin(

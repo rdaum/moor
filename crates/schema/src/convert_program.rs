@@ -340,7 +340,8 @@ pub fn decode_stored_program_struct(stored: &fb::StoredProgram) -> Result<Progra
         .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read StoredProgram: {e}")))?;
 
     // Extract language union and decode
-    let language = fb_ref.language()
+    let language = fb_ref
+        .language()
         .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read language union: {e}")))?;
 
     match language {

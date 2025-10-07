@@ -187,8 +187,9 @@ pub enum SessionError {
     InvalidToken,
 }
 
-/// A simple no-op implementation of the Sessions trait, for use in unit tests.
-/// No output, and pretends no players are connected.
+/// A simple no-op implementation of the Session trait.
+/// Used for background tasks (e.g., forked tasks with no associated connection) and in unit tests.
+/// No output is generated, and all connection-related queries return errors or empty results.
 pub struct NoopClientSession {}
 impl NoopClientSession {
     pub fn new() -> Self {
@@ -249,14 +250,14 @@ impl Session for NoopClientSession {
     }
 
     fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
-        Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+        Err(SessionError::NoConnectionForPlayer(SYSTEM_OBJECT))
     }
 
     fn connection_details(
         &self,
         _player: Option<Obj>,
     ) -> Result<Vec<ConnectionDetails>, SessionError> {
-        Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+        Err(SessionError::NoConnectionForPlayer(SYSTEM_OBJECT))
     }
 
     fn connection_attributes(&self, _obj: Obj) -> Result<Var, SessionError> {
@@ -417,14 +418,14 @@ impl Session for MockClientSession {
     }
 
     fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
-        Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+        Err(SessionError::NoConnectionForPlayer(SYSTEM_OBJECT))
     }
 
     fn connection_details(
         &self,
         _player: Option<Obj>,
     ) -> Result<Vec<ConnectionDetails>, SessionError> {
-        Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+        Err(SessionError::NoConnectionForPlayer(SYSTEM_OBJECT))
     }
 
     fn connection_attributes(&self, _obj: Obj) -> Result<Var, SessionError> {

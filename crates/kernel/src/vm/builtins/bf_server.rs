@@ -1974,6 +1974,37 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(connections_list)))
 }
 
+/// Returns the connection object for the current task.
+/// MOO: `obj connection()`
+fn bf_connection(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("connection() does not take any arguments"),
+        ));
+    }
+
+    // Get connection details for the current session (None means "this session")
+    let connection_details = match current_session().connection_details(None) {
+        Ok(result) => result,
+        Err(SessionError::NoConnectionForPlayer(_)) => {
+            return Err(ErrValue(E_INVARG.msg("No connection for current task")));
+        }
+        Err(_) => {
+            return Err(ErrValue(
+                E_INVARG.msg("Unable to get connection information"),
+            ));
+        }
+    };
+
+    // There should be exactly one connection for the current session
+    let connection_obj = connection_details
+        .first()
+        .ok_or_else(|| ErrValue(E_INVARG.msg("No connection found for current task")))?
+        .connection_obj;
+
+    Ok(Ret(v_obj(connection_obj)))
+}
+
 /// Switches the current player to a different player object. Wizard-only.
 /// MOO: `none switch_player(obj new_player)`
 fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -2504,6 +2535,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("present")] = Box::new(bf_present);
     builtins[offset_for_builtin("worker_request")] = Box::new(bf_worker_request);
     builtins[offset_for_builtin("connections")] = Box::new(bf_connections);
+    builtins[offset_for_builtin("connection")] = Box::new(bf_connection);
     builtins[offset_for_builtin("switch_player")] = Box::new(bf_switch_player);
     builtins[offset_for_builtin("workers")] = Box::new(bf_workers);
     builtins[offset_for_builtin("output_delimiters")] = Box::new(bf_output_delimiters);

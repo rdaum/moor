@@ -146,6 +146,73 @@ connections()  // Called from an unlogged connection
 - `connections(player)` with a player argument: Requires wizard permissions OR the player must be the caller's own
   object
 
+**Important Note About Connection Order**:
+
+When `connections()` is called with no arguments, the **first connection** in the returned list is always the connection
+object that initiated the current task. This is useful when a player has multiple active connections and you need to
+identify which specific connection is executing the current code. When `connections(player)` is called with a player
+argument, there is no guarantee about the ordering of connections.
+
+### The `connection()` Function
+
+The `connection()` builtin function returns the specific connection object that initiated the current task. This is a
+convenience function that is equivalent to getting the first element from `connections()`, but more explicit about intent.
+
+**Syntax**: `connection()`
+
+**Returns**: The connection object (negative ID) that initiated the current task
+
+**Raises**:
+- `E_INVARG`: If no connection is found for the current task (e.g., in background tasks)
+
+**Examples**:
+
+```moo
+// Get the connection object for the current task
+my_connection = connection();
+=> #-42
+
+// Use it to send output to only this specific connection
+notify(connection(), "This message goes only to the connection that ran this command");
+
+// Useful when a player has multiple connections
+// and you want to affect only the one they're currently using
+set_connection_option(connection(), "hold-input", 1);
+
+// Compare with getting all connections
+all_conns = connections();
+current_conn = connection();
+=> current_conn == all_conns[1][1]  // Always true when connections() returns results
+
+// Useful in verbs that need to know which connection triggered them
+if (connection() == some_specific_connection_obj)
+    notify(player, "You're using the expected connection");
+else
+    notify(player, "This command should be run from a different connection");
+endif
+```
+
+**Use Cases**:
+
+- **Per-connection state**: Maintain different state for each connection a player has open
+- **Connection-specific commands**: Implement commands that should only affect the connection they're run from
+- **Debugging**: Identify which connection is causing issues when a player has multiple sessions
+- **Security**: Verify that sensitive operations are coming from expected connections
+
+**Background Tasks**:
+
+Note that tasks started via `fork()` or other background mechanisms may not have an associated connection object,
+in which case `connection()` will raise `E_INVARG`. Always handle this case if your code might run in background tasks:
+
+```moo
+try
+    conn = connection();
+    // Do something with conn
+except e (E_INVARG)
+    // No connection available (background task)
+endtry
+```
+
 ## Associating Network Connections with Players
 
 When a network connection is first made to the MOO, it is identified by a unique, negative object number. Such a
