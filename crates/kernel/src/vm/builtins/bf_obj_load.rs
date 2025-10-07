@@ -65,6 +65,8 @@ lazy_static! {
     static ref DELETE_VERB_SYM: Symbol = Symbol::mk("delete_verb");
     static ref UPDATE_VERB_PROGRAM_SYM: Symbol = Symbol::mk("update_verb_program");
     static ref UPDATE_VERB_METADATA_SYM: Symbol = Symbol::mk("update_verb_metadata");
+    static ref CREATE_OBJECT_SYM: Symbol = Symbol::mk("create_object");
+    static ref RECYCLE_OBJECT_SYM: Symbol = Symbol::mk("recycle_object");
     static ref SET_OBJECT_FLAGS_SYM: Symbol = Symbol::mk("set_object_flags");
     static ref SET_PARENT_SYM: Symbol = Symbol::mk("set_parent");
     static ref SET_LOCATION_SYM: Symbol = Symbol::mk("set_location");
@@ -462,19 +464,19 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Parse verb flags from a string like "rwxd"
 pub fn parse_verb_flags(flags_str: &str) -> Result<BitEnum<VerbFlag>, Error> {
     VerbFlag::parse_str(flags_str)
-        .ok_or_else(|| E_INVARG.msg(format!("Invalid verb flags: {}", flags_str)))
+        .ok_or_else(|| E_INVARG.msg(format!("Invalid verb flags: {flags_str}")))
 }
 
 /// Parse property flags from a string like "rwc"
 pub fn parse_prop_flags(flags_str: &str) -> Result<BitEnum<PropFlag>, Error> {
     PropFlag::parse_str(flags_str)
-        .ok_or_else(|| E_INVARG.msg(format!("Invalid property flags: {}", flags_str)))
+        .ok_or_else(|| E_INVARG.msg(format!("Invalid property flags: {flags_str}")))
 }
 
 /// Parse object flags from a string like "pwr"
 pub fn parse_object_flags(flags_str: &str) -> Result<BitEnum<ObjFlag>, Error> {
     ObjFlag::parse_str(flags_str)
-        .ok_or_else(|| E_INVARG.msg(format!("Invalid object flags: {}", flags_str)))
+        .ok_or_else(|| E_INVARG.msg(format!("Invalid object flags: {flags_str}")))
 }
 
 /// Convert a MOO Var representing a mutation specification into an ObjectMutation
@@ -721,7 +723,61 @@ pub fn var_to_mutation(mutation_var: &Var) -> Result<ObjectMutation, Error> {
         });
     }
 
-    // Object operations
+    // Object lifecycle operations
+    if action_sym == *CREATE_OBJECT_SYM {
+        // create_object: {action, objid_or_0, parent, location, owner, flags}
+        if list.len() != 6 {
+            return Err(E_ARGS.msg(
+                "create_object requires 6 elements: action, objid, parent, location, owner, flags",
+            ));
+        }
+
+        let objid_val = list.index(1)?;
+        let objid = if objid_val.variant() == &Variant::Int(0) {
+            None
+        } else {
+            Some(
+                objid_val
+                    .as_object()
+                    .ok_or_else(|| E_TYPE.msg("Object ID must be an object or 0"))?,
+            )
+        };
+
+        let parent = list
+            .index(2)?
+            .as_object()
+            .ok_or_else(|| E_TYPE.msg("Parent must be an object"))?;
+        let location = list
+            .index(3)?
+            .as_object()
+            .ok_or_else(|| E_TYPE.msg("Location must be an object"))?;
+        let owner = list
+            .index(4)?
+            .as_object()
+            .ok_or_else(|| E_TYPE.msg("Owner must be an object"))?;
+        let flags_val = list.index(5)?;
+        let flags_str = flags_val
+            .as_string()
+            .ok_or_else(|| E_TYPE.msg("Flags must be a string"))?;
+        let flags = parse_object_flags(flags_str)?;
+
+        return Ok(ObjectMutation::CreateObject {
+            objid,
+            parent,
+            location,
+            owner,
+            flags,
+        });
+    }
+
+    if action_sym == *RECYCLE_OBJECT_SYM {
+        if list.len() != 1 {
+            return Err(E_ARGS.msg("recycle_object requires 1 element: action"));
+        }
+        return Ok(ObjectMutation::RecycleObject);
+    }
+
+    // Object attribute operations
     if action_sym == *SET_OBJECT_FLAGS_SYM {
         if list.len() != 2 {
             return Err(E_ARGS.msg("set_object_flags requires 2 elements: action, flags"));
@@ -782,11 +838,11 @@ fn parse_verb_argspec(argspec_list: &moor_var::List) -> Result<VerbArgsSpec, Err
         .ok_or_else(|| E_TYPE.msg("iobj must be a string"))?;
 
     let dobj = ArgSpec::from_string(dobj_str)
-        .ok_or_else(|| E_INVARG.msg(format!("Invalid dobj spec: {}", dobj_str)))?;
+        .ok_or_else(|| E_INVARG.msg(format!("Invalid dobj spec: {dobj_str}")))?;
     let prep = parse_preposition_spec(prep_str)
-        .ok_or_else(|| E_INVARG.msg(format!("Invalid prep spec: {}", prep_str)))?;
+        .ok_or_else(|| E_INVARG.msg(format!("Invalid prep spec: {prep_str}")))?;
     let iobj = ArgSpec::from_string(iobj_str)
-        .ok_or_else(|| E_INVARG.msg(format!("Invalid iobj spec: {}", iobj_str)))?;
+        .ok_or_else(|| E_INVARG.msg(format!("Invalid iobj spec: {iobj_str}")))?;
 
     Ok(VerbArgsSpec { dobj, prep, iobj })
 }

@@ -70,6 +70,20 @@ pub enum ObjectMutation {
         argspec: Option<VerbArgsSpec>,
     },
 
+    // Object lifecycle operations
+    /// Create a new object (will error if object at this ID already exists)
+    CreateObject {
+        /// If Some, create object with this specific ID (will error if exists)
+        /// If None, auto-assign next available object ID
+        objid: Option<Obj>,
+        parent: Obj,
+        location: Obj,
+        owner: Obj,
+        flags: BitEnum<ObjFlag>,
+    },
+    /// Recycle/delete an object
+    RecycleObject,
+
     // Object attribute operations
     /// Set object flags
     SetObjectFlags { flags: BitEnum<ObjFlag> },

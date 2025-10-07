@@ -483,7 +483,15 @@ Each mutation is a list starting with a mutation action symbol, followed by acti
 - `{'update_verb_metadata, {names}, new_names, owner, flags, argspec}` - Update verb properties
     - Any of `new_names`, `owner`, `flags`, or `argspec` can be `0` to leave unchanged
 
-**Object Operations:**
+**Object Lifecycle Operations:**
+
+- `{'create_object, objid_or_0, parent, location, owner, flags}` - Create a new object
+  - `objid_or_0`: If `0`, auto-assign next available object ID; otherwise use specified object ID (will error if exists)
+  - `flags`: String like "upw" for user/programmer/wizard
+  - **Note**: Will raise E_INVARG if an object with the specified ID already exists
+- `{'recycle_object}` - Delete/recycle the target object
+
+**Object Attribute Operations:**
 
 - `{'set_object_flags, flags}` - Change object permission flags (e.g., "upw" for user/programmer/wizard)
 - `{'set_parent, parent_obj}` - Change object's parent

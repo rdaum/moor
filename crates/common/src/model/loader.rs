@@ -133,6 +133,9 @@ pub trait LoaderInterface: Send {
     /// Get the highest-numbered object in the database
     fn max_object(&self) -> Result<Obj, WorldStateError>;
 
+    /// Recycle/destroy an object (no permission checks)
+    fn recycle_object(&mut self, obj: &Obj) -> Result<(), WorldStateError>;
+
     /// Commit all changes made through this loader
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 
@@ -298,6 +301,22 @@ fn apply_mutation(
                 None => Err(WorldStateError::VerbNotFound(*target, names[0].to_string())),
             }
         }
+
+        ObjectMutation::CreateObject {
+            objid,
+            parent,
+            location,
+            owner,
+            flags,
+        } => {
+            use crate::model::ObjAttrs;
+            // Note: CreateObject ignores the 'target' parameter - objid specifies the ID
+            let attrs = ObjAttrs::new(*parent, *location, *owner, *flags, "");
+            loader.create_object(*objid, &attrs)?;
+            Ok(())
+        }
+
+        ObjectMutation::RecycleObject => loader.recycle_object(target),
 
         ObjectMutation::SetObjectFlags { flags } => loader.update_object_flags(target, *flags),
 

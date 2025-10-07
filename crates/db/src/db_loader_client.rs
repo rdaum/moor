@@ -136,6 +136,11 @@ impl LoaderInterface for DbWorldState {
         self.get_tx().get_max_object()
     }
 
+    fn recycle_object(&mut self, obj: &Obj) -> Result<(), WorldStateError> {
+        // Loader bypasses permissions
+        self.get_tx_mut().recycle_object(obj)
+    }
+
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         self.tx.commit()
     }
