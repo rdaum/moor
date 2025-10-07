@@ -998,7 +998,7 @@ impl Scheduler {
                     TaskSuspend::Never => WakeCondition::Never,
                     TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
-                    TaskSuspend::Commit => WakeCondition::Immedate,
+                    TaskSuspend::Commit(return_value) => WakeCondition::Immedate(return_value),
                     TaskSuspend::WorkerRequest(worker_type, args, timeout) => {
                         let worker_request_id = Uuid::new_v4();
                         // Send out a message over the workers channel.
@@ -1407,9 +1407,21 @@ impl Scheduler {
         // Handle immediate wake task from channel
         // Check if task still exists in suspended state and wake it
         if let Some(sr) = self.task_q.suspended.remove_task(task_id) {
+            // Extract the return value from the wake condition
+            let return_value = match sr.wake_condition {
+                WakeCondition::Immedate(val) => val,
+                _ => {
+                    error!(
+                        ?task_id,
+                        "Immediate wake task has non-immediate wake condition"
+                    );
+                    v_int(0)
+                }
+            };
+
             if let Err(e) = self.task_q.resume_task_thread(
                 sr.task,
-                ResumeAction::Return(v_int(0)),
+                ResumeAction::Return(return_value),
                 sr.session,
                 sr.result_sender,
                 &self.task_control_sender,

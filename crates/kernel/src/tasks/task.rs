@@ -256,10 +256,10 @@ impl Task {
             }
             VMHostResponse::Suspend(delay) => {
                 // Check for immediate wake conditions to avoid scheduler round-trip
-                let is_immediate = match delay.as_ref() {
-                    TaskSuspend::Commit => true,
-                    TaskSuspend::Timed(d) if d.is_zero() => true,
-                    _ => false,
+                let (is_immediate, resume_value) = match delay.as_ref() {
+                    TaskSuspend::Commit(val) => (true, val.clone()),
+                    TaskSuspend::Timed(d) if d.is_zero() => (true, v_int(0)),
+                    _ => (false, v_int(0)),
                 };
 
                 if is_immediate {
@@ -273,7 +273,7 @@ impl Task {
                     }) {
                         Ok((CommitResult::Success { .. }, _)) => {
                             self.retry_state = self.vm_host.snapshot_state();
-                            self.vm_host.resume_execution(v_int(0));
+                            self.vm_host.resume_execution(resume_value);
                             return Some(self);
                         }
                         Ok((CommitResult::ConflictRetry, _)) => {

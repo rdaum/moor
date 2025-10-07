@@ -1289,7 +1289,7 @@ macro_rules! trace_task_suspend_with_delay {
                 vm::TaskSuspend,
             };
             let reason = match $delay {
-                TaskSuspend::Commit => "Commit".to_string(),
+                TaskSuspend::Commit(_) => "Commit".to_string(),
                 TaskSuspend::Timed(d) => format!("Timed({:?})", d),
                 TaskSuspend::Never => "Never".to_string(),
                 TaskSuspend::WaitTask(tid) => format!("WaitTask({})", tid),

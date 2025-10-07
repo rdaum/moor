@@ -709,14 +709,22 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
 
-/// Commits the current transaction and suspends the task.
-/// MOO: `none commit()`
+/// Commits the current transaction and suspends the task, optionally returning a value.
+/// MOO: `any commit([any value])`
 fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if !bf_args.args.is_empty() {
-        return Err(ErrValue(E_ARGS.msg("commit() does not take any arguments")));
+    if bf_args.args.len() > 1 {
+        return Err(ErrValue(E_ARGS.msg("commit() takes 0 or 1 arguments")));
     }
 
-    Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit)))
+    let return_value = if bf_args.args.is_empty() {
+        v_bool_int(false)
+    } else {
+        bf_args.args[0].clone()
+    };
+
+    Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
+        return_value,
+    ))))
 }
 
 /// Rolls back the current transaction. Wizard-only.

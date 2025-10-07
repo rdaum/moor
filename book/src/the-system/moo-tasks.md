@@ -102,8 +102,10 @@ This does however, have some implications for how tasks are written:
 
 For explicit transaction management, the following functions are available at the wizard level:
 
-- The (wizard-only) `commit()` function is used to commit the mutations made by a task to the database, and it
-  suspends the task until the commit is complete. This is functionally equivalent suspending for 0 seconds, but is
-  more explicit about the intent to commit the changes, and is optimized for this purpose.
+- The (wizard-only) `commit([value])` function commits the mutations made by a task to the database, then suspends
+  and resumes the task in a new transaction. If provided, `value` is returned when the task resumes; otherwise,
+  `commit()` returns `0`. This is similar to suspending for 0 seconds, but is more explicit about the intent to
+  commit changes, and is optimized for this purpose. The optional return value is useful when you need to commit
+  changes and then return a result that depends on those committed changes being visible.
 - The (wizard-only) `rollback()` function is used to abort the current task, reverting any changes made to the database
   since the last commit.

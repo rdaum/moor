@@ -36,6 +36,7 @@ use moor_common::tasks::AbortLimitReason as KernelAbortLimitReason;
 use moor_compiler::{Label, Offset};
 use moor_schema::{
     common as fb_common, convert as convert_schema,
+    convert::{var_from_db_flatbuffer, var_to_db_flatbuffer},
     convert_program::{decode_stored_program_struct, encode_program_to_fb},
     program as fb_program, task as fb,
 };
@@ -56,6 +57,12 @@ pub enum TaskConversionError {
 
     #[error("Program conversion error: {0}")]
     ProgramError(String),
+}
+
+impl From<moor_schema::convert::VarConversionError> for TaskConversionError {
+    fn from(e: moor_schema::convert::VarConversionError) -> Self {
+        TaskConversionError::VarError(e.to_string())
+    }
 }
 
 const CURRENT_TASK_VERSION: u16 = 1;
@@ -176,7 +183,12 @@ pub(crate) fn wake_condition_to_flatbuffer(
                 }),
             }))
         }
-        KernelWakeCondition::Immedate => WakeImmediate(Box::new(fb::WakeImmediate {})),
+        KernelWakeCondition::Immedate(return_value) => {
+            let return_value_fb = var_to_db_flatbuffer(return_value)?;
+            WakeImmediate(Box::new(fb::WakeImmediate {
+                return_value: Box::new(return_value_fb),
+            }))
+        }
         KernelWakeCondition::Task(task_id) => WakeTask(Box::new(fb::WakeTask {
             task_id: *task_id as u64,
         })),
@@ -233,7 +245,10 @@ pub(crate) fn wake_condition_from_flatbuffer(
             let uuid = uuid::Uuid::from_bytes(uuid_bytes);
             Ok(KernelWakeCondition::Input(uuid))
         }
-        WakeConditionUnion::WakeImmediate(_) => Ok(KernelWakeCondition::Immedate),
+        WakeConditionUnion::WakeImmediate(wi) => {
+            let return_value = var_from_db_flatbuffer(&wi.return_value)?;
+            Ok(KernelWakeCondition::Immedate(return_value))
+        }
         WakeConditionUnion::WakeTask(wt) => Ok(KernelWakeCondition::Task(wt.task_id as usize)),
         WakeConditionUnion::WakeWorker(ww) => {
             let uuid_bytes: [u8; 16] = ww.uuid.data.as_slice().try_into().map_err(|_| {
@@ -695,7 +710,7 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
         .collect();
     let fb_finally_stack = fb_finally_stack?;
 
-    let fb_capture_stack: Result<Vec<_>, _> = frame
+    let fb_capture_stack: Result<Vec<_>, TaskConversionError> = frame
         .capture_stack
         .iter()
         .map(|(name, var)| {
@@ -732,11 +747,11 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
     let pc_type = pc_type_from_flatbuffer(&fb.pc_type)?;
 
     // Convert environment back
-    let environment: Result<Vec<Vec<Option<moor_var::Var>>>, _> = fb
+    let environment: Result<Vec<Vec<Option<moor_var::Var>>>, TaskConversionError> = fb
         .environment
         .iter()
         .map(|scope| {
-            let vars: Result<Vec<_>, _> = scope
+            let vars: Result<Vec<_>, TaskConversionError> = scope
                 .vars
                 .iter()
                 .map(|v| {
@@ -782,7 +797,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
         .collect();
     let finally_stack = finally_stack?;
 
-    let capture_stack: Result<Vec<_>, _> = fb
+    let capture_stack: Result<Vec<_>, TaskConversionError> = fb
         .capture_stack
         .iter()
         .map(|c| {

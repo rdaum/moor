@@ -92,8 +92,8 @@ pub enum TaskSuspend {
     Timed(Duration),
     /// Suspend until another task completes (or never exists)
     WaitTask(TaskId),
-    /// Just commit and resume immediately.
-    Commit,
+    /// Commit and resume immediately with the given return value.
+    Commit(Var),
     /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
     /// the work is done.
     WorkerRequest(Symbol, Vec<Var>, Option<Duration>),

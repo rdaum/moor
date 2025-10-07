@@ -17,14 +17,14 @@
 mod tests {
     use crate::{Database, DatabaseConfig, TxDB};
     use moor_common::model::{
-        loader::batch_mutate,
-        mutations::ObjectMutation,
         ObjAttrs, ObjFlag, PropFlag, VerbArgsSpec, VerbFlag, WorldStateSource,
+        loader::batch_mutate, mutations::ObjectMutation,
     };
     use moor_common::util::BitEnum;
     use moor_var::{
-        program::{program::Program, ProgramType},
-        v_int, v_str, Obj, Symbol, NOTHING, SYSTEM_OBJECT,
+        NOTHING, Obj, SYSTEM_OBJECT, Symbol,
+        program::{ProgramType, program::Program},
+        v_int, v_str,
     };
     use std::{path::Path, sync::Arc};
 
@@ -64,7 +64,9 @@ mod tests {
         assert!(prop_value.is_some());
 
         // Delete the property
-        loader.delete_property(&obj, Symbol::mk("test_prop")).unwrap();
+        loader
+            .delete_property(&obj, Symbol::mk("test_prop"))
+            .unwrap();
 
         // Verify property no longer exists
         let prop_value = loader
@@ -403,18 +405,24 @@ mod tests {
         assert_eq!(result.failed_count(), 0);
 
         // Verify all mutations were applied
-        assert!(loader
-            .get_existing_property_value(&obj, Symbol::mk("prop1"))
-            .unwrap()
-            .is_some());
-        assert!(loader
-            .get_existing_property_value(&obj, Symbol::mk("prop2"))
-            .unwrap()
-            .is_some());
-        assert!(loader
-            .get_existing_verb_by_names(&obj, &[Symbol::mk("verb1")])
-            .unwrap()
-            .is_some());
+        assert!(
+            loader
+                .get_existing_property_value(&obj, Symbol::mk("prop1"))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            loader
+                .get_existing_property_value(&obj, Symbol::mk("prop2"))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            loader
+                .get_existing_verb_by_names(&obj, &[Symbol::mk("verb1")])
+                .unwrap()
+                .is_some()
+        );
 
         loader.commit().unwrap();
 

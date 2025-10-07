@@ -34,12 +34,13 @@ use crate::{
         current_task_scheduler_client, with_current_transaction, with_current_transaction_mut,
     },
     vm::{
-        VerbCall, VerbExecutionRequest,
+        TaskSuspend, VerbCall, VerbExecutionRequest,
         builtins::{
             BfCallState, BfErr, BfRet,
             BfRet::{Ret, RetNil, VmInstr},
             BuiltinFunction, world_state_bf_err,
         },
+        vm_host::ExecutionResult,
         vm_host::ExecutionResult::DispatchVerb,
     },
 };
@@ -1402,11 +1403,13 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     // Use the task scheduler client to request the load from the scheduler
+    // This creates its own transaction and commits it
     let result = current_task_scheduler_client()
         .load_object(object_definition, loader_options)
         .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to load object: {e}"))))?;
 
-    if return_conflicts {
+    // Format the return value based on return_conflicts flag
+    let return_value = if return_conflicts {
         // Return detailed result: {success, conflicts, removals, loaded_objects}
         let conflicts = result
             .conflicts
@@ -1428,19 +1431,25 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .map(|obj| v_obj(*obj))
             .collect::<Vec<_>>();
 
-        Ok(Ret(v_list(&[
+        v_list(&[
             bf_args.v_bool(result.commit),
             v_list(&conflicts),
             v_list(&removals_result),
             v_list(&loaded_objects),
-        ])))
+        ])
     } else {
         // Return simple object ID (backward compatibility)
         if result.loaded_objects.is_empty() {
             return Err(BfErr::ErrValue(E_INVARG.msg("No objects were loaded")));
         }
-        Ok(Ret(v_obj(result.loaded_objects[0])))
-    }
+        v_obj(result.loaded_objects[0])
+    };
+
+    // Commit current transaction and resume with the result in a new transaction
+    // This ensures the caller can see the loaded object
+    Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
+        return_value,
+    ))))
 }
 
 /// Renumber an object to a new object number

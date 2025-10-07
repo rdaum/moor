@@ -53,7 +53,9 @@ table WakeInput {
     uuid: MoorCommon.Uuid (required);
 }
 
-table WakeImmediate {}
+table WakeImmediate {
+    return_value: MoorVar.Var (required);
+}
 
 table WakeTask {
     task_id: uint64;
