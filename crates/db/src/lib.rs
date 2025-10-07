@@ -28,6 +28,8 @@ pub type SnapshotCallback = Box<
 >;
 
 mod db_loader_client;
+#[cfg(test)]
+mod db_loader_tests;
 pub mod db_worldstate;
 #[cfg(test)]
 mod gc_tests;

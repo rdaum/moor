@@ -232,6 +232,32 @@ impl LoaderInterface for DbWorldState {
     ) -> Result<(), WorldStateError> {
         self.get_tx_mut().set_object_flags(obj, flags)
     }
+
+    fn delete_property(
+        &mut self,
+        obj: &Obj,
+        propname: Symbol,
+    ) -> Result<(), WorldStateError> {
+        // First resolve the property to get its UUID
+        let (propdef, _, _, _) = self.get_tx().resolve_property(obj, propname)?;
+        self.get_tx_mut().delete_property(obj, propdef.uuid())
+    }
+
+    fn remove_verb(
+        &mut self,
+        obj: &Obj,
+        uuid: Uuid,
+    ) -> Result<(), WorldStateError> {
+        self.get_tx_mut().delete_verb(obj, uuid)
+    }
+
+    fn get_verb_program(
+        &self,
+        obj: &Obj,
+        uuid: Uuid,
+    ) -> Result<ProgramType, WorldStateError> {
+        self.get_tx().get_verb_program(obj, uuid)
+    }
 }
 
 /// Implementation of SnapshotInterface for read operations during exporting

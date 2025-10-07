@@ -17,6 +17,7 @@ use crate::{
     model::{
         CommitResult, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs, PropFlag, PropPerms,
         VerbArgsSpec, VerbDef, VerbDefs, VerbFlag, WorldStateError,
+        mutations::{BatchMutationResult, MutationResult, ObjectMutation},
     },
     util::BitEnum,
 };
@@ -161,10 +162,147 @@ pub trait LoaderInterface: Send {
         names: &[Symbol],
     ) -> Result<Option<(Uuid, VerbDef)>, WorldStateError>;
 
+    /// Get the program for an existing verb
+    fn get_verb_program(&self, obj: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError>;
+
     /// Update the flags of an existing object
     fn update_object_flags(
         &mut self,
         obj: &Obj,
         flags: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError>;
+
+    /// Delete a property from an object
+    fn delete_property(&mut self, obj: &Obj, propname: Symbol) -> Result<(), WorldStateError>;
+
+    /// Remove a verb from an object
+    fn remove_verb(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
+}
+
+/// Apply a batch of mutations to an object using the LoaderInterface.
+/// This bypasses normal permission checks and verb calls - intended for VCS-style operations.
+/// Returns detailed results for each mutation attempted.
+pub fn batch_mutate(
+    loader: &mut dyn LoaderInterface,
+    target: &Obj,
+    mutations: &[ObjectMutation],
+) -> BatchMutationResult {
+    let mut results = Vec::with_capacity(mutations.len());
+
+    for (index, mutation) in mutations.iter().enumerate() {
+        let result = apply_mutation(loader, target, mutation);
+        results.push(MutationResult {
+            index,
+            mutation: mutation.clone(),
+            result,
+        });
+    }
+
+    BatchMutationResult {
+        target: *target,
+        results,
+    }
+}
+
+/// Apply a single mutation to an object
+fn apply_mutation(
+    loader: &mut dyn LoaderInterface,
+    target: &Obj,
+    mutation: &ObjectMutation,
+) -> Result<(), WorldStateError> {
+    match mutation {
+        ObjectMutation::DefineProperty {
+            name,
+            owner,
+            flags,
+            value,
+        } => loader.define_property(target, target, *name, owner, *flags, value.clone()),
+
+        ObjectMutation::DeleteProperty { name } => loader.delete_property(target, *name),
+
+        ObjectMutation::SetPropertyValue { name, value } => {
+            loader.set_property(target, *name, None, None, Some(value.clone()))
+        }
+
+        ObjectMutation::SetPropertyFlags { name, owner, flags } => {
+            loader.set_property(target, *name, *owner, Some(*flags), None)
+        }
+
+        ObjectMutation::ClearProperty { name } => {
+            // Clearing means setting to None value while keeping the property definition
+            loader.set_property(target, *name, None, None, None)
+        }
+
+        ObjectMutation::DefineVerb {
+            names,
+            owner,
+            flags,
+            argspec,
+            program,
+        } => loader.add_verb(target, names, owner, *flags, *argspec, program.clone()),
+
+        ObjectMutation::DeleteVerb { names } => {
+            // Look up the verb UUID by names, then delete it
+            match loader.get_existing_verb_by_names(target, names)? {
+                Some((uuid, _)) => loader.remove_verb(target, uuid),
+                None => Err(WorldStateError::VerbNotFound(*target, names[0].to_string())),
+            }
+        }
+
+        ObjectMutation::UpdateVerbProgram { names, program } => {
+            // Look up the verb UUID and current definition
+            match loader.get_existing_verb_by_names(target, names)? {
+                Some((uuid, verb_def)) => loader.update_verb(
+                    target,
+                    uuid,
+                    names,
+                    &verb_def.owner(),
+                    verb_def.flags(),
+                    verb_def.args(),
+                    program.clone(),
+                ),
+                None => Err(WorldStateError::VerbNotFound(*target, names[0].to_string())),
+            }
+        }
+
+        ObjectMutation::UpdateVerbMetadata {
+            names,
+            new_names,
+            owner,
+            flags,
+            argspec,
+        } => {
+            // Look up the verb UUID and current definition
+            match loader.get_existing_verb_by_names(target, names)? {
+                Some((uuid, verb_def)) => {
+                    // Get the current program
+                    let program = loader.get_verb_program(target, uuid)?;
+
+                    // Use provided values or fall back to existing
+                    let final_names = new_names.as_ref().unwrap_or(names);
+                    let verb_def_owner = verb_def.owner();
+                    let final_owner = owner.as_ref().unwrap_or(&verb_def_owner);
+                    let final_flags = flags.unwrap_or_else(|| verb_def.flags());
+                    let final_argspec = argspec.unwrap_or_else(|| verb_def.args());
+
+                    loader.update_verb(
+                        target,
+                        uuid,
+                        final_names,
+                        final_owner,
+                        final_flags,
+                        final_argspec,
+                        program,
+                    )
+                }
+                None => Err(WorldStateError::VerbNotFound(*target, names[0].to_string())),
+            }
+        }
+
+        ObjectMutation::SetObjectFlags { flags } => loader.update_object_flags(target, *flags),
+
+        ObjectMutation::SetParent { parent } => loader.set_object_parent(target, parent),
+
+        ObjectMutation::SetLocation { location } => loader.set_object_location(target, location),
+    }
 }
