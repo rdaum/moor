@@ -376,6 +376,12 @@ impl MessageHandler for RpcMessageHandler {
             HostClientToDaemonMessageUnionRef::Program(prog) => {
                 self.handle_program(scheduler_client, client_id, prog)
             }
+            HostClientToDaemonMessageUnionRef::GetEventLogPublicKey(req) => {
+                self.handle_get_event_log_pubkey(client_id, req)
+            }
+            HostClientToDaemonMessageUnionRef::SetEventLogPublicKey(req) => {
+                self.handle_set_event_log_pubkey(client_id, req)
+            }
         }
     }
 
@@ -1708,6 +1714,53 @@ impl RpcMessageHandler {
         }
 
         Ok(result)
+    }
+
+    fn handle_get_event_log_pubkey(
+        &self,
+        client_id: Uuid,
+        req: moor_rpc::GetEventLogPublicKeyRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &req,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        let public_key = self.event_log.get_pubkey(player);
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::EventLogPublicKey(Box::new(
+                moor_rpc::EventLogPublicKey { public_key },
+            )),
+        })
+    }
+
+    fn handle_set_event_log_pubkey(
+        &self,
+        client_id: Uuid,
+        req: moor_rpc::SetEventLogPublicKeyRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &req,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        let public_key = extract_string_rpc(&req, "public_key", |r| r.public_key())?;
+
+        self.event_log.set_pubkey(player, public_key);
+
+        // Return the key that was set
+        let public_key = self.event_log.get_pubkey(player);
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::EventLogPublicKey(Box::new(
+                moor_rpc::EventLogPublicKey { public_key },
+            )),
+        })
     }
 }
 

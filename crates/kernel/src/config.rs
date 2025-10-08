@@ -93,7 +93,7 @@ impl Default for FeaturesConfig {
             use_symbols_in_builtins: false,
             custom_errors: false,
             use_uuobjids: false,
-            enable_eventlog: true,
+            enable_eventlog: false,
             anonymous_objects: false,
         }
     }

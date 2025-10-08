@@ -1,12 +1,20 @@
 # Event Logging
 
-mooR includes a comprehensive event logging system. Unlike traditional MOO servers where messages and events disappear
-once sent, mooR can persistently store every narrative event that occurs in your virtual world, enabling rich features
-like message history, persistent UI elements, and detailed audit trails.
+mooR includes an optional event logging system with end-to-end encryption. This feature is disabled by default and must
+be explicitly enabled by server administrators who want to provide persistent message history.
+
+When enabled, unlike traditional MOO servers where messages and events disappear once sent, mooR persistently stores
+every narrative event that occurs in your virtual world, enabling rich features like message history, persistent UI
+elements, and detailed audit trails—all while keeping your communications private through encryption.
 
 When you're building a modern MOO experience, players expect to be able to scroll back through their conversation
 history, just like they would in Discord or Slack. The event logging system makes this possible by capturing and
-preserving the narrative flow of your world.
+preserving the narrative flow of your world, with encryption protecting player privacy.
+
+**Note**: Event logging is designed for modern clients that connect through mooR's web-host (like the official web
+client). It is not currently available for traditional telnet or TCP-based MUD clients, which receive live events only
+and do not have access to encrypted history. See the Configuration section below for how to enable this optional
+feature.
 
 ## Understanding What Gets Preserved
 
@@ -22,33 +30,105 @@ information. This helps with debugging, as administrators can review exactly wha
 fact.
 
 **User Interface Elements**: Modern MOO experiences often involve rich user interfaces with persistent elements like
-status displays, interactive widgets, or informational panels. The event logging system tracks when these
-"presentations" are shown to players and maintains their current state.
+status displays, interactive widgets, or informational panels. The event logging system tracks when these "
+presentations" are shown to players and maintains their current state.
 
 The system automatically springs into action whenever your MOO code generates any of these events. There's no special
-coding required on your part - simply use `notify()` as you normally would, and the logging happens transparently in the
+coding required on your part—simply use `notify()` as you normally would, and the logging happens transparently in the
 background.
+
+## Privacy and Encryption
+
+**Encryption is mandatory.** All events are encrypted before storage using modern age encryption (X25519 +
+ChaCha20-Poly1305). Events cannot be logged without encryption—there is no plaintext storage option.
+
+### How Encryption Works
+
+Each player sets their own encryption password (separate from their MOO login password) when they first connect through
+the web client. This password is used to:
+
+1. **Derive encryption keys** (using Argon2, a secure password hashing algorithm)
+2. **Encrypt all events** before they're written to disk
+3. **Decrypt events** when viewing history
+
+Importantly, the server never stores your password or private keys. Your browser derives the encryption keys from your
+password and stores only the derived keys in browser localStorage. When you request your message history, these keys are
+sent over secure HTTPS to decrypt your events on the server side.
+
+### What This Protects
+
+The encryption architecture protects against realistic privacy threats:
+
+- ✅ Administrators browsing database files directly
+- ✅ Stolen database backups or improperly disposed drives
+- ✅ Offline filesystem snooping
+- ✅ Data breaches where raw database files are stolen
+
+### What Happens If You Forget Your Password
+
+If you forget your encryption password, you'll lose access to your existing message history. This is by design—the
+system cannot decrypt your history without the password. You can reset your encryption password to start fresh, but old
+events will remain encrypted with the old password and become unreadable.
+
+**Important**: Write down your encryption password in a safe place when you first set it up.
+
+### Cross-Device Access
+
+Because key derivation is deterministic (same password always produces the same keys), you can access your encrypted
+history from multiple devices. When you log in from a new device, enter the same encryption password you set up
+originally, and you'll be able to see your full history.
+
+Your browser caches the derived keys in its local storage so you don't have to enter your password every time you visit.
 
 ## How the System Works Behind the Scenes
 
-The event logging system uses an embedded database called `fjall` to store events persistently on disk. Each event gets
-a
-unique identifier based on UUID version 7, which has the clever property of naturally sorting in chronological order.
+The encryption/decryption flow works like this:
 
-To keep things fast for active players, the system maintains a memory cache. Recent events are kept in
-memory for quick access, while older events are still available by reading from disk when needed. When new events come
-in rapidly, they're batched together before being written to disk, which helps maintain good performance even on busy
-servers.
+1. **Event generation**: Your MOO code calls `notify()` to send a message
+2. **Encryption**: The daemon encrypts the event using your public key (derived from your password)
+3. **Storage**: The encrypted event is written to the database on disk
+4. **Retrieval**: When you view history, the web client sends your derived keys to the server
+5. **Decryption**: The web host decrypts events using your keys and sends plaintext JSON back to the browser
+6. **Immediate disposal**: The server discards your keys as soon as the request is complete
 
-The system runs a background thread that handles all the disk writing operations, so the main MOO execution isn't slowed
-down by database operations. This means your MOO code can generate events as quickly as it needs to without worrying
-about storage performance.
+To keep things fast, the system maintains a memory cache of recent events for quick access, while older events are read
+from disk when needed. Events are batched together before being written to disk, which helps maintain good performance
+even on busy servers.
+
+All disk operations happen in a background thread, so your MOO code can generate events as quickly as needed without
+being slowed down by database writes.
 
 ## The Web Client Experience
 
 The official mooR web client uses the event logging system to provide a modern chat-like experience similar to Discord
 or Slack. When you connect through the web interface, you automatically get scrollable message history, and new messages
 appear in real time while preserving the ability to scroll back through older conversations.
+
+### First-Time Setup
+
+When you first log in through the web client:
+
+1. After entering your MOO credentials, you'll be prompted to set an encryption password
+2. The client displays a warning that this password cannot be recovered
+3. Once you enter and confirm your password, the client derives your encryption keys
+4. Your public key is stored on the server, and your private keys are saved in your browser's localStorage
+5. Your password itself is immediately discarded—never stored anywhere
+
+### Subsequent Logins
+
+When you log in again from the same browser:
+
+- Your derived keys are loaded automatically from localStorage
+- No password prompt needed
+- You immediately have access to your full encrypted history
+
+When you log in from a new device:
+
+- The client detects you have encryption enabled
+- You're prompted to enter your encryption password
+- The client re-derives your keys from the password (same password = same keys)
+- Keys are saved to localStorage on the new device
+- You can now access your history from this device too
 
 ### How the Web Client Works
 
@@ -59,24 +139,17 @@ primary endpoint is:
 GET /api/history?since_seconds=3600&limit=50
 ```
 
-This request asks for events from the last hour (3600 seconds), limited to 50 events. The system supports several
-different ways to query history - you can ask for events from a specific time period using `since_seconds`, or request
-events relative to a specific event using `since_event` or `until_event` with an event's unique identifier.
+This request asks for events from the last hour (3600 seconds), limited to 50 events. The client includes your derived
+encryption keys in the `X-Moor-Event-Log-Key` HTTP header. The system supports several different ways to query
+history—you can ask for events from a specific time period using `since_seconds`, or request events relative to a
+specific event using `since_event` or `until_event` with an event's unique identifier.
 
 The response comes back as a JSON structure containing an array of events, with each event including its unique
-identifier, timestamp, author information, and the actual event content.
+identifier, timestamp, author information, and the actual event content (decrypted server-side before being sent to
+you).
 
 Note that these API endpoints require proper authentication using PASETO tokens, which makes manual testing with tools
 like curl quite complex. The web client handles all the authentication and token management automatically.
-
-### Managing UI Presentations
-
-The web client also uses additional endpoints for managing persistent UI elements. The `GET /api/presentations` endpoint
-retrieves all currently active presentations for the authenticated player - things like status widgets, notification
-panels, or interactive elements that should persist across browser sessions.
-
-When a player dismisses a presentation (like closing a notification), the web client makes a
-`DELETE /api/presentations/{presentation_id}` request to remove it from the player's active set.
 
 ### How Infinite Scroll Works
 
@@ -90,37 +163,44 @@ proper chronological order and avoiding duplicates.
 
 ## Configuring Event Logging
 
-The event logging system is enabled by default, but server administrators have full control over whether to use it:
+Event logging is disabled by default and must be explicitly enabled by server administrators. To enable event logging:
 
-```yaml
-features_config:
-  enable_eventlog: true  # The default setting
-```
-
-You can also control this from the command line when starting the server:
+### Using Command Line
 
 ```bash
 ./moor-daemon --enable-eventlog true
 ```
 
-When event logging is disabled, the system switches to a "no-op" mode where events are discarded rather than stored.
-This means no disk space is used for logging, and history API endpoints will return empty results. However, live events
-sent over WebSocket connections continue to work normally, so real-time functionality isn't affected.
+### Using Configuration File
 
-Event data is stored in a dedicated database file, separate from your main MOO database. By default, this is located at
-`./moor-data/events.db`, but you can specify a different location:
+In your YAML configuration file:
+
+```yaml
+features_config:
+  enable_eventlog: true
+```
+
+### Specifying Storage Location
+
+You can also customize where event data is stored (relative to `data-dir` if not absolute):
 
 ```bash
-./moor-daemon --events-db /path/to/your/events.db
+./moor-daemon --enable-eventlog true --events-db /path/to/your/events.db
 ```
+
+By default, event data is stored in `./moor-data/events.db`, separate from your main MOO database.
+
+When event logging is disabled, no events are stored to disk and the history API endpoints will return empty results.
+However, live events sent over WebSocket connections continue to work normally for real-time functionality.
 
 ## Understanding Storage and Performance
 
 It's worth understanding how storage works so you can make informed decisions about your deployment.
 
-Each narrative event typically consumes around 1KB of storage on average, though this varies depending on the content.
-The system uses LZ4 compression to keep storage requirements reasonable. The database will grow continuously as events
-are added - there's currently no automatic cleanup mechanism, so events persist indefinitely.
+Each narrative event typically consumes around 1-1.5KB of storage on average after encryption (about 33% larger than
+plaintext due to age encryption overhead). The system uses LZ4 compression to keep storage requirements reasonable. The
+database will grow continuously as events are added—there's currently no automatic cleanup mechanism, so events persist
+indefinitely.
 
 For memory usage, the system keeps recent events cached in memory to provide fast access. The default configuration
 keeps about a week's worth of events in memory, up to a maximum of 10,000 events. On a reasonably busy server, this
@@ -129,43 +209,104 @@ translates to maybe 10-50MB of memory usage for the cache.
 The background persistence system batches writes together for efficiency. Under normal circumstances, events are written
 to disk in groups of 100, which balances data safety and performance.
 
-## Privacy and Administrative Considerations
+### Encryption Performance
 
-It's important to understand the privacy implications of persistent event logging. When enabled, the system stores all
-player communications in plaintext on the server's disk. This includes private messages, room conversations, and any
-other text that gets sent to players through the `notify()` function.
+Age encryption (ChaCha20-Poly1305) is extremely fast and has minimal impact on event logging performance. Encryption
+happens in the daemon when events are written, and decryption happens in the web host when history is requested. The
+Argon2 key derivation is intentionally slow (to resist password brute-forcing) but only happens once per device in the
+browser—subsequent access uses the cached derived keys.
 
-As a server administrator, you have access to this complete historical record. This can be valuable for debugging
-issues, understanding player behavior, or investigating problems. However, it also means you're essentially keeping logs
-of all player communications.
+## Administrative Considerations
 
-Depending on your jurisdiction and use case, you may need to inform players that their communications are being logged.
-Some deployments may choose to disable event logging entirely for privacy reasons, while others might implement policies
-around log retention and access.
+### What Administrators Can and Cannot See
 
-If you do keep event logging enabled, make sure the event database files have appropriate file system permissions to
-prevent unauthorized access. The data is stored in plaintext without encryption, so file-level security is your primary
-protection mechanism.
+With the encryption architecture:
+
+- **Administrators cannot** read player messages by accessing database files directly
+- **Administrators cannot** decrypt events without the player's password
+- **Events are protected** in backups, on stolen drives, and against filesystem snooping
+- **Administrators can still** see metadata (timestamps, player IDs, event counts) but not content
+
+The encrypted events remain in the database even if a player resets their password. Old events encrypted with the old
+key are unreadable, but they remain on disk (consuming storage) unless manually deleted.
+
+### Server Security
+
+Since decryption happens in the web host (not client-side), a compromised web host could potentially:
+
+- Log encryption keys as they arrive in HTTP headers
+- Capture plaintext events after decryption
+- Serve malicious JavaScript to steal passwords or keys
+
+Proper server security (keeping the web host process secure, using HTTPS, monitoring for intrusions) remains essential.
+The encryption protects against offline attacks on the database, but cannot protect against a fully compromised server.
+
+### Backup and Disaster Recovery
+
+When backing up your mooR server:
+
+- **Do backup** the events database file (contains encrypted events)
+- **Do backup** the main MOO database (contains public keys)
+- **Do not store** player passwords—you don't have them anyway
+- **Understand** that encrypted events cannot be bulk-decrypted by administrators
+
+Players are responsible for remembering their own encryption passwords. If a player loses their password and needs to
+access old history, there is no recovery mechanism—they must reset their encryption password and start fresh.
 
 ## Troubleshooting Common Issues
 
-**Players Report Missing Message History**: First, verify that event logging is actually enabled in your server
-configuration. Check your server startup logs for a message like "Event log persistence thread started". If logging is
-disabled, you'll see "Event logging is disabled - using no-op implementation" instead.
+**Players Report They Can't See History**: This usually means:
 
-**Poor Performance with Large Histories**: The event logging system is generally efficient, but very large message
-histories can impact performance. Monitor your server's memory usage to ensure the cache isn't consuming excessive RAM.
-Very old servers with millions of stored events might experience slower API responses for historical queries.
+- They haven't set up encryption yet (first-time users need to set a password)
+- They're on a new device and need to enter their password
+- They entered the wrong password (client should show an error)
+- Their browser localStorage was cleared (need to re-enter password)
 
-**Events Missing After Server Restart**: This usually indicates a problem with the event database file. Check that the
-path specified for your events database is correct and that the server process has write access to that location. Also
-verify that the background persistence thread is successfully writing events by looking for related log messages during
-normal operation.
+**Players Forgot Their Encryption Password**:
+
+- They'll need to reset their encryption password in the web client settings
+- This starts fresh encryption with a new password
+- Old history remains in the database but becomes unreadable
+- Warn players during setup to save their password in a safe place
+
+**Events Not Being Logged**:
+
+- Check that the player has set up encryption (events can't be logged without it)
+- Verify the events database file exists and has proper permissions
+- Check server logs for encryption-related errors
+- Ensure the background persistence thread is running
+
+**Performance Issues with Large Histories**:
+
+- The event logging system is generally efficient, but very large message histories can impact performance
+- Monitor server memory usage to ensure the cache isn't consuming excessive RAM
+- Very old servers with millions of stored events might experience slower API responses for historical queries
+- Consider implementing periodic cleanup of very old events (requires manual process)
+
+**Database File Growing Too Large**:
+
+- Events accumulate indefinitely by default
+- Consider periodic cleanup of events older than a certain age
+- Encrypted events from reset passwords remain on disk—can be manually deleted with careful database operations
+- Monitor disk space usage on your server
 
 If you're experiencing issues, enabling debug logging with the `--debug` flag will provide much more detailed
 information about what the event logging system is doing. Look for log entries mentioning event IDs, cache operations,
-and persistence thread activity.
+encryption operations, and persistence thread activity.
 
 The system is designed to gracefully handle various failure scenarios. Even if there are temporary issues with disk
 writing, the in-memory cache ensures that recent events remain available. When problems are resolved, the system
 automatically resumes normal persistence operations.
+
+## API Reference for Developers
+
+If you're building custom clients or tools, the event logging system exposes these key endpoints:
+
+- **GET /api/event-log/pubkey** - Check if a player has encryption set up
+- **PUT /api/event-log/pubkey** - Set up encryption for a player (body contains derived key bytes)
+- **GET /api/history** - Fetch encrypted history (requires `X-Moor-Event-Log-Key` header)
+    - Query params: `since_seconds`, `since_event`, `until_event`, `limit`
+- **POST /api/event-log/change-password** - Re-encrypt history with new password (not yet implemented)
+
+All endpoints require PASETO authentication tokens. The encryption key header must contain base64-encoded derived key
+bytes (32 bytes derived from the player's encryption password using Argon2id, with the player's OID as salt).

@@ -12,12 +12,17 @@
 //
 
 mod auth;
+mod event_log;
 mod props;
 mod verbs;
 pub mod web_host;
 mod ws_connection;
 
 pub use auth::{connect_auth_handler, create_auth_handler};
+pub use event_log::{
+    dismiss_presentation_handler, get_pubkey_handler, history_handler, presentations_handler,
+    set_pubkey_handler,
+};
 use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str};
 pub use props::{properties_handler, property_retrieval_handler};
 use serde::Serialize;
@@ -25,8 +30,7 @@ use serde_derive::Deserialize;
 use serde_json::{Number, json};
 pub use verbs::{verb_program_handler, verb_retrieval_handler, verbs_handler};
 pub use web_host::{
-    WebHost, dismiss_presentation_handler, eval_handler, history_handler, invoke_verb_handler,
-    presentations_handler, resolve_objref_handler, system_property_handler,
+    WebHost, eval_handler, invoke_verb_handler, resolve_objref_handler, system_property_handler,
     ws_connect_attach_handler, ws_create_attach_handler,
 };
 

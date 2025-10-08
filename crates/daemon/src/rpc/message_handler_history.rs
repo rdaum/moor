@@ -133,8 +133,8 @@ impl RpcMessageHandler {
             (SystemTime::now(), SystemTime::now())
         } else {
             (
-                UNIX_EPOCH + Duration::from_nanos(events.first().unwrap().event.timestamp),
-                UNIX_EPOCH + Duration::from_nanos(events.last().unwrap().event.timestamp),
+                UNIX_EPOCH + Duration::from_nanos(events.first().unwrap().timestamp),
+                UNIX_EPOCH + Duration::from_nanos(events.last().unwrap().timestamp),
             )
         };
 
@@ -156,7 +156,7 @@ impl RpcMessageHandler {
                 .iter()
                 .map(|e| {
                     // Convert FlatBuffer UUID to Uuid
-                    let uuid_bytes = e.event.event_id.data.as_slice();
+                    let uuid_bytes = e.event_id.data.as_slice();
                     if uuid_bytes.len() == 16 {
                         let mut bytes = [0u8; 16];
                         bytes.copy_from_slice(uuid_bytes);
@@ -174,11 +174,13 @@ impl RpcMessageHandler {
         let fb_events: Vec<_> = events
             .iter()
             .map(|logged_event| {
-                // LoggedNarrativeEvent already has FlatBuffer types, use them directly
+                // LoggedNarrativeEvent now stores encrypted blobs
                 moor_rpc::HistoricalNarrativeEvent {
-                    event: logged_event.event.clone(),
-                    is_historical: true,
+                    event_id: logged_event.event_id.clone(),
+                    timestamp: logged_event.timestamp,
                     player: logged_event.player.clone(),
+                    is_historical: true,
+                    encrypted_blob: logged_event.encrypted_blob.clone(),
                 }
             })
             .collect();

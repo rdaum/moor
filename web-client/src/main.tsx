@@ -17,6 +17,8 @@ import { BottomDock } from "./components/docks/BottomDock";
 import { LeftDock } from "./components/docks/LeftDock";
 import { RightDock } from "./components/docks/RightDock";
 import { TopDock } from "./components/docks/TopDock";
+import { EncryptionPasswordPrompt } from "./components/EncryptionPasswordPrompt";
+import { EncryptionSetupPrompt } from "./components/EncryptionSetupPrompt";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
@@ -26,12 +28,14 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { TopNavBar } from "./components/TopNavBar";
 import { VerbEditor } from "./components/VerbEditor";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
+import { EncryptionProvider, useEncryptionContext } from "./context/EncryptionContext";
 import { PresentationProvider, usePresentationContext } from "./context/PresentationContext";
 import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { usePropertyEditor } from "./hooks/usePropertyEditor";
+import { useTitle } from "./hooks/useTitle";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { MoorRemoteObject } from "./lib/rpc";
 import { oidRef } from "./lib/var";
@@ -71,10 +75,15 @@ function AppContent({
     const { systemMessage, showMessage } = useSystemMessage();
     const { welcomeMessage, contentType, isServerReady } = useWelcomeMessage();
     const { authState, connect } = useAuthContext();
+    const { encryptionState, setupEncryption, forgetKey, getKeyForHistoryRequest } = useEncryptionContext();
+    const systemTitle = useTitle();
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+    const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
+    const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+    const [userSkippedEncryption, setUserSkippedEncryption] = useState(false);
     const [splitRatio, setSplitRatio] = useState(() => {
         // Load saved split ratio or default to 60% for room, 40% for editor
         const saved = localStorage.getItem("moor-split-ratio");
@@ -121,12 +130,31 @@ function AppContent({
     }, [onPropertyEditorReady, showPropertyEditor]);
 
     // History management
+    // Get encryption key reactively - will update when encryption state changes
+    const encryptionKeyForHistory = getKeyForHistoryRequest();
+
+    // Debug logging for encryption key state
+    useEffect(() => {
+        console.log("[EncryptionDebug] Encryption state:", {
+            hasEncryption: encryptionState.hasEncryption,
+            isChecking: encryptionState.isChecking,
+            hasDerivedKeyBytes: !!encryptionState.derivedKeyBytes,
+            derivedKeyBytesLength: encryptionState.derivedKeyBytes?.length,
+            encryptionKeyForHistory: encryptionKeyForHistory?.substring(0, 20) + "...",
+        });
+    }, [
+        encryptionState.hasEncryption,
+        encryptionState.isChecking,
+        encryptionState.derivedKeyBytes,
+        encryptionKeyForHistory,
+    ]);
+
     const {
         setHistoryBoundaryNow,
         fetchInitialHistory,
         fetchMoreHistory,
         isLoadingHistory,
-    } = useHistory(authState.player?.authToken || null);
+    } = useHistory(authState.player?.authToken || null, encryptionKeyForHistory);
 
     // Presentation management
     const {
@@ -201,10 +229,63 @@ function AppContent({
         await connect(mode, username, password);
     };
 
+    // Check encryption setup after login
+    useEffect(() => {
+        if (authState.player && !encryptionState.isChecking && !userSkippedEncryption) {
+            const hasLocalKey = !!encryptionState.derivedKeyBytes;
+            const backendHasPubkey = encryptionState.hasEncryption;
+
+            // If no local key but backend has pubkey, prompt for existing password
+            if (!hasLocalKey && backendHasPubkey && !showPasswordPrompt) {
+                console.log("Backend has pubkey but no local key - prompting for existing password");
+                setShowPasswordPrompt(true);
+            } // If no local key and backend has no pubkey, prompt for new setup
+            else if (!hasLocalKey && !backendHasPubkey && !showEncryptionSetup) {
+                console.log("No encryption key anywhere - prompting for new setup");
+                setShowEncryptionSetup(true);
+            } // If we have a local key but backend doesn't have our pubkey (DB was reset), clear and re-prompt
+            else if (hasLocalKey && !backendHasPubkey) {
+                console.log(
+                    "Backend missing pubkey but localStorage has key - clearing stale key and prompting for fresh setup",
+                );
+                forgetKey();
+                setUserSkippedEncryption(false);
+                setShowEncryptionSetup(true);
+            } // If we have both local key and backend has pubkey, we're good - hide prompts
+            else if (hasLocalKey && backendHasPubkey) {
+                setShowEncryptionSetup(false);
+                setShowPasswordPrompt(false);
+            }
+        }
+    }, [
+        authState.player,
+        encryptionState.hasEncryption,
+        encryptionState.derivedKeyBytes,
+        encryptionState.isChecking,
+        showEncryptionSetup,
+        showPasswordPrompt,
+        forgetKey,
+        userSkippedEncryption,
+    ]);
+
     // Load history and connect WebSocket after authentication
     useEffect(() => {
-        // Load history when player is authenticated and history not yet loaded
-        if (authState.player && authState.player.authToken && !historyLoaded) {
+        // Load history when player is authenticated, encryption status has been checked at least once, and history not yet loaded
+        if (authState.player && authState.player.authToken && !historyLoaded && encryptionState.hasCheckedOnce) {
+            // Encryption key is ALWAYS required - events cannot be logged or retrieved without it
+            if (!encryptionKeyForHistory) {
+                console.error(
+                    "[HistoryError] No encryption key available. Cannot load history. User must set up encryption.",
+                );
+                // Still need to connect WebSocket, but skip history loading
+                setHistoryLoaded(true); // Mark as "loaded" to prevent retrying
+                if (!wsState.isConnected) {
+                    setTimeout(() => connectWS(loginMode), 100);
+                }
+                return;
+            }
+
+            console.log("[HistoryDebug] Loading history with encryption key");
             setHistoryLoaded(true);
 
             // Set history boundary before fetching
@@ -252,6 +333,8 @@ function AppContent({
     }, [
         authState.player?.authToken,
         historyLoaded,
+        encryptionState.hasCheckedOnce,
+        encryptionKeyForHistory,
         wsState.isConnected,
         connectWS,
         loginMode,
@@ -560,6 +643,42 @@ function AppContent({
                     contentType={propertyEditorSession.contentType}
                 />
             )}
+
+            {showPasswordPrompt && (
+                <EncryptionPasswordPrompt
+                    systemTitle={systemTitle}
+                    onUnlock={async (password) => {
+                        const result = await setupEncryption(password);
+                        if (result.success) {
+                            setShowPasswordPrompt(false);
+                            setUserSkippedEncryption(false);
+                        }
+                        return result;
+                    }}
+                    onForgotPassword={() => {
+                        setShowPasswordPrompt(false);
+                        setShowEncryptionSetup(true);
+                    }}
+                />
+            )}
+
+            {showEncryptionSetup && (
+                <EncryptionSetupPrompt
+                    systemTitle={systemTitle}
+                    onSetup={async (password) => {
+                        const result = await setupEncryption(password);
+                        if (result.success) {
+                            setShowEncryptionSetup(false);
+                            setUserSkippedEncryption(false);
+                        }
+                        return result;
+                    }}
+                    onSkip={() => {
+                        setShowEncryptionSetup(false);
+                        setUserSkippedEncryption(true);
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -571,10 +690,23 @@ function App() {
         <ThemeProvider>
             <AuthProvider showMessage={showMessage}>
                 <PresentationProvider>
-                    <AppWrapper />
+                    <EncryptionWrapper />
                 </PresentationProvider>
             </AuthProvider>
         </ThemeProvider>
+    );
+}
+
+function EncryptionWrapper() {
+    const { authState } = useAuthContext();
+
+    return (
+        <EncryptionProvider
+            authToken={authState.player?.authToken || null}
+            playerOid={authState.player?.oid || null}
+        >
+            <AppWrapper />
+        </EncryptionProvider>
     );
 }
 

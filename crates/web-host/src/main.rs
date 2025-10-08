@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use clap::Parser;
 use clap_derive::Parser;
@@ -246,6 +246,8 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             "/api/presentations/{presentation_id}",
             axum::routing::delete(host::dismiss_presentation_handler),
         )
+        .route("/api/event-log/pubkey", get(host::get_pubkey_handler))
+        .route("/api/event-log/pubkey", put(host::set_pubkey_handler))
         .with_state(web_host);
 
     Ok(webhost_router)

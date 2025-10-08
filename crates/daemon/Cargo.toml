@@ -71,6 +71,7 @@ oneshot.workspace = true
 papaya.workspace = true
 
 # Authentication & Security
+age.workspace = true
 base64.workspace = true
 ed25519-dalek.workspace = true
 rusty_paseto.workspace = true

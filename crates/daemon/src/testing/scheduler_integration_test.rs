@@ -37,14 +37,9 @@ mod tests {
         config::{Config, ImportExportFormat},
         tasks::{NoopTasksDb, scheduler::Scheduler},
     };
-    use moor_schema::{
-        common::EventUnion,
-        convert::{narrative_event_from_ref, obj_from_flatbuffer_struct},
-        rpc as moor_rpc,
-    };
+    use moor_schema::rpc as moor_rpc;
     use moor_textdump::textdump_load;
     use moor_var::{Obj, SYSTEM_OBJECT};
-    use planus::ReadAsRoot;
     use rpc_common::{
         AuthToken, ClientToken, mk_command_msg, mk_connection_establish_msg, mk_login_command_msg,
     };
@@ -72,7 +67,7 @@ mod tests {
     /// Searches through events for the specified player and calls the predicate on each event.
     /// Returns when the predicate returns true for any event, or panics on timeout.
     fn wait_for_event_content<F>(
-        event_log: &MockEventLog,
+        transport: &MockTransport,
         player: Obj,
         predicate: F,
         timeout_secs: u64,
@@ -90,30 +85,15 @@ mod tests {
                 );
             }
 
-            let events = event_log.get_all_events();
-            for e in &events {
-                // Compare FlatBuffer player with domain player
-                let event_player = obj_from_flatbuffer_struct(&e.player).ok();
-                if event_player != Some(player) {
+            let events = transport.get_narrative_events();
+            for (event_player, narrative_event) in &events {
+                // Check if this event is for the expected player
+                if *event_player != player {
                     continue;
                 }
 
-                // Convert FlatBuffer event to domain Event
-                // The event is stored as an owned type, so we need to serialize and re-parse as a Ref
-                let mut builder = planus::Builder::new();
-                let event_bytes = builder.finish(&e.event, None);
-                let event_ref =
-                    match moor_schema::common::NarrativeEventRef::read_as_root(event_bytes) {
-                        Ok(r) => r,
-                        Err(_) => continue,
-                    };
-                let narrative_event = match narrative_event_from_ref(event_ref) {
-                    Ok(ne) => ne,
-                    Err(_) => continue,
-                };
-
                 // Check for traceback
-                if matches!(&narrative_event.event(), Event::Traceback(_)) {
+                if matches!(narrative_event.event(), Event::Traceback(_)) {
                     panic!("Received exception during {description}");
                 }
 
@@ -155,7 +135,7 @@ mod tests {
         );
 
         wait_for_event_content(
-            &env.event_log,
+            &env.transport,
             player_obj,
             |event| {
                 if let Event::Notify {
@@ -619,7 +599,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // This is all there is right now.
         // Your previous connection was before we started keeping track.
         wait_for_event_content(
-            &env.event_log,
+            &env.transport,
             player_obj,
             |event| {
                 if let Event::Notify {
@@ -726,10 +706,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             "say command output",
         );
 
-        // Verify no tracebacks in the event log
-        let events = env.event_log.get_all_events();
-        for event in events {
-            if matches!(&event.event.event.event, EventUnion::TracebackEvent(_)) {
+        // Verify no tracebacks in the transport events (which are unencrypted)
+        let events = env.transport.get_narrative_events();
+        for (_player, narrative_event) in events {
+            if matches!(narrative_event.event(), Event::Traceback(_)) {
                 panic!("Unexpected traceback in events");
             }
         }
@@ -860,10 +840,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             export_path.display()
         );
 
-        // Step 8: Verify there are no errors in the event log
-        let events = env.event_log.get_all_events();
-        for event in events {
-            if matches!(&event.event.event.event, EventUnion::TracebackEvent(_)) {
+        // Step 8: Verify there are no errors in the transport events (which are unencrypted)
+        let events = env.transport.get_narrative_events();
+        for (_player, narrative_event) in events {
+            if matches!(narrative_event.event(), Event::Traceback(_)) {
                 panic!("Unexpected traceback after checkpoint");
             }
         }
@@ -975,7 +955,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Wait for connection events
         wait_for_event_content(
-            &env.event_log,
+            &env.transport,
             player_obj,
             |event| {
                 if let Event::Notify {
@@ -1134,7 +1114,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
             // Wait for and verify permission error
             wait_for_event_content(
-                &env.event_log,
+                &env.transport,
                 player_obj_2,
                 |event| {
                     if let Event::Notify {
@@ -1195,12 +1175,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             current_count + 2
         );
 
-        // Verify no unexpected tracebacks in the event log
-        let events = env.event_log.get_all_events();
-        for event in events {
-            if matches!(&event.event.event.event, EventUnion::TracebackEvent(_)) {
+        // Verify no unexpected tracebacks in the transport events (which are unencrypted)
+        let events = env.transport.get_narrative_events();
+        for (_player, narrative_event) in events {
+            if matches!(narrative_event.event(), Event::Traceback(_)) {
                 // For now, just ignore tracebacks - proper handling would require
-                // converting FlatBuffer traceback to domain type
+                // inspecting traceback details to filter out expected E_PERM errors
                 // TODO: Add proper traceback inspection and E_PERM filtering
             }
         }

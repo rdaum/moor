@@ -22,13 +22,13 @@ use uuid::Uuid;
 
 use moor_common::tasks::Presentation;
 use moor_schema::{
-    common::{EventUnion, ObjUnion},
+    common::ObjUnion,
     convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
     event_log::LoggedNarrativeEvent,
 };
 use moor_var::Obj;
 
-use crate::event_log::{EventLogOps, presentation_from_flatbuffer};
+use crate::event_log::{EventLogOps, PresentationAction};
 
 /// Mock event log implementation for testing
 pub struct MockEventLog {
@@ -48,7 +48,7 @@ impl MockEventLog {
 
     /// Helper to extract UUID from FlatBuffer event
     fn extract_event_id(event: &LoggedNarrativeEvent) -> Uuid {
-        let uuid_bytes = event.event.event_id.data.as_slice();
+        let uuid_bytes = event.event_id.data.as_slice();
         if uuid_bytes.len() == 16 {
             let mut bytes = [0u8; 16];
             bytes.copy_from_slice(uuid_bytes);
@@ -173,9 +173,13 @@ impl Default for MockEventLog {
 }
 
 impl EventLogOps for MockEventLog {
-    fn append(&self, event: LoggedNarrativeEvent) -> Uuid {
+    fn append(
+        &self,
+        event: LoggedNarrativeEvent,
+        presentation_action: Option<PresentationAction>,
+    ) -> Uuid {
         // Extract event_id from FlatBuffer event
-        let event_id_bytes = event.event.event_id.data.as_slice();
+        let event_id_bytes = event.event_id.data.as_slice();
         let event_id = if event_id_bytes.len() == 16 {
             let mut bytes = [0u8; 16];
             bytes.copy_from_slice(event_id_bytes);
@@ -184,30 +188,26 @@ impl EventLogOps for MockEventLog {
             Uuid::nil()
         };
 
-        // Check if this is a Present or Unpresent event and update presentation state
-        match &event.event.event.event {
-            EventUnion::PresentEvent(present_ref) => {
-                // Add presentation to player's current presentations
-                if let Ok(presentation) = presentation_from_flatbuffer(&present_ref.presentation) {
-                    let player_obj = obj_from_flatbuffer_struct(&event.player)
-                        .expect("Failed to convert player obj");
+        // Handle presentation state updates (same as real EventLog)
+        if let Some(action) = presentation_action {
+            let player_obj =
+                obj_from_flatbuffer_struct(&event.player).expect("Failed to convert player obj");
+
+            match action {
+                PresentationAction::Add(presentation) => {
                     let mut presentations = self.presentations.lock().unwrap();
                     presentations
                         .entry(player_obj)
                         .or_default()
                         .push(presentation);
                 }
-            }
-            EventUnion::UnpresentEvent(unpresent_ref) => {
-                // Remove presentation from player's current presentations
-                let player_obj = obj_from_flatbuffer_struct(&event.player)
-                    .expect("Failed to convert player obj");
-                let mut presentations = self.presentations.lock().unwrap();
-                if let Some(player_presentations) = presentations.get_mut(&player_obj) {
-                    player_presentations.retain(|p| p.id != unpresent_ref.presentation_id);
+                PresentationAction::Remove(presentation_id) => {
+                    let mut presentations = self.presentations.lock().unwrap();
+                    if let Some(player_presentations) = presentations.get_mut(&player_obj) {
+                        player_presentations.retain(|p| p.id != presentation_id);
+                    }
                 }
             }
-            _ => {}
         }
 
         // Store the event
@@ -229,6 +229,25 @@ impl EventLogOps for MockEventLog {
         if let Some(player_presentations) = presentations.get_mut(&player) {
             player_presentations.retain(|p| p.id != presentation_id);
         }
+    }
+
+    fn get_pubkey(&self, _player: Obj) -> Option<String> {
+        // Mock implementation - no encryption in tests
+        None
+    }
+
+    fn set_pubkey(&self, _player: Obj, _pubkey: String) {
+        // Mock implementation - no encryption in tests
+    }
+
+    fn delete_all_events(&self, player: Obj) -> Result<(), String> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let mut events = self.narrative_events.lock().unwrap();
+
+        // Remove all events for this player
+        events.retain(|_, event| !Self::obj_matches(&player_fb, &event.player));
+
+        Ok(())
     }
 
     fn events_for_player_since(
@@ -303,7 +322,7 @@ impl EventLogOps for MockEventLog {
                     return false;
                 }
                 // Check timestamp (FlatBuffer timestamp is in nanoseconds)
-                let event_time = UNIX_EPOCH + Duration::from_nanos(event.event.timestamp);
+                let event_time = UNIX_EPOCH + Duration::from_nanos(event.timestamp);
                 event_time >= cutoff_time
             })
             .cloned()

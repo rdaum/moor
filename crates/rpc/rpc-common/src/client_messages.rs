@@ -376,6 +376,40 @@ pub fn mk_dismiss_presentation_msg(
     }
 }
 
+/// Build a GetEventLogPublicKey message
+#[inline]
+pub fn mk_get_event_log_pubkey_msg(
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::GetEventLogPublicKey(Box::new(
+            rpc::GetEventLogPublicKey {
+                client_token: client_token_fb(client_token),
+                auth_token: auth_token_fb(auth_token),
+            },
+        )),
+    }
+}
+
+/// Build a SetEventLogPublicKey message
+#[inline]
+pub fn mk_set_event_log_pubkey_msg(
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+    public_key: String,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::SetEventLogPublicKey(Box::new(
+            rpc::SetEventLogPublicKey {
+                client_token: client_token_fb(client_token),
+                auth_token: auth_token_fb(auth_token),
+                public_key,
+            },
+        )),
+    }
+}
+
 /// Build an InvokeVerb message
 #[inline]
 pub fn mk_invoke_verb_msg(

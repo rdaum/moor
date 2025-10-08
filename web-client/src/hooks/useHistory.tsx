@@ -71,7 +71,7 @@ interface HistoryResponse {
     };
 }
 
-export const useHistory = (authToken: string | null) => {
+export const useHistory = (authToken: string | null, encryptionKey: string | null = null) => {
     const [historyBoundary, setHistoryBoundary] = useState<number | null>(null);
     const [earliestHistoryEventId, setEarliestHistoryEventId] = useState<string | null>(null);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -177,12 +177,19 @@ export const useHistory = (authToken: string | null) => {
 
             const url = `/api/history?${params}`;
 
+            const headers: Record<string, string> = {
+                "X-Moor-Auth-Token": authToken,
+                "Content-Type": "application/json",
+            };
+
+            // Add encryption key if available
+            if (encryptionKey) {
+                headers["X-Moor-Event-Log-Key"] = encryptionKey;
+            }
+
             const response = await fetch(url, {
                 method: "GET",
-                headers: {
-                    "X-Moor-Auth-Token": authToken,
-                    "Content-Type": "application/json",
-                },
+                headers,
             });
 
             if (!response.ok) {
@@ -215,7 +222,7 @@ export const useHistory = (authToken: string | null) => {
         } finally {
             setIsLoadingHistory(false);
         }
-    }, [authToken, convertHistoricalEvent]);
+    }, [authToken, encryptionKey, convertHistoricalEvent]);
 
     // Calculate optimal initial load based on viewport
     const calculateInitialLoad = useCallback(() => {

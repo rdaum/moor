@@ -464,7 +464,9 @@ union HostClientToDaemonMessageUnion {
     RequestCurrentPresentations,
     DismissPresentation,
     SetClientAttribute,
-    Detach
+    Detach,
+    GetEventLogPublicKey,
+    SetEventLogPublicKey
 }
 
 table ConnectionEstablish {
@@ -606,6 +608,17 @@ table Detach {
     disconnected: bool;
 }
 
+table GetEventLogPublicKey {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+}
+
+table SetEventLogPublicKey {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    public_key: string (required);
+}
+
 table HostClientToDaemonMessage {
     message: HostClientToDaemonMessageUnion (required);
 }
@@ -633,7 +646,8 @@ union DaemonToClientReplyUnion {
     CurrentPresentations,
     PresentationDismissed,
     ClientAttributeSet,
-    Disconnected
+    Disconnected,
+    EventLogPublicKey
 }
 
 table NewConnection {
@@ -714,6 +728,10 @@ table ClientAttributeSet {
 }
 
 table Disconnected {
+}
+
+table EventLogPublicKey {
+    public_key: string;  // Empty string if not set
 }
 
 table DaemonToClientReply {
@@ -1002,9 +1020,11 @@ table HistoryRecall {
 }
 
 table HistoricalNarrativeEvent {
-    event: MoorCommon.NarrativeEvent (required);
-    is_historical: bool;
+    event_id: MoorCommon.Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
     player: MoorCommon.Obj (required);
+    is_historical: bool;
+    encrypted_blob: [ubyte] (required);
 }
 
 table HistoryResponse {

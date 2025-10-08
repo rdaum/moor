@@ -19,14 +19,14 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::event_log::presentation_from_flatbuffer;
+use crate::event_log::{PresentationAction, presentation_from_flatbuffer};
 use fjall::{CompressionType, Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use flume::{Receiver, Sender};
 use moor_common::tasks::Presentation;
+use moor_schema::convert::presentation_to_flatbuffer_struct;
 use moor_schema::{
-    common as fb_common,
-    common::{EventUnion, ObjUnion, ObjUnionRef},
-    convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
+    common::{ObjUnion, ObjUnionRef},
+    convert::obj_to_flatbuffer_struct,
     event_log::{LoggedNarrativeEvent, PlayerPresentations},
 };
 use moor_var::Obj;
@@ -36,10 +36,14 @@ use tracing::{debug, error, info};
 pub trait EventLogOps: Send + Sync {
     /// Add a new event to the log, returns the event's UUID
     /// Note: Caller should convert from domain types to FlatBuffer types before calling
-    fn append(&self, event: LoggedNarrativeEvent) -> Uuid;
+    fn append(
+        &self,
+        event: LoggedNarrativeEvent,
+        presentation_action: Option<PresentationAction>,
+    ) -> Uuid;
 
-    /// Get current presentations for a player
-    /// Returns FlatBuffer presentations (Vec) - caller can convert to HashMap if needed
+    /// Get current presentation IDs for a player
+    /// Returns presentation objects with only IDs populated (content is in encrypted history)
     fn current_presentations(&self, player: Obj) -> Vec<Presentation>;
 
     /// Dismiss a presentation by ID
@@ -65,6 +69,12 @@ pub trait EventLogOps: Send + Sync {
         player: Obj,
         seconds_ago: u64,
     ) -> Vec<LoggedNarrativeEvent>;
+
+    /// Get the public key for a player's event log encryption
+    fn get_pubkey(&self, player: Obj) -> Option<String>;
+
+    /// Set the public key for a player's event log encryption
+    fn set_pubkey(&self, player: Obj, pubkey: String);
 }
 
 // LoggedNarrativeEvent and PlayerPresentations are now imported from
@@ -105,6 +115,7 @@ struct EventPersistence {
     narrative_events_partition: PartitionHandle,
     player_index_partition: PartitionHandle,
     presentations_partition: PartitionHandle,
+    pubkeys_partition: PartitionHandle,
 }
 
 impl EventPersistence {
@@ -128,7 +139,8 @@ impl EventPersistence {
         let player_index_partition =
             keyspace.open_partition("player_index", partition_creation_options.clone())?;
         let presentations_partition =
-            keyspace.open_partition("presentations", partition_creation_options)?;
+            keyspace.open_partition("presentations", partition_creation_options.clone())?;
+        let pubkeys_partition = keyspace.open_partition("pubkeys", partition_creation_options)?;
 
         Ok(Self {
             _tmpdir: tmpdir,
@@ -136,6 +148,7 @@ impl EventPersistence {
             narrative_events_partition,
             player_index_partition,
             presentations_partition,
+            pubkeys_partition,
         })
     }
 
@@ -327,8 +340,7 @@ impl EventPersistence {
 
             // Check if player matches and timestamp is after cutoff
             let event_player_ref = event_ref.player()?;
-            let event_narrative_ref = event_ref.event()?;
-            let event_timestamp_nanos = event_narrative_ref.timestamp()?;
+            let event_timestamp_nanos = event_ref.timestamp()?;
             let event_timestamp = UNIX_EPOCH + Duration::from_nanos(event_timestamp_nanos);
 
             if Self::obj_matches_ref(&player_fb, &event_player_ref)
@@ -361,6 +373,119 @@ impl EventPersistence {
         } else {
             Ok(None)
         }
+    }
+
+    fn load_pubkey(&self, player: Obj) -> Result<Option<String>, eyre::Error> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let player_key = Self::obj_to_key(&player_fb);
+
+        if let Some(value) = self.pubkeys_partition.get(player_key.as_bytes())? {
+            let pubkey = String::from_utf8(value.to_vec())?;
+            Ok(Some(pubkey))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn store_pubkey(&mut self, player: Obj, pubkey: String) -> Result<(), eyre::Error> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let player_key = Self::obj_to_key(&player_fb);
+
+        self.pubkeys_partition
+            .insert(player_key.as_bytes(), pubkey.as_bytes())?;
+        Ok(())
+    }
+
+    fn add_presentation(
+        &mut self,
+        player: &moor_schema::common::Obj,
+        presentation: &moor_common::tasks::Presentation,
+        pubkey: String,
+    ) -> Result<(), eyre::Error> {
+        let player_key = Self::obj_to_key(player);
+
+        // Load current presentations
+        let mut presentations: Vec<moor_schema::event_log::StoredPresentation> = if let Some(
+            value,
+        ) =
+            self.presentations_partition.get(player_key.as_bytes())?
+        {
+            let presentations_ref =
+                <moor_schema::event_log::PlayerPresentationsRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+            let vec_ref = presentations_ref.presentations()?;
+            let mut result = Vec::new();
+            for p_ref in vec_ref.iter() {
+                result.push(p_ref?.try_into()?);
+            }
+            result
+        } else {
+            Vec::new()
+        };
+
+        // Serialize presentation to FlatBuffer bytes
+        let pres_fb = presentation_to_flatbuffer_struct(presentation)?;
+        let mut builder = ::planus::Builder::new();
+        let pres_bytes = builder.finish(&pres_fb, None);
+
+        // Encrypt with pubkey (REQUIRED - no plaintext storage)
+        let encrypted_content = crate::event_log::encryption::encrypt(pres_bytes, &pubkey)
+            .map_err(|e| eyre::eyre!("Encryption failed: {}", e))?;
+
+        // Add/update presentation (replace if ID already exists)
+        presentations.retain(|p| p.id != presentation.id);
+        presentations.push(moor_schema::event_log::StoredPresentation {
+            id: presentation.id.clone(),
+            encrypted_content,
+        });
+
+        // Save updated list
+        let updated = PlayerPresentations {
+            player: Box::new(player.clone()),
+            presentations,
+        };
+
+        let mut builder = ::planus::Builder::new();
+        let value_bytes = builder.finish(&updated, None);
+        self.presentations_partition
+            .insert(player_key.as_bytes(), value_bytes)?;
+
+        Ok(())
+    }
+
+    fn remove_presentation(
+        &mut self,
+        player: &moor_schema::common::Obj,
+        presentation_id: &str,
+    ) -> Result<(), eyre::Error> {
+        let player_key = Self::obj_to_key(player);
+
+        // Load current presentations
+        if let Some(value) = self.presentations_partition.get(player_key.as_bytes())? {
+            let presentations_ref =
+                <moor_schema::event_log::PlayerPresentationsRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+            let vec_ref = presentations_ref.presentations()?;
+            let mut presentations = Vec::new();
+            for p_ref in vec_ref.iter() {
+                presentations.push(p_ref?.try_into()?);
+            }
+
+            // Remove the presentation with matching ID
+            presentations
+                .retain(|p: &moor_schema::event_log::StoredPresentation| p.id != presentation_id);
+
+            // Save updated list
+            let updated = PlayerPresentations {
+                player: Box::new(player.clone()),
+                presentations,
+            };
+
+            let mut builder = ::planus::Builder::new();
+            let value_bytes = builder.finish(&updated, None);
+            self.presentations_partition
+                .insert(player_key.as_bytes(), value_bytes)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -439,9 +564,13 @@ impl EventLog {
 
     /// Add a new event to the log, returns the event's UUID
     /// Takes a FlatBuffer LoggedNarrativeEvent - caller should convert from domain types
-    pub fn append(&self, event: LoggedNarrativeEvent) -> Uuid {
+    pub fn append(
+        &self,
+        event: LoggedNarrativeEvent,
+        presentation_action: Option<PresentationAction>,
+    ) -> Uuid {
         // Extract event_id from the FlatBuffer event
-        let event_id_bytes = event.event.event_id.data.as_slice();
+        let event_id_bytes = event.event_id.data.as_slice();
         let event_id = if event_id_bytes.len() == 16 {
             let mut bytes = [0u8; 16];
             bytes.copy_from_slice(event_id_bytes);
@@ -451,23 +580,26 @@ impl EventLog {
             return Uuid::nil();
         };
 
-        // Check if this is a Present or Unpresent event and update presentation state
-        match &event.event.event.event {
-            EventUnion::PresentEvent(present_ref) => {
-                // Add presentation to player's current presentations
-                if let Ok(presentation) = presentation_from_flatbuffer(&present_ref.presentation) {
-                    self.update_presentation_state(&event.player, Some(presentation), None);
+        // Handle presentation state updates
+        if let Some(action) = presentation_action {
+            // Get player's pubkey for presentation encryption (REQUIRED)
+            let pubkey = {
+                let guard = self.persistence.lock().unwrap();
+                moor_schema::convert::obj_from_flatbuffer_struct(&event.player)
+                    .ok()
+                    .and_then(|player_obj| guard.load_pubkey(player_obj).ok().flatten())
+            };
+
+            match action {
+                PresentationAction::Add(presentation) => {
+                    if let Some(key) = pubkey {
+                        self.add_presentation(&event.player, &presentation, key);
+                    }
+                }
+                PresentationAction::Remove(presentation_id) => {
+                    self.remove_presentation(&event.player, &presentation_id);
                 }
             }
-            EventUnion::UnpresentEvent(unpresent_ref) => {
-                // Remove presentation from player's current presentations
-                self.update_presentation_state(
-                    &event.player,
-                    None,
-                    Some(unpresent_ref.presentation_id.clone()),
-                );
-            }
-            _ => {}
         }
 
         // Send to background persistence thread
@@ -483,62 +615,24 @@ impl EventLog {
         event_id
     }
 
-    /// Update presentation state for a player (add or remove a presentation)
-    /// This is done synchronously to ensure consistency with reads
-    fn update_presentation_state(
+    /// Add a presentation to the player's active presentations (always encrypted)
+    fn add_presentation(
         &self,
         player: &moor_schema::common::Obj,
-        add_presentation: Option<Presentation>,
-        remove_id: Option<String>,
+        presentation: &moor_common::tasks::Presentation,
+        pubkey: String,
     ) {
-        // Convert FlatBuffer Obj to domain Obj to use as key
-        let player_obj = obj_from_flatbuffer_struct(player).expect("Failed to convert player obj");
-
-        // Lock persistence and update synchronously for consistency
         let mut persistence_guard = self.persistence.lock().unwrap();
-
-        // Load current state
-        let mut current_state = persistence_guard
-            .load_presentation_state(player_obj)
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| {
-                // Create new state if none exists
-                PlayerPresentations {
-                    player: Box::new(player.clone()),
-                    presentations: vec![],
-                }
-            });
-
-        // Apply the update
-        if let Some(presentation) = add_presentation {
-            // Convert domain Presentation to FlatBuffer Presentation
-            let fb_presentation = fb_common::Presentation {
-                id: presentation.id.clone(),
-                content_type: presentation.content_type.clone(),
-                content: presentation.content.clone(),
-                target: presentation.target.clone(),
-                attributes: presentation
-                    .attributes
-                    .into_iter()
-                    .map(|(k, v)| fb_common::PresentationAttribute { key: k, value: v })
-                    .collect(),
-            };
-            current_state.presentations.push(fb_presentation);
+        if let Err(e) = persistence_guard.add_presentation(player, presentation, pubkey) {
+            error!("Failed to add presentation: {}", e);
         }
+    }
 
-        if let Some(id) = remove_id {
-            current_state.presentations.retain(|p| p.id != id);
-        }
-
-        // Write synchronously
-        if let Err(e) = persistence_guard.write_presentation_state(&current_state) {
-            error!("Failed to write presentation state: {}", e);
-        }
-
-        // Flush to ensure write is visible
-        if let Err(e) = persistence_guard.flush() {
-            error!("Failed to flush presentation state: {}", e);
+    /// Remove a presentation from the player's active presentations
+    fn remove_presentation(&self, player: &moor_schema::common::Obj, presentation_id: &str) {
+        let mut persistence_guard = self.persistence.lock().unwrap();
+        if let Err(e) = persistence_guard.remove_presentation(player, presentation_id) {
+            error!("Failed to remove presentation: {}", e);
         }
     }
 
@@ -588,6 +682,16 @@ impl EventLog {
         let persistence_guard = self.persistence.lock().unwrap();
         persistence_guard.load_narrative_events_for_player_since_seconds(player, seconds_ago)
     }
+
+    fn load_pubkey_from_disk(&self, player: Obj) -> Result<Option<String>, eyre::Error> {
+        let persistence_guard = self.persistence.lock().unwrap();
+        persistence_guard.load_pubkey(player)
+    }
+
+    fn store_pubkey_to_disk(&self, player: Obj, pubkey: String) -> Result<(), eyre::Error> {
+        let mut persistence_guard = self.persistence.lock().unwrap();
+        persistence_guard.store_pubkey(player, pubkey)
+    }
 }
 
 impl Drop for EventLog {
@@ -603,8 +707,12 @@ impl Default for EventLog {
 }
 
 impl EventLogOps for EventLog {
-    fn append(&self, event: LoggedNarrativeEvent) -> Uuid {
-        self.append(event)
+    fn append(
+        &self,
+        event: LoggedNarrativeEvent,
+        presentation_action: Option<PresentationAction>,
+    ) -> Uuid {
+        self.append(event, presentation_action)
     }
 
     fn current_presentations(&self, player: Obj) -> Vec<Presentation> {
@@ -612,11 +720,28 @@ impl EventLogOps for EventLog {
             .ok()
             .flatten()
             .map(|state| {
-                // Convert from FlatBuffer Presentations to domain Presentations
+                // When encrypted, daemon can't decrypt (no secret key)
+                // Return stub presentations with IDs only
+                // Web-host will decrypt from event history using client's secret key
                 state
                     .presentations
                     .iter()
-                    .filter_map(|p| presentation_from_flatbuffer(p).ok())
+                    .filter_map(|stored_pres| {
+                        // Try to deserialize - works for plaintext (no encryption)
+                        // For encrypted data, just return stub with ID
+                        if let Ok(pres_ref) = <moor_schema::common::PresentationRef as ::planus::ReadAsRoot>::read_as_root(&stored_pres.encrypted_content) {
+                            presentation_from_flatbuffer(&pres_ref).ok()
+                        } else {
+                            // Encrypted - return stub with ID only
+                            Some(Presentation {
+                                id: stored_pres.id.clone(),
+                                content_type: String::new(),
+                                content: String::new(),
+                                target: String::new(),
+                                attributes: vec![],
+                            })
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -697,6 +822,16 @@ impl EventLogOps for EventLog {
             }
         }
     }
+
+    fn get_pubkey(&self, player: Obj) -> Option<String> {
+        self.load_pubkey_from_disk(player).ok().flatten()
+    }
+
+    fn set_pubkey(&self, player: Obj, pubkey: String) {
+        if let Err(e) = self.store_pubkey_to_disk(player, pubkey) {
+            error!("Failed to store pubkey for player {:?}: {}", player, e);
+        }
+    }
 }
 
 /// No-op event log implementation that discards all events
@@ -716,9 +851,13 @@ impl Default for NoOpEventLog {
 }
 
 impl EventLogOps for NoOpEventLog {
-    fn append(&self, event: LoggedNarrativeEvent) -> Uuid {
+    fn append(
+        &self,
+        event: LoggedNarrativeEvent,
+        _presentation_action: Option<PresentationAction>,
+    ) -> Uuid {
         // Extract event_id from the FlatBuffer event
-        let event_id_bytes = event.event.event_id.data.as_slice();
+        let event_id_bytes = event.event_id.data.as_slice();
         if event_id_bytes.len() == 16 {
             let mut bytes = [0u8; 16];
             bytes.copy_from_slice(event_id_bytes);
@@ -759,6 +898,14 @@ impl EventLogOps for NoOpEventLog {
     ) -> Vec<LoggedNarrativeEvent> {
         Vec::new()
     }
+
+    fn get_pubkey(&self, _player: Obj) -> Option<String> {
+        None
+    }
+
+    fn set_pubkey(&self, _player: Obj, _pubkey: String) {
+        // No-op
+    }
 }
 
 #[cfg(test)]
@@ -771,6 +918,10 @@ mod tests {
     use uuid::Uuid;
 
     fn create_logged_event(player: Obj, message: &str) -> LoggedNarrativeEvent {
+        // Generate a test key for encryption (all events must be encrypted)
+        let identity = age::x25519::Identity::generate();
+        let pubkey = identity.to_public().to_string();
+
         let event = NarrativeEvent {
             event_id: Uuid::now_v7(),
             timestamp: SystemTime::now(),
@@ -782,11 +933,16 @@ mod tests {
                 no_newline: false,
             },
         };
-        logged_narrative_event_to_flatbuffer(player, Box::new(event))
+        logged_narrative_event_to_flatbuffer(player, Box::new(event), pubkey)
             .expect("Failed to convert to FlatBuffer")
+            .0
     }
 
     fn create_present_event(player: Obj, id: &str, content: &str) -> LoggedNarrativeEvent {
+        // Generate a test key for encryption (all events must be encrypted)
+        let identity = age::x25519::Identity::generate();
+        let pubkey = identity.to_public().to_string();
+
         let event = NarrativeEvent {
             event_id: Uuid::now_v7(),
             timestamp: SystemTime::now(),
@@ -799,12 +955,13 @@ mod tests {
                 attributes: vec![],
             }),
         };
-        logged_narrative_event_to_flatbuffer(player, Box::new(event))
+        logged_narrative_event_to_flatbuffer(player, Box::new(event), pubkey)
             .expect("Failed to convert to FlatBuffer")
+            .0
     }
 
     fn extract_event_id(event: &LoggedNarrativeEvent) -> Uuid {
-        let uuid_bytes = event.event.event_id.data.as_slice();
+        let uuid_bytes = event.event_id.data.as_slice();
         if uuid_bytes.len() == 16 {
             let mut bytes = [0u8; 16];
             bytes.copy_from_slice(uuid_bytes);
@@ -822,8 +979,8 @@ mod tests {
         let event1 = create_logged_event(player, "hello");
         let event2 = create_logged_event(player, "world");
 
-        let id1 = log.append(event1);
-        let id2 = log.append(event2);
+        let id1 = log.append(event1, None);
+        let id2 = log.append(event2, None);
 
         assert!(!id1.is_nil());
         assert!(!id2.is_nil());
@@ -848,9 +1005,9 @@ mod tests {
         let event2 = create_logged_event(player2, "player2 msg1");
         let event3 = create_logged_event(player1, "player1 msg2");
 
-        log.append(event1);
-        log.append(event2);
-        log.append(event3);
+        log.append(event1, None);
+        log.append(event2, None);
+        log.append(event3, None);
 
         // Give persistence thread time to write
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -871,9 +1028,9 @@ mod tests {
         let event2 = create_logged_event(player, "msg2");
         let event3 = create_logged_event(player, "msg3");
 
-        let id1 = log.append(event1);
-        let _id2 = log.append(event2);
-        let id3 = log.append(event3);
+        let id1 = log.append(event1, None);
+        let _id2 = log.append(event2, None);
+        let id3 = log.append(event3, None);
 
         // Give persistence thread time to write
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -897,7 +1054,7 @@ mod tests {
         // Add a presentation (note: presentations aren't handled via append in the new API)
         // We need to directly create a PlayerPresentations state
         let present_event = create_present_event(player, "widget1", "Hello World");
-        log.append(present_event);
+        log.append(present_event, None);
 
         // Give persistence thread time to write
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -914,7 +1071,7 @@ mod tests {
         let player = Obj::mk_id(1);
 
         let event1 = create_logged_event(player, "old message");
-        log.append(event1);
+        log.append(event1, None);
 
         // Give persistence thread time to write
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -929,12 +1086,93 @@ mod tests {
     }
 
     #[test]
+    fn test_encryption_roundtrip() {
+        // Generate a key pair
+        let identity = age::x25519::Identity::generate();
+        let pubkey = identity.to_public().to_string();
+        let seckey = identity.to_string();
+
+        let log = EventLog::new();
+        let player = Obj::mk_id(1);
+
+        // Set the player's pubkey
+        log.set_pubkey(player, pubkey.clone());
+
+        // Verify we can retrieve it
+        assert_eq!(log.get_pubkey(player), Some(pubkey.clone()));
+
+        // Create a test event with a presentation
+        let presentation = moor_common::tasks::Presentation {
+            id: "test_widget".to_string(),
+            content_type: "text/plain".to_string(),
+            content: "Secret Message!".to_string(),
+            target: "main".to_string(),
+            attributes: vec![],
+        };
+
+        let event = Box::new(moor_common::tasks::NarrativeEvent {
+            event_id: uuid::Uuid::now_v7(),
+            timestamp: std::time::SystemTime::now(),
+            author: moor_var::v_str("test_author"),
+            event: moor_common::tasks::Event::Present(presentation.clone()),
+        });
+
+        // Convert to FlatBuffer (will be encrypted)
+        let (logged_event, presentation_action) =
+            crate::event_log::logged_narrative_event_to_flatbuffer(player, event, pubkey)
+                .expect("Failed to create logged event");
+
+        // Append the event
+        log.append(logged_event.clone(), presentation_action);
+
+        // Verify the encrypted_blob is actually encrypted (not plaintext FlatBuffer)
+        // Plaintext FlatBuffer starts with specific magic bytes, encrypted Age data won't
+        assert!(
+            logged_event.encrypted_blob.len() > 100,
+            "Encrypted blob should be reasonably sized"
+        );
+
+        // Try to deserialize as plaintext - should fail for encrypted data
+        let _plaintext_parse =
+            <moor_schema::common::NarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(
+                &logged_event.encrypted_blob,
+            );
+        // For encrypted data, this should fail. For testing without keys it will succeed.
+        // The important thing is encryption works when pubkey is provided.
+
+        // Decrypt and verify
+        use age::secrecy::ExposeSecret;
+        let decrypted_bytes = crate::event_log::encryption::decrypt(
+            &logged_event.encrypted_blob,
+            seckey.expose_secret(),
+        )
+        .expect("Failed to decrypt");
+
+        // Parse decrypted bytes and convert to domain type
+        let narrative_event_ref =
+            <moor_schema::common::NarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(
+                &decrypted_bytes,
+            )
+            .expect("Failed to parse decrypted event");
+        let narrative_event = moor_schema::convert::narrative_event_from_ref(narrative_event_ref)
+            .expect("Failed to convert event");
+
+        // Verify the event content
+        if let moor_common::tasks::Event::Present(pres) = narrative_event.event() {
+            assert_eq!(pres.id, "test_widget");
+            assert_eq!(pres.content, "Secret Message!");
+        } else {
+            panic!("Expected Present event");
+        }
+    }
+
+    #[test]
     fn test_no_op_event_log() {
         let log = NoOpEventLog::new();
         let player = Obj::mk_id(1);
 
         let event = create_logged_event(player, "test");
-        let id = log.append(event);
+        let id = log.append(event, None);
 
         assert!(!id.is_nil(), "Should return valid UUID even for no-op");
 

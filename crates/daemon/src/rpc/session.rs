@@ -90,11 +90,16 @@ impl Session for RpcSession {
             transaction_buffer.drain(..).collect()
         };
 
-        // First, persist all events to the shared EventLog
         for (player, event) in &events {
-            // Convert to FlatBuffer LoggedNarrativeEvent
-            if let Ok(logged_event) = logged_narrative_event_to_flatbuffer(*player, event.clone()) {
-                self.event_log.append(logged_event);
+            let Some(pubkey) = self.event_log.get_pubkey(*player) else {
+                continue;
+            };
+
+            // Convert to FlatBuffer LoggedNarrativeEvent (always encrypted)
+            if let Ok((logged_event, presentation_action)) =
+                logged_narrative_event_to_flatbuffer(*player, event.clone(), pubkey)
+            {
+                self.event_log.append(logged_event, presentation_action);
             }
         }
 

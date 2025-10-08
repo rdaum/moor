@@ -15,5 +15,6 @@
 pub(crate) use event_log::*;
 pub(crate) use event_log_conversions::*;
 
+mod encryption;
 mod event_log;
 mod event_log_conversions;

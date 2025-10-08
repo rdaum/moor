@@ -12,8 +12,8 @@
     "lint": "eslint web-client --ext ts,tsx --report-unused-disable-directives",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
-    "daemon:dev": "cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true",
-    "daemon:traced": "cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --trace-output moor-trace.json",
+    "daemon:dev": "cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true",
+    "daemon:traced": "cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --trace-output moor-trace.json",
     "web-host:dev": "cargo run --bin moor-web-host -- --debug",
     "web-host:build": "cargo build --release --bin moor-web-host",
     "web-host:run": "cargo run --release --bin moor-web-host",
@@ -44,11 +44,15 @@
     "globals": "^16.4.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.2",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
   },
   "dependencies": {
     "@djot/djot": "^0.3.2",
     "@monaco-editor/react": "^4.7.0",
+    "age-encryption": "^0.2.4",
+    "argon2-browser": "^1.18.0",
     "dompurify": "^3.2.6",
     "monaco-editor": "^0.52.2",
     "react": "^18.2.0",

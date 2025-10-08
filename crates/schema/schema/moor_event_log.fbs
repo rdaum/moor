@@ -25,15 +25,22 @@ namespace MoorEventLog;
 // ============================================================================
 
 // Wrapper for a narrative event with player information
-// Replaces the bincode-serialized LoggedNarrativeEvent
+// Stores encrypted event data for privacy
 table LoggedNarrativeEvent {
+    event_id: MoorCommon.Uuid (required);
+    timestamp: uint64;  // SystemTime as nanos since epoch
     player: MoorCommon.Obj (required);
-    event: MoorCommon.NarrativeEvent (required);
+    encrypted_blob: [ubyte] (required);  // age-encrypted event data
+}
+
+// Individual presentation - ID is plaintext, content is encrypted
+table StoredPresentation {
+    id: string (required);  // Plaintext ID for dismiss operations
+    encrypted_content: [ubyte] (required);  // Encrypted presentation data
 }
 
 // Current presentation state for a player
-// Replaces the bincode-serialized PlayerPresentations
 table PlayerPresentations {
     player: MoorCommon.Obj (required);
-    presentations: [MoorCommon.Presentation] (required);
+    presentations: [StoredPresentation] (required);
 }

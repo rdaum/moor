@@ -861,9 +861,13 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             },
         });
 
-        // Test event logging
-        let logged_event = logged_narrative_event_to_flatbuffer(player, test_event).unwrap();
-        let event_id = event_log.append(logged_event);
+        // Test event logging (generate test key - encryption is mandatory)
+        let identity = age::x25519::Identity::generate();
+        let pubkey = identity.to_public().to_string();
+        let logged_event = logged_narrative_event_to_flatbuffer(player, test_event, pubkey)
+            .unwrap()
+            .0;
+        let event_id = event_log.append(logged_event, None);
         assert!(!event_id.is_nil(), "Should return valid event ID");
 
         // Test event retrieval
@@ -873,7 +877,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let event_player = obj_from_flatbuffer_struct(&events[0].player).unwrap();
         assert_eq!(event_player, player, "Event should be for correct player");
         // event_id is now a field, not a method, and is a FlatBuffer UUID
-        let event_uuid_bytes = events[0].event.event_id.data.as_slice();
+        let event_uuid_bytes = events[0].event_id.data.as_slice();
         let mut uuid_bytes = [0u8; 16];
         uuid_bytes.copy_from_slice(event_uuid_bytes);
         let event_event_id = Uuid::from_bytes(uuid_bytes);
@@ -901,8 +905,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             event: moor_common::tasks::Event::Present(presentation.clone()),
         });
 
-        let logged_event = logged_narrative_event_to_flatbuffer(player, present_event).unwrap();
-        event_log.append(logged_event);
+        // Generate test key - encryption is mandatory
+        let identity = age::x25519::Identity::generate();
+        let pubkey = identity.to_public().to_string();
+        let (logged_event, presentation_action) =
+            logged_narrative_event_to_flatbuffer(player, present_event, pubkey).unwrap();
+        event_log.append(logged_event, presentation_action);
 
         // Check current presentations - now returns Vec<Presentation> instead of HashMap
         let presentations = event_log.current_presentations(player);

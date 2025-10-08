@@ -2859,6 +2859,7 @@ dependencies = [
 name = "moor-daemon"
 version = "0.9.0-alpha"
 dependencies = [
+ "age",
  "ahash",
  "base64 0.21.7",
  "byteview",
@@ -3149,8 +3150,10 @@ dependencies = [
 name = "moor-web-host"
 version = "0.9.0-alpha"
 dependencies = [
+ "age",
  "axum",
  "base64 0.21.7",
+ "bech32",
  "clap",
  "clap_derive",
  "color-eyre",
