@@ -85,24 +85,33 @@ export const useWelcomeMessage = () => {
 
         const fetchWelcome = async (): Promise<boolean> => {
             try {
-                // Fetch welcome message
-                const messageResponse = await fetch("/system_property/login/welcome_message");
+                // Import FlatBuffer function
+                const { getSystemPropertyFlatBuffer } = await import("../lib/rpc-fb");
 
-                if (!messageResponse.ok) {
+                // Fetch welcome message using FlatBuffer protocol
+                const welcomeValue = await getSystemPropertyFlatBuffer(["login"], "welcome_message");
+
+                if (welcomeValue === null) {
                     // Server not ready yet, return false to retry
-                    console.log(`Server not ready (${messageResponse.status}), retrying...`);
+                    console.log("Server not ready, retrying...");
                     return false;
                 }
 
-                const welcomeArray = await messageResponse.json() as string[];
-                const welcomeText = welcomeArray.join("\n");
+                let welcomeText = "";
+                if (Array.isArray(welcomeValue)) {
+                    welcomeText = welcomeValue.join("\n");
+                } else if (typeof welcomeValue === "string") {
+                    welcomeText = welcomeValue;
+                } else {
+                    console.warn("Unexpected welcome message format:", welcomeValue);
+                    welcomeText = "Welcome to mooR";
+                }
 
-                // Fetch content type
+                // Fetch content type using FlatBuffer protocol
                 let contentTypeValue: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
                 try {
-                    const typeResponse = await fetch("/system_property/login/welcome_message_content_type");
-                    if (typeResponse.ok) {
-                        const typeValue = await typeResponse.json() as string;
+                    const typeValue = await getSystemPropertyFlatBuffer(["login"], "welcome_message_content_type");
+                    if (typeof typeValue === "string") {
                         // Validate the content type
                         if (
                             typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain"

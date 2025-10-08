@@ -11,6 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+import { ObjId } from "../generated/moor-common/obj-id.js";
+import { UuObjId } from "../generated/moor-common/uu-obj-id.js";
+
 export enum ORefKind {
     Oid,
     SysObj,
@@ -33,50 +36,6 @@ export interface ObjMatch {
 }
 
 export type ObjectRef = Oid | SysObj | ObjMatch;
-
-// Parse a JSON document representing a MOO 'Var'.
-// Moor JSON common are a bit special because we have a number of types that are not a direct map.
-export function jsonToValue(json: any): any {
-    if (typeof json === "number") {
-        return json;
-    } else if (typeof json === "string") {
-        return json;
-    } else if (typeof json === "object") {
-        if ((json as any)["error"]) {
-            return new Error((json as any)["error"], (json as any)["message"]);
-        } else if ((json as any)["obj"] != null) {
-            return curieToObjectRef((json as any)["obj"]);
-        } else if ((json as any)["map_pairs"] != null) {
-            const pairs: any[] = [];
-            const jsonPairs = (json as any)["map_pairs"];
-            if (!Array.isArray(jsonPairs)) {
-                throw "Map pairs must be an array";
-            }
-            for (let i = 0; i < jsonPairs.length; i++) {
-                pairs.push(jsonToValue(jsonPairs[i]));
-            }
-            return new Map(pairs);
-        } else {
-            throw "Unknown object type: " + json;
-        }
-    } else {
-        throw "Unknown JSON type: " + json;
-    }
-}
-
-export function valueToJson(v: any): any {
-    if (typeof v === "number" || typeof v === "string") {
-        return v;
-    } else if (v instanceof Error) {
-        return { error: v.code, message: v.message };
-    } else if (v["kind"] === ORefKind.Oid) {
-        return { obj: v.curie };
-    } else if (v instanceof Map) {
-        return { map_pairs: v.pairs.map(valueToJson) };
-    } else {
-        throw "Unknown object type: " + v;
-    }
-}
 
 export function oidRef(oid: number): Oid {
     return { kind: ORefKind.Oid, curie: `oid:${oid}` };
@@ -104,84 +63,70 @@ export function matchRef(match: string): ObjMatch {
     return { kind: ORefKind.Match, match: match };
 }
 
+/**
+ * Convert UuObjId packed value to UUID string representation
+ * Matches Rust implementation in crates/var/src/obj.rs
+ *
+ * Format: FFFFFF-FFFFFFFFFF
+ * - First group (6 hex): autoincrement (18 bits) << 6 | rng (6 bits)
+ * - Second group (10 hex): epoch_ms (38 bits)
+ */
+export function uuObjIdToString(packedValue: bigint): string {
+    // Extract components from packed 62-bit value
+    // autoincrement: top 18 bits
+    // rng: next 6 bits
+    // epoch_ms: bottom 38 bits
+    const autoincrement = Number((packedValue >> 44n) & 0x3FFFFn);
+    const rng = Number((packedValue >> 38n) & 0x3Fn);
+    const epochMs = Number(packedValue & 0x3FFFFFFFFFn);
+
+    // Format: FFFFFF-FFFFFFFFFF
+    const firstGroup = ((autoincrement << 6) | rng).toString(16).toUpperCase().padStart(6, "0");
+    const secondGroup = epochMs.toString(16).toUpperCase().padStart(10, "0");
+    return `${firstGroup}-${secondGroup}`;
+}
+
+/**
+ * Extract object ID string from FlatBuffer Obj union
+ * Returns numeric ID for ObjId, UUID string for UuObjId, null for other types
+ */
+export function objToString(obj: any): string | null {
+    if (!obj) return null;
+
+    // ObjUnion enum values
+    const ObjUnion = {
+        NONE: 0,
+        ObjId: 1,
+        UuObjId: 2,
+        AnonymousObjId: 3,
+    };
+
+    const objType = obj.objType();
+
+    // ObjId type - numeric ID (format: 123)
+    if (objType === ObjUnion.ObjId) {
+        const objId = obj.obj(new ObjId());
+        return objId ? objId.id().toString() : null;
+    }
+
+    // UuObjId type - UUID-based ID (format: FFFFFF-FFFFFFFFFF)
+    if (objType === ObjUnion.UuObjId) {
+        const uuObjId = obj.obj(new UuObjId());
+        if (uuObjId) {
+            const packedValue = uuObjId.packedValue();
+            return uuObjIdToString(packedValue);
+        }
+    }
+
+    // AnonymousObjId can't come over RPC
+    return null;
+}
+
 export class Error {
     code: string;
     message: string | null;
     constructor(code: string, message: string | null) {
         this.code = code;
         this.message = message;
-    }
-}
-
-// Represents a MOO 'map' which is a list of key-value pairs in sorted order and binary search for keys.
-// (We cannot use a JavaScript object because the keys are potentially-not strings.)
-// - Maps are not supported in JSON serialization, so we have to encode them as a list of pairs,
-//   with a tag to indicate that it's a map.
-// - Object references are encoded as a JSON object with a tag to indicate the type of reference.
-//      { oid: 1234 }
-// - Errors are encoded as a JSON object with a tag to indicate the type of error, and an optional description.
-//      { error: "E_PROPNF", message: "Property not found" }
-// - Lists are encoded as JSON arrays.
-// - Strings are encoded as JSON strings.
-// - Integers & floats are encoded as JSON numbers, but there's a caveat here that JSON's spec
-//   can't permit a full 64-bit integer, so we have to be careful about that.
-// - Future things like WAIFs, etc. will need to be encoded in a way that makes sense for JSON.
-export class Map {
-    pairs: Array<[any, any]>;
-
-    constructor(pairs: Array<[any, any]> = []) {
-        this.pairs = pairs;
-    }
-
-    // Insert a key-value pair into the map, replacing the value if the key already exists, common are kept in sorted
-    // order.
-    // As in MOO, we are CoW friendly, so we return a new map with the new pair inserted.
-    insert(key: any, value: any): Map {
-        const pairs = this.pairs.slice();
-        let i = pairs.findIndex(pair => pair[0] >= key);
-        if (i < 0) {
-            i = pairs.length;
-        } else if (pairs[i][0] === key) {
-            pairs[i] = [key, value];
-            return new Map(pairs);
-        }
-        pairs.splice(i, 0, [key, value]);
-        return new Map(pairs);
-    }
-
-    // Remove a key-value pair from the map, returning a new map with the pair removed.
-    remove(key: any): Map {
-        const pairs = this.pairs.slice();
-        const i = pairs.findIndex(pair => pair[0] === key);
-        if (i < 0) {
-            return this;
-        }
-        pairs.splice(i, 1);
-        return new Map(pairs);
-    }
-
-    // Get the value for a key, or undefined if the key is not in the map.
-    get(key: any): any {
-        const i = this.pairs.findIndex(pair => pair[0] === key);
-        if (i < 0) {
-            return undefined;
-        }
-        return this.pairs[i][1];
-    }
-
-    // Return the set of pairs
-    // Return the keys in the map
-    keys() {
-        return this.pairs.map(pair => pair[0]);
-    }
-
-    // Return the common in the map
-    values() {
-        return this.pairs.map(pair => pair[1]);
-    }
-
-    // Return the number of pairs in the map
-    size(): number {
-        return this.pairs.length;
     }
 }

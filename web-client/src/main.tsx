@@ -138,14 +138,14 @@ function AppContent({
         console.log("[EncryptionDebug] Encryption state:", {
             hasEncryption: encryptionState.hasEncryption,
             isChecking: encryptionState.isChecking,
-            hasDerivedKeyBytes: !!encryptionState.derivedKeyBytes,
-            derivedKeyBytesLength: encryptionState.derivedKeyBytes?.length,
-            encryptionKeyForHistory: encryptionKeyForHistory?.substring(0, 20) + "...",
+            hasAgeIdentity: !!encryptionState.ageIdentity,
+            ageIdentityLength: encryptionState.ageIdentity?.length,
+            encryptionKeyForHistory: encryptionKeyForHistory?.substring(0, 30) + "...",
         });
     }, [
         encryptionState.hasEncryption,
         encryptionState.isChecking,
-        encryptionState.derivedKeyBytes,
+        encryptionState.ageIdentity,
         encryptionKeyForHistory,
     ]);
 
@@ -232,7 +232,7 @@ function AppContent({
     // Check encryption setup after login
     useEffect(() => {
         if (authState.player && !encryptionState.isChecking && !userSkippedEncryption) {
-            const hasLocalKey = !!encryptionState.derivedKeyBytes;
+            const hasLocalKey = !!encryptionState.ageIdentity;
             const backendHasPubkey = encryptionState.hasEncryption;
 
             // If no local key but backend has pubkey, prompt for existing password
@@ -260,7 +260,7 @@ function AppContent({
     }, [
         authState.player,
         encryptionState.hasEncryption,
-        encryptionState.derivedKeyBytes,
+        encryptionState.ageIdentity,
         encryptionState.isChecking,
         showEncryptionSetup,
         showPasswordPrompt,
@@ -303,7 +303,7 @@ function AppContent({
 
                         // Fetch current presentations BEFORE connecting WebSocket
                         try {
-                            await fetchCurrentPresentations(authState.player!.authToken);
+                            await fetchCurrentPresentations(authState.player!.authToken, encryptionKeyForHistory);
                         } catch (_error) {
                             // Continue even if presentations fail to load
                         }
@@ -318,7 +318,7 @@ function AppContent({
 
                         // Still try to fetch presentations even if history fails
                         try {
-                            await fetchCurrentPresentations(authState.player!.authToken);
+                            await fetchCurrentPresentations(authState.player!.authToken, encryptionKeyForHistory);
                         } catch (_error) {
                             // Continue even if presentations fail to load
                         }

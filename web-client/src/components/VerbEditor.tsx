@@ -15,6 +15,7 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { objToString } from "../lib/var.js";
 
 interface VerbEditorProps {
     visible: boolean;
@@ -363,11 +364,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         // Cache for verb/property lookups to avoid repeated API calls
         const completionCache = new Map<
             string,
-            { verbs?: any[]; properties?: Record<string, any>; timestamp: number }
+            { verbs?: any; properties?: any; timestamp: number }
         >();
         const CACHE_TTL = 30000; // 30 seconds
 
-        const getCachedVerbs = async (cacheKey: string, fetchFn: () => Promise<any[]>) => {
+        const getCachedVerbs = async (cacheKey: string, fetchFn: () => Promise<any>) => {
             const cached = completionCache.get(cacheKey);
             if (cached && cached.verbs && Date.now() - cached.timestamp < CACHE_TTL) {
                 return cached.verbs;
@@ -377,7 +378,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             return verbs;
         };
 
-        const getCachedProperties = async (cacheKey: string, fetchFn: () => Promise<Record<string, any>>) => {
+        const getCachedProperties = async (cacheKey: string, fetchFn: () => Promise<any>) => {
             const cached = completionCache.get(cacheKey);
             if (cached && cached.properties && Date.now() - cached.timestamp < CACHE_TTL) {
                 return cached.properties;
@@ -398,30 +399,39 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             suggestions: monaco.languages.CompletionItem[],
         ) => {
             try {
-                const properties = await getCachedProperties(cacheKey, () => objectRef.getProperties());
-                properties.forEach((prop: any, index: number) => {
-                    if (prop.name && prop.name.startsWith(prefix)) {
-                        suggestions.push({
-                            label: {
-                                label: prop.name,
-                                detail: ` #${prop.definer}`,
-                            },
-                            kind: monaco.languages.CompletionItemKind.Property,
-                            insertText: prop.name,
-                            sortText: index.toString().padStart(4, "0"),
-                            documentation:
-                                `Property on ${contextLabel} (defined in #${prop.definer}, owner: #${prop.owner}, ${
-                                    prop.r ? "readable" : "not readable"
-                                }, ${prop.w ? "writable" : "read-only"})`,
-                            range: {
-                                startLineNumber: position.lineNumber,
-                                endLineNumber: position.lineNumber,
-                                startColumn,
-                                endColumn: position.column,
-                            },
-                        });
-                    }
-                });
+                const propsReply = await getCachedProperties(cacheKey, () => objectRef.getProperties());
+                const propsLength = propsReply.propertiesLength();
+
+                for (let i = 0; i < propsLength; i++) {
+                    const propInfo = propsReply.properties(i);
+                    if (!propInfo) continue;
+
+                    const nameSymbol = propInfo.name();
+                    const propName = nameSymbol?.value();
+                    if (!propName || !propName.startsWith(prefix)) continue;
+
+                    const definerId = objToString(propInfo.definer());
+                    const ownerId = objToString(propInfo.owner());
+
+                    suggestions.push({
+                        label: {
+                            label: propName,
+                            detail: definerId ? ` #${definerId}` : "",
+                        },
+                        kind: monaco.languages.CompletionItemKind.Property,
+                        insertText: propName,
+                        sortText: i.toString().padStart(4, "0"),
+                        documentation: `Property on ${contextLabel} (defined in #${definerId || "?"}, owner: #${
+                            ownerId || "?"
+                        }, ${propInfo.r() ? "readable" : "not readable"}, ${propInfo.w() ? "writable" : "read-only"})`,
+                        range: {
+                            startLineNumber: position.lineNumber,
+                            endLineNumber: position.lineNumber,
+                            startColumn,
+                            endColumn: position.column,
+                        },
+                    });
+                }
             } catch (error) {
                 console.warn(`Failed to fetch properties for ${contextLabel}:`, error);
             }
@@ -438,36 +448,46 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             suggestions: monaco.languages.CompletionItem[],
         ) => {
             try {
-                const verbs = await getCachedVerbs(cacheKey, () => objectRef.getVerbs());
+                const verbsReply = await getCachedVerbs(cacheKey, () => objectRef.getVerbs());
+                const verbsLength = verbsReply.verbsLength();
                 let sortIndex = 0;
-                verbs.forEach((verb: any) => {
-                    if (verb.names && Array.isArray(verb.names)) {
-                        verb.names.forEach((verbName: string) => {
-                            if (verbName.startsWith(prefix)) {
-                                suggestions.push({
-                                    label: {
-                                        label: verbName,
-                                        detail: ` #${verb.location}`,
-                                    },
-                                    kind: monaco.languages.CompletionItemKind.Method,
-                                    insertText: verbName,
-                                    sortText: sortIndex.toString().padStart(4, "0"),
-                                    documentation:
-                                        `Verb on ${contextLabel} (defined in #${verb.location}, owner: #${verb.owner}, ${
-                                            verb.r ? "readable" : "not readable"
-                                        }, ${verb.x ? "executable" : "not executable"})`,
-                                    range: {
-                                        startLineNumber: position.lineNumber,
-                                        endLineNumber: position.lineNumber,
-                                        startColumn,
-                                        endColumn: position.column,
-                                    },
-                                });
-                                sortIndex++;
-                            }
+
+                for (let i = 0; i < verbsLength; i++) {
+                    const verbInfo = verbsReply.verbs(i);
+                    if (!verbInfo) continue;
+
+                    const locationId = objToString(verbInfo.location());
+                    const ownerId = objToString(verbInfo.owner());
+                    const namesLength = verbInfo.namesLength();
+
+                    for (let j = 0; j < namesLength; j++) {
+                        const nameSymbol = verbInfo.names(j);
+                        const verbName = nameSymbol?.value();
+                        if (!verbName || !verbName.startsWith(prefix)) continue;
+
+                        suggestions.push({
+                            label: {
+                                label: verbName,
+                                detail: locationId ? ` #${locationId}` : "",
+                            },
+                            kind: monaco.languages.CompletionItemKind.Method,
+                            insertText: verbName,
+                            sortText: sortIndex.toString().padStart(4, "0"),
+                            documentation: `Verb on ${contextLabel} (defined in #${locationId || "?"}, owner: #${
+                                ownerId || "?"
+                            }, ${verbInfo.r() ? "readable" : "not readable"}, ${
+                                verbInfo.x() ? "executable" : "not executable"
+                            })`,
+                            range: {
+                                startLineNumber: position.lineNumber,
+                                endLineNumber: position.lineNumber,
+                                startColumn,
+                                endColumn: position.column,
+                            },
                         });
+                        sortIndex++;
                     }
-                });
+                }
             } catch (error) {
                 console.warn(`Failed to fetch verbs for ${contextLabel}:`, error);
             }

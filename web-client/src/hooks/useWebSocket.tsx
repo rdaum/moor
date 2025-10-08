@@ -12,23 +12,12 @@
 //
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { handleClientEventFlatBuffer } from "../lib/rpc-fb";
 import { Player } from "./useAuth";
-
-export interface WebSocketMessage {
-    kind?: string;
-    message?: string;
-    system_message?: string;
-    present?: any;
-    unpresent?: string;
-    traceback?: any;
-    server_time?: string;
-    no_newline?: boolean;
-}
 
 export interface WebSocketState {
     socket: WebSocket | null;
     isConnected: boolean;
-    lastMessage: WebSocketMessage | null;
     connectionStatus: "disconnected" | "connecting" | "connected" | "error";
 }
 
@@ -45,12 +34,10 @@ export const useWebSocket = (
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
-    onMessage?: (message: WebSocketMessage) => void,
 ) => {
     const [wsState, setWsState] = useState<WebSocketState>({
         socket: null,
         isConnected: false,
-        lastMessage: null,
         connectionStatus: "disconnected",
     });
 
@@ -58,66 +45,29 @@ export const useWebSocket = (
     const reconnectTimeoutRef = useRef<number | null>(null);
 
     // Handle incoming WebSocket messages
-    const handleMessage = useCallback((event: MessageEvent) => {
+    const handleMessage = useCallback(async (event: MessageEvent) => {
         try {
-            const data: WebSocketMessage = JSON.parse(event.data);
+            // All messages are now binary FlatBuffer format
+            if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+                // Convert Blob to ArrayBuffer if needed
+                const arrayBuffer = event.data instanceof Blob
+                    ? await event.data.arrayBuffer()
+                    : event.data;
 
-            // Update state with last message
-            setWsState(prev => ({ ...prev, lastMessage: data }));
-
-            // Handle different message types
-            if (typeof data !== "object" || data === null) {
-                // Skip non-object messages like numbers
-                return;
-            } else if (data.system_message) {
-                onSystemMessage(data.system_message, 5);
-            } else if ("message" in data && data.message !== undefined) {
-                // Narrative message - send to narrative display
-
-                let content: string | string[];
-
-                if (typeof data.message === "string") {
-                    content = data.message;
-                } else if (typeof data.message === "object" && data.message !== null) {
-                    // For arrays or objects, use the message directly as content
-                    content = data.message;
-                } else {
-                    content = JSON.stringify(data.message);
-                }
-
-                // Always check for content_type at the top level of the message
-                const contentType = (data as any).content_type;
-
-                if (onNarrativeMessage) {
-                    onNarrativeMessage(content, data.server_time, contentType, false, data.no_newline); // WebSocket messages are always live (not historical)
-                }
-            } else if (data.present) {
-                // Presentation message - handle present
-                if (onPresentMessage) {
-                    onPresentMessage(data.present);
-                }
-            } else if (data.unpresent) {
-                // Unpresent message - handle unpresent
-                if (onUnpresentMessage) {
-                    onUnpresentMessage(data.unpresent);
-                }
-            } else if (data.traceback) {
-                // Traceback message - log to console and show as narrative
-                console.error("MOO Traceback:", data.traceback);
-                if (onNarrativeMessage) {
-                    const tracebackText = `${data.traceback.error}\n${data.traceback.traceback.join("\n")}`;
-                    onNarrativeMessage(tracebackText, data.server_time, "text/traceback", false, false);
-                }
-            }
-
-            // Call optional message handler
-            if (onMessage) {
-                onMessage(data);
+                handleClientEventFlatBuffer(
+                    new Uint8Array(arrayBuffer),
+                    onSystemMessage,
+                    onNarrativeMessage,
+                    onPresentMessage,
+                    onUnpresentMessage,
+                );
+            } else {
+                console.error("Unexpected non-binary WebSocket message:", event.data);
             }
         } catch (error) {
-            console.error("Failed to parse WebSocket message:", error, event.data);
+            console.error("Failed to parse WebSocket message:", error);
         }
-    }, [onSystemMessage, onNarrativeMessage, onPresentMessage, onUnpresentMessage, onMessage]);
+    }, [onSystemMessage, onNarrativeMessage, onPresentMessage, onUnpresentMessage]);
 
     // Connect to WebSocket
     const connect = useCallback(async (mode: "connect" | "create") => {

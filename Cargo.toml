@@ -132,6 +132,7 @@ tokio-util = { version = "0.7", features = ["full"] }
 age = "0.11"
 argon2 = "0.5"
 base64 = "0.21"
+bech32 = "0.11"
 ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "signature"] }
 hmac = "0.12"
 md-5 = "0.10" # For MOO's "string_hash"

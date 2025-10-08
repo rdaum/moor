@@ -28,12 +28,32 @@ system provides:
 - **Encryption at rest** using age (modern file encryption with X25519/ChaCha20-Poly1305)
 - **Per-user encryption** with user-chosen passwords (separate from MOO login)
 - **Deterministic key derivation** enabling cross-device access (same password = same keys)
-- **Browser localStorage** for derived private keys (password never stored)
-- **Web-host decryption** (not client-side) for simpler architecture
-- **Mandatory encryption** - events cannot be logged without it
+- **Client-side decryption** enabling E2E protection
+- **Mandatory for history** - events cannot be logged to history without encryption setup
 
-**What this protects**: Protect narrative events from filesystem access (backups, snooping, stolen
-drives) without requiring complex client-side cryptography.
+**What this offers**: End-to-end encryption of historical events - neither web-host nor daemon can
+read plaintext events. Protects against filesystem access, stolen backups, and compromised server
+components.
+
+### Client Support
+
+**Web client**: Full E2E encryption support via age.js in browser. Password-derived keys stored in
+localStorage. This is the reference implementation.
+
+**Telnet client**: Does not support retrieving encrypted history or providing encryption keys.
+Telnet clients only see live, real-time events as they occur - no scrollback, no history recall.
+However, events generated during telnet sessions _are_ still logged to the event log (encrypted) if
+the player has encryption configured. The telnet client simply cannot retrieve that encrypted
+history later.
+
+**Future clients**: Any client that wants history support must implement:
+
+1. Age encryption (for decryption)
+2. FlatBuffer parsing (for protocol)
+3. Key derivation (Argon2 + bech32 encoding)
+
+The system is designed to be client-agnostic - the daemon/web-host handle encrypted blobs, clients
+handle decryption. A native desktop client or mobile app could implement the same flow.
 
 ## Threat Model
 
@@ -46,15 +66,19 @@ drives) without requiring complex client-side cryptography.
 
 ### What We Accept As Limitations
 
-- ❌ In-memory snooping while user is logged in (unsolvable without hardware support)
-- ❌ Compromised daemon/web-host logging passwords
-- ❌ HTTPS man-in-the-middle (but that breaks everything anyway)
+- ❌ Live events in transit (in-memory snooping, HTTPS MitM) - no solution for real-time events as
+  they arrive
+- ❌ Compromised web-client sources serving malicious JavaScript to steal passwords/keys
+
+Note: Logged history is fully protected - only live, actively-arriving events are potentially
+visible. Past encrypted events stored in the database cannot be accessed without the user's
+password.
 
 ### Security Model
 
-**Encryption at rest, decryption in web-host**. The web-host is part of the trusted system. Users
-communicate over HTTPS, so plaintext in transit is protected by TLS. We do not attempt
-"zero-knowledge" architecture where the server never sees plaintext.
+**True end-to-end encryption for logged history**. Decryption happens entirely client-side in the
+browser. The web-host and daemon never see plaintext events from history - they only handle
+encrypted FlatBuffer blobs. Private keys never leave the client.
 
 ---
 
@@ -64,24 +88,23 @@ communicate over HTTPS, so plaintext in transit is protected by TLS. We do not a
 ┌─────────────────────────────────────────────┐
 │  Browser (JavaScript)                       │
 │  - User enters event log password           │
-│  - Derives age keypair (client-side)        │
-│  - Stores private key in localStorage       │
-│  - Sends private key via HTTPS header       │
-│  - Receives plaintext JSON                  │
+│  - Derives age identity (client-side)       │
+│  - Stores identity in localStorage          │
+│  - Requests encrypted FlatBuffer blobs      │
+│  - Decrypts blobs client-side with age.js   │
+│  - Parses decrypted FlatBuffers             │
 └─────────────────────────────────────────────┘
                     ↓ HTTPS (TLS encrypted)
 ┌─────────────────────────────────────────────┐
 │  Web-host (Rust)                            │
-│  - Receives age private key from client     │
-│  - Requests encrypted blobs from daemon     │
-│  - Decrypts with client's private key       │
-│  - Returns plaintext JSON to browser        │
-│  - Discards keys immediately after request  │
-└───────────────────────────────────────
+│  - No key handling (keys never leave client)│
+│  - Passes encrypted blobs to browser        │
+│  - Never sees plaintext events              │
+└─────────────────────────────────────────────┘
                     ↓ RPC (ZMQ)
 ┌─────────────────────────────────────────────┐
 │  Daemon (Rust)                              │
-│  - Stores player public keys (in MOO DB)    │
+│  - Stores player public keys                │
 │  - EventLog encrypts events with pubkeys    │
 │  - Returns encrypted blobs (never decrypts) │
 └─────────────────────────────────────────────┘
@@ -99,12 +122,12 @@ communicate over HTTPS, so plaintext in transit is protected by TLS. We do not a
 
 ### 1. Browser (JavaScript Client)
 
-All cryptographic key derivation happens client-side in JavaScript. The browser derives 32 bytes
-from passwords using Argon2 KDF with the player OID as salt. These bytes are sent to the server
-which generates age keypairs.
+All cryptographic operations happen client-side in JavaScript. The browser derives age identities
+from passwords, stores them in localStorage, and decrypts encrypted event blobs received from the
+server using age.js.
 
 **IMPORTANT**: Encryption is MANDATORY. Events cannot be logged without encryption. There is no
-plaintext storage option.
+plaintext storage option. Private keys never leave the client.
 
 #### Key Derivation (JavaScript)
 
@@ -129,7 +152,7 @@ async function deriveKeyBytes(password, playerOid) {
 }
 ```
 
-**Important**: Same password + same player OID = same 32 bytes (deterministic). The server generates
+**Important**: Same password + same player OID = same 32 bytes (deterministic). The client generates
 age keypairs from these bytes deterministically, enabling cross-device recovery.
 
 #### First-time Setup Flow
@@ -140,20 +163,22 @@ age keypairs from these bytes deterministically, enabling cross-device recovery.
    - Password is separate from MOO login password
 3. User enters encryption password
 4. **Client derives 32 bytes from password** (deterministic Argon2)
-5. Client sends **derived bytes** to web-host via PUT /api/event-log/pubkey
-6. Web-host generates age keypair from bytes, stores public key in daemon
-7. **Client saves derived bytes** to localStorage for future use
-8. Password is discarded (never stored)
+5. **Client generates age keypair from derived bytes** (client-side)
+6. **Client extracts public key** from keypair
+7. Client sends **only public key** to web-host via PUT /api/event-log/pubkey
+8. Web-host stores public key in daemon (never sees private key)
+9. **Client saves age identity (private key)** to localStorage for future use
+10. Password is discarded (never stored)
 
 #### Subsequent Logins (Same Browser)
 
 1. User logs in with MOO credentials
-2. Client checks localStorage for saved derived bytes
-3. If found: Use saved bytes automatically (no password needed)
-4. If not found: Prompt for password, derive bytes, save (see "New Browser" below)
+2. Client checks localStorage for saved age identity (private key)
+3. If found: Use saved identity automatically (no password needed)
+4. If not found: Prompt for password, derive identity, save (see "New Browser" below)
 
-**LocalStorage Key**: `moor_event_log_key_${playerOid}` **Value**: Base64-encoded 32 bytes from
-Argon2 (e.g., `UGMFqXg4t9EOT...`)
+**LocalStorage Key**: `moor_event_log_identity_${playerOid}` **Value**: Age identity string
+(AGE-SECRET-KEY-1...) derived from password
 
 #### Login from New Browser/Device
 
@@ -162,9 +187,9 @@ Argon2 (e.g., `UGMFqXg4t9EOT...`)
 3. If enabled, prompt: **"Enter your event log encryption password"**
 4. User enters password
 5. **Client derives 32 bytes from password** (deterministic - same password = same bytes)
-6. Client validates by attempting to fetch history with derived bytes
-7. If successful: **Save derived bytes** (not password) to localStorage for future sessions
-8. Client includes derived bytes in all history API requests via X-Moor-Event-Log-Key header
+6. **Client generates age identity from derived bytes**
+7. Client validates by attempting to fetch and decrypt history
+8. If successful: **Save age identity** (not password) to localStorage for future sessions
 
 #### Forgotten Password Flow (Reset)
 
@@ -175,11 +200,13 @@ Argon2 (e.g., `UGMFqXg4t9EOT...`)
 4. If user confirms:
    - Client prompts for new password
    - Client derives new 32 bytes from new password
-   - Calls PUT /api/event-log/pubkey with new derived bytes
-   - Server generates new keypair, stores new public key
+   - Client generates new age keypair from new derived bytes
+   - Client extracts new public key
+   - Calls PUT /api/event-log/pubkey with new public key
+   - Server stores new public key
    - Old events remain in database (encrypted with old key, unreadable)
    - New events use new key going forward
-5. Save new derived bytes to localStorage
+5. Save new age identity to localStorage
 
 #### Change Password Flow (Re-encrypt)
 
@@ -189,30 +216,25 @@ abandons old history.
 1. User clicks **"Change encryption password"** in settings
 2. Client prompts for **current password**
 3. Client prompts for **new password**
-4. Client derives **old bytes** from current password (from localStorage or re-derived)
-5. Client derives **new bytes** from new password
-6. Client calls POST /api/event-log/change-password with JSON body:
-   ```json
-   {
-     "old_derived_bytes": "base64...",
-     "new_derived_bytes": "base64..."
-   }
-   ```
-7. Web-host generates age identities from both byte sets
-8. Web-host fetches encrypted history, decrypts with old identity, re-encrypts with new identity
-9. Web-host stores new public key in daemon
-10. On success:
-    - Client saves **new derived bytes** to localStorage
-    - Client discards old bytes
+4. Client derives **old identity** from current password (from localStorage or re-derived)
+5. Client derives **new bytes** from new password and generates new age keypair
+6. Client fetches all encrypted history from server
+7. Client decrypts all events with old identity
+8. Client re-encrypts all events with new public key
+9. Client sends re-encrypted events + new public key back to server
+10. Server stores new public key and re-encrypted events
+11. On success:
+    - Client saves **new age identity** to localStorage
+    - Client discards old identity
     - User can now access all history with new password
 
-**Note**: This operation preserves all history by re-encrypting it. The web-host temporarily holds
-both derived keys during re-encryption, then discards them.
+**Note**: This operation preserves all history by re-encrypting it client-side. The server never
+sees either private key.
 
 #### History Retrieval
 
-Client sends derived bytes from localStorage via X-Moor-Event-Log-Key header to GET /api/history
-endpoint.
+Client fetches encrypted events from GET /api/history endpoint and decrypts them client-side using
+the age identity derived from localStorage.
 
 #### Summary of Login Flows
 
@@ -248,18 +270,18 @@ for (const event of events) {
 
 ### 2. Web-host (Rust)
 
-The web-host receives derived bytes from the client, generates age keypairs/identities, and performs
-encryption/decryption operations. It never stores keys permanently.
+The web-host acts as a pass-through for encrypted data and stores public keys. It never handles
+private keys or performs decryption.
 
-**Note**: Key derivation happens client-side (in browser). The client derives 32 bytes from
-passwords using Argon2 + player OID as salt, then sends the derived bytes to web-host as needed.
+**Note**: All cryptographic operations (key derivation, keypair generation, encryption, decryption)
+happen client-side in the browser. The server only stores public keys and encrypted blobs.
 
 #### API Endpoints
 
 - **GET /api/event-log/pubkey** - Check if user has encryption set up (returns public_key if
   present)
-- **PUT /api/event-log/pubkey** - Set up encryption (body: derived_key_bytes as base64)
-- **GET /api/history** - Fetch history (requires X-Moor-Event-Log-Key header with derived bytes)
+- **PUT /api/event-log/pubkey** - Set up encryption (body: public_key as age1... string)
+- **GET /api/history** - Fetch encrypted history (returns encrypted FlatBuffer blobs)
 - **POST /api/event-log/change-password** - Re-encrypt all history with new password (not yet
   implemented)
 

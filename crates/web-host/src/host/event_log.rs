@@ -13,20 +13,15 @@
 
 //! Event log encryption and history endpoints
 
-use crate::host::{auth, var_as_json, web_host::WebHost, web_host::rpc_call};
+use crate::host::{auth, web_host::WebHost, web_host::rpc_call};
 use axum::{
     Json,
+    body::Body,
     extract::{ConnectInfo, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use base64::Engine;
-use moor_common::tasks::Event;
-use moor_schema::{
-    convert::{narrative_event_from_ref, obj_from_flatbuffer_struct},
-    rpc as moor_rpc,
-};
-use moor_var::v_obj;
+use moor_schema::rpc as moor_rpc;
 use planus::ReadAsRoot;
 use rpc_common::{
     mk_detach_msg, mk_dismiss_presentation_msg, mk_request_current_presentations_msg,
@@ -35,82 +30,43 @@ use rpc_common::{
 use serde_derive::Deserialize;
 use serde_json::json;
 use std::net::SocketAddr;
-use tracing::{error, warn};
+use tracing::error;
 use uuid::Uuid;
 
 /// Helper function to extract the daemon reply from an RPC response
 /// Handles the common boilerplate of unwrapping the nested RPC structures
 fn extract_daemon_reply(
     reply_bytes: &[u8],
-) -> Result<moor_rpc::DaemonToClientReplyUnionRef<'_>, Response> {
+) -> Result<moor_rpc::DaemonToClientReplyUnionRef<'_>, Box<Response>> {
     let reply = match moor_rpc::ReplyResultRef::read_as_root(reply_bytes) {
         Ok(r) => r,
         Err(e) => {
             error!("Failed to parse reply: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+            return Err(Box::new(StatusCode::INTERNAL_SERVER_ERROR.into_response()));
         }
     };
 
     let Ok(result) = reply.result() else {
         error!("Missing result in RPC reply");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        return Err(Box::new(StatusCode::INTERNAL_SERVER_ERROR.into_response()));
     };
 
     let moor_rpc::ReplyResultUnionRef::ClientSuccess(host_success) = result else {
         error!("RPC failure");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        return Err(Box::new(StatusCode::INTERNAL_SERVER_ERROR.into_response()));
     };
 
     let Ok(daemon_reply) = host_success.reply() else {
         error!("Missing daemon reply");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        return Err(Box::new(StatusCode::INTERNAL_SERVER_ERROR.into_response()));
     };
 
     let Ok(reply_union) = daemon_reply.reply() else {
         error!("Missing reply union");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        return Err(Box::new(StatusCode::INTERNAL_SERVER_ERROR.into_response()));
     };
 
     Ok(reply_union)
-}
-
-/// Create an age identity from 32 derived bytes (from Argon2)
-/// Encodes bytes as bech32 AGE-SECRET-KEY string that age can parse
-fn identity_from_derived_bytes(bytes: &[u8; 32]) -> Result<age::x25519::Identity, String> {
-    use bech32::{ToBase32, Variant};
-
-    // Encode as bech32 with AGE-SECRET-KEY- prefix (same format age uses)
-    let base32_bytes = bytes.to_base32();
-    let encoded = bech32::encode("age-secret-key-", base32_bytes, Variant::Bech32)
-        .map_err(|e| format!("Failed to encode identity: {}", e))?;
-
-    // Age expects uppercase
-    encoded
-        .to_uppercase()
-        .parse()
-        .map_err(|e| format!("Failed to parse identity: {}", e))
-}
-
-/// Decrypt an age-encrypted event blob using the provided identity
-fn decrypt_event_blob(
-    encrypted_blob: &[u8],
-    identity: &age::x25519::Identity,
-) -> Result<Vec<u8>, String> {
-    use std::io::Read;
-
-    let decryptor = age::Decryptor::new(encrypted_blob)
-        .map_err(|e| format!("Failed to create decryptor: {}", e))?;
-
-    let mut decrypted = Vec::new();
-    let mut reader = decryptor
-        .decrypt(std::iter::once(identity as &dyn age::Identity))
-        .map_err(|e| format!("Failed to decrypt: {}", e))?;
-
-    reader
-        .read_to_end(&mut decrypted)
-        .map_err(|e| format!("Failed to read decrypted data: {}", e))?;
-
-    Ok(decrypted)
 }
 
 #[derive(Deserialize)]
@@ -121,7 +77,8 @@ pub struct HistoryQuery {
     limit: Option<usize>,
 }
 
-/// REST endpoint to retrieve player event history
+/// REST endpoint to retrieve player event history as encrypted FlatBuffer blobs
+/// Client-side decryption: returns encrypted events, no key needed in header
 pub async fn history_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -186,7 +143,7 @@ pub async fn history_handler(
 
     let reply_union = match extract_daemon_reply(&reply_bytes) {
         Ok(r) => r,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     let moor_rpc::DaemonToClientReplyUnionRef::HistoryResponseReply(history_ref) = reply_union
@@ -195,167 +152,28 @@ pub async fn history_handler(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let Ok(history_response) = history_ref.response() else {
+    let Ok(_history_response) = history_ref.response() else {
         error!("Missing history response");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let Ok(events_ref) = history_response.events() else {
-        error!("Missing events in history response");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    // Return the entire HistoryResponse as FlatBuffer bytes
+    // Client will parse the FlatBuffer and decrypt the encrypted_blob field of each event
+    let response = axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/x-flatbuffer")
+        .body(Body::from(reply_bytes))
+        .unwrap();
 
-    let events: Vec<_> = events_ref
-        .iter()
-        .filter_map(|event_result| {
-            let historical_event = event_result.ok()?;
-            let encrypted_blob = historical_event.encrypted_blob().ok()?;
-
-            // Get decryption key from header
-            let Some(key_header) = header_map.get("X-Moor-Event-Log-Key") else {
-                warn!("No decryption key provided in X-Moor-Event-Log-Key header - skipping encrypted event");
-                return None;
-            };
-
-            let key_str = key_header.to_str().ok()?;
-
-            // Try to parse as age identity string first, then as base64 derived bytes
-            let identity = if let Ok(id) = key_str.parse::<age::x25519::Identity>() {
-                id
-            } else if let Ok(derived_bytes) = base64::engine::general_purpose::STANDARD.decode(key_str) {
-                let Ok(bytes_array) = <[u8; 32]>::try_from(derived_bytes.as_slice()) else {
-                    warn!("Invalid derived key length: {}", derived_bytes.len());
-                    return None;
-                };
-                match identity_from_derived_bytes(&bytes_array) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        warn!("Failed to create identity from derived bytes: {}", e);
-                        return None;
-                    }
-                }
-            } else {
-                warn!("Invalid key format in X-Moor-Event-Log-Key header");
-                return None;
-            };
-
-            // Decrypt with provided key
-            let event_bytes = match decrypt_event_blob(encrypted_blob, &identity) {
-                Ok(decrypted) => decrypted,
-                Err(e) => {
-                    warn!("Failed to decrypt event: {}", e);
-                    return None;
-                }
-            };
-
-            let narrative_event_ref = <moor_schema::common::NarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&event_bytes).ok()?;
-            let narrative_event = narrative_event_from_ref(narrative_event_ref).ok()?;
-            let is_historical = historical_event.is_historical().ok()?;
-            let player_ref = historical_event.player().ok()?;
-            let player_struct = moor_rpc::Obj::try_from(player_ref).ok()?;
-            let player = obj_from_flatbuffer_struct(&player_struct).ok()?;
-
-            Some(json!({
-                "event_id": narrative_event.event_id(),
-                "author": var_as_json(narrative_event.author()),
-                "message": match narrative_event.event() {
-                    Event::Notify { value: msg, content_type, no_flush, no_newline } => {
-                        let _ = (no_flush, no_newline);
-                        let normalized_content_type = content_type.as_ref().map(|ct| {
-                            match ct.as_string().as_str() {
-                                "text_djot" => "text/djot".to_string(),
-                                "text_html" => "text/html".to_string(),
-                                "text_plain" => "text/plain".to_string(),
-                                _ => ct.as_string(),
-                            }
-                        });
-                        json!({
-                            "type": "notify",
-                            "content": var_as_json(&msg),
-                            "content_type": normalized_content_type
-                        })
-                    },
-                    Event::Traceback(ex) => json!({
-                        "type": "traceback",
-                        "error": format!("{}", ex)
-                    }),
-                    Event::Present(p) => json!({
-                        "type": "present",
-                        "presentation": p
-                    }),
-                    Event::Unpresent(id) => json!({
-                        "type": "unpresent",
-                        "id": id
-                    })
-                },
-                "timestamp": narrative_event.timestamp(),
-                "is_historical": is_historical,
-                "player": var_as_json(&v_obj(player))
-            }))
-        })
-        .collect();
-
-    let Ok(total_events) = history_response.total_events() else {
-        error!("Missing total_events in history response");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    let Ok(time_range_start) = history_response.time_range_start() else {
-        error!("Missing time_range_start in history response");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    let Ok(time_range_end) = history_response.time_range_end() else {
-        error!("Missing time_range_end in history response");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    let Ok(has_more_before) = history_response.has_more_before() else {
-        error!("Missing has_more_before in history response");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    let earliest_event_id = history_response
-        .earliest_event_id()
-        .ok()
-        .flatten()
-        .and_then(|uuid_ref| uuid_ref.data().ok())
-        .and_then(|bytes| {
-            let bytes_array = <[u8; 16]>::try_from(bytes).ok()?;
-            Some(Uuid::from_bytes(bytes_array))
-        });
-
-    let latest_event_id = history_response
-        .latest_event_id()
-        .ok()
-        .flatten()
-        .and_then(|uuid_ref| uuid_ref.data().ok())
-        .and_then(|bytes| {
-            let bytes_array = <[u8; 16]>::try_from(bytes).ok()?;
-            Some(Uuid::from_bytes(bytes_array))
-        });
-
-    let response = Json(json!({
-        "events": events,
-        "meta": {
-            "total_events": total_events,
-            "time_range": (time_range_start, time_range_end),
-            "has_more_before": has_more_before,
-            "earliest_event_id": earliest_event_id,
-            "latest_event_id": latest_event_id
-        }
-    }));
-
-    // We're done with this RPC connection, so we detach it.
+    // Detach RPC connection
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
         message: mk_detach_msg(&client_token, false).message,
     };
     if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
         error!("Failed to send detach to RPC server: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    response.into_response()
+    response
 }
 
 /// REST endpoint to get player's event log public key
@@ -379,7 +197,7 @@ pub async fn get_pubkey_handler(
 
     let reply_union = match extract_daemon_reply(&reply_bytes) {
         Ok(r) => r,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     let moor_rpc::DaemonToClientReplyUnionRef::EventLogPublicKey(pubkey_ref) = reply_union else {
@@ -411,9 +229,7 @@ pub async fn get_pubkey_handler(
 }
 
 /// REST endpoint to set player's event log public key
-/// Expects either:
-/// - `derived_key_bytes`: base64-encoded 32 bytes from Argon2 (will derive age keypair)
-/// - `public_key`: age public key string (legacy)
+/// Expects JSON body with `public_key` field containing age public key string (age1...)
 pub async fn set_pubkey_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -426,64 +242,12 @@ pub async fn set_pubkey_handler(
             Err(status) => return status.into_response(),
         };
 
-    // Derive public key from Argon2 bytes or use provided public key
-    let public_key = if let Some(derived_bytes_b64) =
-        payload.get("derived_key_bytes").and_then(|v| v.as_str())
-    {
-        // Decode base64
-        let derived_bytes =
-            match base64::engine::general_purpose::STANDARD.decode(derived_bytes_b64) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    error!("Failed to decode derived_key_bytes: {}", e);
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        "Invalid base64 in derived_key_bytes",
-                    )
-                        .into_response();
-                }
-            };
-
-        // Ensure 32 bytes
-        if derived_bytes.len() != 32 {
-            return (
-                StatusCode::BAD_REQUEST,
-                "derived_key_bytes must be 32 bytes",
-            )
-                .into_response();
+    // Extract public key from request
+    let public_key = match payload.get("public_key").and_then(|v| v.as_str()) {
+        Some(key) => key.to_string(),
+        None => {
+            return (StatusCode::BAD_REQUEST, "Missing public_key field").into_response();
         }
-
-        // Create age identity from bytes
-        let Ok(bytes_array) = derived_bytes.as_slice().try_into() else {
-            error!("Failed to convert derived bytes to array (expected 32 bytes)");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to convert derived bytes",
-            )
-                .into_response();
-        };
-
-        let identity = match identity_from_derived_bytes(&bytes_array) {
-            Ok(id) => id,
-            Err(e) => {
-                error!("Failed to create identity from derived bytes: {}", e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to create identity",
-                )
-                    .into_response();
-            }
-        };
-        let recipient = identity.to_public();
-        recipient.to_string()
-    } else if let Some(key) = payload.get("public_key").and_then(|v| v.as_str()) {
-        key.to_string()
-    } else {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Missing derived_key_bytes or public_key field",
-        )
-            .into_response();
     };
 
     let set_pubkey_msg =
@@ -504,7 +268,7 @@ pub async fn set_pubkey_handler(
 
     let reply_union = match extract_daemon_reply(&reply_bytes) {
         Ok(r) => r,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     let moor_rpc::DaemonToClientReplyUnionRef::EventLogPublicKey(pubkey_ref) = reply_union else {
@@ -525,59 +289,6 @@ pub async fn set_pubkey_handler(
     }));
 
     // Detach RPC connection
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    response.into_response()
-}
-
-/// REST endpoint to retrieve current presentations for the authenticated player
-pub async fn presentations_handler(
-    State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    header_map: HeaderMap,
-) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
-
-    let presentations_msg = mk_request_current_presentations_msg(&client_token, &auth_token);
-
-    let reply_bytes = match rpc_call(client_id, &mut rpc_client, presentations_msg).await {
-        Ok(bytes) => bytes,
-        Err(status) => return status.into_response(),
-    };
-
-    let reply_union = match extract_daemon_reply(&reply_bytes) {
-        Ok(r) => r,
-        Err(response) => return response,
-    };
-
-    let moor_rpc::DaemonToClientReplyUnionRef::EventLogPublicKey(pubkey_ref) = reply_union else {
-        error!("Unexpected response type: expected EventLogPublicKey");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    let public_key = pubkey_ref
-        .public_key()
-        .ok()
-        .flatten()
-        .unwrap_or_default()
-        .to_string();
-
-    let response = Json(json!({
-        "public_key": public_key,
-        "status": "set"
-    }));
-
-    // We're done with this RPC connection, so we detach it.
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
         message: mk_detach_msg(&client_token, false).message,
     };
@@ -612,7 +323,7 @@ pub async fn dismiss_presentation_handler(
 
     let reply_union = match extract_daemon_reply(&reply_bytes) {
         Ok(r) => r,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     let moor_rpc::DaemonToClientReplyUnionRef::PresentationDismissed(_) = reply_union else {
@@ -635,4 +346,40 @@ pub async fn dismiss_presentation_handler(
     }
 
     response.into_response()
+}
+
+/// FlatBuffer version: GET /fb/api/presentations - return raw flatbuffer bytes
+pub async fn presentations_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let presentations_msg = mk_request_current_presentations_msg(&client_token, &auth_token);
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, presentations_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    // Return raw FlatBuffer bytes
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/x-flatbuffer")
+        .body(Body::from(reply_bytes))
+        .unwrap();
+
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
+    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
+        error!("Failed to send detach to RPC server: {}", e);
+    }
+
+    response
 }

@@ -18,7 +18,8 @@ interface EncryptionContextType {
     encryptionState: {
         hasEncryption: boolean;
         isChecking: boolean;
-        derivedKeyBytes: string | null;
+        hasCheckedOnce: boolean;
+        ageIdentity: string | null;
     };
     checkEncryptionStatus: () => Promise<void>;
     setupEncryption: (password: string) => Promise<{ success: boolean; error?: string }>;

@@ -11,16 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// ! Hook for managing event log encryption (Argon2 key derivation)
-// ! Age keypair generation happens server-side in web-host
+// ! Hook for managing event log encryption (Argon2 key derivation + age keypair generation)
+// ! Age keypair generation happens client-side - only public key is sent to server
 
 import { useCallback, useState } from "react";
+import { identityFromDerivedBytes, publicKeyFromIdentity } from "../lib/age-decrypt";
 
 interface EncryptionState {
     hasEncryption: boolean;
     isChecking: boolean;
     hasCheckedOnce: boolean; // Track if we've checked at least once
-    derivedKeyBytes: string | null; // base64-encoded 32 bytes from Argon2
+    ageIdentity: string | null; // AGE-SECRET-KEY-1... private key string
 }
 
 /**
@@ -33,14 +34,14 @@ async function deriveKeyBytes(password: string, playerOid: string): Promise<stri
     const saltString = `moor-event-log-v1-${playerOid}`;
 
     // Set WASM path before loading argon2
-    // @ts-ignore
+    // @ts-expect-error - argon2WasmPath not in Window type
     window.argon2WasmPath = "/argon2.wasm";
 
     // Load argon2-browser - it attaches to window.argon2
-    // @ts-ignore
+    // @ts-expect-error - dynamic import of UMD module
     await import("argon2-browser");
 
-    // @ts-ignore - UMD module attaches to window
+    // @ts-expect-error - UMD module attaches to window
     const argon2 = window.argon2;
 
     if (!argon2 || typeof argon2.hash !== "function") {
@@ -67,22 +68,22 @@ export const useEventLogEncryption = (
     playerOid: string | null,
 ) => {
     const [encryptionState, setEncryptionState] = useState<EncryptionState>(() => {
-        // Initialize with saved key if available
+        // Initialize with saved identity if available
         if (playerOid) {
-            const storageKey = `moor_event_log_key_${playerOid}`;
-            const savedKeyBytes = localStorage.getItem(storageKey);
+            const storageKey = `moor_event_log_identity_${playerOid}`;
+            const savedIdentity = localStorage.getItem(storageKey);
             return {
                 hasEncryption: false,
                 isChecking: false,
                 hasCheckedOnce: false,
-                derivedKeyBytes: savedKeyBytes,
+                ageIdentity: savedIdentity,
             };
         }
         return {
             hasEncryption: false,
             isChecking: false,
             hasCheckedOnce: false,
-            derivedKeyBytes: null,
+            ageIdentity: null,
         };
     });
 
@@ -104,14 +105,14 @@ export const useEventLogEncryption = (
             const data = await response.json();
             const hasEncryption = !!data.public_key;
 
-            const storageKey = `moor_event_log_key_${playerOid}`;
-            const savedKeyBytes = localStorage.getItem(storageKey);
+            const storageKey = `moor_event_log_identity_${playerOid}`;
+            const savedIdentity = localStorage.getItem(storageKey);
 
             setEncryptionState({
                 hasEncryption,
                 isChecking: false,
                 hasCheckedOnce: true,
-                derivedKeyBytes: savedKeyBytes,
+                ageIdentity: savedIdentity,
             });
         } catch (error) {
             console.error("Error checking encryption status:", error);
@@ -129,14 +130,31 @@ export const useEventLogEncryption = (
             const derivedBytes = await deriveKeyBytes(password, playerOid);
             console.log("Derived key bytes (base64):", derivedBytes.substring(0, 20) + "...");
 
-            console.log("Sending pubkey setup request...");
+            // Decode base64 to bytes for age identity generation
+            const binaryString = atob(derivedBytes);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // Generate age identity from derived bytes (client-side)
+            console.log("Generating age keypair client-side...");
+            const identity = identityFromDerivedBytes(bytes);
+            console.log("Generated identity:", identity.substring(0, 30) + "...");
+
+            // Extract public key from identity
+            const publicKey = await publicKeyFromIdentity(identity);
+            console.log("Extracted public key:", publicKey);
+
+            // Send only the public key to server (NOT derived bytes or identity)
+            console.log("Sending public key to server...");
             const response = await fetch("/api/event-log/pubkey", {
                 method: "PUT",
                 headers: {
                     "X-Moor-Auth-Token": authToken,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ derived_key_bytes: derivedBytes }),
+                body: JSON.stringify({ public_key: publicKey }),
             });
 
             console.log("Pubkey setup response status:", response.status);
@@ -149,14 +167,15 @@ export const useEventLogEncryption = (
             const responseData = await response.json();
             console.log("Pubkey setup response:", responseData);
 
-            const storageKey = `moor_event_log_key_${playerOid}`;
-            localStorage.setItem(storageKey, derivedBytes);
+            // Store the private key (identity) locally - server never sees this
+            const storageKey = `moor_event_log_identity_${playerOid}`;
+            localStorage.setItem(storageKey, identity);
 
             setEncryptionState({
                 hasEncryption: true,
                 isChecking: false,
                 hasCheckedOnce: true,
-                derivedKeyBytes: derivedBytes,
+                ageIdentity: identity,
             });
 
             return { success: true };
@@ -174,14 +193,24 @@ export const useEventLogEncryption = (
         try {
             const derivedBytes = await deriveKeyBytes(password, playerOid);
 
+            // Decode base64 to bytes
+            const binaryString = atob(derivedBytes);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // Generate age identity from derived bytes
+            const identity = identityFromDerivedBytes(bytes);
+
             // TODO: Validate by fetching and decrypting a test event
 
-            const storageKey = `moor_event_log_key_${playerOid}`;
-            localStorage.setItem(storageKey, derivedBytes);
+            const storageKey = `moor_event_log_identity_${playerOid}`;
+            localStorage.setItem(storageKey, identity);
 
             setEncryptionState(prev => ({
                 ...prev,
-                derivedKeyBytes: derivedBytes,
+                ageIdentity: identity,
             }));
 
             return { success: true };
@@ -194,18 +223,18 @@ export const useEventLogEncryption = (
     const forgetKey = useCallback(() => {
         if (!playerOid) return;
 
-        const storageKey = `moor_event_log_key_${playerOid}`;
+        const storageKey = `moor_event_log_identity_${playerOid}`;
         localStorage.removeItem(storageKey);
 
         setEncryptionState(prev => ({
             ...prev,
-            derivedKeyBytes: null,
+            ageIdentity: null,
         }));
     }, [playerOid]);
 
     const getKeyForHistoryRequest = useCallback((): string | null => {
-        return encryptionState.derivedKeyBytes;
-    }, [encryptionState.derivedKeyBytes]);
+        return encryptionState.ageIdentity;
+    }, [encryptionState.ageIdentity]);
 
     return {
         encryptionState,

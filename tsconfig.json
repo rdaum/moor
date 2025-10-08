@@ -15,8 +15,8 @@
 
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
     /* Path mapping */
@@ -27,5 +27,5 @@
     }
   },
   "include": ["web-client/src/**/*", "web-client/src/**/*.ts", "web-client/src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "crates", "target"]
+  "exclude": ["node_modules", "dist", "crates", "target", "web-client/src/generated"]
 }

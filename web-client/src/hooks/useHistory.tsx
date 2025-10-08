@@ -13,6 +13,11 @@
 
 import { useCallback, useState } from "react";
 import { NarrativeMessage } from "../components/Narrative";
+import { EventUnion } from "../generated/moor-common/event-union";
+import { NotifyEvent } from "../generated/moor-common/notify-event";
+import { TracebackEvent } from "../generated/moor-common/traceback-event";
+import { MoorVar } from "../lib/MoorVar";
+import { fetchHistoryFlatBuffer } from "../lib/rpc-fb";
 
 // Filter out MCP sequences from historical messages
 const filterMCPSequences = (messages: NarrativeMessage[]): NarrativeMessage[] => {
@@ -58,17 +63,8 @@ interface HistoricalEvent {
     player?: any;
     is_historical?: boolean;
     data?: any; // Fallback field
-}
-
-interface HistoryResponse {
-    events: ReadonlyArray<HistoricalEvent>;
-    meta: {
-        total_events: number;
-        time_range: readonly [string, string];
-        has_more_before: boolean;
-        earliest_event_id: string | null;
-        latest_event_id: string | null;
-    };
+    narrative_event?: any; // FlatBuffer NarrativeEvent (when using client-side decryption)
+    event?: any; // FlatBuffer Event union
 }
 
 export const useHistory = (authToken: string | null, encryptionKey: string | null = null) => {
@@ -90,7 +86,12 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
     // Convert historical event to narrative message format (all events become narrative)
     const convertHistoricalEvent = useCallback((event: HistoricalEvent): NarrativeMessage | null => {
         try {
-            // Extract message content from the actual event structure
+            // Check if this is a FlatBuffer event (from fetchHistoryFlatBuffer)
+            if (event.narrative_event) {
+                return convertFlatBufferHistoricalEvent(event);
+            }
+
+            // Legacy JSON format handling (kept for backwards compatibility)
             let messageContent = "";
             let contentType: "text/plain" | "text/djot" | "text/html" = "text/plain";
 
@@ -98,7 +99,6 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                 const msg = event.message as any;
                 if (msg.type === "notify") {
                     messageContent = msg.content || "";
-                    // Extract content type from the message object
                     if (msg.content_type) {
                         contentType = msg.content_type;
                     }
@@ -117,12 +117,10 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
             } else if (typeof event.message === "string") {
                 messageContent = event.message;
             } else if (event.data) {
-                // Fallback to data field if it exists
                 messageContent = typeof event.data === "string" ? event.data : JSON.stringify(event.data);
             }
 
-            // Extract timestamp from the actual event structure
-            let timestamp: number = Date.now(); // Default fallback
+            let timestamp: number = Date.now();
 
             if (event.timestamp) {
                 if (typeof event.timestamp === "object" && event.timestamp !== null) {
@@ -139,7 +137,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
             }
 
             return {
-                id: `history_${event.event_id}_${timestamp}`, // Add timestamp to ensure uniqueness
+                id: `history_${event.event_id}_${timestamp}`,
                 content: messageContent,
                 type: "narrative",
                 timestamp,
@@ -147,6 +145,103 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                 contentType,
             };
         } catch (error) {
+            return null;
+        }
+    }, []);
+
+    // Convert FlatBuffer historical event to narrative message format
+    const convertFlatBufferHistoricalEvent = useCallback((event: any): NarrativeMessage | null => {
+        try {
+            const narrativeEvent = event.narrative_event;
+            const timestamp = event.timestamp; // Already converted to milliseconds
+            const eventId = event.event_id;
+
+            const eventData = narrativeEvent.event();
+            if (!eventData) {
+                return null;
+            }
+
+            const eventType = eventData.eventType();
+
+            let messageContent: string | string[] = "";
+            let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
+
+            switch (eventType) {
+                case EventUnion.NotifyEvent: {
+                    const notify = eventData.event(new NotifyEvent());
+                    if (!notify) break;
+
+                    const value = notify.value();
+                    if (!value) break;
+
+                    // Convert the Var to JavaScript value
+                    messageContent = new MoorVar(value).toJS();
+
+                    // Get content type
+                    const contentTypeSym = notify.contentType();
+                    if (contentTypeSym && contentTypeSym.value()) {
+                        const ct = contentTypeSym.value();
+                        // Normalize content type
+                        if (ct === "text_djot" || ct === "text/djot") {
+                            contentType = "text/djot";
+                        } else if (ct === "text_html" || ct === "text/html") {
+                            contentType = "text/html";
+                        } else {
+                            contentType = "text/plain";
+                        }
+                    }
+                    break;
+                }
+
+                case EventUnion.TracebackEvent: {
+                    const traceback = eventData.event(new TracebackEvent());
+                    if (!traceback) break;
+
+                    const exception = traceback.exception();
+                    if (!exception) break;
+
+                    // Build traceback text from backtrace frames
+                    const tracebackLines: string[] = [];
+                    for (let i = 0; i < exception.backtraceLength(); i++) {
+                        const backtraceVar = exception.backtrace(i);
+                        if (backtraceVar) {
+                            const line = new MoorVar(backtraceVar).asString();
+                            if (line) {
+                                tracebackLines.push(line);
+                            }
+                        }
+                    }
+
+                    messageContent = tracebackLines.join("\n");
+                    contentType = "text/traceback";
+                    break;
+                }
+
+                case EventUnion.PresentEvent: {
+                    // Presentations are handled separately, skip for now
+                    return null;
+                }
+
+                case EventUnion.UnpresentEvent: {
+                    // Unpresent events are handled separately, skip for now
+                    return null;
+                }
+
+                default:
+                    console.warn(`Unknown event type: ${eventType}`);
+                    return null;
+            }
+
+            return {
+                id: `history_${eventId}_${timestamp}`,
+                content: messageContent,
+                type: "narrative",
+                timestamp,
+                isHistorical: true,
+                contentType,
+            };
+        } catch (error) {
+            console.error("Failed to convert FlatBuffer event:", error);
             return null;
         }
     }, []);
@@ -164,43 +259,18 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
         setIsLoadingHistory(true);
 
         try {
-            const params = new URLSearchParams();
-            params.set("limit", limit.toString());
-
-            if (sinceSeconds) {
-                params.set("since_seconds", sinceSeconds.toString());
-            }
-
-            if (untilEvent) {
-                params.set("until_event", untilEvent);
-            }
-
-            const url = `/api/history?${params}`;
-
-            const headers: Record<string, string> = {
-                "X-Moor-Auth-Token": authToken,
-                "Content-Type": "application/json",
-            };
-
-            // Add encryption key if available
-            if (encryptionKey) {
-                headers["X-Moor-Event-Log-Key"] = encryptionKey;
-            }
-
-            const response = await fetch(url, {
-                method: "GET",
-                headers,
-            });
-
-            if (!response.ok) {
-                throw new Error(`History fetch failed: ${response.status} ${response.statusText}`);
-            }
-
-            const historyData: HistoryResponse = await response.json();
+            // Use FlatBuffer endpoint with client-side decryption
+            const events = await fetchHistoryFlatBuffer(
+                authToken,
+                encryptionKey,
+                limit,
+                sinceSeconds,
+                untilEvent,
+            );
 
             // Convert events to narrative messages
             const narrativeMessages: NarrativeMessage[] = [];
-            for (const event of historyData.events) {
+            for (const event of events) {
                 const message = convertHistoricalEvent(event);
                 if (message) {
                     narrativeMessages.push(message);
@@ -211,8 +281,8 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
             const filteredMessages = filterMCPSequences(narrativeMessages);
 
             // Update earliest event ID for pagination
-            if (historyData.meta.earliest_event_id) {
-                setEarliestHistoryEventId(historyData.meta.earliest_event_id);
+            if (events.length > 0) {
+                setEarliestHistoryEventId(events[0].event_id);
             }
 
             return filteredMessages;

@@ -45,7 +45,7 @@ figment.workspace = true
 # Serialization & Data Formats
 age.workspace = true
 base64.workspace = true
-bech32 = "0.9.1"
+bech32.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true

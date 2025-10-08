@@ -222,26 +222,31 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
         .route(
-            "/system_property/{*path}",
+            "/fb/system_property/{*path}",
             get(host::system_property_handler),
         )
-        .route("/eval", post(host::eval_handler))
-        .route("/verbs/{object}", get(host::verbs_handler))
-        .route("/verbs/{object}/{name}", get(host::verb_retrieval_handler))
-        .route("/verbs/{object}/{name}", post(host::verb_program_handler))
+        .route("/fb/eval", post(host::eval_handler))
         .route(
-            "/verbs/{object}/{name}/invoke",
+            "/fb/verbs/{object}/{name}",
+            post(host::verb_program_handler),
+        )
+        .route("/fb/verbs/{object}", get(host::verbs_handler))
+        .route(
+            "/fb/verbs/{object}/{name}",
+            get(host::verb_retrieval_handler),
+        )
+        .route(
+            "/fb/verbs/{object}/{name}/invoke",
             post(host::invoke_verb_handler),
         )
-        .route("/properties/{object}", get(host::properties_handler))
-        // ?oid=1234 or ?sysobj=foo.bar.baz or ?match=foo
-        .route("/objects/{object}", get(host::resolve_objref_handler))
+        .route("/fb/properties/{object}", get(host::properties_handler))
         .route(
-            "/properties/{object}/{name}",
+            "/fb/properties/{object}/{name}",
             get(host::property_retrieval_handler),
         )
-        .route("/api/history", get(host::history_handler))
-        .route("/api/presentations", get(host::presentations_handler))
+        .route("/fb/objects/{object}", get(host::resolve_objref_handler))
+        .route("/fb/api/history", get(host::history_handler))
+        .route("/fb/api/presentations", get(host::presentations_handler))
         .route(
             "/api/presentations/{presentation_id}",
             axum::routing::delete(host::dismiss_presentation_handler),

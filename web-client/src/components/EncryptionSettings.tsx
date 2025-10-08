@@ -15,10 +15,12 @@
 
 import React, { useState } from "react";
 import { useEncryptionContext } from "../context/EncryptionContext";
+import { useTitle } from "../hooks/useTitle";
 import { EncryptionSetupPrompt } from "./EncryptionSetupPrompt";
 
 export const EncryptionSettings: React.FC = () => {
     const { encryptionState, forgetKey, setupEncryption } = useEncryptionContext();
+    const systemTitle = useTitle();
     const [showForgetConfirm, setShowForgetConfirm] = useState(false);
     const [showSetupPrompt, setShowSetupPrompt] = useState(false);
 
@@ -78,7 +80,7 @@ export const EncryptionSettings: React.FC = () => {
 
                 {encryptionState.hasEncryption && (
                     <div style={{ fontSize: "0.9em", color: "var(--color-text-secondary)" }}>
-                        {encryptionState.derivedKeyBytes
+                        {encryptionState.ageIdentity
                             ? (
                                 <>
                                     <div style={{ marginBottom: "0.5em" }}>
@@ -184,6 +186,7 @@ export const EncryptionSettings: React.FC = () => {
 
                 {showSetupPrompt && (
                     <EncryptionSetupPrompt
+                        systemTitle={systemTitle}
                         onSetup={async (password) => {
                             const result = await setupEncryption(password);
                             if (result.success) {

@@ -176,6 +176,11 @@ impl ClientEventMessage {
         rpc::ClientEventRef::read_as_root(&self.buffer)
             .map_err(|e| RpcError::CouldNotDecode(format!("Failed to parse flatbuffer: {e}")))
     }
+
+    /// Consume self and pull the underlying buffer.
+    pub fn consume(self) -> Vec<u8> {
+        self.buffer
+    }
 }
 
 pub async fn events_recv(

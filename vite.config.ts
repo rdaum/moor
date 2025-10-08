@@ -29,6 +29,7 @@ export default defineConfig({
             input: {
                 main: resolve(__dirname, "web-client/src/index.html"),
             },
+            external: ["argon2-browser"],
         },
     },
     define: {
@@ -59,6 +60,7 @@ export default defineConfig({
             "/properties": process.env.MOOR_API_URL || "http://localhost:8080",
             "/objects": process.env.MOOR_API_URL || "http://localhost:8080",
             "/system_property": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/fb": process.env.MOOR_API_URL || "http://localhost:8080",
         },
     },
 });

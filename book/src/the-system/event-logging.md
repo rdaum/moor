@@ -52,8 +52,8 @@ the web client. This password is used to:
 3. **Decrypt events** when viewing history
 
 Importantly, the server never stores your password or private keys. Your browser derives the encryption keys from your
-password and stores only the derived keys in browser localStorage. When you request your message history, these keys are
-sent over secure HTTPS to decrypt your events on the server side.
+password and stores them in browser localStorage. When you request your message history, your browser decrypts the
+events locally—the server never sees your private keys.
 
 ### What This Protects
 
@@ -85,11 +85,11 @@ Your browser caches the derived keys in its local storage so you don't have to e
 The encryption/decryption flow works like this:
 
 1. **Event generation**: Your MOO code calls `notify()` to send a message
-2. **Encryption**: The daemon encrypts the event using your public key (derived from your password)
+2. **Encryption**: The daemon encrypts the event using your public key
 3. **Storage**: The encrypted event is written to the database on disk
-4. **Retrieval**: When you view history, the web client sends your derived keys to the server
-5. **Decryption**: The web host decrypts events using your keys and sends plaintext JSON back to the browser
-6. **Immediate disposal**: The server discards your keys as soon as the request is complete
+4. **Retrieval**: When you view history, the web client requests encrypted events from the server
+5. **Client-side decryption**: Your browser decrypts events locally using your private key (never sent to server)
+6. **Display**: Decrypted events are shown in your browser
 
 To keep things fast, the system maintains a memory cache of recent events for quick access, while older events are read
 from disk when needed. Events are batched together before being written to disk, which helps maintain good performance
@@ -110,9 +110,10 @@ When you first log in through the web client:
 
 1. After entering your MOO credentials, you'll be prompted to set an encryption password
 2. The client displays a warning that this password cannot be recovered
-3. Once you enter and confirm your password, the client derives your encryption keys
-4. Your public key is stored on the server, and your private keys are saved in your browser's localStorage
-5. Your password itself is immediately discarded—never stored anywhere
+3. Once you enter and confirm your password, the client derives your encryption keys client-side
+4. The client generates an age keypair and extracts the public key
+5. Your public key is sent to the server, and your private key is saved in your browser's localStorage
+6. Your password itself is immediately discarded—never stored anywhere
 
 ### Subsequent Logins
 
@@ -139,14 +140,13 @@ primary endpoint is:
 GET /api/history?since_seconds=3600&limit=50
 ```
 
-This request asks for events from the last hour (3600 seconds), limited to 50 events. The client includes your derived
-encryption keys in the `X-Moor-Event-Log-Key` HTTP header. The system supports several different ways to query
+This request asks for events from the last hour (3600 seconds), limited to 50 events. The system returns encrypted
+events which are decrypted client-side in your browser. The system supports several different ways to query
 history—you can ask for events from a specific time period using `since_seconds`, or request events relative to a
 specific event using `since_event` or `until_event` with an event's unique identifier.
 
-The response comes back as a JSON structure containing an array of events, with each event including its unique
-identifier, timestamp, author information, and the actual event content (decrypted server-side before being sent to
-you).
+The response comes back as a FlatBuffer structure containing an array of encrypted events, with each event including
+its unique identifier, timestamp, author information, and encrypted content that your browser decrypts locally.
 
 Note that these API endpoints require proper authentication using PASETO tokens, which makes manual testing with tools
 like curl quite complex. The web client handles all the authentication and token management automatically.
@@ -197,10 +197,8 @@ However, live events sent over WebSocket connections continue to work normally f
 
 It's worth understanding how storage works so you can make informed decisions about your deployment.
 
-Each narrative event typically consumes around 1-1.5KB of storage on average after encryption (about 33% larger than
-plaintext due to age encryption overhead). The system uses LZ4 compression to keep storage requirements reasonable. The
-database will grow continuously as events are added—there's currently no automatic cleanup mechanism, so events persist
-indefinitely.
+The system uses LZ4 compression to keep storage requirements reasonable. The database will grow continuously as events
+are added—there's currently no automatic cleanup mechanism, so events persist indefinitely.
 
 For memory usage, the system keeps recent events cached in memory to provide fast access. The default configuration
 keeps about a week's worth of events in memory, up to a maximum of 10,000 events. On a reasonably busy server, this
@@ -211,7 +209,7 @@ to disk in groups of 100, which balances data safety and performance.
 
 ### Encryption Performance
 
-Age encryption (ChaCha20-Poly1305) is extremely fast and has minimal impact on event logging performance. Encryption
+Age encryption (ChaCha20-Poly1305) is fast and has minimal impact on event logging performance. Encryption
 happens in the daemon when events are written, and decryption happens in the web host when history is requested. The
 Argon2 key derivation is intentionally slow (to resist password brute-forcing) but only happens once per device in the
 browser—subsequent access uses the cached derived keys.
@@ -232,14 +230,15 @@ key are unreadable, but they remain on disk (consuming storage) unless manually 
 
 ### Server Security
 
-Since decryption happens in the web host (not client-side), a compromised web host could potentially:
+Since decryption happens client-side in the browser, the web host never sees private keys or plaintext events. However,
+a compromised web host could still:
 
-- Log encryption keys as they arrive in HTTP headers
-- Capture plaintext events after decryption
-- Serve malicious JavaScript to steal passwords or keys
+- Serve malicious JavaScript to steal passwords or keys from the browser
+- Intercept live events as they arrive in real-time (before encryption)
 
 Proper server security (keeping the web host process secure, using HTTPS, monitoring for intrusions) remains essential.
-The encryption protects against offline attacks on the database, but cannot protect against a fully compromised server.
+The encryption protects against offline attacks on the database and prevents the server from reading logged history, but
+cannot protect against a fully compromised server serving malicious code.
 
 ### Backup and Disaster Recovery
 
@@ -303,10 +302,10 @@ automatically resumes normal persistence operations.
 If you're building custom clients or tools, the event logging system exposes these key endpoints:
 
 - **GET /api/event-log/pubkey** - Check if a player has encryption set up
-- **PUT /api/event-log/pubkey** - Set up encryption for a player (body contains derived key bytes)
-- **GET /api/history** - Fetch encrypted history (requires `X-Moor-Event-Log-Key` header)
+- **PUT /api/event-log/pubkey** - Set up encryption for a player (body contains age public key)
+- **GET /api/history** - Fetch encrypted history (returns encrypted FlatBuffer blobs for client-side decryption)
     - Query params: `since_seconds`, `since_event`, `until_event`, `limit`
 - **POST /api/event-log/change-password** - Re-encrypt history with new password (not yet implemented)
 
-All endpoints require PASETO authentication tokens. The encryption key header must contain base64-encoded derived key
-bytes (32 bytes derived from the player's encryption password using Argon2id, with the player's OID as salt).
+All endpoints require PASETO authentication tokens. The client generates age keypairs from passwords and decrypts
+history locally in the browser. Private keys never leave the client.

@@ -61,6 +61,18 @@ comments:
       type: line
       comment_char: "//"
       trailing_lines: 1
+  - columns: 80
+    extension: py
+    commenter:
+      type: line
+      comment_char: "#"
+      trailing_lines: 1
+  - columns: 80
+    extension: sh
+    commenter:
+      type: line
+      comment_char: "#"
+      trailing_lines: 1
 
 excludes:
   - \.gitignore
@@ -70,19 +82,20 @@ excludes:
   - \.git/.*
   - \.idea/.*
   - \.cargo/.*
-  - crates/web-host/src/client/flexbuffers/*
-  - crates/db-wiredtiger/third-party/*
   - target/*
   - README.*
   - LICENSE.*
   - Dockerfile
   - core
-  - cowbell
+  - cores/*
   - book/*
+  - lambdamoo/*
+  - __pycache__/*
   - .envrc
   - node_modules/*
   - development-export/*
   - crates/daemon/debian/*
   - crates/telnet-host/debian/*
   - crates/web-host/debian/*
-  - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data|conf|nix|el|ttf|otf)
+  - generated/*
+  - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data|conf|nix|el|ttf|otf|wasm)
