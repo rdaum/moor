@@ -466,7 +466,8 @@ union HostClientToDaemonMessageUnion {
     SetClientAttribute,
     Detach,
     GetEventLogPublicKey,
-    SetEventLogPublicKey
+    SetEventLogPublicKey,
+    DeleteEventLogHistory
 }
 
 table ConnectionEstablish {
@@ -619,6 +620,11 @@ table SetEventLogPublicKey {
     public_key: string (required);
 }
 
+table DeleteEventLogHistory {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+}
+
 table HostClientToDaemonMessage {
     message: HostClientToDaemonMessageUnion (required);
 }
@@ -647,7 +653,8 @@ union DaemonToClientReplyUnion {
     PresentationDismissed,
     ClientAttributeSet,
     Disconnected,
-    EventLogPublicKey
+    EventLogPublicKey,
+    EventLogHistoryDeleted
 }
 
 table NewConnection {
@@ -732,6 +739,10 @@ table Disconnected {
 
 table EventLogPublicKey {
     public_key: string;  // Empty string if not set
+}
+
+table EventLogHistoryDeleted {
+    success: bool;
 }
 
 table DaemonToClientReply {

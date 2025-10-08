@@ -20,8 +20,8 @@ mod ws_connection;
 
 pub use auth::{connect_auth_handler, create_auth_handler};
 pub use event_log::{
-    dismiss_presentation_handler, get_pubkey_handler, history_handler, presentations_handler,
-    set_pubkey_handler,
+    delete_history_handler, dismiss_presentation_handler, get_pubkey_handler, history_handler,
+    presentations_handler, set_pubkey_handler,
 };
 pub use props::{properties_handler, property_retrieval_handler};
 pub use verbs::{invoke_verb_handler, verb_program_handler, verb_retrieval_handler, verbs_handler};

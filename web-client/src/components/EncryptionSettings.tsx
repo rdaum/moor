@@ -14,19 +14,70 @@
 // ! Encryption settings component for settings panel
 
 import React, { useState } from "react";
+import { useAuthContext } from "../context/AuthContext";
 import { useEncryptionContext } from "../context/EncryptionContext";
 import { useTitle } from "../hooks/useTitle";
 import { EncryptionSetupPrompt } from "./EncryptionSetupPrompt";
 
 export const EncryptionSettings: React.FC = () => {
+    const { authState } = useAuthContext();
     const { encryptionState, forgetKey, setupEncryption } = useEncryptionContext();
     const systemTitle = useTitle();
     const [showForgetConfirm, setShowForgetConfirm] = useState(false);
     const [showSetupPrompt, setShowSetupPrompt] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const handleForgetKey = () => {
         forgetKey();
         setShowForgetConfirm(false);
+    };
+
+    const handleDeleteHistory = async () => {
+        setIsDeleting(true);
+        try {
+            const authToken = authState.player?.authToken;
+            if (!authToken) {
+                throw new Error("No auth token found");
+            }
+            const response = await fetch("/api/event-log/history", {
+                method: "DELETE",
+                headers: {
+                    "X-Moor-Auth-Token": authToken,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to delete history");
+            }
+
+            const result = await response.json();
+            if (result.success) {
+                alert("Event history deleted successfully");
+            } else {
+                alert("Failed to delete history");
+            }
+        } catch (error) {
+            console.error("Error deleting history:", error);
+            alert("Error deleting history");
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteConfirm(false);
+        }
+    };
+
+    const handleDownloadHistory = async () => {
+        setIsDownloading(true);
+        try {
+            // TODO: Implement download with background worker for decryption
+            alert("Download feature coming soon - requires background worker for decryption");
+        } catch (error) {
+            console.error("Error downloading history:", error);
+            alert("Error downloading history");
+        } finally {
+            setIsDownloading(false);
+        }
     };
 
     return (
@@ -181,6 +232,110 @@ export const EncryptionSettings: React.FC = () => {
                                     Password not stored - you'll need to enter it each time to view history
                                 </div>
                             )}
+                    </div>
+                )}
+
+                {encryptionState.hasEncryption && (
+                    <div
+                        style={{
+                            fontSize: "0.9em",
+                            marginTop: "1em",
+                            borderTop: "1px solid var(--color-border-light)",
+                            paddingTop: "1em",
+                        }}
+                    >
+                        <div style={{ marginBottom: "0.5em", fontWeight: "bold" }}>History Management</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                            <button
+                                onClick={handleDownloadHistory}
+                                disabled={isDownloading}
+                                aria-label="Download all encrypted event history"
+                                style={{
+                                    padding: "0.5em 1em",
+                                    borderRadius: "var(--radius-md)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                    color: "var(--color-text-primary)",
+                                    cursor: isDownloading ? "wait" : "pointer",
+                                    fontFamily: "inherit",
+                                    fontSize: "0.95em",
+                                    opacity: isDownloading ? 0.6 : 1,
+                                    transition: "opacity var(--transition-fast)",
+                                }}
+                            >
+                                {isDownloading ? "Downloading..." : "Download All History"}
+                            </button>
+
+                            {!showDeleteConfirm
+                                ? (
+                                    <button
+                                        onClick={() => setShowDeleteConfirm(true)}
+                                        aria-label="Delete all event history from server"
+                                        style={{
+                                            padding: "0.5em 1em",
+                                            borderRadius: "var(--radius-md)",
+                                            border: "1px solid var(--color-text-error)",
+                                            backgroundColor:
+                                                "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                            color: "var(--color-text-primary)",
+                                            cursor: "pointer",
+                                            fontFamily: "inherit",
+                                            fontSize: "0.95em",
+                                            transition: "background-color var(--transition-fast)",
+                                        }}
+                                    >
+                                        Delete All History
+                                    </button>
+                                )
+                                : (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                                        <div style={{ color: "var(--color-text-error)", fontSize: "0.95em" }}>
+                                            ⚠️ This will permanently delete all your event history from the server. This
+                                            cannot be undone!
+                                        </div>
+                                        <div style={{ display: "flex", gap: "0.5em" }}>
+                                            <button
+                                                onClick={handleDeleteHistory}
+                                                disabled={isDeleting}
+                                                aria-label="Confirm deletion of all history"
+                                                style={{
+                                                    padding: "0.4em 0.8em",
+                                                    borderRadius: "var(--radius-md)",
+                                                    border: "1px solid var(--color-text-error)",
+                                                    backgroundColor:
+                                                        "color-mix(in srgb, var(--color-text-error) 25%, transparent)",
+                                                    color: "var(--color-text-primary)",
+                                                    cursor: isDeleting ? "wait" : "pointer",
+                                                    fontSize: "0.9em",
+                                                    fontFamily: "inherit",
+                                                    fontWeight: "bold",
+                                                    opacity: isDeleting ? 0.6 : 1,
+                                                }}
+                                            >
+                                                {isDeleting ? "Deleting..." : "Yes, Delete Everything"}
+                                            </button>
+                                            <button
+                                                onClick={() => setShowDeleteConfirm(false)}
+                                                disabled={isDeleting}
+                                                aria-label="Cancel history deletion"
+                                                style={{
+                                                    padding: "0.4em 0.8em",
+                                                    borderRadius: "var(--radius-md)",
+                                                    border: "1px solid var(--color-border-medium)",
+                                                    backgroundColor: "var(--color-bg-secondary)",
+                                                    color: "var(--color-text-primary)",
+                                                    cursor: isDeleting ? "not-allowed" : "pointer",
+                                                    fontSize: "0.9em",
+                                                    fontFamily: "inherit",
+                                                    opacity: isDeleting ? 0.6 : 1,
+                                                }}
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                        </div>
                     </div>
                 )}
 

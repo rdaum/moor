@@ -75,6 +75,9 @@ pub trait EventLogOps: Send + Sync {
 
     /// Set the public key for a player's event log encryption
     fn set_pubkey(&self, player: Obj, pubkey: String);
+
+    /// Delete all event history for a player
+    fn delete_all_events(&self, player: Obj) -> Result<(), String>;
 }
 
 // LoggedNarrativeEvent and PlayerPresentations are now imported from
@@ -487,6 +490,59 @@ impl EventPersistence {
 
         Ok(())
     }
+
+    fn delete_all_events_for_player(
+        &mut self,
+        player: &moor_schema::common::Obj,
+    ) -> Result<(), eyre::Error> {
+        let player_key_prefix = Self::obj_to_key(player);
+        let player_prefix_with_colon = format!("{player_key_prefix}:");
+
+        // Use range to efficiently iterate over all keys for this player
+        // Collect event IDs and index keys in one pass
+        let mut index_keys = Vec::new();
+        let mut event_ids = Vec::new();
+
+        for result in self
+            .player_index_partition
+            .range(player_prefix_with_colon.as_bytes()..)
+        {
+            let (key, value) = result?;
+
+            // Check if key still matches our prefix (range scan stops when prefix doesn't match)
+            let key_str = std::str::from_utf8(&key)?;
+            if !key_str.starts_with(&player_prefix_with_colon) {
+                break;
+            }
+
+            // Store the index key for deletion
+            index_keys.push(key.to_vec());
+
+            // Extract event UUID from the value (stored as UUID bytes)
+            if value.len() == 16 {
+                let mut bytes = [0u8; 16];
+                bytes.copy_from_slice(&value);
+                event_ids.push(Uuid::from_bytes(bytes));
+            }
+        }
+
+        // Delete from player index partition
+        for key in index_keys {
+            self.player_index_partition.remove(key)?;
+        }
+
+        // Delete from narrative events partition
+        for event_id in event_ids {
+            self.narrative_events_partition
+                .remove(event_id.as_bytes())?;
+        }
+
+        // Delete presentations for this player
+        self.presentations_partition
+            .remove(player_key_prefix.as_bytes())?;
+
+        Ok(())
+    }
 }
 
 impl EventLog {
@@ -832,6 +888,14 @@ impl EventLogOps for EventLog {
             error!("Failed to store pubkey for player {:?}: {}", player, e);
         }
     }
+
+    fn delete_all_events(&self, player: Obj) -> Result<(), String> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let mut persistence = self.persistence.lock().unwrap();
+        persistence
+            .delete_all_events_for_player(&player_fb)
+            .map_err(|e| e.to_string())
+    }
 }
 
 /// No-op event log implementation that discards all events
@@ -905,6 +969,10 @@ impl EventLogOps for NoOpEventLog {
 
     fn set_pubkey(&self, _player: Obj, _pubkey: String) {
         // No-op
+    }
+
+    fn delete_all_events(&self, _player: Obj) -> Result<(), String> {
+        Ok(())
     }
 }
 

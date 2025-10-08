@@ -228,6 +228,54 @@ pub async fn get_pubkey_handler(
     response.into_response()
 }
 
+/// REST endpoint to delete all event history for the authenticated player
+pub async fn delete_history_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let delete_msg = rpc_common::mk_delete_event_log_history_msg(&client_token, &auth_token);
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, delete_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let reply_union = match extract_daemon_reply(&reply_bytes) {
+        Ok(r) => r,
+        Err(response) => return *response,
+    };
+
+    let moor_rpc::DaemonToClientReplyUnionRef::EventLogHistoryDeleted(deleted_ref) = reply_union
+    else {
+        error!("Unexpected response type: expected EventLogHistoryDeleted");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let success = deleted_ref.success().unwrap_or(false);
+
+    let response = Json(json!({
+        "success": success
+    }));
+
+    // Detach RPC connection
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
+    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
+        error!("Failed to send detach to RPC server: {}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    response.into_response()
+}
+
 /// REST endpoint to set player's event log public key
 /// Expects JSON body with `public_key` field containing age public key string (age1...)
 pub async fn set_pubkey_handler(

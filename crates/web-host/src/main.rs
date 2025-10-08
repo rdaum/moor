@@ -253,6 +253,10 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
         )
         .route("/api/event-log/pubkey", get(host::get_pubkey_handler))
         .route("/api/event-log/pubkey", put(host::set_pubkey_handler))
+        .route(
+            "/api/event-log/history",
+            axum::routing::delete(host::delete_history_handler),
+        )
         .with_state(web_host);
 
     Ok(webhost_router)

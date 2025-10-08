@@ -382,6 +382,9 @@ impl MessageHandler for RpcMessageHandler {
             HostClientToDaemonMessageUnionRef::SetEventLogPublicKey(req) => {
                 self.handle_set_event_log_pubkey(client_id, req)
             }
+            HostClientToDaemonMessageUnionRef::DeleteEventLogHistory(req) => {
+                self.handle_delete_event_log_history(client_id, req)
+            }
         }
     }
 
@@ -1759,6 +1762,36 @@ impl RpcMessageHandler {
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::EventLogPublicKey(Box::new(
                 moor_rpc::EventLogPublicKey { public_key },
+            )),
+        })
+    }
+
+    fn handle_delete_event_log_history(
+        &self,
+        client_id: Uuid,
+        req: moor_rpc::DeleteEventLogHistoryRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &req,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        let success = match self.event_log.delete_all_events(player) {
+            Ok(_) => true,
+            Err(e) => {
+                error!(
+                    "Failed to delete event history for player {:?}: {}",
+                    player, e
+                );
+                false
+            }
+        };
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::EventLogHistoryDeleted(Box::new(
+                moor_rpc::EventLogHistoryDeleted { success },
             )),
         })
     }

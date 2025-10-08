@@ -410,6 +410,22 @@ pub fn mk_set_event_log_pubkey_msg(
     }
 }
 
+/// Build a DeleteEventLogHistory message
+#[inline]
+pub fn mk_delete_event_log_history_msg(
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::DeleteEventLogHistory(Box::new(
+            rpc::DeleteEventLogHistory {
+                client_token: client_token_fb(client_token),
+                auth_token: auth_token_fb(auth_token),
+            },
+        )),
+    }
+}
+
 /// Build an InvokeVerb message
 #[inline]
 pub fn mk_invoke_verb_msg(

@@ -48,12 +48,12 @@ pub use helpers::{
 
 // Re-export client message builders
 pub use client_messages::{
-    mk_attach_msg, mk_client_pong_msg, mk_command_msg, mk_connection_establish_msg, mk_detach_msg,
-    mk_dismiss_presentation_msg, mk_eval_msg, mk_get_event_log_pubkey_msg, mk_invoke_verb_msg,
-    mk_login_command_msg, mk_out_of_band_msg, mk_program_msg, mk_properties_msg,
-    mk_request_current_presentations_msg, mk_request_history_msg, mk_request_sys_prop_msg,
-    mk_requested_input_msg, mk_resolve_msg, mk_retrieve_msg, mk_set_client_attribute_msg,
-    mk_set_event_log_pubkey_msg, mk_verbs_msg,
+    mk_attach_msg, mk_client_pong_msg, mk_command_msg, mk_connection_establish_msg,
+    mk_delete_event_log_history_msg, mk_detach_msg, mk_dismiss_presentation_msg, mk_eval_msg,
+    mk_get_event_log_pubkey_msg, mk_invoke_verb_msg, mk_login_command_msg, mk_out_of_band_msg,
+    mk_program_msg, mk_properties_msg, mk_request_current_presentations_msg,
+    mk_request_history_msg, mk_request_sys_prop_msg, mk_requested_input_msg, mk_resolve_msg,
+    mk_retrieve_msg, mk_set_client_attribute_msg, mk_set_event_log_pubkey_msg, mk_verbs_msg,
 };
 pub use host_messages::{
     mk_detach_host_msg, mk_host_pong_msg, mk_register_host_msg, mk_request_performance_counters_msg,
