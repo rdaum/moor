@@ -204,6 +204,11 @@ export const Login: React.FC<LoginProps> = (
     const [oauth2ExistingUsername, setOAuth2ExistingUsername] = useState("");
     const [oauth2ExistingPassword, setOAuth2ExistingPassword] = useState("");
     const [oauth2IsSubmitting, setOAuth2IsSubmitting] = useState(false);
+    const [showHelp, setShowHelp] = useState(false);
+    const [helpMessage, setHelpMessage] = useState<string>("");
+    const [helpContentType, setHelpContentType] = useState<"text/plain" | "text/djot" | "text/html" | "text/traceback">(
+        "text/plain",
+    );
     const { authState } = useAuthContext();
 
     const usernameRef = useRef<HTMLInputElement>(null);
@@ -310,6 +315,48 @@ export const Login: React.FC<LoginProps> = (
             }
         }
     }, [oauth2UserInfo, oauth2PlayerName]);
+
+    // Fetch help message when component becomes visible
+    useEffect(() => {
+        if (!visible || !isServerReady) return;
+
+        const fetchHelpMessage = async () => {
+            try {
+                const { getSystemPropertyFlatBuffer } = await import("../lib/rpc-fb");
+
+                // Fetch help message
+                const helpValue = await getSystemPropertyFlatBuffer(["login"], "help_message");
+                if (helpValue !== null) {
+                    let helpText = "";
+                    if (Array.isArray(helpValue)) {
+                        helpText = helpValue.join("\n");
+                    } else if (typeof helpValue === "string") {
+                        helpText = helpValue;
+                    }
+                    setHelpMessage(helpText);
+                }
+
+                // Fetch help message content type
+                try {
+                    const typeValue = await getSystemPropertyFlatBuffer(["login"], "help_message_content_type");
+                    if (typeof typeValue === "string") {
+                        if (
+                            typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain"
+                            || typeValue === "text/traceback"
+                        ) {
+                            setHelpContentType(typeValue);
+                        }
+                    }
+                } catch (error) {
+                    console.log("Help message content type not available, defaulting to text/plain:", error);
+                }
+            } catch (error) {
+                console.error("Error fetching help message:", error);
+            }
+        };
+
+        fetchHelpMessage();
+    }, [visible, isServerReady]);
 
     if (!visible) {
         return null;
@@ -469,7 +516,20 @@ export const Login: React.FC<LoginProps> = (
         <div className="login_window" style={{ display: "block" }}>
             {/* Welcome message display */}
             <div className="welcome_box" role="banner" aria-label="Welcome message">
-                <ContentRenderer content={welcomeMessage} contentType={contentType} />
+                <div style={{ position: "relative" }}>
+                    {helpMessage && (
+                        <button
+                            type="button"
+                            onClick={() => setShowHelp(true)}
+                            className="help_button"
+                            aria-label="Show help"
+                            title="Help"
+                        >
+                            ?
+                        </button>
+                    )}
+                    <ContentRenderer content={welcomeMessage} contentType={contentType} />
+                </div>
             </div>
 
             {/* Modern login card */}
@@ -627,6 +687,37 @@ export const Login: React.FC<LoginProps> = (
                     </button>
                 </form>
             </div>
+
+            {/* Help modal */}
+            {showHelp && helpMessage && (
+                <div
+                    className="help_modal_backdrop"
+                    onClick={() => setShowHelp(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="help-modal-title"
+                >
+                    <div
+                        className="help_modal"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="help_modal_header">
+                            <h2 id="help-modal-title" className="help_modal_title">Help</h2>
+                            <button
+                                type="button"
+                                className="help_modal_close"
+                                onClick={() => setShowHelp(false)}
+                                aria-label="Close help"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="help_modal_content">
+                            <ContentRenderer content={helpMessage} contentType={helpContentType} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

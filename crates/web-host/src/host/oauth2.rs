@@ -33,14 +33,12 @@ pub struct OAuth2ProviderConfig {
 }
 
 /// OAuth2 configuration section from YAML
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OAuth2Config {
     pub enabled: bool,
     pub base_url: String,
     pub providers: HashMap<String, OAuth2ProviderConfig>,
 }
-
 
 /// External user information retrieved from OAuth2 provider
 #[derive(Debug, Clone, Serialize, Deserialize)]

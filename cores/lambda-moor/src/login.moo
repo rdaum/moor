@@ -42,7 +42,21 @@ object LOGIN
     "For assistance either now or later, type `help'."
   };
   property graylist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property help_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {"Sorry, but there's no help here yet.  Type `?' for a list of commands."};
+  property help_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "# Getting Started
+
+To sign in to an existing account, use your **player name** and **password**.
+
+To create a new account, choose a unique player name and password.
+
+## Available commands (for telnet users)
+
+- `connect <name> <password>` - Sign in to an existing account
+- `create <name> <password>` - Create a new account
+- `who` - See who is currently connected
+- `quit` - Disconnect from the server
+
+For more detailed help once you're logged in, type `help` after connecting.";
+  property help_message_content_type (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "text/djot";
   property ignored (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
   property intercepted_actions (owner: HACKER, flags: "") = {};
   property intercepted_players (owner: HACKER, flags: "") = {};
@@ -67,13 +81,16 @@ object LOGIN
   property temporary_newts (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
   property temporary_redlist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
   property temporary_spooflist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property welcome_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
-    "Welcome to the LambdaCore database.",
-    "",
-    "Type 'connect wizard' to log in.",
-    "",
-    "You will probably want to change this text and the output of the `help' command, which are stored in $login.welcome_message and $login.help_message, respectively."
-  };
+  property welcome_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "# Welcome to the LambdaCore database
+
+To get started, either **sign in** to an existing account or **create a new one**.
+
+For more information, tap the help button or type `help`.
+
+---
+
+_Administrators: You may want to customize this text and the help message, which are stored in `$login.welcome_message` and `$login.help_message`._";
+  property welcome_message_content_type (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "text/djot";
   property who_masks_wizards (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
 
   override aliases = {"Login Commands"};
@@ -105,12 +122,17 @@ object LOGIN
       return E_PERM;
     else
       msg = this.welcome_message;
+      content_type = $object_utils:has_property(this, "welcome_message_content_type") ? this.welcome_message_content_type | "text/plain";
       version = server_version();
-      for line in (typeof(msg) == LIST ? msg | {msg})
-        if (typeof(line) == STR)
-          notify(player, strsub(line, "%v", version));
-        endif
-      endfor
+      if (typeof(msg) == STR)
+        notify(player, strsub(msg, "%v", version), 0, 0, content_type);
+      else
+        for line in (msg)
+          if (typeof(line) == STR)
+            notify(player, strsub(line, "%v", version));
+          endif
+        endfor
+      endif
       this:check_player_db();
       this:check_for_shutdown();
       this:check_for_checkpoint();
@@ -628,8 +650,10 @@ object LOGIN
       this.registration_address = "";
       this.registration_string = "Character creation is disabled.";
       this.newt_registration_string = "Your character is temporarily hosed.";
-      this.welcome_message = {"Welcome to the LambdaCore database.", "", "Type 'connect wizard' to log in.", "", "You will probably want to change this text and the output of the `help' command, which are stored in $login.welcome_message and $login.help_message, respectively."};
-      this.help_message = {"Sorry, but there's no help here yet.  Type `?' for a list of commands."};
+      this.welcome_message = "# Welcome to the LambdaCore database\n\nTo get started, either **sign in** to an existing account or **create a new one**.\n\nFor more information, tap the help button or type `help`.\n\n---\n\n_Administrators: You may want to customize this text and the help message, which are stored in `$login.welcome_message` and `$login.help_message`._";
+      this.welcome_message_content_type = "text/djot";
+      this.help_message = "# Getting Started\n\nTo sign in to an existing account, use your **player name** and **password**.\n\nTo create a new account, choose a unique player name and password.\n\n## Available commands (for telnet users)\n\n- `connect <name> <password>` - Sign in to an existing account\n- `create <name> <password>` - Create a new account\n- `who` - See who is currently connected\n- `quit` - Disconnect from the server\n\nFor more detailed help once you're logged in, type `help` after connecting.";
+      this.help_message_content_type = "text/djot";
       this.redlist = this.blacklist = this.graylist = this.spooflist = {{}, {}};
       this.temporary_redlist = this.temporary_blacklist = this.temporary_graylist = this.temporary_spooflist = {{}, {}};
       this.who_masks_wizards = 0;
@@ -901,11 +925,16 @@ object LOGIN
       return E_PERM;
     else
       msg = this.help_message;
-      for line in (typeof(msg) == LIST ? msg | {msg})
-        if (typeof(line) == STR)
-          notify(player, line);
-        endif
-      endfor
+      content_type = $object_utils:has_property(this, "help_message_content_type") ? this.help_message_content_type | "text/plain";
+      if (typeof(msg) == STR)
+        notify(player, msg, 0, 0, content_type);
+      else
+        for line in (msg)
+          if (typeof(line) == STR)
+            notify(player, line);
+          endif
+        endfor
+      endif
       return 0;
     endif
   endverb

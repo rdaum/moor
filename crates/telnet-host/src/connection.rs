@@ -60,6 +60,8 @@ pub(crate) const DEFAULT_FLUSH_COMMAND: &str = ".flush";
 // TODO: switch to djot
 const CONTENT_TYPE_MARKDOWN: &str = "text_markdown";
 const CONTENT_TYPE_DJOT: &str = "text_djot";
+const CONTENT_TYPE_DJOT_SLASH: &str = "text/djot";
+const CONTENT_TYPE_MARKDOWN_SLASH: &str = "text/markdown";
 
 pub(crate) struct TelnetConnection {
     pub(crate) peer_addr: SocketAddr,
@@ -935,7 +937,7 @@ impl TelnetConnection {
                         ..
                     } => {
                         let output_str = output_format(msg, *content_type)?;
-                        self.send_line(&output_str_format(&output_str, *content_type)?)
+                        self.send_line(&output_str)
                             .await
                             .expect("Unable to send message to client");
                     }
@@ -1405,8 +1407,8 @@ fn output_str_format(content: &str, content_type: Option<Symbol>) -> Result<Stri
     };
     let content_type = content_type.as_arc_string();
     Ok(match content_type.as_str() {
-        CONTENT_TYPE_MARKDOWN => markdown_to_ansi(content),
-        CONTENT_TYPE_DJOT => {
+        CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => markdown_to_ansi(content),
+        CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => {
             // For now, we treat Djot as markdown.
             // In the future, we might want to support Djot specifically, but in realiy, djot
             // is mainly a (safer) subset of markdown.

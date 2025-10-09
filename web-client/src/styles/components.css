@@ -1332,3 +1332,131 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ====== HELP BUTTON & MODAL ====== */
+
+/* Help button - positioned in top-right of welcome box */
+.help_button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: var(--color-text-accent);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 1.2em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  font-family: var(--font-sans);
+  z-index: 10;
+}
+
+.help_button:hover {
+  background-color: #339af0;
+  transform: scale(1.1);
+  box-shadow: 0 3px 10px rgba(77, 171, 247, 0.4);
+}
+
+.help_button:active {
+  transform: scale(0.95);
+}
+
+/* Help modal backdrop */
+.help_modal_backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: var(--space-lg);
+}
+
+/* Help modal container */
+.help_modal {
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-lg);
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px var(--color-shadow);
+  border: 1px solid var(--color-border-medium);
+}
+
+/* Help modal header */
+.help_modal_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--color-border-medium);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.help_modal_title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.4em;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.help_modal_close {
+  background: none;
+  border: none;
+  font-size: 2em;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.help_modal_close:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+/* Help modal content */
+.help_modal_content {
+  padding: var(--space-lg);
+  overflow-y: auto;
+  flex: 1;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+}
+
+/* Mobile responsive adjustments for help modal */
+@media (max-width: 768px) {
+  .help_modal {
+    max-width: 95vw;
+    max-height: 90vh;
+  }
+
+  .help_button {
+    width: 36px;
+    height: 36px;
+    font-size: 1.3em;
+  }
+}

@@ -274,10 +274,7 @@ fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Resu
     // Add OAuth2 routes if OAuth2 is enabled
     if let Some(oauth2_state) = oauth2_state {
         let oauth2_router = Router::new()
-            .route(
-                "/api/oauth2/config",
-                get(host::oauth2_config_handler),
-            )
+            .route("/api/oauth2/config", get(host::oauth2_config_handler))
             .route(
                 "/auth/oauth2/{provider}/authorize",
                 get(host::oauth2_authorize_handler),
