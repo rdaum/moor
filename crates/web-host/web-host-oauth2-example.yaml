@@ -1,0 +1,53 @@
+# Example web-host configuration with OAuth2 support
+# Copy this to web-host.yaml and fill in your actual credentials
+
+# Standard web-host settings
+listen_address: "0.0.0.0:8080"
+debug: false
+rpc_address: "tcp://127.0.0.1:7899"
+events_address: "tcp://127.0.0.1:7898"
+public_key: "path/to/public_key.pem"
+private_key: "path/to/private_key.pem"
+
+# OAuth2 configuration
+oauth2:
+  enabled: true
+  # Base URL must match your deployment (used for redirect URIs)
+  base_url: "http://localhost:8080"
+
+  providers:
+    # Google OAuth2
+    google:
+      client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+      client_secret: "YOUR_GOOGLE_CLIENT_SECRET"
+      auth_url: "https://accounts.google.com/o/oauth2/v2/auth"
+      token_url: "https://oauth2.googleapis.com/token"
+      user_info_url: "https://www.googleapis.com/oauth2/v3/userinfo"
+      scopes:
+        - "openid"
+        - "email"
+        - "profile"
+
+    # GitHub OAuth2
+    github:
+      client_id: "YOUR_GITHUB_CLIENT_ID"
+      client_secret: "YOUR_GITHUB_CLIENT_SECRET"
+      auth_url: "https://github.com/login/oauth/authorize"
+      token_url: "https://github.com/login/oauth/access_token"
+      user_info_url: "https://api.github.com/user"
+      scopes:
+        - "read:user"
+        - "user:email"
+
+    # Discord OAuth2
+    discord:
+      client_id: "YOUR_DISCORD_CLIENT_ID"
+      client_secret: "YOUR_DISCORD_CLIENT_SECRET"
+      auth_url: "https://discord.com/api/oauth2/authorize"
+      token_url: "https://discord.com/api/oauth2/token"
+      user_info_url: "https://discord.com/api/users/@me"
+      scopes:
+        - "identify"
+        - "email"
+
+# To disable OAuth2, set enabled: false or remove the oauth2 section entirely

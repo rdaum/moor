@@ -20,12 +20,14 @@ interface EncryptionPasswordPromptProps {
     systemTitle: string;
     onUnlock: (password: string) => Promise<{ success: boolean; error?: string }>;
     onForgotPassword: () => void;
+    onSkip: () => void;
 }
 
 export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> = ({
     systemTitle,
     onUnlock,
     onForgotPassword,
+    onSkip,
 }) => {
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
@@ -197,6 +199,25 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                                 }}
                             >
                                 I Forgot My Password
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onSkip}
+                                disabled={isSubmitting}
+                                aria-label="Skip history decryption for now"
+                                style={{
+                                    padding: "0.5em 1em",
+                                    borderRadius: "var(--radius-md)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    backgroundColor: "transparent",
+                                    color: "var(--color-text-secondary)",
+                                    cursor: isSubmitting ? "not-allowed" : "pointer",
+                                    fontFamily: "inherit",
+                                    fontSize: "0.9em",
+                                    transition: "background-color var(--transition-fast)",
+                                }}
+                            >
+                                Skip for Now
                             </button>
                         </div>
                     </form>

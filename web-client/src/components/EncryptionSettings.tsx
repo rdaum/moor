@@ -18,6 +18,7 @@ import { useAuthContext } from "../context/AuthContext";
 import { useEncryptionContext } from "../context/EncryptionContext";
 import { useHistoryExport } from "../hooks/useHistoryExport";
 import { useTitle } from "../hooks/useTitle";
+import { EncryptionPasswordPrompt } from "./EncryptionPasswordPrompt";
 import { EncryptionSetupPrompt } from "./EncryptionSetupPrompt";
 
 export const EncryptionSettings: React.FC = () => {
@@ -27,6 +28,7 @@ export const EncryptionSettings: React.FC = () => {
     const systemTitle = useTitle();
     const [showForgetConfirm, setShowForgetConfirm] = useState(false);
     const [showSetupPrompt, setShowSetupPrompt] = useState(false);
+    const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
@@ -254,7 +256,28 @@ export const EncryptionSettings: React.FC = () => {
                             )
                             : (
                                 <div role="status">
-                                    Password not stored - you'll need to enter it each time to view history
+                                    <div style={{ marginBottom: "0.75em" }}>
+                                        History encryption is enabled on the server, but your password isn't saved in
+                                        this browser. You'll need to unlock it with your password to view history.
+                                    </div>
+                                    <button
+                                        onClick={() => setShowPasswordPrompt(true)}
+                                        aria-label="Unlock history with password"
+                                        style={{
+                                            padding: "0.5em 1em",
+                                            borderRadius: "var(--radius-md)",
+                                            border: "none",
+                                            backgroundColor: "var(--color-button-primary)",
+                                            color: "var(--color-bg-base)",
+                                            cursor: "pointer",
+                                            fontFamily: "inherit",
+                                            fontSize: "1em",
+                                            fontWeight: "bold",
+                                            transition: "opacity var(--transition-fast)",
+                                        }}
+                                    >
+                                        Unlock History
+                                    </button>
                                 </div>
                             )}
                     </div>
@@ -498,6 +521,24 @@ export const EncryptionSettings: React.FC = () => {
                             return result;
                         }}
                         onSkip={() => setShowSetupPrompt(false)}
+                    />
+                )}
+
+                {showPasswordPrompt && (
+                    <EncryptionPasswordPrompt
+                        systemTitle={systemTitle}
+                        onUnlock={async (password) => {
+                            const result = await setupEncryption(password);
+                            if (result.success) {
+                                setShowPasswordPrompt(false);
+                            }
+                            return result;
+                        }}
+                        onForgotPassword={() => {
+                            setShowPasswordPrompt(false);
+                            setShowSetupPrompt(true);
+                        }}
+                        onSkip={() => setShowPasswordPrompt(false)}
                     />
                 )}
             </div>

@@ -328,6 +328,136 @@ object LOGIN
     endif
   endverb
 
+  verb oauth2_check (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+    "$login:oauth2_check(provider, external_id)";
+    " => 0 (for not found)";
+    " => objnum (for existing OAuth2 identity)";
+    caller == #0 || caller == this || raise(E_PERM);
+    try
+      {provider, external_id} = args;
+    except (E_ARGS)
+      notify(player, "OAuth2 check failed: invalid arguments");
+      return 0;
+    endtry
+    if (valid(candidate = this:find_by_oauth2(provider, external_id)))
+      server_log(tostr("OAUTH2 CHECK SUCCESS: ", provider, ":", external_id, " -> ", candidate));
+      this:record_connection(candidate);
+      return candidate;
+    else
+      server_log(tostr("OAUTH2 CHECK NOT FOUND: ", provider, ":", external_id));
+      return 0;
+    endif
+  endverb
+
+  verb oauth2_create (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+    "$login:oauth2_create(provider, external_id, email, name, username, player_name)";
+    " => 0 (for failed creation)";
+    " => objnum (for successful creation)";
+    caller == #0 || caller == this || raise(E_PERM);
+    if (!this:player_creation_enabled(player))
+      notify(player, this:registration_string());
+      return 0;
+    endif
+    try
+      {provider, external_id, email, name, username, player_name} = args;
+    except (E_ARGS)
+      notify(player, "OAuth2 create failed: invalid arguments");
+      return 0;
+    endtry
+    if ($player_db.frozen)
+      notify(player, "Sorry, can't create any new players right now.  Try again in a few minutes.");
+      return 0;
+    elseif (!player_name || player_name == "<>")
+      notify(player, "You can't have a blank name!");
+      return 0;
+    elseif (player_name[1] == "<" && player_name[$] == ">")
+      notify(player, "Don't use angle brackets in your player name.");
+      return 0;
+    elseif (index(player_name, " "))
+      notify(player, "Sorry, no spaces are allowed in player names.  Use dashes or underscores.");
+      return 0;
+    elseif (!$player_db:available(player_name) || this:_match_player(player_name) != $failed_match)
+      notify(player, "Sorry, that name is not available.  Please choose another.");
+      return 0;
+    endif
+    new = $quota_utils:bi_create($player_class, $nothing);
+    set_player_flag(new, 1);
+    new.name = player_name;
+    new.aliases = {player_name};
+    new.programmer = $player_class.programmer;
+    new.password = 0;
+    new.email_address = email;
+    new.oauth2_identities = {{provider, external_id}};
+    new.last_connect_time = $maxint;
+    new.last_disconnect_time = time();
+    $quota_utils:initialize_quota(new);
+    this:record_connection(new);
+    $player_db:insert(player_name, new);
+    `move(new, $player_start) ! ANY';
+    server_log(tostr("OAUTH2 CREATE: ", player_name, " (", new, ") via ", provider, ":", external_id));
+    return new;
+  endverb
+
+  verb oauth2_connect (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+    "$login:oauth2_connect(provider, external_id, email, name, username, existing_name, existing_password)";
+    " => 0 (for failed connection)";
+    " => objnum (for successful link)";
+    caller == #0 || caller == this || raise(E_PERM);
+    try
+      {provider, external_id, email, name, username, existing_name, existing_password} = args;
+      server_log(tostr("OAUTH2 CONNECT ATTEMPT: provider=", provider, " external_id=", external_id, " existing_name=", existing_name, " args_count=", length(args)));
+    except (E_ARGS)
+      server_log(tostr("OAUTH2 CONNECT E_ARGS: received ", length(args), " args, expected 7"));
+      notify(player, "OAuth2 connect failed: invalid arguments");
+      return 0;
+    endtry
+    if (!valid(candidate = this:_match_player(existing_name)))
+      server_log(tostr("OAUTH2 CONNECT FAILED: player not found: ", existing_name));
+      notify(player, "That player does not exist.");
+      return 0;
+    endif
+    server_log(tostr("OAUTH2 CONNECT: found candidate ", candidate, " password_type=", typeof(candidate.password)));
+    if (typeof(cp = candidate.password) == STR)
+      "=== Candidate has a password, verify it";
+      if (!argon2_verify(cp, existing_password))
+        server_log(tostr("OAUTH2 CONNECT FAILED PASSWORD: ", existing_name, " (", candidate, ")"));
+        notify(player, "Invalid password for existing account.");
+        return 0;
+      endif
+      server_log(tostr("OAUTH2 CONNECT: password verified for ", existing_name));
+    elseif (cp == 0)
+      "=== Candidate has no password set, allow linking";
+      server_log(tostr("OAUTH2 CONNECT: no password required for ", existing_name, " (", candidate, ")"));
+    else
+      "=== Candidate has nonstandard password";
+      server_log(tostr("OAUTH2 CONNECT FAILED: nonstandard password type for ", existing_name, " (", candidate, ")"));
+      notify(player, "Cannot link to that account.");
+      return 0;
+    endif
+    if ($object_utils:has_property(candidate, "oauth2_identities"))
+      for identity in (candidate.oauth2_identities)
+        if (typeof(identity) == LIST && length(identity) == 2)
+          if (identity[1] == provider && identity[2] == external_id)
+            notify(player, "This OAuth2 identity is already linked to this account.");
+            this:record_connection(candidate);
+            return candidate;
+          endif
+        endif
+      endfor
+      candidate.oauth2_identities = {@candidate.oauth2_identities, {provider, external_id}};
+    else
+      candidate.oauth2_identities = {{provider, external_id}};
+    endif
+    "=== Set email address if one was provided and the candidate doesn't have one";
+    if (email && (!$object_utils:has_property(candidate, "email_address") || !candidate.email_address))
+      candidate.email_address = email;
+      server_log(tostr("OAUTH2 CONNECT: set email address for ", existing_name, " to ", email));
+    endif
+    this:record_connection(candidate);
+    server_log(tostr("OAUTH2 CONNECT: ", existing_name, " (", candidate, ") linked ", provider, ":", external_id));
+    return candidate;
+  endverb
+
   verb "up*time @up*time" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
@@ -435,6 +565,28 @@ object LOGIN
     ".   endif ";
     ". endfor ";
     ".....";
+    return $failed_match;
+  endverb
+
+  verb find_by_oauth2 (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+    ":find_by_oauth2(provider, external_id)";
+    "Search all players for matching oauth2_identities entry";
+    "Returns player object or $failed_match";
+    if (!caller_perms().wizard)
+      return E_PERM;
+    endif
+    {provider, external_id} = args;
+    for candidate in (players())
+      if ($object_utils:has_property(candidate, "oauth2_identities"))
+        for identity in (candidate.oauth2_identities)
+          if (typeof(identity) == LIST && length(identity) == 2)
+            if (identity[1] == provider && identity[2] == external_id)
+              return candidate;
+            endif
+          endif
+        endfor
+      endif
+    endfor
     return $failed_match;
   endverb
 

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export interface Player {
     oid: string;
@@ -31,6 +31,31 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         isConnecting: false,
         error: null,
     });
+
+    // Check for OAuth2 credentials in sessionStorage on mount
+    useEffect(() => {
+        const oauth2Token = sessionStorage.getItem("oauth2_auth_token");
+        const oauth2PlayerOid = sessionStorage.getItem("oauth2_player_oid");
+
+        if (oauth2Token && oauth2PlayerOid) {
+            // Clear from sessionStorage
+            sessionStorage.removeItem("oauth2_auth_token");
+            sessionStorage.removeItem("oauth2_player_oid");
+
+            // Set auth state
+            setAuthState({
+                player: {
+                    oid: oauth2PlayerOid,
+                    authToken: oauth2Token,
+                    connected: false,
+                },
+                isConnecting: false,
+                error: null,
+            });
+
+            onSystemMessage("Authenticated via OAuth2! Loading history...", 2);
+        }
+    }, [onSystemMessage]);
 
     const connect = useCallback(async (
         mode: "connect" | "create",

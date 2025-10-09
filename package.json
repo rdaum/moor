@@ -15,9 +15,12 @@
     "daemon:dev": "cargo run -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true",
     "daemon:traced": "cargo run --features trace_events -p moor-daemon -- ./moor-data --db development.db --import-format objdef --import ${MOOR_CORE:-cores/lambda-moor/src} --export development-export --export-format objdef --use-boolean-returns true --custom-errors true --use-uuobjids true --enable-eventlog true --trace-output moor-trace.json",
     "web-host:dev": "cargo run --bin moor-web-host -- --debug",
+    "web-host:dev:oauth2": "cargo run --bin moor-web-host -- --debug --config-file ${MOOR_OAUTH2_CONFIG:-web-host-oauth2.yaml}",
     "web-host:build": "cargo build --release --bin moor-web-host",
     "web-host:run": "cargo run --release --bin moor-web-host",
+    "web-host:run:oauth2": "cargo run --release --bin moor-web-host -- --config-file ${MOOR_OAUTH2_CONFIG:-web-host-oauth2.yaml}",
     "full:dev": "concurrently \"npm run dev\" \"npm run daemon:dev\" \"npm run web-host:dev\"",
+    "full:dev:oauth2": "concurrently \"npm run dev\" \"npm run daemon:dev\" \"npm run web-host:dev:oauth2\"",
     "full:dev-traced": "concurrently \"npm run dev\" \"npm run daemon:traced\" \"npm run web-host:dev\"",
     "full:build": "npm run build && npm run web-host:build"
   },

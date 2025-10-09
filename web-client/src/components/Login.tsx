@@ -13,7 +13,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useAuthContext } from "../context/AuthContext";
+import { OAuth2UserInfo } from "../lib/oauth2";
 import { ContentRenderer } from "./ContentRenderer";
+import { OAuth2Buttons } from "./OAuth2Buttons";
 
 /**
  * Simple loading spinner component for server startup
@@ -66,6 +68,19 @@ interface LoginProps {
     contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
     isServerReady: boolean;
     onConnect: (mode: "connect" | "create", username: string, password: string) => void;
+    oauth2UserInfo?: OAuth2UserInfo | null;
+    onOAuth2AccountChoice?: (choice: {
+        mode: "oauth2_create" | "oauth2_connect";
+        provider: string;
+        external_id: string;
+        email?: string;
+        name?: string;
+        username?: string;
+        player_name?: string;
+        existing_email?: string;
+        existing_password?: string;
+    }) => Promise<void>;
+    onOAuth2Cancel?: () => void;
 }
 
 /**
@@ -168,15 +183,31 @@ export const useWelcomeMessage = () => {
  * account or create a new one. The component automatically hides when
  * the user is connected and shows when disconnected.
  */
-export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentType, isServerReady, onConnect }) => {
+export const Login: React.FC<LoginProps> = (
+    {
+        visible,
+        welcomeMessage,
+        contentType,
+        isServerReady,
+        onConnect,
+        oauth2UserInfo,
+        onOAuth2AccountChoice,
+        onOAuth2Cancel,
+    },
+) => {
     const [mode, setMode] = useState<"connect" | "create">("connect");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [oauth2Mode, setOAuth2Mode] = useState<"create" | "link">("create");
+    const [oauth2PlayerName, setOAuth2PlayerName] = useState("");
+    const [oauth2ExistingUsername, setOAuth2ExistingUsername] = useState("");
+    const [oauth2ExistingPassword, setOAuth2ExistingPassword] = useState("");
+    const [oauth2IsSubmitting, setOAuth2IsSubmitting] = useState(false);
     const { authState } = useAuthContext();
 
     const usernameRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);
-    const modeSelectRef = useRef<HTMLSelectElement>(null);
 
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -194,6 +225,12 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
             return;
         }
 
+        // For create mode, validate password confirmation
+        if (mode === "create" && password !== confirmPassword) {
+            // Show error or focus confirm password field
+            return;
+        }
+
         onConnect(mode, username.trim(), password);
     };
 
@@ -201,6 +238,47 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
         if (e.key === "Enter") {
             e.preventDefault();
             handleSubmit();
+        }
+    };
+
+    const handleOAuth2Submit = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+
+        if (!oauth2UserInfo || !onOAuth2AccountChoice) return;
+
+        setOAuth2IsSubmitting(true);
+
+        try {
+            if (oauth2Mode === "create") {
+                if (!oauth2PlayerName.trim()) {
+                    return;
+                }
+                await onOAuth2AccountChoice({
+                    mode: "oauth2_create",
+                    provider: oauth2UserInfo.provider,
+                    external_id: oauth2UserInfo.external_id,
+                    email: oauth2UserInfo.email,
+                    name: oauth2UserInfo.name,
+                    username: oauth2UserInfo.username,
+                    player_name: oauth2PlayerName.trim(),
+                });
+            } else {
+                if (!oauth2ExistingUsername.trim() || !oauth2ExistingPassword) {
+                    return;
+                }
+                await onOAuth2AccountChoice({
+                    mode: "oauth2_connect",
+                    provider: oauth2UserInfo.provider,
+                    external_id: oauth2UserInfo.external_id,
+                    email: oauth2UserInfo.email,
+                    name: oauth2UserInfo.name,
+                    username: oauth2UserInfo.username,
+                    existing_email: oauth2ExistingUsername.trim(),
+                    existing_password: oauth2ExistingPassword,
+                });
+            }
+        } finally {
+            setOAuth2IsSubmitting(false);
         }
     };
 
@@ -215,6 +293,24 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
         }
     }, [visible, authState.isConnecting]);
 
+    // Clear confirm password when switching to connect mode
+    useEffect(() => {
+        if (mode === "connect") {
+            setConfirmPassword("");
+        }
+    }, [mode]);
+
+    // Pre-populate OAuth2 player name with name (display name) or username from provider
+    useEffect(() => {
+        if (oauth2UserInfo && !oauth2PlayerName) {
+            // Prefer name (which includes Discord's global_name), fall back to username
+            const suggestedName = oauth2UserInfo.name || oauth2UserInfo.username;
+            if (suggestedName) {
+                setOAuth2PlayerName(suggestedName);
+            }
+        }
+    }, [oauth2UserInfo, oauth2PlayerName]);
+
     if (!visible) {
         return null;
     }
@@ -228,111 +324,307 @@ export const Login: React.FC<LoginProps> = ({ visible, welcomeMessage, contentTy
         );
     }
 
+    // Show OAuth2 account choice form if we have user info
+    if (oauth2UserInfo && onOAuth2AccountChoice) {
+        return (
+            <div className="login_window" style={{ display: "block" }}>
+                <div className="welcome_box" role="banner" aria-label="Welcome message">
+                    <ContentRenderer content={welcomeMessage} contentType={contentType} />
+                </div>
+
+                <div className="login_card">
+                    <div className="oauth2_complete_header">
+                        <h2 className="oauth2_complete_title">
+                            {oauth2UserInfo.name ? `Welcome, ${oauth2UserInfo.name}!` : "Welcome!"}
+                        </h2>
+                        <p className="oauth2_complete_subtitle">
+                            You've authenticated with{" "}
+                            {oauth2UserInfo.provider.charAt(0).toUpperCase() + oauth2UserInfo.provider.slice(1)}.
+                        </p>
+                        <p className="oauth2_complete_subtitle">
+                            This {oauth2UserInfo.provider.charAt(0).toUpperCase() + oauth2UserInfo.provider.slice(1)}
+                            {" "}
+                            account isn't linked to any existing player yet. You can create a new player or link it to
+                            an existing one.
+                        </p>
+                    </div>
+
+                    <div className="login_tabs" role="tablist" aria-label="Account option">
+                        <button
+                            type="button"
+                            role="tab"
+                            className={`login_tab ${oauth2Mode === "create" ? "active" : ""}`}
+                            onClick={() => setOAuth2Mode("create")}
+                            disabled={oauth2IsSubmitting}
+                            aria-selected={oauth2Mode === "create"}
+                            aria-controls="oauth2-form-panel"
+                        >
+                            Create New Account
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            className={`login_tab ${oauth2Mode === "link" ? "active" : ""}`}
+                            onClick={() => setOAuth2Mode("link")}
+                            disabled={oauth2IsSubmitting}
+                            aria-selected={oauth2Mode === "link"}
+                            aria-controls="oauth2-form-panel"
+                        >
+                            Link to Existing
+                        </button>
+                    </div>
+
+                    <form
+                        id="oauth2-form-panel"
+                        className="login_form oauth2_complete_form"
+                        onSubmit={handleOAuth2Submit}
+                        noValidate
+                        role="tabpanel"
+                        aria-labelledby={oauth2Mode === "create" ? "tab-create" : "tab-link"}
+                    >
+                        {oauth2Mode === "create"
+                            ? (
+                                <div className="login_field">
+                                    <label htmlFor="oauth2_player_name" className="login_field_label">
+                                        Choose Your Player Name
+                                    </label>
+                                    <input
+                                        id="oauth2_player_name"
+                                        type="text"
+                                        className="login_input"
+                                        placeholder="Enter desired player name"
+                                        value={oauth2PlayerName}
+                                        onChange={(e) => setOAuth2PlayerName(e.target.value)}
+                                        disabled={oauth2IsSubmitting}
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
+                            )
+                            : (
+                                <>
+                                    <div className="login_field">
+                                        <label htmlFor="oauth2_existing_username" className="login_field_label">
+                                            Player Name
+                                        </label>
+                                        <input
+                                            id="oauth2_existing_username"
+                                            type="text"
+                                            className="login_input"
+                                            placeholder="Your existing player name"
+                                            value={oauth2ExistingUsername}
+                                            onChange={(e) => setOAuth2ExistingUsername(e.target.value)}
+                                            disabled={oauth2IsSubmitting}
+                                            required
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div className="login_field">
+                                        <label htmlFor="oauth2_existing_password" className="login_field_label">
+                                            Password
+                                        </label>
+                                        <input
+                                            id="oauth2_existing_password"
+                                            type="password"
+                                            className="login_input"
+                                            placeholder="Your existing password"
+                                            value={oauth2ExistingPassword}
+                                            onChange={(e) => setOAuth2ExistingPassword(e.target.value)}
+                                            disabled={oauth2IsSubmitting}
+                                            required
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                        <button
+                            type="submit"
+                            className="login_submit_button"
+                            disabled={oauth2IsSubmitting}
+                        >
+                            {oauth2IsSubmitting ? "Processing..." : "Continue"}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="login_cancel_button"
+                            onClick={() => {
+                                setOAuth2PlayerName("");
+                                setOAuth2ExistingUsername("");
+                                setOAuth2ExistingPassword("");
+                                setOAuth2Mode("create");
+                                onOAuth2Cancel?.();
+                            }}
+                            disabled={oauth2IsSubmitting}
+                        >
+                            Cancel
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="login_window" style={{ display: "block" }}>
             {/* Welcome message display */}
             <div className="welcome_box" role="banner" aria-label="Welcome message">
                 <ContentRenderer content={welcomeMessage} contentType={contentType} />
             </div>
-            <br />
 
-            {/* Login form */}
-            <div className="login_prompt">
-                <form onSubmit={handleSubmit} noValidate role="form" aria-label="Player authentication">
-                    <fieldset>
-                        <legend>Player Authentication</legend>
-                        {authState.error && (
-                            <div
-                                id="login-error"
-                                className="login_error"
-                                style={{ color: "#ff6b6b", marginBottom: "10px", fontSize: "14px" }}
-                                role="alert"
-                                aria-live="assertive"
-                                aria-atomic="true"
-                            >
-                                {authState.error}
-                            </div>
-                        )}
-                        {authState.isConnecting && (
-                            <div
-                                id="login-status"
-                                className="login_status"
-                                style={{ color: "#4dabf7", marginBottom: "10px", fontSize: "14px" }}
-                                role="status"
-                                aria-live="polite"
-                                aria-atomic="true"
-                            >
-                                Connecting to server, please wait...
-                            </div>
-                        )}
-                        <label htmlFor="mode_select" className="sr-only">Connection type:</label>
-                        <select
-                            ref={modeSelectRef}
-                            id="mode_select"
-                            value={mode}
-                            onChange={(e) => setMode(e.target.value as "connect" | "create")}
+            {/* Modern login card */}
+            <div className="login_card">
+                {/* Tab switcher for connect/create */}
+                <div className="login_tabs" role="tablist" aria-label="Authentication mode">
+                    <button
+                        type="button"
+                        role="tab"
+                        className={`login_tab ${mode === "connect" ? "active" : ""}`}
+                        onClick={() => setMode("connect")}
+                        disabled={authState.isConnecting}
+                        aria-selected={mode === "connect"}
+                        aria-controls="login-form-panel"
+                    >
+                        Sign In
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        className={`login_tab ${mode === "create" ? "active" : ""}`}
+                        onClick={() => setMode("create")}
+                        disabled={authState.isConnecting}
+                        aria-selected={mode === "create"}
+                        aria-controls="login-form-panel"
+                    >
+                        Create Account
+                    </button>
+                </div>
+
+                {/* Error/status messages */}
+                {authState.error && (
+                    <div
+                        id="login-error"
+                        className="login_error"
+                        role="alert"
+                        aria-live="assertive"
+                        aria-atomic="true"
+                    >
+                        {authState.error}
+                    </div>
+                )}
+                {authState.isConnecting && (
+                    <div
+                        id="login-status"
+                        className="login_status"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        Connecting to server, please wait...
+                    </div>
+                )}
+
+                {/* OAuth2 login options at top */}
+                <div className="login_oauth_section">
+                    <OAuth2Buttons disabled={authState.isConnecting} mode={mode} />
+                </div>
+
+                {/* Divider */}
+                <div className="login_divider">
+                    <span>{mode === "connect" ? "or continue with username" : "or create with username"}</span>
+                </div>
+
+                {/* Login form */}
+                <form
+                    id="login-form-panel"
+                    className="login_form"
+                    onSubmit={handleSubmit}
+                    noValidate
+                    role="tabpanel"
+                    aria-labelledby={mode === "connect" ? "tab-connect" : "tab-create"}
+                >
+                    <div className="login_field">
+                        <label htmlFor="login_username" className="login_field_label">
+                            Player Name
+                        </label>
+                        <input
+                            ref={usernameRef}
+                            id="login_username"
+                            name="username"
+                            type="text"
+                            className="login_input"
+                            placeholder={mode === "connect" ? "Enter your player name" : "Enter your new player name"}
+                            autoComplete="username"
+                            spellCheck={false}
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            onKeyUp={handleKeyPress}
                             disabled={authState.isConnecting}
-                            aria-label="Choose whether to connect to existing account or create new account"
+                            required
+                            aria-invalid={authState.error ? "true" : "false"}
                             aria-describedby={authState.error ? "login-error" : undefined}
-                        >
-                            <option value="connect">Connect</option>
-                            <option value="create">Create</option>
-                        </select>{" "}
-                        <label htmlFor="login_username" className="login_label">
-                            Player:{" "}
-                            <input
-                                ref={usernameRef}
-                                id="login_username"
-                                name="username"
-                                type="text"
-                                placeholder="Enter your username"
-                                autoComplete="username"
-                                spellCheck={false}
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                onKeyUp={handleKeyPress}
-                                disabled={authState.isConnecting}
-                                required
-                                aria-invalid={authState.error ? "true" : "false"}
-                                aria-describedby={authState.error ? "login-error" : undefined}
-                                aria-label="Enter your player username"
-                            />
-                        </label>{" "}
-                        <label htmlFor="login_password" className="login_label">
-                            Password:{" "}
-                            <input
-                                ref={passwordRef}
-                                id="login_password"
-                                name="password"
-                                type="password"
-                                placeholder="Enter your password"
-                                autoComplete="current-password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                onKeyUp={handleKeyPress}
-                                disabled={authState.isConnecting}
-                                required
-                                aria-invalid={authState.error ? "true" : "false"}
-                                aria-describedby={authState.error ? "login-error" : undefined}
-                                aria-label="Enter your password"
-                            />
-                        </label>{" "}
-                        <button
-                            type="submit"
-                            className="login_button"
+                        />
+                    </div>
+
+                    <div className="login_field">
+                        <label htmlFor="login_password" className="login_field_label">
+                            Password
+                        </label>
+                        <input
+                            ref={passwordRef}
+                            id="login_password"
+                            name="password"
+                            type="password"
+                            className="login_input"
+                            placeholder={mode === "connect" ? "Enter your password" : "Choose a password"}
+                            autoComplete={mode === "connect" ? "current-password" : "new-password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            onKeyUp={handleKeyPress}
                             disabled={authState.isConnecting}
-                            aria-describedby={authState.isConnecting
-                                ? "login-status"
-                                : authState.error
-                                ? "login-error"
-                                : undefined}
-                            aria-label={authState.isConnecting
-                                ? "Connecting to server, please wait"
-                                : `${mode === "connect" ? "Connect to existing account" : "Create new account"}`}
-                        >
-                            {authState.isConnecting ? "Connecting..." : "Go"}
-                        </button>
-                    </fieldset>
+                            required
+                            aria-invalid={authState.error ? "true" : "false"}
+                            aria-describedby={authState.error ? "login-error" : undefined}
+                        />
+                    </div>
+
+                    {mode === "create" && (
+                        <div className="login_field">
+                            <label htmlFor="login_confirm_password" className="login_field_label">
+                                Confirm Password
+                            </label>
+                            <input
+                                id="login_confirm_password"
+                                name="confirm_password"
+                                type="password"
+                                className="login_input"
+                                placeholder="Re-enter your password"
+                                autoComplete="new-password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onKeyUp={handleKeyPress}
+                                disabled={authState.isConnecting}
+                                required
+                                aria-invalid={password !== confirmPassword && confirmPassword !== "" ? "true" : "false"}
+                            />
+                            {password !== confirmPassword && confirmPassword !== "" && (
+                                <span className="login_field_error">Passwords do not match</span>
+                            )}
+                        </div>
+                    )}
+
+                    <button
+                        type="submit"
+                        className="login_submit_button"
+                        disabled={authState.isConnecting}
+                        aria-describedby={authState.isConnecting
+                            ? "login-status"
+                            : authState.error
+                            ? "login-error"
+                            : undefined}
+                    >
+                        {authState.isConnecting ? "Connecting..." : mode === "connect" ? "Sign In" : "Create Account"}
+                    </button>
                 </form>
             </div>
         </div>

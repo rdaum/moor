@@ -1,0 +1,22 @@
+# Minimal OAuth2 configuration for testing
+# This example shows just GitHub OAuth2
+
+listen_address: "0.0.0.0:8080"
+rpc_address: "tcp://127.0.0.1:7899"
+events_address: "tcp://127.0.0.1:7898"
+public_key: "path/to/public_key.pem"
+private_key: "path/to/private_key.pem"
+
+oauth2:
+  enabled: true
+  base_url: "http://localhost:8080"
+  providers:
+    github:
+      client_id: "YOUR_GITHUB_CLIENT_ID"
+      client_secret: "YOUR_GITHUB_CLIENT_SECRET"
+      auth_url: "https://github.com/login/oauth/authorize"
+      token_url: "https://github.com/login/oauth/access_token"
+      user_info_url: "https://api.github.com/user"
+      scopes:
+        - "read:user"
+        - "user:email"

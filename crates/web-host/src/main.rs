@@ -13,8 +13,9 @@
 
 mod host;
 
-use crate::host::WebHost;
+use crate::host::{OAuth2Config, OAuth2Manager, OAuth2State, WebHost};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use axum::{
     Router,
@@ -33,10 +34,7 @@ use rpc_async_client::{
 };
 use rpc_common::{HostType, client_args::RpcClientArgs, load_keypair, make_host_token};
 use serde_derive::{Deserialize, Serialize};
-use std::{
-    net::SocketAddr,
-    sync::{Arc, atomic::AtomicBool},
-};
+use std::{net::SocketAddr, sync::atomic::AtomicBool};
 use tokio::{
     net::TcpListener,
     select,
@@ -62,6 +60,10 @@ struct Args {
 
     #[arg(long, help = "Yaml config file to use, overrides values in CLI args")]
     config_file: Option<String>,
+
+    #[serde(default)]
+    #[arg(skip)]
+    pub oauth2: OAuth2Config,
 }
 
 struct Listeners {
@@ -70,6 +72,7 @@ struct Listeners {
     rpc_address: String,
     events_address: String,
     kill_switch: Arc<AtomicBool>,
+    oauth2_manager: Option<Arc<OAuth2Manager>>,
 }
 
 impl Listeners {
@@ -78,6 +81,7 @@ impl Listeners {
         rpc_address: String,
         events_address: String,
         kill_switch: Arc<AtomicBool>,
+        oauth2_manager: Option<Arc<OAuth2Manager>>,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -90,6 +94,7 @@ impl Listeners {
             rpc_address,
             events_address,
             kill_switch,
+            oauth2_manager,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
@@ -133,7 +138,14 @@ impl Listeners {
                         handler,
                         local_addr.port(),
                     );
-                    let main_router = match mk_routes(ws_host) {
+
+                    // Create OAuth2State if OAuth2 is enabled
+                    let oauth2_state = self.oauth2_manager.as_ref().map(|manager| OAuth2State {
+                        manager: Arc::clone(manager),
+                        web_host: ws_host.clone(),
+                    });
+
+                    let main_router = match mk_routes(ws_host, oauth2_state) {
                         Ok(mr) => mr,
                         Err(e) => {
                             warn!(?e, "Unable to create main router");
@@ -209,8 +221,8 @@ impl Listener {
     }
 }
 
-fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
-    let webhost_router = Router::new()
+fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Result<Router> {
+    let mut webhost_router = Router::new()
         .route(
             "/ws/attach/connect/{token}",
             get(host::ws_connect_attach_handler),
@@ -258,6 +270,30 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             axum::routing::delete(host::delete_history_handler),
         )
         .with_state(web_host);
+
+    // Add OAuth2 routes if OAuth2 is enabled
+    if let Some(oauth2_state) = oauth2_state {
+        let oauth2_router = Router::new()
+            .route(
+                "/api/oauth2/config",
+                get(host::oauth2_config_handler),
+            )
+            .route(
+                "/auth/oauth2/{provider}/authorize",
+                get(host::oauth2_authorize_handler),
+            )
+            .route(
+                "/auth/oauth2/{provider}/callback",
+                get(host::oauth2_callback_handler),
+            )
+            .route(
+                "/auth/oauth2/account",
+                post(host::oauth2_account_choice_handler),
+            )
+            .with_state(oauth2_state);
+
+        webhost_router = webhost_router.merge(oauth2_router);
+    }
 
     Ok(webhost_router)
 }
@@ -310,11 +346,33 @@ async fn main() -> Result<(), eyre::Error> {
 
     let zmq_ctx = tmq::Context::new();
 
+    // Initialize OAuth2Manager if enabled
+    let oauth2_manager = if args.oauth2.enabled {
+        match OAuth2Manager::new(args.oauth2.clone()) {
+            Ok(manager) => {
+                info!(
+                    "OAuth2 enabled with {} providers",
+                    manager.available_providers().len()
+                );
+                Some(Arc::new(manager))
+            }
+            Err(e) => {
+                error!("Failed to initialize OAuth2Manager: {}", e);
+                error!("OAuth2 authentication will be disabled");
+                None
+            }
+        }
+    } else {
+        info!("OAuth2 authentication is disabled");
+        None
+    };
+
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         args.client_args.events_address.clone(),
         kill_switch.clone(),
+        oauth2_manager,
     );
     let listeners_thread = tokio::spawn(async move {
         listeners_server.run(listeners_channel).await;

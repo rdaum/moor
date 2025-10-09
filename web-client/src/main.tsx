@@ -37,6 +37,7 @@ import { useMediaQuery } from "./hooks/useMediaQuery";
 import { usePropertyEditor } from "./hooks/usePropertyEditor";
 import { useTitle } from "./hooks/useTitle";
 import { useVerbEditor } from "./hooks/useVerbEditor";
+import { OAuth2UserInfo } from "./lib/oauth2";
 import { MoorRemoteObject } from "./lib/rpc";
 import { oidRef } from "./lib/var";
 import { PresentationData } from "./types/presentation";
@@ -84,6 +85,7 @@ function AppContent({
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [userSkippedEncryption, setUserSkippedEncryption] = useState(false);
+    const [oauth2UserInfo, setOAuth2UserInfo] = useState<OAuth2UserInfo | null>(null);
     const [splitRatio, setSplitRatio] = useState(() => {
         // Load saved split ratio or default to 60% for room, 40% for editor
         const saved = localStorage.getItem("moor-split-ratio");
@@ -223,10 +225,113 @@ function AppContent({
     // WebSocket integration
     const { wsState, connect: connectWS, sendMessage } = useWebSocketContext();
 
+    // Handle OAuth2 callback from URL parameters
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // Check for OAuth2 user info (new user flow)
+        const oauth2UserInfoParam = urlParams.get("oauth2_user_info");
+        if (oauth2UserInfoParam) {
+            try {
+                const userInfo: OAuth2UserInfo = JSON.parse(decodeURIComponent(oauth2UserInfoParam));
+                setOAuth2UserInfo(userInfo);
+                showMessage(`OAuth2 login successful! Please choose how to proceed.`, 5);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } catch (error) {
+                console.error("Failed to parse OAuth2 user info:", error);
+                showMessage("OAuth2 callback error. Please try again.", 5);
+            }
+        }
+
+        // Check for auth token (existing user flow)
+        const authToken = urlParams.get("auth_token");
+        const playerOid = urlParams.get("player");
+        if (authToken && playerOid) {
+            // Clear URL parameters immediately
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Store in sessionStorage so useAuth can pick it up
+            sessionStorage.setItem("oauth2_auth_token", authToken);
+            sessionStorage.setItem("oauth2_player_oid", playerOid);
+
+            showMessage("Logged in successfully via OAuth2!", 2);
+        }
+
+        // Check for OAuth2 errors
+        const error = urlParams.get("error");
+        if (error) {
+            const details = urlParams.get("details");
+            showMessage(`OAuth2 error: ${error}${details ? ` - ${details}` : ""}`, 5);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }, [showMessage]);
+
     // Handle login and WebSocket connection
     const handleConnect = async (mode: "connect" | "create", username: string, password: string) => {
         setLoginMode(mode);
         await connect(mode, username, password);
+    };
+
+    // Handle OAuth2 account choice
+    const handleOAuth2AccountChoice = async (choice: {
+        mode: "oauth2_create" | "oauth2_connect";
+        provider: string;
+        external_id: string;
+        email?: string;
+        name?: string;
+        username?: string;
+        player_name?: string;
+        existing_email?: string;
+        existing_password?: string;
+    }) => {
+        try {
+            const response = await fetch("/auth/oauth2/account", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    mode: choice.mode,
+                    provider: choice.provider,
+                    external_id: choice.external_id,
+                    email: choice.email,
+                    name: choice.name,
+                    username: choice.username,
+                    player_name: choice.player_name,
+                    existing_email: choice.existing_email,
+                    existing_password: choice.existing_password,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+                showMessage(`Failed: ${errorData.error || response.statusText}`, 5);
+                return;
+            }
+
+            const result = await response.json();
+
+            if (result.success && result.auth_token && result.player) {
+                // Clear OAuth2 user info
+                setOAuth2UserInfo(null);
+
+                // Store credentials in sessionStorage for useAuth to pick up
+                sessionStorage.setItem("oauth2_auth_token", result.auth_token);
+                sessionStorage.setItem("oauth2_player_oid", result.player);
+
+                showMessage(`Account ${choice.mode === "oauth2_create" ? "created" : "linked"}! Connecting...`, 2);
+
+                // Reload to trigger auth flow
+                window.location.reload();
+            } else {
+                // Show specific error message if available
+                const errorMsg = result.error || "Failed to complete account setup. Please try again.";
+                showMessage(errorMsg, 5);
+            }
+        } catch (error) {
+            console.error("OAuth2 account choice failed:", error);
+            showMessage(`Error: ${error instanceof Error ? error.message : String(error)}`, 5);
+        }
     };
 
     // Check encryption setup after login
@@ -235,14 +340,26 @@ function AppContent({
             const hasLocalKey = !!encryptionState.ageIdentity;
             const backendHasPubkey = encryptionState.hasEncryption;
 
-            // If no local key but backend has pubkey, prompt for existing password
-            if (!hasLocalKey && backendHasPubkey && !showPasswordPrompt) {
+            // If no local key but backend has pubkey, prompt for existing password (NOT setup!)
+            if (!hasLocalKey && backendHasPubkey) {
                 console.log("Backend has pubkey but no local key - prompting for existing password");
-                setShowPasswordPrompt(true);
-            } // If no local key and backend has no pubkey, prompt for new setup
-            else if (!hasLocalKey && !backendHasPubkey && !showEncryptionSetup) {
+                if (!showPasswordPrompt) {
+                    setShowPasswordPrompt(true);
+                }
+                // Make sure setup screen is NOT showing
+                if (showEncryptionSetup) {
+                    setShowEncryptionSetup(false);
+                }
+            } // If no local key and backend has no pubkey, prompt for new setup (NOT password!)
+            else if (!hasLocalKey && !backendHasPubkey) {
                 console.log("No encryption key anywhere - prompting for new setup");
-                setShowEncryptionSetup(true);
+                if (!showEncryptionSetup) {
+                    setShowEncryptionSetup(true);
+                }
+                // Make sure password prompt is NOT showing
+                if (showPasswordPrompt) {
+                    setShowPasswordPrompt(false);
+                }
             } // If we have a local key but backend doesn't have our pubkey (DB was reset), clear and re-prompt
             else if (hasLocalKey && !backendHasPubkey) {
                 console.log(
@@ -251,6 +368,7 @@ function AppContent({
                 forgetKey();
                 setUserSkippedEncryption(false);
                 setShowEncryptionSetup(true);
+                setShowPasswordPrompt(false);
             } // If we have both local key and backend has pubkey, we're good - hide prompts
             else if (hasLocalKey && backendHasPubkey) {
                 setShowEncryptionSetup(false);
@@ -476,10 +594,13 @@ function AppContent({
                 contentType={contentType}
                 isServerReady={isServerReady}
                 onConnect={handleConnect}
+                oauth2UserInfo={oauth2UserInfo}
+                onOAuth2AccountChoice={handleOAuth2AccountChoice}
+                onOAuth2Cancel={() => setOAuth2UserInfo(null)}
             />
 
-            {/* Top navigation bar */}
-            <TopNavBar onSettingsToggle={() => setIsSettingsOpen(true)} />
+            {/* Top navigation bar - only show when connected */}
+            {isConnected && <TopNavBar onSettingsToggle={() => setIsSettingsOpen(true)} />}
 
             {/* Settings panel */}
             <SettingsPanel
@@ -658,6 +779,10 @@ function AppContent({
                     onForgotPassword={() => {
                         setShowPasswordPrompt(false);
                         setShowEncryptionSetup(true);
+                    }}
+                    onSkip={() => {
+                        setShowPasswordPrompt(false);
+                        setUserSkippedEncryption(true);
                     }}
                 />
             )}

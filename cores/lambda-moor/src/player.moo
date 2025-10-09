@@ -16,6 +16,7 @@ object PLAYER
   property first_connect_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 2147483647;
   property gaglist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
   property gender (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "neuter";
+  property oauth2_identities (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
   property help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
   property home (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PLAYER_START;
   property last_connect_attempt (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;

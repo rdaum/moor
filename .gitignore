@@ -29,3 +29,7 @@ sessions/
 connections.db/
 development.db/
 moor-data/
+
+# OAuth2 config files with secrets
+*-oauth2.yaml
+my-*.yaml

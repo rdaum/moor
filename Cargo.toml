@@ -136,6 +136,7 @@ bech32 = "0.11"
 ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "signature"] }
 hmac = "0.12"
 md-5 = "0.10" # For MOO's "string_hash"
+oauth2 = { version = "5.0", features = ["reqwest"] }
 pwhash = { version = "1.0", default-features = false }
 rusty_paseto = { version = "0.7" }
 sha1 = "0.10"

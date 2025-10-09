@@ -43,16 +43,17 @@ clap_derive.workspace = true
 figment.workspace = true
 
 # Serialization & Data Formats
-age.workspace = true
-base64.workspace = true
-bech32.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
 
+# Authentication
+oauth2.workspace = true
+
 # Networking & Communication
 axum.workspace = true
 hickory-resolver.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 tmq.workspace = true
 
 # Async Runtime & Concurrency
@@ -64,8 +65,8 @@ color-eyre.workspace = true
 eyre.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 # Utilities & Helpers
 planus.workspace = true
+urlencoding = "2.1"
 uuid.workspace = true
