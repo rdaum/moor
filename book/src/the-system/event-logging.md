@@ -42,6 +42,12 @@ background.
 **Encryption is mandatory.** All events are encrypted before storage using modern age encryption (X25519 +
 ChaCha20-Poly1305). Events cannot be logged without encryption—there is no plaintext storage option.
 
+**Security model**: The system provides client-side encryption where decryption happens in your browser. The
+web-host never sees plaintext events from history. However, the daemon (which generates events) must be trusted,
+as events exist in plaintext in the MOO environment before encryption. This protects against offline attacks
+(stolen backups, database snooping) and prevents web-host/database administrators from reading your history, but
+cannot protect against a compromised daemon binary.
+
 ### How Encryption Works
 
 Each player sets their own encryption password (separate from their MOO login password) when they first connect through
@@ -224,9 +230,11 @@ With the encryption architecture:
 - **Administrators cannot** decrypt events without the player's password
 - **Events are protected** in backups, on stolen drives, and against filesystem snooping
 - **Administrators can still** see metadata (timestamps, player IDs, event counts) but not content
+- **Important**: Administrators with access to modify the daemon binary could theoretically capture events before
+  encryption, but this requires active modification of the server software and doesn't affect already-stored history
 
 The encrypted events remain in the database even if a player resets their password. Old events encrypted with the old
-key are unreadable, but they remain on disk (consuming storage) unless manually deleted.
+key remain accessible if the player remembers their old password, but they remain on disk consuming storage regardless.
 
 ### Server Security
 
@@ -234,11 +242,18 @@ Since decryption happens client-side in the browser, the web host never sees pri
 a compromised web host could still:
 
 - Serve malicious JavaScript to steal passwords or keys from the browser
-- Intercept live events as they arrive in real-time (before encryption)
+- Forward requests to a compromised daemon
 
-Proper server security (keeping the web host process secure, using HTTPS, monitoring for intrusions) remains essential.
-The encryption protects against offline attacks on the database and prevents the server from reading logged history, but
-cannot protect against a fully compromised server serving malicious code.
+Additionally, a compromised daemon could:
+
+- Dump events before encrypting them (events are generated in plaintext by MOO code)
+- Tee off unencrypted event streams to external storage
+- Disable encryption while claiming it's enabled
+
+Proper server security (keeping daemon and web-host processes secure, using HTTPS, monitoring for intrusions, verifying
+binary integrity) remains essential. The encryption protects against offline attacks on the database and prevents
+web-host/database administrators from reading logged history, but cannot protect against a fully compromised server
+serving malicious code or modified binaries. The daemon must be trusted.
 
 ### Backup and Disaster Recovery
 

@@ -76,9 +76,22 @@ password.
 
 ### Security Model
 
-**True end-to-end encryption for logged history**. Decryption happens entirely client-side in the
-browser. The web-host and daemon never see plaintext events from history - they only handle
-encrypted FlatBuffer blobs. Private keys never leave the client.
+**Client-side encryption for logged history**. Decryption happens entirely client-side in the
+browser. The web-host never sees plaintext events from history - it only handles encrypted
+FlatBuffer blobs. Private keys never leave the client.
+
+**Important distinction**: This provides end-to-end encryption for the web-host component (browser
+to web-host), but not for the system as a whole. The daemon performs encryption before storage,
+which means:
+
+- A compromised daemon binary could be modified to dump plaintext events before encryption
+- A compromised daemon could tee off unencrypted event streams before they're encrypted
+- True E2E (like Signal) would mean the server never sees plaintext at all, which isn't feasible for
+  a MOO where events must be generated server-side in a shared environment
+
+**What this actually provides**: Strong protection against offline attacks (stolen backups, database
+snooping, improper disposal) and lazy administrative access. The daemon must be trusted, but
+web-host and database storage do not expose plaintext.
 
 ---
 
@@ -97,8 +110,9 @@ encrypted FlatBuffer blobs. Private keys never leave the client.
                     ↓ HTTPS (TLS encrypted)
 ┌─────────────────────────────────────────────┐
 │  Web-host (Rust)                            │
-│  - No key handling (keys never leave client)│
+│  - Stores player public keys                │
 │  - Passes encrypted blobs to browser        │
+│  - Never handles private keys               │
 │  - Never sees plaintext events              │
 └─────────────────────────────────────────────┘
                     ↓ RPC (ZMQ)
@@ -162,13 +176,19 @@ age keypairs from these bytes deterministically, enabling cross-device recovery.
    - Display warning: "This password cannot be recovered. Write it down."
    - Password is separate from MOO login password
 3. User enters encryption password
-4. **Client derives 32 bytes from password** (deterministic Argon2)
-5. **Client generates age keypair from derived bytes** (client-side)
-6. **Client extracts public key** from keypair
-7. Client sends **only public key** to web-host via PUT /api/event-log/pubkey
-8. Web-host stores public key in daemon (never sees private key)
-9. **Client saves age identity (private key)** to localStorage for future use
-10. Password is discarded (never stored)
+4. **Client validates password is different from MOO password** (prevent password reuse - security
+   best practice)
+5. **Client derives 32 bytes from password** (deterministic Argon2)
+6. **Client generates age keypair from derived bytes** (client-side)
+7. **Client extracts public key** from keypair
+8. Client sends **only public key** to web-host via PUT /api/event-log/pubkey
+9. Web-host stores public key in daemon (never sees private key)
+10. **Client saves age identity (private key)** to localStorage for future use
+11. Password is discarded (never stored)
+
+**Implementation note**: Password validation against MOO password requires the client to have access
+to the MOO password at setup time. If MOO password isn't available client-side, this validation can
+be skipped with a warning to the user.
 
 #### Subsequent Logins (Same Browser)
 
@@ -183,20 +203,24 @@ age keypairs from these bytes deterministically, enabling cross-device recovery.
 #### Login from New Browser/Device
 
 1. User logs in with MOO credentials
-2. Client checks if user has encryption enabled (GET /api/event-log/pubkey)
+2. Client checks if user has encryption enabled (GET /api/event-log/pubkey returns public key)
 3. If enabled, prompt: **"Enter your event log encryption password"**
 4. User enters password
 5. **Client derives 32 bytes from password** (deterministic - same password = same bytes)
 6. **Client generates age identity from derived bytes**
-7. Client validates by attempting to fetch and decrypt history
-8. If successful: **Save age identity** (not password) to localStorage for future sessions
+7. **Client extracts public key from generated identity**
+8. **Client validates by comparing generated public key with retrieved public key** (no need to
+   fetch/decrypt history)
+9. If match: **Save age identity** (not password) to localStorage for future sessions
+10. If mismatch: Show error "Incorrect password" and prompt again
 
 #### Forgotten Password Flow (Reset)
 
 1. User logs in but doesn't remember event log password
 2. User clicks **"I forgot my password"** link
-3. Client shows warning: **"Resetting will permanently erase access to your existing history.
-   Continue?"**
+3. Client shows warning: **"Resetting will generate a new encryption key. Old history will remain
+   encrypted with your old password. If you remember your old password later, you can re-enter it to
+   access old events, but new events will only be readable with your new password. Continue?"**
 4. If user confirms:
    - Client prompts for new password
    - Client derives new 32 bytes from new password
@@ -204,29 +228,48 @@ age keypairs from these bytes deterministically, enabling cross-device recovery.
    - Client extracts new public key
    - Calls PUT /api/event-log/pubkey with new public key
    - Server stores new public key
-   - Old events remain in database (encrypted with old key, unreadable)
+   - Old events remain in database (encrypted with old key)
    - New events use new key going forward
+   - User has access to old history ONLY if they re-enter old password later
 5. Save new age identity to localStorage
+
+**Implementation note**: Currently the server does not reject events encrypted with old keys, so
+users who remember their old password can still access pre-reset history. If you want to prevent
+this (force new-key-only access), the server would need to track key versions and reject old
+encrypted events.
 
 #### Change Password Flow (Re-encrypt)
 
-**Status**: Design complete, not yet implemented. Currently users must use the reset flow, which
-abandons old history.
+**Status**: Design complete, not yet implemented. Currently users must use the reset flow.
 
 1. User clicks **"Change encryption password"** in settings
 2. Client prompts for **current password**
 3. Client prompts for **new password**
-4. Client derives **old identity** from current password (from localStorage or re-derived)
-5. Client derives **new bytes** from new password and generates new age keypair
-6. Client fetches all encrypted history from server
-7. Client decrypts all events with old identity
-8. Client re-encrypts all events with new public key
-9. Client sends re-encrypted events + new public key back to server
-10. Server stores new public key and re-encrypted events
-11. On success:
+4. **Client validates new password is different from MOO password** (prevent password reuse)
+5. Client derives **old identity** from current password (from localStorage or re-derived)
+6. Client derives **new bytes** from new password and generates new age keypair
+7. Client fetches all encrypted history from server
+8. Client decrypts all events with old identity
+9. Client re-encrypts all events with new public key
+10. Client sends re-encrypted events + new public key back to server
+11. Server performs validation:
+    - **Check total size of re-encrypted data is within ~33% of original** (age overhead is
+      consistent)
+    - **Check event count matches** (no additions/deletions)
+    - **Check timestamps are unchanged** (no data injection)
+    - Reject if validation fails
+12. Server stores new public key and re-encrypted events
+13. On success:
     - Client saves **new age identity** to localStorage
     - Client discards old identity
     - User can now access all history with new password
+
+**Security considerations**:
+
+- Without validation, this allows arbitrary encrypted data upload (no way to verify what's inside)
+- Size checks prevent abuse (new data should be roughly same size as old)
+- Event count and timestamp checks prevent data injection
+- Rate limiting on this endpoint is recommended (expensive operation)
 
 **Note**: This operation preserves all history by re-encrypting it client-side. The server never
 sees either private key.
@@ -293,6 +336,24 @@ The daemon stores encrypted events and manages public keys. It **never** decrypt
 
 **CRITICAL**: Events can ONLY be logged if the player has a public key. There is no plaintext
 fallback.
+
+**Design rationale**: This explicit opt-in approach keeps encryption separate from authentication
+and makes security properties clear. Users must actively set up encryption to enable event logging.
+
+**Alternative approach considered but rejected**: Auto-generate encryption keys from username + MOO
+password for all users. This would give telnet users encrypted history automatically and lower the
+barrier to entry. However, it was rejected because:
+
+- Ties event log encryption to MOO password, creating entanglement between auth and history
+- MOO password changes become complicated (trigger encryption reset? force re-encryption?)
+- Weaker security model (MOO password compromise = history compromise)
+- Adds significant complexity to password change flows
+- Blurs the security boundary between authentication and encryption
+- Telnet clients still can't retrieve history (no decryption capability anyway)
+
+**Current approach** forces users to make an explicit decision about encryption, take it seriously
+(write down the password), and accept the consequences (lost password = lost history). This honesty
+about limitations is better than creating false expectations or complex recovery mechanisms.
 
 #### Public Key Storage
 
@@ -406,9 +467,9 @@ discarded after request).
 Attacker tries to brute force password offline → Argon2 makes this very expensive → would need
 stolen encrypted events + lots of compute.
 
-#### Compromised Web-host (Mitigated with E2E)
+#### Compromised Web-host (Partially Mitigated)
 
-With end-to-end encryption (implemented as of commit 83df0656f):
+With client-side encryption (implemented as of commit 83df0656f):
 
 **Protected against:**
 
@@ -419,12 +480,32 @@ With end-to-end encryption (implemented as of commit 83df0656f):
 **Remaining risks if web-host is compromised:**
 
 - Serve malicious JavaScript to steal passwords/keys from browser
-- Log new events in real-time as they're sent via WebSocket (before encryption)
 - Exfiltrate auth tokens to impersonate users
+- Forward requests to compromised daemon
+
+**Note**: Web-host has end-to-end encryption (browser to web-host), but the system as a whole does
+not. See "Compromised Daemon" below.
+
+#### Compromised Daemon (Accepted Risk)
+
+**If daemon binary is modified or compromised:**
+
+- Events are generated in plaintext by MOO code before encryption
+- Modified daemon could dump events before encrypting them
+- Modified daemon could tee off unencrypted event streams to external storage
+- Could disable encryption entirely while claiming it's enabled
+
+**Why this is accepted**: True end-to-end encryption (where server never sees plaintext) isn't
+feasible for a MOO where events must be generated server-side in a shared environment. The daemon
+must be trusted.
+
+**Mitigation**: Verify daemon binary integrity, run in isolated environment, monitor for
+unauthorized modifications.
 
 **Note on PASETO tokens and SSL/TLS**: These provide authentication and tamper-detection between
-components. SSL/TLS protects data in transit. The E2E encryption ensures stored events remain
-confidential even if the web-host or database is compromised.
+components. SSL/TLS protects data in transit. The client-side encryption ensures stored events
+remain confidential even if the web-host or database is compromised, but cannot protect against a
+compromised daemon.
 
 ### Why This Design Is Sufficient
 
