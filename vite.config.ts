@@ -32,6 +32,9 @@ export default defineConfig({
             external: ["argon2-browser"],
         },
     },
+    worker: {
+        format: "es",
+    },
     define: {
         // Monaco Editor requires this to be defined
         global: "globalThis",

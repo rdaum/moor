@@ -16,18 +16,19 @@
 import React, { useState } from "react";
 import { useAuthContext } from "../context/AuthContext";
 import { useEncryptionContext } from "../context/EncryptionContext";
+import { useHistoryExport } from "../hooks/useHistoryExport";
 import { useTitle } from "../hooks/useTitle";
 import { EncryptionSetupPrompt } from "./EncryptionSetupPrompt";
 
 export const EncryptionSettings: React.FC = () => {
     const { authState } = useAuthContext();
     const { encryptionState, forgetKey, setupEncryption } = useEncryptionContext();
+    const { exportState, startExport, cancelExport, downloadReady, dismissReady } = useHistoryExport();
     const systemTitle = useTitle();
     const [showForgetConfirm, setShowForgetConfirm] = useState(false);
     const [showSetupPrompt, setShowSetupPrompt] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [isDownloading, setIsDownloading] = useState(false);
 
     const handleForgetKey = () => {
         forgetKey();
@@ -68,15 +69,39 @@ export const EncryptionSettings: React.FC = () => {
     };
 
     const handleDownloadHistory = async () => {
-        setIsDownloading(true);
+        const authToken = authState.player?.authToken;
+        const ageIdentity = encryptionState.ageIdentity;
+        const playerOid = authState.player?.oid;
+
+        if (!authToken) {
+            alert("No auth token found");
+            return;
+        }
+
+        if (!ageIdentity) {
+            alert("No encryption key available. Please enter your password to unlock encryption.");
+            return;
+        }
+
+        if (!playerOid) {
+            alert("No player ID found");
+            return;
+        }
+
+        // Warn user about potential wait time
+        if (
+            !confirm(
+                "This will download and decrypt your entire event history. Depending on the size of your history, this may take several minutes. Continue?",
+            )
+        ) {
+            return;
+        }
+
         try {
-            // TODO: Implement download with background worker for decryption
-            alert("Download feature coming soon - requires background worker for decryption");
+            await startExport(authToken, ageIdentity, systemTitle, playerOid);
         } catch (error) {
             console.error("Error downloading history:", error);
-            alert("Error downloading history");
-        } finally {
-            setIsDownloading(false);
+            alert(`Error downloading history: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
     };
 
@@ -246,9 +271,130 @@ export const EncryptionSettings: React.FC = () => {
                     >
                         <div style={{ marginBottom: "0.5em", fontWeight: "bold" }}>History Management</div>
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                            {exportState.readyBlob && exportState.readyFilename && (
+                                <div
+                                    style={{
+                                        padding: "0.75em",
+                                        borderRadius: "var(--radius-md)",
+                                        backgroundColor:
+                                            "color-mix(in srgb, var(--color-text-success) 15%, transparent)",
+                                        border: "1px solid var(--color-text-success)",
+                                        fontSize: "0.9em",
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            marginBottom: "0.5em",
+                                            fontWeight: "bold",
+                                            color: "var(--color-text-success)",
+                                        }}
+                                    >
+                                        ✓ Export Ready!
+                                    </div>
+                                    <div style={{ marginBottom: "0.75em", fontSize: "0.95em" }}>
+                                        Your history export is ready to download:{" "}
+                                        <strong>{exportState.readyFilename}</strong>
+                                    </div>
+                                    <div style={{ display: "flex", gap: "0.5em" }}>
+                                        <button
+                                            onClick={downloadReady}
+                                            style={{
+                                                padding: "0.5em 1em",
+                                                borderRadius: "var(--radius-md)",
+                                                border: "none",
+                                                backgroundColor: "var(--color-button-primary)",
+                                                color: "var(--color-bg-base)",
+                                                cursor: "pointer",
+                                                fontFamily: "inherit",
+                                                fontSize: "0.95em",
+                                                fontWeight: "bold",
+                                            }}
+                                        >
+                                            Download Now
+                                        </button>
+                                        <button
+                                            onClick={dismissReady}
+                                            style={{
+                                                padding: "0.5em 1em",
+                                                borderRadius: "var(--radius-md)",
+                                                border: "1px solid var(--color-border-medium)",
+                                                backgroundColor: "var(--color-bg-secondary)",
+                                                color: "var(--color-text-primary)",
+                                                cursor: "pointer",
+                                                fontFamily: "inherit",
+                                                fontSize: "0.95em",
+                                            }}
+                                        >
+                                            Dismiss
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                            {exportState.isExporting && exportState.progress && (
+                                <div
+                                    style={{
+                                        padding: "0.5em",
+                                        borderRadius: "var(--radius-md)",
+                                        backgroundColor: "var(--color-bg-tertiary)",
+                                        fontSize: "0.9em",
+                                    }}
+                                >
+                                    <div style={{ marginBottom: "0.25em" }}>
+                                        Exporting history...
+                                        {exportState.progress.total && (
+                                            <span>
+                                                {" "}
+                                                {exportState.progress.processed} / {exportState.progress.total}
+                                            </span>
+                                        )}
+                                        {!exportState.progress.total && exportState.progress.processed > 0 && (
+                                            <span>({exportState.progress.processed} events)</span>
+                                        )}
+                                    </div>
+                                    {exportState.progress.total && (
+                                        <div
+                                            style={{
+                                                width: "100%",
+                                                height: "4px",
+                                                backgroundColor: "var(--color-border-light)",
+                                                borderRadius: "2px",
+                                                overflow: "hidden",
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    width: `${
+                                                        (exportState.progress.processed / exportState.progress.total)
+                                                        * 100
+                                                    }%`,
+                                                    height: "100%",
+                                                    backgroundColor: "var(--color-button-primary)",
+                                                    transition: "width 0.2s ease",
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={cancelExport}
+                                        style={{
+                                            marginTop: "0.5em",
+                                            padding: "0.3em 0.6em",
+                                            borderRadius: "var(--radius-sm)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            backgroundColor: "var(--color-bg-secondary)",
+                                            color: "var(--color-text-primary)",
+                                            cursor: "pointer",
+                                            fontSize: "0.85em",
+                                            fontFamily: "inherit",
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
                             <button
                                 onClick={handleDownloadHistory}
-                                disabled={isDownloading}
+                                disabled={exportState.isExporting || !encryptionState.ageIdentity}
                                 aria-label="Download all encrypted event history"
                                 style={{
                                     padding: "0.5em 1em",
@@ -256,14 +402,16 @@ export const EncryptionSettings: React.FC = () => {
                                     border: "1px solid var(--color-border-medium)",
                                     backgroundColor: "var(--color-bg-secondary)",
                                     color: "var(--color-text-primary)",
-                                    cursor: isDownloading ? "wait" : "pointer",
+                                    cursor: (exportState.isExporting || !encryptionState.ageIdentity)
+                                        ? "not-allowed"
+                                        : "pointer",
                                     fontFamily: "inherit",
                                     fontSize: "0.95em",
-                                    opacity: isDownloading ? 0.6 : 1,
+                                    opacity: (exportState.isExporting || !encryptionState.ageIdentity) ? 0.6 : 1,
                                     transition: "opacity var(--transition-fast)",
                                 }}
                             >
-                                {isDownloading ? "Downloading..." : "Download All History"}
+                                Download All History (JSON)
                             </button>
 
                             {!showDeleteConfirm
