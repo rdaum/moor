@@ -18,9 +18,10 @@ create_directories() {
   chown -R ${MOOR_USER}:${MOOR_USER} ${DATABASE_DIR}
 
   echo ""
-  echo "** Please remember to source a textdump file (e.g. LambdaCore or JHCore) and put it in /var/lib/moor and update the config file to point to it."
-  echo "** Config file is at /etc/moor/daemon-config.yaml; textdump import specified by import_export_config.input_path."
-  echo "** ... Then restart the daemon with 'systemctl restart moor-daemon'."
+  echo "** The moor-daemon package includes a LambdaCore-based core (with modifications for moor)"
+  echo "** at /usr/share/moor/cores/lambda-moor/src - see README.md in that directory for details."
+  echo "** This core will be used by default. To use a different core, update"
+  echo "** /etc/moor/daemon-config.yaml (import_export.input_path) and restart with 'systemctl restart moor-daemon'."
   echo ""
 }
 

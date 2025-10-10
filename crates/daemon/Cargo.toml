@@ -25,6 +25,11 @@ assets = [
         "644",
     ],
     ["debian/moor-daemon-config.yaml", "/etc/moor/daemon-config.yaml", "644"],
+    [
+        "../../cores/lambda-moor/**/*",
+        "/usr/share/moor/cores/lambda-moor/",
+        "644",
+    ],
 ]
 maintainer-scripts = "debian/scripts"
 systemd-units = { enable = false }

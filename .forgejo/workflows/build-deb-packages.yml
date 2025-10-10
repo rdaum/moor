@@ -1,0 +1,45 @@
+name: Build Debian Packages
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_deb_packages:
+    runs-on: ubuntu-latest
+    container: rust-node:1.88.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build moor-daemon deb package
+        run: cargo deb -p moor-daemon
+
+      - name: Build moor-web-host deb package
+        run: cargo deb -p moor-web-host
+
+      - name: Build moor-telnet-host deb package
+        run: cargo deb -p moor-telnet-host
+
+      - name: Build web client
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build moor-web-client deb package
+        run: ./deploy/build-web-client-deb.sh
+
+      - name: Upload debian packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages
+          path: |
+            target/debian/*.deb
+            moor-web-client_*.deb
+          retention-days: 30
