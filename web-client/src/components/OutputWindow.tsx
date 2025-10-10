@@ -149,7 +149,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             role="log"
             aria-live="polite"
             aria-atomic="false"
-            aria-label="Narrative content"
             aria-relevant="additions"
             onScroll={handleScroll}
             style={{

@@ -46,6 +46,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
     );
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // Detect if user prefers reduced motion (common for screen reader users)
+    const prefersReducedMotion = useRef(
+        typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    );
+
     // Focus input area when it becomes visible and enabled
     useEffect(() => {
         if (visible && !disabled && textareaRef.current) {
@@ -136,8 +141,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
         setInput("");
         setHistoryOffset(0);
 
-        // Pick a new encouraging placeholder for next input
-        setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
+        // Pick a new encouraging placeholder for next input (skip for screen readers)
+        if (!prefersReducedMotion.current) {
+            setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
+        }
     }, [input, onSendMessage, onAddToHistory, disabled]);
 
     // Handle paste events

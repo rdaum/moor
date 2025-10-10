@@ -29,7 +29,6 @@ export default defineConfig({
             input: {
                 main: resolve(__dirname, "web-client/src/index.html"),
             },
-            external: ["argon2-browser"],
         },
     },
     worker: {
@@ -41,7 +40,6 @@ export default defineConfig({
     },
     optimizeDeps: {
         include: ["monaco-editor"],
-        exclude: ["argon2-browser"],
     },
     resolve: {
         alias: {

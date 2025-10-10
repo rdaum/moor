@@ -33,13 +33,21 @@ interface EncryptionState {
 async function deriveKeyBytes(password: string, playerOid: string): Promise<string> {
     const saltString = `moor-event-log-v1-${playerOid}`;
 
-    // Set WASM path before loading argon2
-    // @ts-expect-error - argon2WasmPath not in Window type
-    window.argon2WasmPath = "/argon2.wasm";
+    // Load argon2-browser from local bundled version if not already loaded
+    // @ts-expect-error - UMD module attaches to window
+    if (!window.argon2) {
+        // Set WASM path before loading argon2
+        // @ts-expect-error - argon2WasmPath not in Window type
+        window.argon2WasmPath = "/argon2.wasm";
 
-    // Load argon2-browser - it attaches to window.argon2
-    // @ts-expect-error - dynamic import of UMD module
-    await import("argon2-browser");
+        await new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "/argon2-bundled.min.js";
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Failed to load argon2-browser"));
+            document.head.appendChild(script);
+        });
+    }
 
     // @ts-expect-error - UMD module attaches to window
     const argon2 = window.argon2;
