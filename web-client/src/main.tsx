@@ -75,7 +75,7 @@ function AppContent({
 }) {
     const { systemMessage, showMessage } = useSystemMessage();
     const { welcomeMessage, contentType, isServerReady } = useWelcomeMessage();
-    const { authState, connect } = useAuthContext();
+    const { authState, connect, disconnect } = useAuthContext();
     const { encryptionState, setupEncryption, forgetKey, getKeyForHistoryRequest } = useEncryptionContext();
     const systemTitle = useTitle();
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
@@ -250,9 +250,9 @@ function AppContent({
             // Clear URL parameters immediately
             window.history.replaceState({}, document.title, window.location.pathname);
 
-            // Store in sessionStorage so useAuth can pick it up
-            sessionStorage.setItem("oauth2_auth_token", authToken);
-            sessionStorage.setItem("oauth2_player_oid", playerOid);
+            // Store in localStorage so useAuth can pick it up (persists across reloads)
+            localStorage.setItem("oauth2_auth_token", authToken);
+            localStorage.setItem("oauth2_player_oid", playerOid);
 
             showMessage("Logged in successfully via OAuth2!", 2);
         }
@@ -315,9 +315,9 @@ function AppContent({
                 // Clear OAuth2 user info
                 setOAuth2UserInfo(null);
 
-                // Store credentials in sessionStorage for useAuth to pick up
-                sessionStorage.setItem("oauth2_auth_token", result.auth_token);
-                sessionStorage.setItem("oauth2_player_oid", result.player);
+                // Store credentials in localStorage for useAuth to pick up (persists across reloads)
+                localStorage.setItem("oauth2_auth_token", result.auth_token);
+                localStorage.setItem("oauth2_player_oid", result.player);
 
                 showMessage(`Account ${choice.mode === "oauth2_create" ? "created" : "linked"}! Connecting...`, 2);
 
@@ -606,6 +606,7 @@ function AppContent({
             <SettingsPanel
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
+                onLogout={disconnect}
             />
 
             {/* Main app layout with narrative interface */}

@@ -98,4 +98,5 @@ excludes:
   - crates/telnet-host/debian/*
   - crates/web-host/debian/*
   - generated/*
+  - web-client/public/*
   - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data|conf|nix|el|ttf|otf|wasm)

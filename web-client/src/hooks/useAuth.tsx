@@ -32,17 +32,13 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         error: null,
     });
 
-    // Check for OAuth2 credentials in sessionStorage on mount
+    // Check for OAuth2 credentials in localStorage on mount
     useEffect(() => {
-        const oauth2Token = sessionStorage.getItem("oauth2_auth_token");
-        const oauth2PlayerOid = sessionStorage.getItem("oauth2_player_oid");
+        const oauth2Token = localStorage.getItem("oauth2_auth_token");
+        const oauth2PlayerOid = localStorage.getItem("oauth2_player_oid");
 
         if (oauth2Token && oauth2PlayerOid) {
-            // Clear from sessionStorage
-            sessionStorage.removeItem("oauth2_auth_token");
-            sessionStorage.removeItem("oauth2_player_oid");
-
-            // Set auth state
+            // Set auth state (keep credentials in localStorage for future sessions)
             setAuthState({
                 player: {
                     oid: oauth2PlayerOid,
@@ -148,6 +144,10 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
     }, [onSystemMessage]);
 
     const disconnect = useCallback(() => {
+        // Clear OAuth2 credentials from localStorage
+        localStorage.removeItem("oauth2_auth_token");
+        localStorage.removeItem("oauth2_player_oid");
+
         setAuthState({
             player: null,
             isConnecting: false,

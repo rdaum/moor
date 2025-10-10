@@ -1,0 +1,84 @@
+# Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+# Rust build artifacts
+target/
+**/*.rs.bk
+**/*.pdb
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+.npm
+
+# Development databases and data
+*.db
+*.db-shm
+*.db-wal
+moor-data/
+development-export/
+
+# Git (keep .git for shadow-rs to get version info)
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# All markdown files
+*.md
+
+# CI/CD
+.forgejo/
+.github/
+
+# Testing artifacts
+moor-trace.json
+
+# Debian packaging artifacts
+debian-pkg*/
+*.deb
+
+# Docker files (not needed inside container)
+.dockerignore
+docker-compose.yml
+
+# Deployment scripts
+deploy/
+
+# Local development config
+.env
+.env.local
+*.local
+
+# Logs
+*.log
+
+# Backup and temporary files
+*.bak
+*.tmp
+*.swp
+*~
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# External sources (if present)
+lambdamoo/
+toaststunt/
+
+# Emacs temp files
+*#
+.#*

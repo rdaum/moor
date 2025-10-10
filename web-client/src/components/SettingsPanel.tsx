@@ -21,9 +21,10 @@ import { ThemeToggle } from "./ThemeToggle";
 interface SettingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    onLogout?: () => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, onLogout }) => {
     if (!isOpen) return null;
 
     return (
@@ -66,6 +67,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose })
                             <span>Profile settings</span>
                             <span className="settings-placeholder">Coming soon</span>
                         </div>
+                        {onLogout && (
+                            <div className="settings-item">
+                                <button
+                                    className="logout-button"
+                                    onClick={() => {
+                                        onLogout();
+                                        onClose();
+                                    }}
+                                    style={{
+                                        padding: "8px 16px",
+                                        backgroundColor: "#dc3545",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-sans)",
+                                    }}
+                                >
+                                    Logout
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
