@@ -47,9 +47,9 @@ FROM linuxcontainers/debian-slim:latest AS backend
 # Pass the build profile to the final stage
 ARG BUILD_PROFILE=debug
 
-# We need libssl for the curl worker
+# We need libssl for the curl worker and ca-certificates for HTTPS
 RUN apt update
-RUN apt -y install libssl3
+RUN apt -y install libssl3 ca-certificates
 
 WORKDIR /moor
 

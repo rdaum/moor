@@ -33,3 +33,7 @@ moor-data/
 # OAuth2 config files with secrets
 *-oauth2.yaml
 my-*.yaml
+web-host-production.yaml
+
+# Docker Compose environment-specific overrides
+docker-compose.override.yml
