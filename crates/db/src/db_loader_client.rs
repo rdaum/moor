@@ -251,6 +251,13 @@ impl LoaderInterface for DbWorldState {
     fn get_verb_program(&self, obj: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
         self.get_tx().get_verb_program(obj, uuid)
     }
+
+    fn as_world_state(
+        self: Box<Self>,
+    ) -> Result<Box<dyn moor_common::model::WorldState>, WorldStateError> {
+        // Extract the transaction and re-wrap it - same transaction, different trait interface
+        Ok(Box::new(DbWorldState { tx: self.tx }))
+    }
 }
 
 /// Implementation of SnapshotInterface for read operations during exporting

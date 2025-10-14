@@ -23,7 +23,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use moor_common::{
-    model::{CommitResult, WorldState, WorldStateError},
+    model::{CommitResult, WorldState, WorldStateError, loader::LoaderInterface},
     tasks::{Session, TaskId},
 };
 use moor_var::Obj;
@@ -353,6 +353,51 @@ where
             Ok((CommitResult::ConflictRetry, None))
         }
     }
+}
+
+/// Execute a closure with loader interface access to the current transaction.
+/// This temporarily extracts the WorldState, converts it to LoaderInterface using
+/// the same underlying transaction, executes the closure, then restores it as WorldState.
+/// Returns an error if no context is active or if the WorldState doesn't support conversion.
+pub fn with_loader_interface<F, R>(f: F) -> Result<R, WorldStateError>
+where
+    F: FnOnce(&mut dyn LoaderInterface) -> Result<R, WorldStateError>,
+{
+    // Extract the current WorldState and context info
+    let (world_state, task_scheduler_client, task_id, player, session) =
+        CURRENT_CONTEXT.with(|ctx| {
+            let task_ctx = ctx.borrow_mut().take().expect("No active task context");
+            (
+                task_ctx.world_state,
+                task_ctx.task_scheduler_client,
+                task_ctx.task_id,
+                task_ctx.player,
+                task_ctx.session,
+            )
+        });
+
+    // Convert WorldState to LoaderInterface
+    let mut loader = world_state.as_loader_interface()?;
+
+    // Execute the closure with loader interface
+    let result = f(loader.as_mut());
+
+    // Convert back to WorldState
+    let world_state = loader.as_world_state()?;
+
+    // Restore the context
+    CURRENT_CONTEXT.with(|ctx| {
+        let mut current = ctx.borrow_mut();
+        *current = Some(TaskContext {
+            world_state,
+            task_scheduler_client,
+            task_id,
+            player,
+            session,
+        });
+    });
+
+    result
 }
 
 #[cfg(test)]

@@ -445,6 +445,18 @@ pub trait WorldState: Send {
 
     /// Rollback all modifications made to the state of this world since the start of its transaction.
     fn rollback(self: Box<Self>) -> Result<(), WorldStateError>;
+
+    /// Convert this WorldState to a LoaderInterface using the same underlying transaction.
+    /// This allows using loader operations (which bypass permissions) on the same transaction.
+    /// Returns an error if the implementation doesn't support this conversion.
+    fn as_loader_interface(
+        self: Box<Self>,
+    ) -> Result<Box<dyn crate::model::loader::LoaderInterface>, WorldStateError> {
+        Err(WorldStateError::DatabaseError(
+            "This WorldState implementation does not support loader interface conversion"
+                .to_string(),
+        ))
+    }
 }
 
 pub trait WorldStateSource: Send {

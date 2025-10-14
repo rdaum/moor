@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::task_context::{current_task_scheduler_client, with_current_transaction};
-use crate::vm::TaskSuspend;
-use crate::vm::builtins::BfRet::{Ret, VmInstr};
+use crate::task_context::{
+    current_task_scheduler_client, with_current_transaction, with_loader_interface,
+};
+use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
-use crate::vm::vm_host::ExecutionResult;
 use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{
@@ -411,11 +411,37 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         removals,
     };
 
-    // Use the task scheduler client to request the load from the scheduler
-    // This creates its own transaction and commits it
-    let result = current_task_scheduler_client()
-        .load_object(object_definition, loader_options)
-        .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to load object: {e}"))))?;
+    // Get the compile options from the config
+    let compile_options = bf_args.config.compile_options();
+
+    // Use the current task's transaction via loader interface
+    // This avoids creating a separate transaction and the TaskSuspend::Commit issue
+    let result = with_loader_interface(|loader| {
+        let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader);
+
+        // Load the single object with provided options
+        let target_obj = loader_options.target_object;
+        let constants_clone = loader_options.constants.clone();
+        let results = object_loader
+            .load_single_object(
+                &object_definition,
+                compile_options,
+                target_obj,
+                constants_clone,
+                loader_options,
+            )
+            .map_err(|e| {
+                moor_common::model::WorldStateError::DatabaseError(format!(
+                    "Failed to load object: {e}"
+                ))
+            })?;
+
+        // Note: We don't commit here - the loader operations are happening in the task's transaction
+        // The transaction will be committed normally when the task completes
+
+        Ok(results)
+    })
+    .map_err(world_state_bf_err)?;
 
     // Format the return value based on return_conflicts flag
     let return_value = if return_conflicts {
@@ -454,11 +480,9 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         v_obj(result.loaded_objects[0])
     };
 
-    // Commit current transaction and resume with the result in a new transaction
-    // This ensures the caller can see the loaded object
-    Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
-        return_value,
-    ))))
+    // Return the result - the loaded objects are already in the current transaction
+    // No need for TaskSuspend::Commit since we used the same transaction
+    Ok(Ret(return_value))
 }
 
 /// Parse verb flags from a string like "rwxd"
@@ -906,10 +930,18 @@ fn bf_mutate_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         parsed_changelist.push((target, mutations));
     }
 
-    // Use the task scheduler client to request the batch mutation from the scheduler
-    let results = current_task_scheduler_client()
-        .batch_mutate_objects(parsed_changelist)
-        .map_err(BfErr::ErrValue)?;
+    // Use the current task's transaction via loader interface to apply mutations
+    let results = with_loader_interface(|loader| {
+        let mut batch_results = Vec::new();
+
+        for (target, mutations) in parsed_changelist {
+            let result = moor_common::model::loader::batch_mutate(loader, &target, &mutations);
+            batch_results.push(result);
+        }
+
+        Ok(batch_results)
+    })
+    .map_err(world_state_bf_err)?;
 
     // Format the return value as a list of per-object results
     // Each entry: {`target -> obj, `success -> 0/1, `results -> {{`index, `success, `error?}, ...}}
@@ -944,11 +976,9 @@ fn bf_mutate_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         object_results.push(obj_result);
     }
 
-    // Commit current transaction and resume with the result in a new transaction
-    // This ensures the caller can see the mutated objects
-    Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
-        v_list(&object_results),
-    ))))
+    // Return the result - mutations are already in the current transaction
+    // No need for TaskSuspend::Commit since we used the same transaction
+    Ok(Ret(v_list(&object_results)))
 }
 
 pub(crate) fn register_bf_obj_load(builtins: &mut [Box<BuiltinFunction>]) {

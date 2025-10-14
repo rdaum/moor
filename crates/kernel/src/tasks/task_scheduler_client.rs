@@ -19,7 +19,6 @@ use crate::{
     tasks::{TaskDescription, TaskStart, task::Task},
     vm::{Fork, TaskSuspend},
 };
-use moor_common::model::{BatchMutationResult, ObjectMutation};
 use moor_common::{
     model::{Perms, WorldState},
     tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, SchedulerError, TaskId},
@@ -351,27 +350,6 @@ impl TaskSchedulerClient {
             .expect("Could not receive dump object reply -- scheduler shut down?")
     }
 
-    pub fn load_object(
-        &self,
-        object_definition: String,
-        options: moor_objdef::ObjDefLoaderOptions,
-    ) -> Result<moor_objdef::ObjDefLoaderResults, Error> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send((
-                self.task_id,
-                TaskControlMsg::LoadObject {
-                    object_definition,
-                    options: Box::new(options),
-                    reply,
-                },
-            ))
-            .expect("Could not deliver client message -- scheduler shut down?");
-        receive
-            .recv()
-            .expect("Could not receive load object reply -- scheduler shut down?")
-    }
-
     pub fn workers_info(&self) -> Vec<WorkerInfo> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
@@ -395,22 +373,6 @@ impl TaskSchedulerClient {
         receive
             .recv_timeout(Duration::from_millis(100))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
-    }
-
-    pub fn batch_mutate_objects(
-        &self,
-        changelist: Vec<(Obj, Vec<ObjectMutation>)>,
-    ) -> Result<Vec<BatchMutationResult>, Error> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send((
-                self.task_id,
-                TaskControlMsg::BatchMutate { changelist, reply },
-            ))
-            .expect("Could not deliver client message -- scheduler shut down?");
-        receive
-            .recv()
-            .expect("Could not receive batch mutate reply -- scheduler shut down?")
     }
 }
 
@@ -508,12 +470,6 @@ pub enum TaskControlMsg {
         obj: Obj,
         reply: oneshot::Sender<Result<Vec<String>, Error>>,
     },
-    /// Request to load an object from objdef format string
-    LoadObject {
-        object_definition: String,
-        options: Box<moor_objdef::ObjDefLoaderOptions>,
-        reply: oneshot::Sender<Result<moor_objdef::ObjDefLoaderResults, Error>>,
-    },
     /// Request information about all workers
     GetWorkersInfo {
         reply: oneshot::Sender<Vec<WorkerInfo>>,
@@ -522,11 +478,6 @@ pub enum TaskControlMsg {
     RequestNewTransaction(oneshot::Sender<Result<Box<dyn WorldState>, SchedulerError>>),
     /// Request that the scheduler force a garbage collection cycle
     ForceGC,
-    /// Request to batch mutate multiple objects with their mutations (changelist)
-    BatchMutate {
-        changelist: Vec<(Obj, Vec<ObjectMutation>)>,
-        reply: oneshot::Sender<Result<Vec<BatchMutationResult>, Error>>,
-    },
 }
 
 impl TaskSchedulerClient {

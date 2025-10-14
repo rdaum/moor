@@ -27,10 +27,7 @@ use std::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_common::model::{
-    BatchMutationResult, CommitResult, ObjectMutation, ObjectRef, Perms, WorldState,
-    loader::batch_mutate,
-};
+use moor_common::model::{CommitResult, ObjectRef, Perms, WorldState};
 use moor_compiler::to_literal;
 use moor_db::Database;
 
@@ -1241,16 +1238,6 @@ impl Scheduler {
                     error!(?e, "Could not send dump object reply to requester");
                 }
             }
-            TaskControlMsg::LoadObject {
-                object_definition,
-                options,
-                reply,
-            } => {
-                let result = self.handle_load_object(object_definition, *options);
-                if let Err(e) = reply.send(result) {
-                    error!(?e, "Could not send load object reply to requester");
-                }
-            }
             TaskControlMsg::GetWorkersInfo { reply } => {
                 let result = self.handle_get_workers_info();
                 if let Err(e) = reply.send(result) {
@@ -1274,12 +1261,6 @@ impl Scheduler {
                     );
                 } else {
                     self.gc_force_collect = true;
-                }
-            }
-            TaskControlMsg::BatchMutate { changelist, reply } => {
-                let result = self.handle_batch_mutate(changelist);
-                if let Err(e) = reply.send(result) {
-                    error!(?e, "Could not send batch mutate reply to requester");
                 }
             }
         }
@@ -1331,77 +1312,6 @@ impl Scheduler {
             .map_err(|e| E_INVARG.with_msg(|| format!("Failed to dump object {obj}: {e:?}")))?;
 
         Ok(lines)
-    }
-
-    fn handle_load_object(
-        &self,
-        object_definition: String,
-        options: moor_objdef::ObjDefLoaderOptions,
-    ) -> Result<moor_objdef::ObjDefLoaderResults, Error> {
-        // Get a loader client from the database
-        let loader_client = self
-            .database
-            .loader_client()
-            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to create loader client: {e:?}")))?;
-        let mut loader_client = loader_client;
-        let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader_client.as_mut());
-
-        // Load the single object with provided options
-        let target_object = options.target_object;
-        let constants = options.constants.clone();
-        let results = object_loader
-            .load_single_object(
-                &object_definition,
-                self.config.features.compile_options(),
-                target_object,
-                constants,
-                options,
-            )
-            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to load object: {e}")))?;
-
-        if results.commit {
-            // Commit the changes
-            loader_client.commit().map_err(|e| {
-                E_INVARG.with_msg(|| format!("Failed to commit object load: {e:?}"))
-            })?;
-        }
-
-        Ok(results)
-    }
-
-    fn handle_batch_mutate(
-        &self,
-        changelist: Vec<(Obj, Vec<ObjectMutation>)>,
-    ) -> Result<Vec<BatchMutationResult>, Error> {
-        // Get a loader client from the database
-        let loader_client = self
-            .database
-            .loader_client()
-            .map_err(|e| E_INVARG.with_msg(|| format!("Failed to create loader client: {e:?}")))?;
-        let mut loader_client = loader_client;
-
-        // Apply batch mutations for each object in the changelist
-        let mut results = Vec::new();
-        let mut any_errors = false;
-        for (target, mutations) in changelist {
-            let result = batch_mutate(loader_client.as_mut(), &target, &mutations);
-            // Check if any mutations failed for this object
-            if !result.all_succeeded() {
-                any_errors = true;
-            }
-            results.push(result);
-        }
-
-        // Only commit if all mutations succeeded, otherwise drop to rollback
-        if !any_errors {
-            loader_client.commit().map_err(|e| {
-                E_INVARG.with_msg(|| format!("Failed to commit batch mutations: {e:?}"))
-            })?;
-        }
-        // If any_errors is true, loader_client will be dropped here,
-        // automatically rolling back the transaction
-
-        Ok(results)
     }
 
     fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {

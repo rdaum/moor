@@ -180,6 +180,18 @@ pub trait LoaderInterface: Send {
 
     /// Remove a verb from an object
     fn remove_verb(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
+
+    /// Convert this LoaderInterface to a WorldState using the same underlying transaction.
+    /// This allows resuming normal (permission-checked) operations on the same transaction.
+    /// Returns an error if the implementation doesn't support this conversion.
+    fn as_world_state(
+        self: Box<Self>,
+    ) -> Result<Box<dyn crate::model::WorldState>, WorldStateError> {
+        Err(WorldStateError::DatabaseError(
+            "This LoaderInterface implementation does not support WorldState conversion"
+                .to_string(),
+        ))
+    }
 }
 
 /// Apply a batch of mutations to an object using the LoaderInterface.

@@ -65,6 +65,18 @@ impl DbWorldState {
     pub(crate) fn get_tx_mut(&mut self) -> &mut WorldStateTransaction {
         &mut self.tx
     }
+
+    /// Extract the underlying transaction, consuming this DbWorldState.
+    /// This allows reusing the same transaction with a different interface (e.g., LoaderInterface).
+    pub fn into_transaction(self) -> WorldStateTransaction {
+        self.tx
+    }
+
+    /// Create a DbWorldState from an existing transaction.
+    /// This allows converting between WorldState and LoaderInterface using the same transaction.
+    pub fn from_transaction(tx: WorldStateTransaction) -> Self {
+        Self { tx }
+    }
     fn perms(&self, who: &Obj) -> Result<Perms, WorldStateError> {
         let flags = self.flags_of(who)?;
         Ok(Perms { who: *who, flags })
@@ -962,6 +974,13 @@ impl WorldState for DbWorldState {
     fn rollback(self: Box<Self>) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.rollback);
         self.tx.rollback()
+    }
+
+    fn as_loader_interface(
+        self: Box<Self>,
+    ) -> Result<Box<dyn moor_common::model::loader::LoaderInterface>, WorldStateError> {
+        // Extract the transaction and re-wrap it - same transaction, different trait interface
+        Ok(Box::new(DbWorldState { tx: self.tx }))
     }
 }
 
