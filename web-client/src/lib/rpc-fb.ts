@@ -509,6 +509,7 @@ export function handleClientEventFlatBuffer(
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
+    lastEventTimestampRef?: React.MutableRefObject<bigint | null>,
 ): void {
     try {
         // Parse the ClientEvent
@@ -540,7 +541,20 @@ export function handleClientEventFlatBuffer(
                 }
 
                 // Extract timestamp (convert from nanoseconds to milliseconds)
-                const timestamp = new Date(Number(event.timestamp()) / 1000000).toISOString();
+                const timestampNanos = event.timestamp();
+                const timestamp = new Date(Number(timestampNanos) / 1000000).toISOString();
+
+                // Check for out-of-order messages using timestamp
+                if (lastEventTimestampRef) {
+                    if (lastEventTimestampRef.current !== null && timestampNanos < lastEventTimestampRef.current) {
+                        console.warn(
+                            `[WS] OUT OF ORDER MESSAGE DETECTED! Current: ${timestampNanos}, Previous: ${lastEventTimestampRef.current}, Diff: ${
+                                lastEventTimestampRef.current - timestampNanos
+                            }ns`,
+                        );
+                    }
+                    lastEventTimestampRef.current = timestampNanos;
+                }
 
                 // Handle different event types within NarrativeEvent
                 const innerEventType = eventData.eventType();

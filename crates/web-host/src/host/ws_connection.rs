@@ -154,7 +154,7 @@ impl WebSocketConnection {
                     }
                 }
                 Ok(event_msg) = events_recv(self.client_id, &mut self.narrative_sub) => {
-                    // Still need to parse to check for input requests and task completions
+                    // Parse to check for input requests and task completions
                     let event = event_msg.event().expect("Failed to parse client event");
                     let event_ref = event.event().expect("Missing event union");
 
@@ -171,10 +171,14 @@ impl WebSocketConnection {
                         }
                         _ => {}
                     }
+
                     // Forward the raw FlatBuffer bytes to the client
                     let bytes = event_msg.consume();
                     let msg = Message::Binary(bytes.into());
-                    ws_sender.send(msg).await.ok();
+                    if let Err(e) = ws_sender.send(msg).await {
+                        error!("Failed to send message to websocket: {}", e);
+                        break;
+                    }
                 }
             }
         }

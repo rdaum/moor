@@ -43,30 +43,37 @@ export const useWebSocket = (
 
     const socketRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | null>(null);
+    const lastEventTimestampRef = useRef<bigint | null>(null);
+    const processingRef = useRef<Promise<void>>(Promise.resolve());
 
     // Handle incoming WebSocket messages
     const handleMessage = useCallback(async (event: MessageEvent) => {
-        try {
-            // All messages are now binary FlatBuffer format
-            if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
-                // Convert Blob to ArrayBuffer if needed
-                const arrayBuffer = event.data instanceof Blob
-                    ? await event.data.arrayBuffer()
-                    : event.data;
+        // Queue message processing to ensure sequential handling
+        // This prevents race conditions when async processing causes reordering
+        processingRef.current = processingRef.current.then(async () => {
+            try {
+                // All messages are now binary FlatBuffer format
+                if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+                    // Convert Blob to ArrayBuffer if needed
+                    const arrayBuffer = event.data instanceof Blob
+                        ? await event.data.arrayBuffer()
+                        : event.data;
 
-                handleClientEventFlatBuffer(
-                    new Uint8Array(arrayBuffer),
-                    onSystemMessage,
-                    onNarrativeMessage,
-                    onPresentMessage,
-                    onUnpresentMessage,
-                );
-            } else {
-                console.error("Unexpected non-binary WebSocket message:", event.data);
+                    handleClientEventFlatBuffer(
+                        new Uint8Array(arrayBuffer),
+                        onSystemMessage,
+                        onNarrativeMessage,
+                        onPresentMessage,
+                        onUnpresentMessage,
+                        lastEventTimestampRef,
+                    );
+                } else {
+                    console.error("Unexpected non-binary WebSocket message:", event.data);
+                }
+            } catch (error) {
+                console.error("Failed to parse WebSocket message:", error);
             }
-        } catch (error) {
-            console.error("Failed to parse WebSocket message:", error);
-        }
+        });
     }, [onSystemMessage, onNarrativeMessage, onPresentMessage, onUnpresentMessage]);
 
     // Connect to WebSocket
