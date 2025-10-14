@@ -46,6 +46,7 @@ export interface NarrativeRef {
     addHistoricalMessages: (messages: NarrativeMessage[]) => void;
     prependHistoricalMessages: (messages: NarrativeMessage[]) => void;
     getContainerHeight: () => number;
+    clearAll: () => void;
 }
 
 export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
@@ -141,6 +142,12 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         return narrativeContainerRef.current?.clientHeight || window.innerHeight * 0.7;
     }, []);
 
+    // Clear all messages and command history (used on logout)
+    const clearAll = useCallback(() => {
+        setMessages([]);
+        setCommandHistory([]);
+    }, []);
+
     // Expose methods to parent component
     useImperativeHandle(ref, () => ({
         addNarrativeContent,
@@ -149,6 +156,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         addHistoricalMessages,
         prependHistoricalMessages,
         getContainerHeight,
+        clearAll,
     }), [
         addNarrativeContent,
         addSystemMessage,
@@ -156,6 +164,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         addHistoricalMessages,
         prependHistoricalMessages,
         getContainerHeight,
+        clearAll,
     ]);
 
     if (!visible) {

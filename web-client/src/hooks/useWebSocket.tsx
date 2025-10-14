@@ -45,6 +45,7 @@ export const useWebSocket = (
     const reconnectTimeoutRef = useRef<number | null>(null);
     const lastEventTimestampRef = useRef<bigint | null>(null);
     const processingRef = useRef<Promise<void>>(Promise.resolve());
+    const isDisconnectingRef = useRef(false);
 
     // Handle incoming WebSocket messages
     const handleMessage = useCallback(async (event: MessageEvent) => {
@@ -79,12 +80,32 @@ export const useWebSocket = (
     // Connect to WebSocket
     const connect = useCallback(async (mode: "connect" | "create") => {
         if (!player || !player.authToken) {
-            console.error("Cannot connect: No player or auth token");
+            console.error("[WebSocket] Cannot connect: No player or auth token");
+            return;
+        }
+
+        if (isDisconnectingRef.current) {
+            console.warn("[WebSocket] Cannot connect: Disconnect in progress");
             return;
         }
 
         if (socketRef.current?.readyState === WebSocket.OPEN) {
+            console.log("[WebSocket] Already connected, skipping");
             return;
+        }
+
+        console.log("[WebSocket] Starting connection for player:", player.oid);
+
+        // If there's an existing socket that's not closed, close it first
+        if (socketRef.current && socketRef.current.readyState !== WebSocket.CLOSED) {
+            console.warn("[WebSocket] Found existing socket, closing it first. State:", socketRef.current.readyState);
+            const oldSocket = socketRef.current;
+            socketRef.current = null;
+            oldSocket.onopen = null;
+            oldSocket.onmessage = null;
+            oldSocket.onerror = null;
+            oldSocket.onclose = null;
+            oldSocket.close(1000, "Replacing with new connection");
         }
 
         try {
@@ -96,8 +117,10 @@ export const useWebSocket = (
             const isSecure = window.location.protocol === "https:";
             const wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${player.authToken}`;
 
+            console.log("[WebSocket] Creating new WebSocket to:", wsUrl);
             const ws = new WebSocket(wsUrl);
             socketRef.current = ws;
+            console.log("[WebSocket] Socket created, readyState:", ws.readyState);
 
             // Set up event handlers
             ws.onopen = () => {
@@ -180,14 +203,38 @@ export const useWebSocket = (
 
     // Disconnect from WebSocket
     const disconnect = useCallback(() => {
+        isDisconnectingRef.current = true;
+
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
         }
 
         if (socketRef.current) {
-            socketRef.current.close(1000, "Manual disconnect");
+            const oldSocket = socketRef.current;
+            socketRef.current = null;
+
+            // Remove event handlers to prevent them from firing
+            oldSocket.onopen = null;
+            oldSocket.onmessage = null;
+            oldSocket.onerror = null;
+            oldSocket.onclose = null;
+
+            // Close the socket
+            oldSocket.close(1000, "Manual disconnect");
+
+            // Immediately clear state
+            setWsState({
+                socket: null,
+                isConnected: false,
+                connectionStatus: "disconnected",
+            });
         }
+
+        // Allow reconnect after a short delay
+        setTimeout(() => {
+            isDisconnectingRef.current = false;
+        }, 100);
     }, []);
 
     // Send message
@@ -212,6 +259,19 @@ export const useWebSocket = (
             }
         };
     }, []);
+
+    // Reset state when player becomes null (logout)
+    useEffect(() => {
+        if (!player) {
+            // Clear WebSocket state for new login
+            setWsState({
+                socket: null,
+                isConnected: false,
+                connectionStatus: "disconnected",
+            });
+            lastEventTimestampRef.current = null;
+        }
+    }, [player]);
 
     return {
         wsState,

@@ -148,6 +148,11 @@ export const usePresentations = () => {
         getPresentationsByTarget,
     ]);
 
+    // Clear all presentations (used on logout)
+    const clearAll = useCallback(() => {
+        setPresentations(new Map());
+    }, []);
+
     // API call to dismiss a presentation on the server
     const dismissPresentation = useCallback(async (id: string, authToken: string) => {
         try {
@@ -251,5 +256,6 @@ export const usePresentations = () => {
         getVerbEditorPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
+        clearAll,
     };
 };

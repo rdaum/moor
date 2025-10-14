@@ -167,6 +167,7 @@ function AppContent({
         getVerbEditorPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
+        clearAll: clearAllPresentations,
     } = usePresentationContext();
 
     // Custom close handler for verb editor that also dismisses presentation
@@ -223,7 +224,60 @@ function AppContent({
     }, [dismissPresentation, authState.player?.authToken]);
 
     // WebSocket integration
-    const { wsState, connect: connectWS, sendMessage } = useWebSocketContext();
+    const { wsState, connect: connectWS, disconnect: disconnectWS, sendMessage } = useWebSocketContext();
+
+    // Track previous player OID to detect logout
+    const previousPlayerOidRef = useRef<string | null>(null);
+
+    // Clean up all user-specific state when player logs out OR changes
+    useEffect(() => {
+        const currentPlayerOid = authState.player?.oid || null;
+
+        // Detect logout OR user switch: had a player, now different/none
+        if (previousPlayerOidRef.current && previousPlayerOidRef.current !== currentPlayerOid) {
+            console.log("[Cleanup] Player changed from", previousPlayerOidRef.current, "to", currentPlayerOid);
+            console.log("[Cleanup] WebSocket state before disconnect:", wsState);
+
+            // Disconnect WebSocket
+            console.log("[Cleanup] Calling disconnectWS()");
+            disconnectWS();
+            console.log("[Cleanup] After disconnectWS(), wsState:", wsState);
+
+            // Close any open editors
+            closeEditor();
+            closePropertyEditor();
+
+            // Clear all presentations
+            clearAllPresentations();
+
+            // Clear narrative messages
+            if (narrativeRef.current) {
+                narrativeRef.current.clearAll();
+            }
+
+            // Reset local state
+            setHistoryLoaded(false);
+            setPendingHistoricalMessages([]);
+            setShowEncryptionSetup(false);
+            setShowPasswordPrompt(false);
+            setUserSkippedEncryption(false);
+            setOAuth2UserInfo(null);
+        }
+
+        previousPlayerOidRef.current = currentPlayerOid;
+    }, [
+        authState.player?.oid,
+        disconnectWS,
+        closeEditor,
+        closePropertyEditor,
+        clearAllPresentations,
+    ]);
+
+    // Comprehensive logout handler
+    const handleLogout = useCallback(() => {
+        // Just disconnect from auth - the useEffect above will handle all cleanup
+        disconnect();
+    }, [disconnect]);
 
     // Handle OAuth2 callback from URL parameters
     useEffect(() => {
@@ -388,6 +442,13 @@ function AppContent({
 
     // Load history and connect WebSocket after authentication
     useEffect(() => {
+        console.log("[ConnectionDebug] Effect triggered:", {
+            hasPlayer: !!authState.player,
+            historyLoaded,
+            hasCheckedOnce: encryptionState.hasCheckedOnce,
+            isConnected: wsState.isConnected,
+        });
+
         // Load history when player is authenticated, encryption status has been checked at least once, and history not yet loaded
         if (authState.player && authState.player.authToken && !historyLoaded && encryptionState.hasCheckedOnce) {
             // Encryption key is ALWAYS required - events cannot be logged or retrieved without it
@@ -606,7 +667,7 @@ function AppContent({
             <SettingsPanel
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
-                onLogout={disconnect}
+                onLogout={handleLogout}
             />
 
             {/* Main app layout with narrative interface */}

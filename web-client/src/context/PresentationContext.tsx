@@ -29,6 +29,7 @@ interface PresentationContextType {
     getVerbEditorPresentations: () => Presentation[];
     dismissPresentation: (id: string, authToken: string) => Promise<void>;
     fetchCurrentPresentations: (authToken: string, ageIdentity?: string | null) => Promise<boolean>;
+    clearAll: () => void;
 }
 
 const PresentationContext = createContext<PresentationContextType | undefined>(undefined);
