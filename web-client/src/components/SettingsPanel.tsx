@@ -90,6 +90,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, o
                             </div>
                         )}
                     </div>
+
+                    <div className="settings-section">
+                        <h3>About</h3>
+                        <div className="settings-item">
+                            <span>Version</span>
+                            <span
+                                style={{
+                                    fontFamily: "var(--font-mono)",
+                                    fontSize: "0.9em",
+                                    color: "var(--color-text-secondary)",
+                                }}
+                            >
+                                {__GIT_HASH__}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </>
