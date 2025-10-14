@@ -513,9 +513,85 @@ export const Login: React.FC<LoginProps> = (
     }
 
     return (
-        <div className="login_window" style={{ display: "block" }}>
+        <div className="login_window" style={{ display: "block", position: "relative" }}>
+            {/* Loading overlay with spinner - shown during authentication */}
+            {authState.isConnecting && (
+                <div
+                    style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "rgba(0, 0, 0, 0.4)",
+                        zIndex: 1000,
+                        borderRadius: "var(--radius-lg)",
+                    }}
+                    role="status"
+                    aria-live="assertive"
+                    aria-label="Authenticating, please wait"
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "16px",
+                            padding: "32px",
+                            backgroundColor: "var(--color-bg-primary)",
+                            borderRadius: "var(--radius-lg)",
+                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                        }}
+                    >
+                        <div
+                            className="loading_spinner"
+                            style={{
+                                width: "48px",
+                                height: "48px",
+                                border: "4px solid #f3f3f3",
+                                borderTop: "4px solid #4dabf7",
+                                borderRadius: "50%",
+                                animation: "spin 0.8s linear infinite",
+                            }}
+                            aria-hidden="true"
+                        />
+                        <div
+                            style={{
+                                color: "var(--color-text-primary)",
+                                fontSize: "16px",
+                                fontWeight: 600,
+                                fontFamily: "var(--font-sans)",
+                            }}
+                        >
+                            Connecting to server...
+                        </div>
+                        <div
+                            style={{
+                                color: "var(--color-text-secondary)",
+                                fontSize: "14px",
+                                fontFamily: "var(--font-sans)",
+                            }}
+                        >
+                            Please wait
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Welcome message display */}
-            <div className="welcome_box" role="banner" aria-label="Welcome message">
+            <div
+                className="welcome_box"
+                role="banner"
+                aria-label="Welcome message"
+                style={{
+                    opacity: authState.isConnecting ? 0.5 : 1,
+                    transition: "opacity 0.3s ease",
+                    pointerEvents: authState.isConnecting ? "none" : "auto",
+                }}
+            >
                 <div style={{ position: "relative" }}>
                     {helpMessage && (
                         <button
@@ -524,6 +600,7 @@ export const Login: React.FC<LoginProps> = (
                             className="help_button"
                             aria-label="Show help"
                             title="Help"
+                            disabled={authState.isConnecting}
                         >
                             ?
                         </button>
@@ -533,7 +610,13 @@ export const Login: React.FC<LoginProps> = (
             </div>
 
             {/* Modern login card */}
-            <div className="login_card">
+            <div
+                className="login_card"
+                style={{
+                    opacity: authState.isConnecting ? 0.5 : 1,
+                    transition: "opacity 0.3s ease",
+                }}
+            >
                 {/* Tab switcher for connect/create */}
                 <div className="login_tabs" role="tablist" aria-label="Authentication mode">
                     <button
