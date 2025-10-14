@@ -1,10 +1,14 @@
 # Multi-stage build: Frontend build stage
 FROM node:20-bookworm AS frontend-build
 WORKDIR /moor-frontend
+# Install git for git hash lookup during build
+RUN apt update && apt -y install git
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY web-client/ ./web-client/
 COPY tsconfig.json vite.config.ts ./
+# Copy .git directory so vite can get the git hash during build
+COPY ./.git ./.git
 RUN npm run build
 
 # Backend build stage
