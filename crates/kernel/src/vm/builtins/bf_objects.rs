@@ -1147,6 +1147,25 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(players.iter().map(v_obj))))
 }
 
+/// Returns a list of all valid objects in the database. Wizard-only.
+/// MOO: `list objects()`
+fn bf_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if !bf_args.args.is_empty() {
+        return Err(BfErr::ErrValue(E_ARGS.msg("objects() takes no arguments")));
+    }
+
+    let objects = with_current_transaction(|world_state| world_state.all_objects())
+        .map_err(world_state_bf_err)?;
+
+    Ok(Ret(v_list_iter(objects.iter().map(v_obj))))
+}
+
 /// Returns a list of objects owned by the given object. If owner is not valid, then E_INVARG is raised.
 /// If the programmer does not have read permission on owner, then E_PERM is raised.
 /// MOO: `list owned_objects(obj owner)`
@@ -1297,6 +1316,7 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("recycle")] = Box::new(bf_recycle);
     builtins[offset_for_builtin("max_object")] = Box::new(bf_max_object);
     builtins[offset_for_builtin("players")] = Box::new(bf_players);
+    builtins[offset_for_builtin("objects")] = Box::new(bf_objects);
     builtins[offset_for_builtin("locations")] = Box::new(bf_locations);
     builtins[offset_for_builtin("owned_objects")] = Box::new(bf_owned_objects);
     builtins[offset_for_builtin("renumber")] = Box::new(bf_renumber);

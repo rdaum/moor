@@ -705,6 +705,24 @@ list players()
 
 Returns a list of the object numbers of all player objects in the database
 
+### `objects`
+
+```
+list objects()
+```
+
+Returns a list of all valid object numbers in the database. This includes all objects that have been created and not yet recycled, regardless of whether they are player objects, numbered objects, UUID objects, or anonymous objects.
+
+This function is wizard-only. If the programmer is not a wizard, `E_PERM` is raised.
+
+> **Note**: This is a mooR-specific extension not present in LambdaMOO or ToastStunt. It provides a way to enumerate all valid objects in the database for administrative purposes.
+
+```
+objects()    =>   {#0, #1, #2, #5, #048D05-1234567890, ...}
+```
+
+> **Warning**: In large databases, this function may be slow and return a very large list. Use with caution in production environments.
+
 ### `is_player`
 
 ```

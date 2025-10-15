@@ -89,6 +89,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`chparent`](objects.md#chparent)               | &check;  |                                    |
 | [`max_object`](objects.md#max_object)           | &check;  |                                    |
 | [`players`](objects.md#players)                 | &check;  | Potentially slow in a large DB.    |
+| [`objects`](objects.md#objects)                 | &check;  | mooR extension. Wizard only.       |
 | [`is_player`](objects.md#is_player)             | &check;  |                                    |
 | [`set_player_flag`](objects.md#set_player_flag) | &check;  |                                    |
 | [`is_anonymous`](objects.md#is_anonymous)       | &check;  |                                    |

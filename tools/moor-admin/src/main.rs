@@ -867,7 +867,11 @@ fn cmd_prog(
     rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
     let (obj, verb) = parse_verbref(args)?;
-    info!("Programming verb {} on {}", verb.as_string(), obj.to_literal());
+    info!(
+        "Programming verb {} on {}",
+        verb.as_string(),
+        obj.to_literal()
+    );
 
     let skin = create_skin();
     let intro = format!(
@@ -1055,11 +1059,11 @@ Type `help` for available commands or `quit` to deactivate.
                     // Eval expression or execute code block
                     if let Some(code) = line.strip_prefix(";;") {
                         // ;; executes code as-is without wrapping in return
-                        let session_result = session_factory
-                            .clone()
-                            .mk_background_session(&wizard);
+                        let session_result = session_factory.clone().mk_background_session(&wizard);
 
-                        let Ok(session) = session_result.map_err(|e| eyre!("Failed to create session: {:?}", e)) else {
+                        let Ok(session) =
+                            session_result.map_err(|e| eyre!("Failed to create session: {:?}", e))
+                        else {
                             continue;
                         };
 
