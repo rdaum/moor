@@ -68,6 +68,9 @@ pub struct ObjDefLoaderOptions {
     pub conflict_mode: ConflictMode,
     /// Optional target object to update instead of creating new
     pub target_object: Option<Obj>,
+    /// If true, allocate a new object ID instead of using the one from the dump.
+    /// Mutually exclusive with target_object.
+    pub create_new: bool,
     /// Optional constants for compilation
     pub constants: Option<moor_var::Map>,
     /// The set of entities for which we will allow overriding and treat as if their specific
@@ -896,46 +899,62 @@ impl<'a> ObjectDefinitionLoader<'a> {
         }
 
         let compiled_def = compiled_defs.into_iter().next().unwrap();
-        let oid = if let Some(target_obj) = target_object {
-            if !target_obj.is_positive() {
-                // Negative numeric object ID means allocate next available (max + 1)
-                let max_obj = self.loader.max_object().map_err(|e| {
-                    ObjdefLoaderError::ObjectDefParseError(
-                        source_name.clone(),
-                        moor_compiler::ObjDefParseError::ConstantNotFound(format!(
-                            "Failed to get max object: {e}"
-                        )),
-                    )
-                })?;
-                Obj::mk_id(max_obj.id().0 + 1)
-            } else {
-                target_obj
-            }
+
+        // Validate mutual exclusivity of target_object and create_new
+        if target_object.is_some() && options.create_new {
+            return Err(ObjdefLoaderError::ObjectDefParseError(
+                source_name.clone(),
+                moor_compiler::ObjDefParseError::ConstantNotFound(
+                    "Cannot specify both target_object and create_new".to_string(),
+                ),
+            ));
+        }
+
+        // Determine the object ID to use for creation
+        let objid_to_pass = if options.create_new {
+            // Allocate new object ID via NextObjid sequence
+            None
+        } else if let Some(target_obj) = target_object {
+            // Use specified target object
+            Some(target_obj)
         } else {
-            compiled_def.oid
+            // Use the object ID from the dump (default behavior)
+            Some(compiled_def.oid)
         };
 
-        // Only create the object if it doesn't already exist
-        if !self
-            .loader
-            .object_exists(&oid)
-            .map_err(|wse| ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), oid, wse))?
-        {
+        // Check if object already exists to avoid overwriting
+        let existing_obj = if let Some(obj_id) = objid_to_pass {
+            self.loader
+                .get_existing_object(&obj_id)
+                .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(source_name.clone(), e))?
+        } else {
+            None
+        };
+
+        // Only create the object if it doesn't exist
+        let oid = if existing_obj.is_none() {
             self.loader
                 .create_object(
-                    Some(oid),
+                    objid_to_pass,
                     &ObjAttrs::new(
                         NOTHING,
                         NOTHING,
                         NOTHING,
-                        BitEnum::new(), // Start with default flags
+                        compiled_def.flags,
                         &compiled_def.name,
                     ),
                 )
                 .map_err(|wse| {
-                    ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), oid, wse)
-                })?;
-        }
+                    ObjdefLoaderError::CouldNotCreateObject(
+                        source_name.clone(),
+                        objid_to_pass.unwrap_or(NOTHING),
+                        wse,
+                    )
+                })?
+        } else {
+            // Object exists, use its ID
+            objid_to_pass.unwrap()
+        };
 
         // Store the definition for processing
         self.object_definitions
@@ -1036,6 +1055,7 @@ mod tests {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
             target_object: None,
+            create_new: false,
             constants: None,
             overrides: vec![],
             removals: vec![],
@@ -1118,6 +1138,7 @@ mod tests {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
             target_object: None,
+            create_new: false,
             constants: None,
             overrides: vec![],
             removals: vec![],
@@ -1179,6 +1200,7 @@ mod tests {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
             target_object: None,
+            create_new: false,
             constants: None,
             overrides: vec![],
             removals: vec![],
@@ -1241,6 +1263,7 @@ mod tests {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
             target_object: None,
+            create_new: false,
             constants: None,
             overrides: vec![],
             removals: vec![],

@@ -734,6 +734,17 @@ impl Scheduler {
                     reply.send(Ok(())).expect("Could not send GC request reply");
                 }
             }
+            SchedulerClientMsg::LoadObject {
+                object_definition,
+                options,
+                return_conflicts,
+                reply,
+            } => {
+                let result = self.handle_load_object(object_definition, options, return_conflicts);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send load_object reply to requester");
+                }
+            }
             SchedulerClientMsg::GCMarkPhaseComplete {
                 unreachable_objects,
                 mutation_timestamp_before_mark,
@@ -1312,6 +1323,51 @@ impl Scheduler {
             .map_err(|e| E_INVARG.with_msg(|| format!("Failed to dump object {obj}: {e:?}")))?;
 
         Ok(lines)
+    }
+
+    fn handle_load_object(
+        &self,
+        object_definition: String,
+        options: moor_objdef::ObjDefLoaderOptions,
+        _return_conflicts: bool,
+    ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
+        use moor_objdef::ObjectDefinitionLoader;
+
+        // Create a new world state for loading
+        let world_state = self
+            .database
+            .new_world_state()
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+
+        let mut loader = Box::new(world_state)
+            .as_loader_interface()
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+
+        let mut object_loader = ObjectDefinitionLoader::new(loader.as_mut());
+
+        // Load the object with the provided options
+        let compile_options = self.config.features.compile_options();
+        let target_obj = options.target_object;
+        let constants = options.constants.clone();
+
+        let result = object_loader
+            .load_single_object(
+                &object_definition,
+                compile_options,
+                target_obj,
+                constants,
+                options,
+            )
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+
+        // Commit the transaction if the result says we should
+        if result.commit {
+            loader
+                .commit()
+                .map_err(|_| SchedulerError::CouldNotStartTask)?;
+        }
+
+        Ok(result)
     }
 
     fn handle_get_workers_info(&self) -> Vec<WorkerInfo> {

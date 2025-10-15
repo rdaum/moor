@@ -482,6 +482,48 @@ impl SchedulerClient {
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
+
+    /// Load an object from objdef text.
+    pub fn load_object(
+        &self,
+        object_definition: String,
+        options: moor_objdef::ObjDefLoaderOptions,
+        return_conflicts: bool,
+    ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::LoadObject {
+                object_definition,
+                options,
+                return_conflicts,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(30)) // Longer timeout for object loading
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    /// Get all objects in the database (for tab completion)
+    pub fn request_all_objects(&self, player: Obj) -> Result<Vec<Obj>, SchedulerError> {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
+
+        let action = WorldStateAction::RequestAllObjects { player };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::AllObjects(objects),
+                ..
+            }) => Ok(objects),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
+    }
 }
 
 pub enum SchedulerClientMsg {
@@ -549,6 +591,13 @@ pub enum SchedulerClientMsg {
     GetGCStats(oneshot::Sender<Result<GCStats, SchedulerError>>),
     /// Request a garbage collection cycle
     RequestGC(oneshot::Sender<Result<(), SchedulerError>>),
+    /// Load an object from objdef text
+    LoadObject {
+        object_definition: String,
+        options: moor_objdef::ObjDefLoaderOptions,
+        return_conflicts: bool,
+        reply: oneshot::Sender<Result<moor_objdef::ObjDefLoaderResults, SchedulerError>>,
+    },
     /// Internal message from GC thread when mark phase completes
     GCMarkPhaseComplete {
         unreachable_objects: std::collections::HashSet<Obj>,

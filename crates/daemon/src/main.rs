@@ -117,6 +117,7 @@ fn perform_import(
                 dry_run: false,
                 conflict_mode: moor_objdef::ConflictMode::Clobber,
                 target_object: None,
+                create_new: false,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],

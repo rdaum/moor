@@ -45,6 +45,7 @@ lazy_static! {
     static ref DRY_RUN_SYM: Symbol = Symbol::mk("dry_run");
     static ref CONFLICT_MODE_SYM: Symbol = Symbol::mk("conflict_mode");
     static ref TARGET_OBJECT_SYM: Symbol = Symbol::mk("target_object");
+    static ref CREATE_NEW_SYM: Symbol = Symbol::mk("create_new");
     static ref CONSTANTS_SYM: Symbol = Symbol::mk("constants");
     static ref OVERRIDES_SYM: Symbol = Symbol::mk("overrides");
     static ref REMOVALS_SYM: Symbol = Symbol::mk("removals");
@@ -303,6 +304,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut dry_run = false;
     let mut conflict_mode = ConflictMode::Clobber;
     let mut target_object = None;
+    let mut create_new = false;
     let mut constants = None;
     let mut overrides = Vec::new();
     let mut removals = Vec::new();
@@ -333,6 +335,8 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Some(value.as_object().ok_or_else(|| {
                     BfErr::ErrValue(E_TYPE.msg("target_object must be an object"))
                 })?);
+        } else if key_sym == *CREATE_NEW_SYM {
+            create_new = value.is_true();
         } else if key_sym == *CONSTANTS_SYM {
             let const_map = bf_args.map_or_alist_to_map(&value)?;
             constants = Some(const_map);
@@ -397,6 +401,13 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
+    // Validate mutual exclusivity of target_object and create_new
+    if target_object.is_some() && create_new {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("Cannot specify both target_object and create_new options"),
+        ));
+    }
+
     // Check permissions: wizard only (object creation with arbitrary properties/verbs)
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     task_perms.check_wizard().map_err(world_state_bf_err)?;
@@ -406,6 +417,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         dry_run,
         conflict_mode,
         target_object,
+        create_new,
         constants,
         overrides,
         removals,

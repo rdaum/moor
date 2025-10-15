@@ -307,6 +307,16 @@ impl WorldStateActionExecutor {
 
                 Ok(WorldStateResult::ResolvedObject(omatch))
             }
+
+            WorldStateAction::RequestAllObjects { player: _ } => {
+                // Get all objects - no permission check needed for listing
+                let objects = self
+                    .tx
+                    .all_objects()
+                    .map_err(SchedulerError::PropertyRetrievalFailed)?;
+
+                Ok(WorldStateResult::AllObjects(objects.iter().collect()))
+            }
         }
     }
 }

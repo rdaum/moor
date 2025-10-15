@@ -69,6 +69,9 @@ pub enum WorldStateAction {
 
     /// Resolve an ObjectRef to an actual object
     ResolveObject { player: Obj, obj: ObjectRef },
+
+    /// Request all objects in the database
+    RequestAllObjects { player: Obj },
     // TODO: Add more operations
     // Future additions might include:
     // - CreateObject
@@ -122,6 +125,9 @@ pub enum WorldStateResult {
 
     /// Result of ResolveObject
     ResolvedObject(Var), // Either v_obj(oid) or v_err(E_INVIND)
+
+    /// Result of RequestAllObjects
+    AllObjects(Vec<Obj>),
 }
 
 impl WorldStateRequest {

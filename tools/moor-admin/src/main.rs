@@ -336,48 +336,52 @@ impl SessionFactory for AdminSessionFactory {
 
 /// Helper for rustyline with tab completion
 struct MooAdminHelper {
-    database: Arc<Box<dyn Database>>,
+    scheduler_client: SchedulerClient,
+    wizard: Obj,
 }
 
 impl MooAdminHelper {
-    fn new(database: Arc<Box<dyn Database>>) -> Self {
-        Self { database }
+    fn new(scheduler_client: SchedulerClient, wizard: Obj) -> Self {
+        Self {
+            scheduler_client,
+            wizard,
+        }
     }
 
-    /// Get all valid object IDs from database
+    /// Get all valid object IDs from scheduler
     fn get_all_objects(&self) -> Vec<Obj> {
-        if let Ok(tx) = self.database.new_world_state() {
-            tx.all_objects().unwrap_or_default().iter().collect()
-        } else {
-            vec![]
-        }
+        self.scheduler_client
+            .request_all_objects(self.wizard)
+            .unwrap_or_default()
     }
 
     /// Get properties for a given object
     fn get_properties(&self, obj: &Obj) -> Vec<String> {
-        let Ok(tx) = self.database.new_world_state() else {
-            return vec![];
-        };
+        use moor_common::model::ObjectRef;
 
-        // Use SYSTEM_OBJECT as perms for admin access
-        let Ok(props) = tx.properties(&SYSTEM_OBJECT, obj) else {
+        let obj_ref = ObjectRef::Id(*obj);
+        let Ok(props) =
+            self.scheduler_client
+                .request_properties(&self.wizard, &self.wizard, &obj_ref, false)
+        else {
             return vec![];
         };
 
         props
             .iter()
-            .map(|pd| pd.name().as_string().to_string())
+            .map(|(pd, _)| pd.name().as_string().to_string())
             .collect()
     }
 
     /// Get verbs for a given object - returns the first name of each verb
     fn get_verbs(&self, obj: &Obj) -> Vec<String> {
-        let Ok(tx) = self.database.new_world_state() else {
-            return vec![];
-        };
+        use moor_common::model::ObjectRef;
 
-        // Use SYSTEM_OBJECT as perms for admin access
-        let Ok(verbs) = tx.verbs(&SYSTEM_OBJECT, obj) else {
+        let obj_ref = ObjectRef::Id(*obj);
+        let Ok(verbs) =
+            self.scheduler_client
+                .request_verbs(&self.wizard, &self.wizard, &obj_ref, false)
+        else {
             return vec![];
         };
 
@@ -385,6 +389,63 @@ impl MooAdminHelper {
             .iter()
             .filter_map(|vd| vd.names().first().map(|s| s.as_string().to_string()))
             .collect()
+    }
+
+    /// Complete filenames in the current directory
+    fn complete_filename(
+        &self,
+        partial: &str,
+        start_pos: usize,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        use std::fs;
+
+        // Determine the directory and filename prefix
+        let (dir_path, file_prefix) = if let Some(last_slash) = partial.rfind('/') {
+            let dir = &partial[..=last_slash];
+            let prefix = &partial[last_slash + 1..];
+            (dir, prefix)
+        } else {
+            ("./", partial)
+        };
+
+        // Read directory entries
+        let Ok(entries) = fs::read_dir(dir_path) else {
+            return Ok((start_pos, vec![]));
+        };
+
+        let mut matches = Vec::new();
+        for entry in entries.flatten() {
+            let Ok(file_name) = entry.file_name().into_string() else {
+                continue;
+            };
+
+            if file_name.starts_with(file_prefix) {
+                let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+                let replacement = if dir_path == "./" {
+                    file_name.clone()
+                } else {
+                    format!("{}{}", dir_path, file_name)
+                };
+
+                let display = if is_dir {
+                    format!("{}/", file_name)
+                } else {
+                    file_name
+                };
+
+                matches.push(Pair {
+                    display,
+                    replacement: if is_dir {
+                        format!("{}/", replacement)
+                    } else {
+                        replacement
+                    },
+                });
+            }
+        }
+
+        matches.sort_by(|a, b| a.display.cmp(&b.display));
+        Ok((start_pos, matches))
     }
 }
 
@@ -402,7 +463,8 @@ impl Completer for MooAdminHelper {
         // Command completion at start of line
         if !line_before_cursor.contains(' ') {
             let commands = [
-                "help", "?", "quit", "exit", "get", "set", "props", "verbs", "list", "prog", "su",
+                "help", "?", "quit", "exit", "get", "set", "props", "verbs", "list", "prog",
+                "dump", "load", "su",
             ];
             let matches: Vec<Pair> = commands
                 .iter()
@@ -413,6 +475,79 @@ impl Completer for MooAdminHelper {
                 })
                 .collect();
             return Ok((0, matches));
+        }
+
+        // Flag completion for dump/load commands
+        if line_before_cursor.starts_with("dump ") || line_before_cursor.starts_with("load ") {
+            // Check if we're in a flag context
+            if let Some(flag_start) = line_before_cursor.rfind("--") {
+                let after_dashes = &line_before_cursor[flag_start + 2..];
+
+                // Check if there's a space after the flag (completing the value)
+                if let Some(space_pos) = after_dashes.find(' ') {
+                    let flag_name = &after_dashes[..space_pos];
+                    let value_start = flag_start + 2 + space_pos + 1;
+                    let partial_value = &line_before_cursor[value_start..];
+
+                    // Complete flag values
+                    if flag_name == "file" {
+                        // Filename completion
+                        return self.complete_filename(partial_value, value_start);
+                    } else if flag_name == "conflict-mode" {
+                        let modes = ["clobber", "skip", "detect"];
+                        let matches: Vec<Pair> = modes
+                            .iter()
+                            .filter(|mode| mode.starts_with(partial_value))
+                            .map(|mode| Pair {
+                                display: mode.to_string(),
+                                replacement: mode.to_string(),
+                            })
+                            .collect();
+                        return Ok((value_start, matches));
+                    } else if flag_name == "target-object" {
+                        // Object completion - use existing object ID completion
+                        if partial_value.starts_with('#') {
+                            let objects = self.get_all_objects();
+                            let matches: Vec<Pair> = objects
+                                .iter()
+                                .map(|obj| obj.to_literal())
+                                .filter(|lit| lit.starts_with(partial_value))
+                                .take(50)
+                                .map(|lit| Pair {
+                                    display: lit.clone(),
+                                    replacement: lit.clone(),
+                                })
+                                .collect();
+                            return Ok((value_start, matches));
+                        }
+                    }
+                } else if !after_dashes.contains('=') {
+                    // Completing the flag name itself
+                    let is_dump = line_before_cursor.starts_with("dump ");
+                    let flags = if is_dump {
+                        vec!["--file"]
+                    } else {
+                        vec![
+                            "--file",
+                            "--dry-run",
+                            "--conflict-mode",
+                            "--target-object",
+                            "--create-new",
+                            "--return-conflicts",
+                        ]
+                    };
+
+                    let matches: Vec<Pair> = flags
+                        .iter()
+                        .filter(|flag| flag.starts_with(&format!("--{}", after_dashes)))
+                        .map(|flag| Pair {
+                            display: flag.to_string(),
+                            replacement: format!("{} ", flag),
+                        })
+                        .collect();
+                    return Ok((flag_start, matches));
+                }
+            }
         }
 
         // Verb completion for list/prog commands (check this BEFORE property completion)
@@ -432,8 +567,11 @@ impl Completer for MooAdminHelper {
 
             let obj_str = before_colon[obj_str_start..].trim();
 
-            let Ok(obj) = parse_objref_with_db(obj_str, Some(self.database.as_ref().as_ref()))
-            else {
+            let Ok(obj) = parse_objref_with_scheduler(
+                obj_str,
+                Some(&self.scheduler_client),
+                Some(&self.wizard),
+            ) else {
                 return Ok((pos, vec![]));
             };
 
@@ -466,8 +604,11 @@ impl Completer for MooAdminHelper {
             };
 
             let obj_str = before_dot[obj_str_start..].trim();
-            let Ok(obj) = parse_objref_with_db(obj_str, Some(self.database.as_ref().as_ref()))
-            else {
+            let Ok(obj) = parse_objref_with_scheduler(
+                obj_str,
+                Some(&self.scheduler_client),
+                Some(&self.wizard),
+            ) else {
                 return Ok((pos, vec![]));
             };
 
@@ -532,6 +673,101 @@ impl Validator for MooAdminHelper {}
 
 impl Helper for MooAdminHelper {}
 
+/// Parsed command-line flags for dump/load commands
+#[derive(Debug, Default)]
+struct ParsedFlags {
+    /// Positional arguments (e.g., object references)
+    positional: Vec<String>,
+    /// Flag values keyed by flag name (without the --)
+    flags: std::collections::HashMap<String, Option<String>>,
+}
+
+impl ParsedFlags {
+    /// Get a boolean flag value (true if present, false if absent)
+    fn get_bool(&self, name: &str) -> bool {
+        self.flags.contains_key(name)
+    }
+
+    /// Get a string flag value
+    fn get_string(&self, name: &str) -> Option<&str> {
+        self.flags.get(name).and_then(|v| v.as_deref())
+    }
+
+    /// Get the first positional argument
+    fn first_positional(&self) -> Option<&str> {
+        self.positional.first().map(|s| s.as_str())
+    }
+}
+
+/// Parse command arguments into flags and positional args
+/// Supports: --flag, --flag value, --flag=value
+fn parse_flags(args: &str) -> ParsedFlags {
+    let mut result = ParsedFlags::default();
+    let mut tokens: Vec<String> = Vec::new();
+
+    // Simple tokenization respecting quotes
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut escape_next = false;
+
+    for ch in args.chars() {
+        if escape_next {
+            current.push(ch);
+            escape_next = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escape_next = true,
+            '"' => in_quotes = !in_quotes,
+            ' ' | '\t' if !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    // Parse tokens into flags and positional args
+    let mut i = 0;
+    while i < tokens.len() {
+        let token = &tokens[i];
+
+        if let Some(flag_part) = token.strip_prefix("--") {
+            // Check for --flag=value syntax
+            if let Some(eq_pos) = flag_part.find('=') {
+                let flag_name = flag_part[..eq_pos].to_string();
+                let flag_value = flag_part[eq_pos + 1..].to_string();
+                result.flags.insert(flag_name, Some(flag_value));
+                i += 1;
+            } else {
+                // Check if next token is a value or another flag
+                let flag_name = flag_part.to_string();
+                if i + 1 < tokens.len() && !tokens[i + 1].starts_with("--") {
+                    result.flags.insert(flag_name, Some(tokens[i + 1].clone()));
+                    i += 2;
+                } else {
+                    // Boolean flag
+                    result.flags.insert(flag_name, None);
+                    i += 1;
+                }
+            }
+        } else {
+            // Positional argument
+            result.positional.push(token.clone());
+            i += 1;
+        }
+    }
+
+    result
+}
+
 fn print_help() {
     let skin = create_skin();
     let markdown = r#"# Emergency Medical Hologram - Available Procedures
@@ -548,9 +784,34 @@ fn print_help() {
 |`verbs #OBJ`|List all verbs on object|
 |`prog #OBJ:VERB`|Program a verb (multi-line)|
 |`list #OBJ:VERB`|Show verb code|
+|`dump #OBJ [--file PATH]`|Dump object to file or console|
+|`load [--file PATH] [options]`|Load object from file or console|
 |`su #OBJ`|Switch to different player object|
 |`help, ?`|Show this help|
 |`quit, exit`|Save and exit|
+
+## Dump & Load
+
+**Dump command:**
+- `dump #OBJ` - Display object definition on console
+- `dump #OBJ --file filename.moo` - Save object definition to file
+
+**Load command:**
+- `load` - Paste object definition, then type `.` to finish
+- `load --file filename.moo` - Load object definition from file
+
+**Load options:**
+- `--file PATH` - Load from file instead of stdin
+- `--dry-run` - Validate without making changes
+- `--conflict-mode MODE` - How to handle conflicts: clobber, skip, or detect
+- `--target-object #OBJ` - Load into existing object
+- `--create-new` - Force creation of new object
+- `--return-conflicts` - Return detailed conflict information
+
+**Examples:**
+- `load --file obj.moo --dry-run` - Validate without loading
+- `load --file obj.moo --target-object #123` - Load into existing object
+- `load --file obj.moo --conflict-mode skip` - Skip conflicting properties
 
 "#;
     println!("{}", skin.term_text(markdown));
@@ -584,30 +845,37 @@ fn format_scheduler_error(err: &SchedulerError) -> String {
     }
 }
 
-/// Parse an object reference with optional database for $property resolution
+/// Parse an object reference with optional scheduler client for $property resolution
 /// Supports "#123" format and "$player" format (which looks up #0.player)
-fn parse_objref_with_db(s: &str, database: Option<&dyn Database>) -> Result<Obj, Report> {
+fn parse_objref_with_scheduler(
+    s: &str,
+    scheduler_client: Option<&SchedulerClient>,
+    wizard: Option<&Obj>,
+) -> Result<Obj, Report> {
     let s = s.trim();
 
     if let Some(prop_name) = s.strip_prefix('$') {
-        // $property reference - need database to resolve
-        let Some(db) = database else {
-            bail!("Cannot resolve $property references without database access");
+        // $property reference - need scheduler client to resolve
+        let Some(client) = scheduler_client else {
+            bail!("Cannot resolve $property references without scheduler client");
+        };
+        let Some(wiz) = wizard else {
+            bail!("Cannot resolve $property references without wizard");
         };
 
         if prop_name.is_empty() {
             bail!("Invalid $property reference: missing property name");
         }
 
-        let tx = db
-            .new_world_state()
-            .map_err(|e| eyre!("Failed to access database: {}", e))?;
-
         let system_obj = Obj::mk_id(0);
         let prop_symbol = Symbol::mk(prop_name);
 
-        let value = tx
-            .retrieve_property(&SYSTEM_OBJECT, &system_obj, prop_symbol)
+        let value = client
+            .request_system_property(
+                wiz,
+                &moor_common::model::ObjectRef::Id(system_obj),
+                prop_symbol,
+            )
             .map_err(|e| eyre!("Failed to retrieve property ${}: {:?}", prop_name, e))?;
 
         let Some(obj) = value.as_object() else {
@@ -632,23 +900,31 @@ fn parse_objref_with_db(s: &str, database: Option<&dyn Database>) -> Result<Obj,
 }
 
 /// Parse "#OBJ.PROP" or "$obj.PROP" into (object, property_name)
-fn parse_propref(s: &str, database: Option<&dyn Database>) -> Result<(Obj, Symbol), Report> {
+fn parse_propref(
+    s: &str,
+    scheduler_client: Option<&SchedulerClient>,
+    wizard: Option<&Obj>,
+) -> Result<(Obj, Symbol), Report> {
     let parts: Vec<&str> = s.splitn(2, '.').collect();
     if parts.len() != 2 {
         bail!("Property reference must be in format #OBJ.PROP or $obj.PROP");
     }
-    let obj = parse_objref_with_db(parts[0], database)?;
+    let obj = parse_objref_with_scheduler(parts[0], scheduler_client, wizard)?;
     let prop = Symbol::mk(parts[1]);
     Ok((obj, prop))
 }
 
 /// Parse "#OBJ:VERB" or "$obj:VERB" into (object, verb_name)
-fn parse_verbref(s: &str, database: Option<&dyn Database>) -> Result<(Obj, Symbol), Report> {
+fn parse_verbref(
+    s: &str,
+    scheduler_client: Option<&SchedulerClient>,
+    wizard: Option<&Obj>,
+) -> Result<(Obj, Symbol), Report> {
     let parts: Vec<&str> = s.splitn(2, ':').collect();
     if parts.len() != 2 {
         bail!("Verb reference must be in format #OBJ:VERB or $obj:VERB");
     }
-    let obj = parse_objref_with_db(parts[0], database)?;
+    let obj = parse_objref_with_scheduler(parts[0], scheduler_client, wizard)?;
     let verb = Symbol::mk(parts[1]);
     Ok((obj, verb))
 }
@@ -695,13 +971,8 @@ fn eval_expression(
 }
 
 /// Get a property value directly from the database
-fn cmd_get(
-    scheduler_client: &SchedulerClient,
-    wizard: &Obj,
-    database: &dyn Database,
-    args: &str,
-) -> Result<(), Report> {
-    let (obj, prop) = parse_propref(args, Some(database))?;
+fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let (obj, prop) = parse_propref(args, Some(scheduler_client), Some(wizard))?;
 
     info!(
         "Getting property {} on {}",
@@ -742,12 +1013,7 @@ fn cmd_get(
 }
 
 /// Set a property value
-fn cmd_set(
-    scheduler_client: &SchedulerClient,
-    wizard: &Obj,
-    database: &dyn Database,
-    args: &str,
-) -> Result<(), Report> {
+fn cmd_set(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
     // Try to parse with '=' first, fall back to space-separated
     let (propref, value_expr) = if args.contains('=') {
         let parts: Vec<&str> = args.splitn(2, '=').collect();
@@ -764,7 +1030,7 @@ fn cmd_set(
         (parts[0].trim(), parts[1].trim())
     };
 
-    let (obj, prop) = parse_propref(propref, Some(database))?;
+    let (obj, prop) = parse_propref(propref, Some(scheduler_client), Some(wizard))?;
 
     info!(
         "Setting property {} on {} to {}",
@@ -808,14 +1074,14 @@ fn cmd_set(
 }
 
 /// List all properties on an object
-fn cmd_props(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Report> {
-    let obj = parse_objref_with_db(args.trim(), Some(database))?;
+fn cmd_props(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let obj = parse_objref_with_scheduler(args.trim(), Some(scheduler_client), Some(wizard))?;
     info!("Listing properties on {}", obj.to_literal());
 
-    let tx = database.new_world_state()?;
-
-    let props = tx
-        .properties(wizard, &obj)
+    use moor_common::model::ObjectRef;
+    let obj_ref = ObjectRef::Id(obj);
+    let props = scheduler_client
+        .request_properties(wizard, wizard, &obj_ref, false)
         .map_err(|e| eyre!("Failed to get properties: {:?}", e))?;
 
     let skin = create_skin();
@@ -825,7 +1091,7 @@ fn cmd_props(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Re
     markdown.push_str("|Property|\n");
     markdown.push_str("|---|\n");
 
-    for prop in props.iter() {
+    for (prop, _) in props.iter() {
         markdown.push_str(&format!("|{}|\n", prop.name().as_string()));
     }
 
@@ -836,14 +1102,14 @@ fn cmd_props(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Re
 }
 
 /// List all verbs on an object
-fn cmd_verbs(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Report> {
-    let obj = parse_objref_with_db(args.trim(), Some(database))?;
+fn cmd_verbs(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let obj = parse_objref_with_scheduler(args.trim(), Some(scheduler_client), Some(wizard))?;
     info!("Listing verbs on {}", obj.to_literal());
 
-    let tx = database.new_world_state()?;
-
-    let verbs = tx
-        .verbs(wizard, &obj)
+    use moor_common::model::ObjectRef;
+    let obj_ref = ObjectRef::Id(obj);
+    let verbs = scheduler_client
+        .request_verbs(wizard, wizard, &obj_ref, false)
         .map_err(|e| eyre!("Failed to get verbs: {:?}", e))?;
 
     let skin = create_skin();
@@ -870,11 +1136,10 @@ fn cmd_verbs(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Re
 fn cmd_prog(
     scheduler_client: &SchedulerClient,
     wizard: &Obj,
-    database: &dyn Database,
     args: &str,
     rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
-    let (obj, verb) = parse_verbref(args, Some(database))?;
+    let (obj, verb) = parse_verbref(args, Some(scheduler_client), Some(wizard))?;
     info!(
         "Programming verb {} on {}",
         verb.as_string(),
@@ -964,20 +1229,55 @@ fn cmd_prog(
 }
 
 /// Switch to a different player object
-fn cmd_su(database: &dyn Database, args: &str) -> Result<Obj, Report> {
-    let obj = parse_objref_with_db(args.trim(), Some(database))?;
+fn cmd_su(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<Obj, Report> {
+    let obj = parse_objref_with_scheduler(args.trim(), Some(scheduler_client), Some(wizard))?;
     info!("Attempting to switch to object {}", obj.to_literal());
 
-    let tx = database.new_world_state()?;
+    // Check if object is valid and has User flag by evaluating MOO code
+    let check_code = format!("return {{valid({0}), is_player({0})}};", obj.to_literal());
 
-    // Check if object is valid
-    if !tx.valid(&obj)? {
+    let session = Arc::new(ConsoleSession::new());
+    let features = Arc::new(FeaturesConfig::default());
+
+    let handle = scheduler_client
+        .submit_eval_task(wizard, wizard, check_code, session, features)
+        .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
+
+    let (_task_id, result) = handle
+        .receiver()
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .map_err(|_| eyre!("Task timed out"))?;
+
+    let Ok(TaskResult::Result(value)) = result else {
+        if let Err(e) = result {
+            eprintln!("{}", format_scheduler_error(&e));
+            bail!("Failed to check object");
+        }
+        bail!("Unexpected result");
+    };
+
+    // Parse the result list {valid, is_player}
+    let Some(list) = value.as_list() else {
+        bail!("Unexpected result format");
+    };
+
+    if list.len() != 2 {
+        bail!("Unexpected result format");
+    }
+
+    let Some(valid) = list[0].as_integer() else {
+        bail!("Unexpected result format");
+    };
+
+    let Some(is_player) = list[1].as_integer() else {
+        bail!("Unexpected result format");
+    };
+
+    if valid == 0 {
         bail!("Object {} does not exist", obj.to_literal());
     }
 
-    // Check if object has the User flag (which marks player objects)
-    let flags = tx.flags_of(&obj)?;
-    if !flags.contains(ObjFlag::User) {
+    if is_player == 0 {
         bail!(
             "Object {} is not a player object (missing User flag)",
             obj.to_literal()
@@ -991,13 +1291,8 @@ fn cmd_su(database: &dyn Database, args: &str) -> Result<Obj, Report> {
 }
 
 /// List a verb's code
-fn cmd_list(
-    scheduler_client: &SchedulerClient,
-    wizard: &Obj,
-    database: &dyn Database,
-    args: &str,
-) -> Result<(), Report> {
-    let (obj, verb) = parse_verbref(args, Some(database))?;
+fn cmd_list(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let (obj, verb) = parse_verbref(args, Some(scheduler_client), Some(wizard))?;
     info!("Listing verb {} on {}", verb.as_string(), obj.to_literal());
 
     let code = format!(
@@ -1051,11 +1346,239 @@ fn cmd_list(
     Ok(())
 }
 
+/// Dump an object definition
+fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+    // Parse args with flag parser
+    let parsed = parse_flags(args);
+
+    // First positional arg must be the object
+    let Some(obj_str) = parsed.first_positional() else {
+        bail!("Usage: dump #OBJ [--file FILENAME]");
+    };
+
+    let obj = parse_objref_with_scheduler(obj_str, Some(scheduler_client), Some(wizard))?;
+    let filename = parsed.get_string("file").map(PathBuf::from);
+
+    info!("Dumping object {}", obj.to_literal());
+
+    let code = format!("return dump_object({});", obj.to_literal());
+
+    let session = Arc::new(ConsoleSession::new());
+    let features = Arc::new(FeaturesConfig::default());
+
+    let handle = scheduler_client
+        .submit_eval_task(wizard, wizard, code, session, features)
+        .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
+
+    let (_task_id, result) = handle
+        .receiver()
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .map_err(|_| eyre!("Task timed out"))?;
+
+    let Ok(TaskResult::Result(value)) = result else {
+        if let Err(e) = result {
+            eprintln!("{}", format_scheduler_error(&e));
+            bail!("Failed to dump object");
+        }
+        bail!("Unexpected result");
+    };
+
+    let Some(lines) = value.as_list() else {
+        bail!("dump_object did not return a list");
+    };
+
+    let skin = create_skin();
+
+    // If filename provided, write to file; otherwise print to console
+    if let Some(path) = filename {
+        let mut file =
+            File::create(&path).map_err(|e| eyre!("Failed to create file {:?}: {}", path, e))?;
+
+        for line in lines.iter() {
+            let Some(s) = line.as_string() else {
+                continue;
+            };
+            writeln!(file, "{}", s)
+                .map_err(|e| eyre!("Failed to write to file {:?}: {}", path, e))?;
+        }
+
+        let markdown = format!(
+            "**✓** Object `{}` dumped to `{}`\n\n*{} lines written*",
+            obj.to_literal(),
+            path.display(),
+            lines.len()
+        );
+        println!("{}", skin.term_text(&markdown));
+    } else {
+        let markdown = format!("# Object Definition: {}\n\n", obj.to_literal());
+        println!("{}", skin.term_text(&markdown));
+
+        // Print the definition lines
+        for line in lines.iter() {
+            let Some(s) = line.as_string() else {
+                continue;
+            };
+            println!("{}", s);
+        }
+
+        let summary = format!("\n*{} lines dumped*", lines.len());
+        println!("{}", skin.term_text(&summary));
+    }
+
+    Ok(())
+}
+
+/// Load an object definition
+fn cmd_load(
+    scheduler_client: &SchedulerClient,
+    wizard: &Obj,
+    args: &str,
+    rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
+) -> Result<(), Report> {
+    use moor_objdef::{ConflictMode, ObjDefLoaderOptions};
+
+    let skin = create_skin();
+
+    // Parse args with flag parser
+    let parsed = parse_flags(args);
+
+    let filename = parsed.get_string("file").map(PathBuf::from);
+
+    let definition_lines = if let Some(path) = &filename {
+        // Read from file
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| eyre!("Failed to read file {:?}: {}", path, e))?;
+        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        info!("Loaded {} lines from {:?}", lines.len(), path);
+        lines
+    } else {
+        // Read from stdin
+        let intro = "**Loading object definition**\n\nPaste object definition (type `.` on a line by itself to finish):";
+        println!("{}", skin.term_text(intro));
+
+        let mut lines = Vec::new();
+        loop {
+            let line_result = rl.readline(">> ");
+            match line_result {
+                Ok(line) => {
+                    if line.trim() == "." {
+                        break;
+                    }
+                    lines.push(line);
+                }
+                Err(ReadlineError::Interrupted) => {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+                Err(ReadlineError::Eof) => {
+                    break;
+                }
+                Err(e) => {
+                    bail!("Error reading input: {}", e);
+                }
+            }
+        }
+        lines
+    };
+
+    if definition_lines.is_empty() {
+        println!("No definition entered, nothing loaded.");
+        return Ok(());
+    }
+
+    let object_definition = definition_lines.join("\n");
+
+    // Parse options from flags
+    let mut dry_run = parsed.get_bool("dry-run");
+    let return_conflicts = parsed.get_bool("return-conflicts");
+
+    let conflict_mode = if let Some(mode) = parsed.get_string("conflict-mode") {
+        match mode {
+            "clobber" => ConflictMode::Clobber,
+            "skip" => ConflictMode::Skip,
+            "detect" => {
+                // "detect" mode is dry_run + return_conflicts
+                dry_run = true;
+                ConflictMode::Skip
+            }
+            _ => bail!("Invalid conflict-mode: must be clobber, skip, or detect"),
+        }
+    } else {
+        ConflictMode::Clobber
+    };
+
+    let target_object = if let Some(target_str) = parsed.get_string("target-object") {
+        Some(parse_objref_with_scheduler(
+            target_str,
+            Some(scheduler_client),
+            Some(wizard),
+        )?)
+    } else {
+        None
+    };
+
+    let create_new = parsed.get_bool("create-new");
+
+    // Validate mutual exclusivity
+    if target_object.is_some() && create_new {
+        bail!("Cannot specify both --target-object and --create-new");
+    }
+
+    // No explicit permission check needed - load_object will check permissions internally
+    let loader_options = ObjDefLoaderOptions {
+        dry_run,
+        conflict_mode,
+        target_object,
+        create_new,
+        constants: None,
+        overrides: Vec::new(),
+        removals: Vec::new(),
+    };
+
+    // Load through the scheduler client so it uses the scheduler's database
+    let result = scheduler_client
+        .load_object(object_definition, loader_options, return_conflicts)
+        .map_err(|e| eyre!("Failed to load object: {}", e))?;
+
+    // Display results
+    if return_conflicts {
+        let markdown = if result.commit {
+            format!(
+                "**✓** Load completed successfully\n\n**Loaded objects:** {}\n**Conflicts:** {}\n**Removals:** {}\n\n*{} lines processed*",
+                result.loaded_objects.len(),
+                result.conflicts.len(),
+                result.removals.len(),
+                definition_lines.len()
+            )
+        } else {
+            format!(
+                "**⚠** Load would have conflicts (dry-run or detect mode)\n\n**Would load:** {}\n**Conflicts:** {}\n**Removals:** {}\n\n*{} lines processed*",
+                result.loaded_objects.len(),
+                result.conflicts.len(),
+                result.removals.len(),
+                definition_lines.len()
+            )
+        };
+        println!("{}", skin.term_text(&markdown));
+    } else if result.loaded_objects.is_empty() {
+        bail!("No objects were loaded");
+    } else {
+        let obj = result.loaded_objects[0];
+        let markdown = format!(
+            "**✓** Object `{}` loaded successfully\n\n*{} lines processed*",
+            obj.to_literal(),
+            definition_lines.len()
+        );
+        println!("{}", skin.term_text(&markdown));
+    }
+
+    Ok(())
+}
+
 fn repl(
     scheduler_client: SchedulerClient,
     session_factory: Arc<AdminSessionFactory>,
     features: Arc<FeaturesConfig>,
-    database: Arc<Box<dyn Database>>,
     wizard: Obj,
     mut rl: Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
@@ -1152,58 +1675,47 @@ Type `help` for available commands or `quit` to deactivate.
                     }
                 } else if line.starts_with("get ") {
                     let args = line.strip_prefix("get ").unwrap().trim();
-                    if let Err(e) = cmd_get(
-                        &scheduler_client,
-                        &current_wizard,
-                        database.as_ref().as_ref(),
-                        args,
-                    ) {
+                    if let Err(e) = cmd_get(&scheduler_client, &current_wizard, args) {
                         error!("Get failed: {}", e);
                     }
                 } else if line.starts_with("set ") {
                     let args = line.strip_prefix("set ").unwrap().trim();
-                    if let Err(e) = cmd_set(
-                        &scheduler_client,
-                        &current_wizard,
-                        database.as_ref().as_ref(),
-                        args,
-                    ) {
+                    if let Err(e) = cmd_set(&scheduler_client, &current_wizard, args) {
                         error!("Set failed: {}", e);
                     }
                 } else if line.starts_with("props ") {
                     let args = line.strip_prefix("props ").unwrap().trim();
-                    if let Err(e) = cmd_props(database.as_ref().as_ref(), &current_wizard, args) {
+                    if let Err(e) = cmd_props(&scheduler_client, &current_wizard, args) {
                         error!("Props failed: {}", e);
                     }
                 } else if line.starts_with("verbs ") {
                     let args = line.strip_prefix("verbs ").unwrap().trim();
-                    if let Err(e) = cmd_verbs(database.as_ref().as_ref(), &current_wizard, args) {
+                    if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, args) {
                         error!("Verbs failed: {}", e);
                     }
                 } else if line.starts_with("prog ") {
                     let args = line.strip_prefix("prog ").unwrap().trim();
-                    if let Err(e) = cmd_prog(
-                        &scheduler_client,
-                        &current_wizard,
-                        database.as_ref().as_ref(),
-                        args,
-                        &mut rl,
-                    ) {
+                    if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, args, &mut rl) {
                         error!("Prog failed: {}", e);
                     }
                 } else if line.starts_with("list ") {
                     let args = line.strip_prefix("list ").unwrap().trim();
-                    if let Err(e) = cmd_list(
-                        &scheduler_client,
-                        &current_wizard,
-                        database.as_ref().as_ref(),
-                        args,
-                    ) {
+                    if let Err(e) = cmd_list(&scheduler_client, &current_wizard, args) {
                         error!("List failed: {}", e);
+                    }
+                } else if line.starts_with("dump ") {
+                    let args = line.strip_prefix("dump ").unwrap().trim();
+                    if let Err(e) = cmd_dump(&scheduler_client, &current_wizard, args) {
+                        error!("Dump failed: {}", e);
+                    }
+                } else if line.starts_with("load") {
+                    let args = line.strip_prefix("load").unwrap_or("").trim();
+                    if let Err(e) = cmd_load(&scheduler_client, &current_wizard, args, &mut rl) {
+                        error!("Load failed: {}", e);
                     }
                 } else if line.starts_with("su ") {
                     let args = line.strip_prefix("su ").unwrap().trim();
-                    match cmd_su(database.as_ref().as_ref(), args) {
+                    match cmd_su(&scheduler_client, &current_wizard, args) {
                         Ok(new_wizard) => {
                             current_wizard = new_wizard;
                         }
@@ -1283,16 +1795,10 @@ fn main() -> Result<(), Report> {
     let (database, _freshly_made) = TxDB::open(Some(&resolved_db_path), DatabaseConfig::default());
     let database = Box::new(database);
 
-    // Find wizard
+    // Find wizard before handing database to scheduler
     let wizard = find_wizard(database.as_ref(), args.wizard)?;
 
-    // Now create the real editor with completion helper
-    let database_arc: Arc<Box<dyn Database>> = Arc::new(database);
-    let helper = MooAdminHelper::new(database_arc.clone());
-    let mut rl = Editor::with_config(rl_config)?;
-    rl.set_helper(Some(helper));
-
-    // Create scheduler
+    // Create scheduler with the database
     let tasks_db = Box::new(NoopTasksDb {});
     let features = Arc::new(FeaturesConfig::default());
     let config = Config {
@@ -1300,14 +1806,9 @@ fn main() -> Result<(), Report> {
         ..Default::default()
     };
 
-    // We need to clone the Box contents for the scheduler, not the Arc
-    // The Database trait isn't Clone, so we need to open it again
-    let (database_for_scheduler, _) =
-        TxDB::open(Some(&resolved_db_path), DatabaseConfig::default());
-
     let scheduler = Scheduler::new(
         version,
-        Box::new(database_for_scheduler),
+        database,
         tasks_db,
         Arc::new(config),
         Arc::new(NoopSystemControl::default()),
@@ -1318,6 +1819,11 @@ fn main() -> Result<(), Report> {
     let scheduler_client = scheduler
         .client()
         .map_err(|e| eyre!("Failed to get scheduler client: {}", e))?;
+
+    // Now create the real editor with completion helper (needs scheduler_client)
+    let helper = MooAdminHelper::new(scheduler_client.clone(), wizard);
+    let mut rl = Editor::with_config(rl_config)?;
+    rl.set_helper(Some(helper));
 
     let session_factory = Arc::new(AdminSessionFactory);
 
@@ -1336,7 +1842,6 @@ fn main() -> Result<(), Report> {
         scheduler_client.clone(),
         session_factory,
         features,
-        database_arc.clone(),
         wizard,
         rl,
     );

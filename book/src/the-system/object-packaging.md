@@ -400,12 +400,17 @@ player.my_object_backup = dump_object($my_widget);
 The `load_object` function recreates objects from their text definitions:
 
 ```moo
-// Load a simple object (creates a new object)
+// Load a simple object using the object ID from the dump
 new_obj = load_object(definition);
 
-// Load with options
+// Create a new object with next available ID (ignoring dump's ID)
+new_obj = load_object(definition, [`create_new -> true]);
+
+// Update an existing object
+new_obj = load_object(definition, [`target_object -> #456]);
+
+// Load with multiple options
 new_obj = load_object(definition, [
-    `target_object -> #456,     // Update existing object instead
     `constants -> [`MY_CONSTANT -> "value"]  // Set compilation constants
 ]);
 ```
@@ -620,25 +625,65 @@ works. This map can contain any combination of the following options:
 
 The following table provides a complete reference for all `load_object` options:
 
-| Option             | Type    | Default    | Description                                             |
-|--------------------|---------|------------|---------------------------------------------------------|
-| `target_object`    | Object  | None       | Existing object to update instead of creating new       |
-| `constants`        | Map     | `[]`       | Compilation constants available during verb compilation |
-| `conflict_mode`    | Symbol  | `'clobber` | How to handle conflicts: `'clobber`, `'skip`, `'detect` |
-| `dry_run`          | Boolean | `false`    | Test mode - don't make actual changes                   |
-| `return_conflicts` | Boolean | `false`    | Return detailed conflict information                    |
-| `overrides`        | List    | `{}`       | Force specific entities to use `clobber` mode           |
-| `removals`         | List    | `{}`       | Remove specified entities not in definition             |
+| Option             | Type    | Default    | Description                                                      |
+|--------------------|---------|------------|------------------------------------------------------------------|
+| `target_object`    | Object  | None       | Existing object to update instead of creating new                |
+| `create_new`       | Boolean | `false`    | Allocate new object ID instead of using ID from dump             |
+| `constants`        | Map     | `[]`       | Compilation constants available during verb compilation          |
+| `conflict_mode`    | Symbol  | `'clobber` | How to handle conflicts: `'clobber`, `'skip`, `'detect`          |
+| `dry_run`          | Boolean | `false`    | Test mode - don't make actual changes                            |
+| `return_conflicts` | Boolean | `false`    | Return detailed conflict information                             |
+| `overrides`        | List    | `{}`       | Force specific entities to use `clobber` mode                    |
+| `removals`         | List    | `{}`       | Remove specified entities not in definition                      |
+
+**Note:** `target_object` and `create_new` are mutually exclusive - specifying both will raise `E_INVARG`.
 
 ### Option Details
+
+### Object ID Handling
+
+When loading an object, you have three options for handling object IDs:
+
+1. **Default behavior (no options)**: Use the object ID from the dump
+2. **`create_new` option**: Allocate a new object ID (next available)
+3. **`target_object` option**: Load into a specific existing object
+
+These options are mutually exclusive - you cannot specify both `create_new` and `target_object`.
+
+### Create New Object
+
+**Option:** `create_new`
+**Type:** Boolean
+**Default:** `false`
+**Mutually exclusive with:** `target_object`
+
+Allocate a new object ID instead of using the object ID from the dump:
+
+```moo
+// Create a new object, ignoring the dump's object ID
+new_obj = load_object(definition, [`create_new -> true]);
+
+// Useful for duplicating objects or sharing object definitions
+// between databases where object IDs may conflict
+copy_of_widget = load_object(dump_object($my_widget), [`create_new -> true]);
+```
+
+**When to use `create_new`:**
+- Duplicating an object within the same database
+- Importing objects that might have conflicting IDs
+- Creating instances from a template definition
+- Sharing object packages between different MOO servers
+
+**Important:** The new object will get the next available ID from the database sequence, not the ID specified in the dump.
 
 ### Target Object
 
 **Option:** `target_object`
 **Type:** Object
-**Default:** None (create new object)
+**Default:** None
+**Mutually exclusive with:** `create_new`
 
-Instead of creating a new object, load the definition into an existing object:
+Load the definition into an existing object instead of creating a new one:
 
 ```moo
 // Update an existing object with new definition
@@ -647,6 +692,12 @@ load_object(definition, [`target_object -> #123]);
 // Useful for updating objects in place
 load_object(new_widget_def, [`target_object -> $my_widget]);
 ```
+
+**When to use `target_object`:**
+- Updating an existing object with a new version
+- Applying a template to an existing object
+- Restoring an object from a backup
+- Syncing an object with an external definition
 
 ### Compilation Constants
 

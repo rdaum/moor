@@ -2850,6 +2850,7 @@ dependencies = [
  "moor-compiler",
  "moor-db",
  "moor-kernel",
+ "moor-objdef",
  "moor-var",
  "rustyline",
  "semver",
