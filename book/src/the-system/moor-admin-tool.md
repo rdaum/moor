@@ -152,6 +152,34 @@ name  description  programmer  wizard  ...
 | `list #OBJ:VERB` | Display the code of a verb |
 | `prog #OBJ:VERB` | Program a verb (multi-line editor) |
 
+### Switching User Context
+
+| Command | Description |
+|---------|-------------|
+| `su #OBJ` | Switch to a different player object |
+
+The `su` command allows you to change the wizard/player object you're operating as. This is useful when you need to test permissions, debug player-specific issues, or perform operations as a different user.
+
+**Requirements:**
+- The target object must exist in the database
+- The target object must have the User flag set (must be a player object)
+
+**Example:**
+```moo
+(#2): su #3
+✓ Switched to player #3
+
+(#3): get #3.name
+#3.name = "Programmer"
+
+(#3): su #2
+✓ Switched to player #2
+
+(#2):
+```
+
+**Note:** The prompt updates to show the current wizard object you're operating as.
+
 **Examples:**
 ```moo
 (#2): verbs #1
@@ -203,7 +231,7 @@ When typing object IDs, press Tab to see available objects:
 `moor-admin` provides comprehensive tab completion to make navigation easier:
 
 - **Commands:** Type the beginning of a command and press Tab
-- **Object IDs:** Type `#` followed by Tab to see all objects
+- **Object IDs:** Type `#` followed by Tab to see all objects (works with `props`, `verbs`, `list`, `prog`, and `su`)
 - **Properties:** Type `get #OBJ.` or `set #OBJ.` and press Tab
 - **Verbs:** Type `list #OBJ:` or `prog #OBJ:` and press Tab
 

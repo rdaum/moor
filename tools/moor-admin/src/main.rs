@@ -402,7 +402,7 @@ impl Completer for MooAdminHelper {
         // Command completion at start of line
         if !line_before_cursor.contains(' ') {
             let commands = [
-                "help", "?", "quit", "exit", "get", "set", "props", "verbs", "list", "prog",
+                "help", "?", "quit", "exit", "get", "set", "props", "verbs", "list", "prog", "su",
             ];
             let matches: Vec<Pair> = commands
                 .iter()
@@ -488,7 +488,8 @@ impl Completer for MooAdminHelper {
             || line_before_cursor.starts_with("props ")
             || line_before_cursor.starts_with("verbs ")
             || line_before_cursor.starts_with("list ")
-            || line_before_cursor.starts_with("prog ");
+            || line_before_cursor.starts_with("prog ")
+            || line_before_cursor.starts_with("su ");
 
         if is_obj_command {
             let after_command = line_before_cursor
@@ -545,6 +546,7 @@ fn print_help() {
 |`verbs #OBJ`|List all verbs on object|
 |`prog #OBJ:VERB`|Program a verb (multi-line)|
 |`list #OBJ:VERB`|Show verb code|
+|`su #OBJ`|Switch to different player object|
 |`help, ?`|Show this help|
 |`quit, exit`|Save and exit|
 
@@ -955,6 +957,33 @@ fn cmd_prog(
     bail!("Failed to program verb");
 }
 
+/// Switch to a different player object
+fn cmd_su(database: &dyn Database, args: &str) -> Result<Obj, Report> {
+    let obj = parse_objref(args.trim())?;
+    info!("Attempting to switch to object {}", obj.to_literal());
+
+    let tx = database.new_world_state()?;
+
+    // Check if object is valid
+    if !tx.valid(&obj)? {
+        bail!("Object {} does not exist", obj.to_literal());
+    }
+
+    // Check if object has the User flag (which marks player objects)
+    let flags = tx.flags_of(&obj)?;
+    if !flags.contains(ObjFlag::User) {
+        bail!(
+            "Object {} is not a player object (missing User flag)",
+            obj.to_literal()
+        );
+    }
+
+    let skin = create_skin();
+    let markdown = format!("**✓** Switched to player `{}`", obj.to_literal());
+    println!("{}", skin.term_text(&markdown));
+    Ok(obj)
+}
+
 /// List a verb's code
 fn cmd_list(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
     let (obj, verb) = parse_verbref(args)?;
@@ -1015,9 +1044,11 @@ fn repl(
     scheduler_client: SchedulerClient,
     session_factory: Arc<AdminSessionFactory>,
     features: Arc<FeaturesConfig>,
+    database: Arc<Box<dyn Database>>,
     wizard: Obj,
     mut rl: Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
+    let mut current_wizard = wizard;
     let skin = create_skin();
     let intro = format!(
         r#"
@@ -1029,13 +1060,13 @@ fn repl(
 
 Type `help` for available commands or `quit` to deactivate.
 "#,
-        wizard.to_literal()
+        current_wizard.to_literal()
     );
 
     println!("{}", skin.term_text(&intro));
 
     loop {
-        let prompt = format!("({}): ", wizard.to_literal());
+        let prompt = format!("({}): ", current_wizard.to_literal());
         let readline = rl.readline(&prompt);
 
         match readline {
@@ -1059,7 +1090,7 @@ Type `help` for available commands or `quit` to deactivate.
                     // Eval expression or execute code block
                     if let Some(code) = line.strip_prefix(";;") {
                         // ;; executes code as-is without wrapping in return
-                        let session_result = session_factory.clone().mk_background_session(&wizard);
+                        let session_result = session_factory.clone().mk_background_session(&current_wizard);
 
                         let Ok(session) =
                             session_result.map_err(|e| eyre!("Failed to create session: {:?}", e))
@@ -1068,8 +1099,8 @@ Type `help` for available commands or `quit` to deactivate.
                         };
 
                         let Ok(handle) = scheduler_client.submit_eval_task(
-                            &wizard,
-                            &wizard,
+                            &current_wizard,
+                            &current_wizard,
                             code.trim().to_string(),
                             session,
                             features.clone(),
@@ -1100,7 +1131,7 @@ Type `help` for available commands or `quit` to deactivate.
                             &scheduler_client,
                             &session_factory,
                             features.clone(),
-                            &wizard,
+                            &current_wizard,
                             expr.trim(),
                         ) {
                             error!("Eval failed: {}", e);
@@ -1108,33 +1139,43 @@ Type `help` for available commands or `quit` to deactivate.
                     }
                 } else if line.starts_with("get ") {
                     let args = line.strip_prefix("get ").unwrap().trim();
-                    if let Err(e) = cmd_get(&scheduler_client, &wizard, args) {
+                    if let Err(e) = cmd_get(&scheduler_client, &current_wizard, args) {
                         error!("Get failed: {}", e);
                     }
                 } else if line.starts_with("set ") {
                     let args = line.strip_prefix("set ").unwrap().trim();
-                    if let Err(e) = cmd_set(&scheduler_client, &wizard, args) {
+                    if let Err(e) = cmd_set(&scheduler_client, &current_wizard, args) {
                         error!("Set failed: {}", e);
                     }
                 } else if line.starts_with("props ") {
                     let args = line.strip_prefix("props ").unwrap().trim();
-                    if let Err(e) = cmd_props(&scheduler_client, &wizard, args) {
+                    if let Err(e) = cmd_props(&scheduler_client, &current_wizard, args) {
                         error!("Props failed: {}", e);
                     }
                 } else if line.starts_with("verbs ") {
                     let args = line.strip_prefix("verbs ").unwrap().trim();
-                    if let Err(e) = cmd_verbs(&scheduler_client, &wizard, args) {
+                    if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, args) {
                         error!("Verbs failed: {}", e);
                     }
                 } else if line.starts_with("prog ") {
                     let args = line.strip_prefix("prog ").unwrap().trim();
-                    if let Err(e) = cmd_prog(&scheduler_client, &wizard, args, &mut rl) {
+                    if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, args, &mut rl) {
                         error!("Prog failed: {}", e);
                     }
                 } else if line.starts_with("list ") {
                     let args = line.strip_prefix("list ").unwrap().trim();
-                    if let Err(e) = cmd_list(&scheduler_client, &wizard, args) {
+                    if let Err(e) = cmd_list(&scheduler_client, &current_wizard, args) {
                         error!("List failed: {}", e);
+                    }
+                } else if line.starts_with("su ") {
+                    let args = line.strip_prefix("su ").unwrap().trim();
+                    match cmd_su(database.as_ref().as_ref(), args) {
+                        Ok(new_wizard) => {
+                            current_wizard = new_wizard;
+                        }
+                        Err(e) => {
+                            error!("Su failed: {}", e);
+                        }
                     }
                 } else {
                     error!("Unknown command. Type 'help' for available commands.");
@@ -1261,6 +1302,7 @@ fn main() -> Result<(), Report> {
         scheduler_client.clone(),
         session_factory,
         features,
+        database_arc.clone(),
         wizard,
         rl,
     );
