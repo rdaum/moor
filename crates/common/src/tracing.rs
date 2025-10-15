@@ -35,7 +35,7 @@ pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
     } else {
         // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
         let level = if debug_fallback { "debug" } else { "info" };
-        EnvFilter::new(format!("{},gdt_cpus=off", level))
+        EnvFilter::new(format!("{level},gdt_cpus=off"))
     };
 
     tracing_subscriber::registry()
@@ -72,7 +72,7 @@ pub fn init_tracing_simple(debug_fallback: bool) -> Result<(), eyre::Report> {
     } else {
         // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
         let level = if debug_fallback { "debug" } else { "info" };
-        EnvFilter::new(format!("{},gdt_cpus=off", level))
+        EnvFilter::new(format!("{level},gdt_cpus=off"))
     };
 
     tracing_subscriber::registry()
