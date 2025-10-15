@@ -134,6 +134,11 @@ pub struct RuntimeConfig {
     /// If None, automatic GC uses database settings or default.
     #[serde(deserialize_with = "parse_duration")]
     pub gc_interval: Option<Duration>,
+    /// Scheduler tick interval - how often the scheduler wakes to check for events.
+    /// Lower values provide better latency but higher CPU usage.
+    /// If None, defaults to 10ms.
+    #[serde(deserialize_with = "parse_duration")]
+    pub scheduler_tick_duration: Option<Duration>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Eq, PartialEq)]

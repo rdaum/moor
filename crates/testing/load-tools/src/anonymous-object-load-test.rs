@@ -652,6 +652,7 @@ async fn main() -> Result<(), eyre::Error> {
     // Create config with higher tick limits for load testing and very long GC interval
     let runtime_config = RuntimeConfig {
         gc_interval: Some(Duration::from_secs(999)), // Very long GC interval during load testing
+        scheduler_tick_duration: None, // Use default tick duration
     };
     let features_config = FeaturesConfig {
         anonymous_objects: true, // Enable anonymous objects for this load test

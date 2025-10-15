@@ -250,7 +250,12 @@ impl Scheduler {
             // Skip task processing only if GC sweep is in progress
             // (mark phase allows concurrent task processing)
             if self.gc_sweep_in_progress {
-                std::thread::sleep(Duration::from_millis(10));
+                let tick_duration = self
+                    .config
+                    .runtime
+                    .scheduler_tick_duration
+                    .unwrap_or(Duration::from_millis(10));
+                std::thread::sleep(tick_duration);
                 continue;
             }
 
@@ -312,7 +317,13 @@ impl Scheduler {
                 Err(_) => None,
             });
 
-            match selector.wait_timeout(Duration::from_millis(10)) {
+            let tick_duration = self
+                .config
+                .runtime
+                .scheduler_tick_duration
+                .unwrap_or(Duration::from_millis(10));
+
+            match selector.wait_timeout(tick_duration) {
                 Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
                     self.handle_task_msg(task_id, msg);
                 }
@@ -1968,8 +1979,14 @@ impl Scheduler {
         );
 
         // Spin until all active tasks are done
+        let tick_duration = self
+            .config
+            .runtime
+            .scheduler_tick_duration
+            .unwrap_or(Duration::from_millis(10));
+
         while !self.task_q.active.is_empty() {
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(tick_duration);
 
             // Process any incoming messages while waiting
             if let Ok((task_id, msg)) = self.task_control_receiver.try_recv() {

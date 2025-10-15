@@ -266,12 +266,23 @@ pub struct RuntimeArgs {
         help = "Interval in seconds for automatic garbage collection (default: 30)"
     )]
     pub gc_interval_seconds: Option<u16>,
+
+    #[arg(
+        long,
+        value_name = "scheduler-tick-ms",
+        help = "Scheduler tick interval in milliseconds - controls how often the scheduler wakes to check for events. Lower values provide better latency but higher CPU usage (default: 10)"
+    )]
+    pub scheduler_tick_ms: Option<u16>,
 }
 
 impl RuntimeArgs {
     pub fn merge_config(&self, config: &mut RuntimeConfig) -> Result<(), eyre::Report> {
         if let Some(args) = self.gc_interval_seconds {
             config.gc_interval = Some(std::time::Duration::from_secs(u64::from(args)));
+        }
+        if let Some(args) = self.scheduler_tick_ms {
+            config.scheduler_tick_duration =
+                Some(std::time::Duration::from_millis(u64::from(args)));
         }
         Ok(())
     }
