@@ -209,8 +209,8 @@ impl FjallSnapshotLoader {
         FjallCodec: EncodeFor<Codomain, Stored = ByteView>,
     {
         let result: ByteView = user_value.into();
-        let ts = Timestamp(u128::from_le_bytes(result[0..16].try_into().unwrap()));
-        let codomain_bytes = result.slice(16..);
+        let ts = Timestamp(u64::from_le_bytes(result[0..8].try_into().unwrap()));
+        let codomain_bytes = result.slice(8..);
         let codomain = FjallCodec.decode(codomain_bytes)?;
         Ok((ts, codomain))
     }

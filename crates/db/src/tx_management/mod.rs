@@ -19,32 +19,7 @@ pub use relation::{CheckRelation, Relation};
 pub use relation_tx::{RelationTransaction, WorkingSet};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
-pub struct Timestamp(pub u128);
-
-impl Default for Timestamp {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Timestamp {
-    /// Generate a new UUID v7 timestamp
-    pub fn new() -> Self {
-        use uuid::Uuid;
-        Timestamp(Uuid::now_v7().as_u128())
-    }
-
-    /// Create a timestamp from an existing UUID v7
-    pub fn from_uuid_v7(uuid: u128) -> Self {
-        Timestamp(uuid)
-    }
-
-    /// Extract the Unix timestamp in milliseconds from the UUID v7
-    pub fn unix_millis(&self) -> u64 {
-        // UUID v7 stores timestamp in first 48 bits
-        (self.0 >> 80) as u64
-    }
-}
+pub struct Timestamp(pub u64);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Tx {

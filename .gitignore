@@ -40,3 +40,10 @@ docker-compose.override.yml
 
 # Production deployment directory (contains secrets, configs, scripts)
 prod/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python

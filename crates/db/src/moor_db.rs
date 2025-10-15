@@ -34,8 +34,8 @@ use moor_var::{Obj, Symbol, Var, program::ProgramType};
 use std::{
     path::Path,
     sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicBool, AtomicI64},
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicI64, AtomicU64},
     },
     thread::JoinHandle,
     time::Duration,
@@ -44,7 +44,12 @@ use tempfile::TempDir;
 use tracing::{error, warn};
 
 use crate::{
-    provider::{fjall_provider::FjallProvider, fjall_snapshot_loader::FjallSnapshotLoader},
+    provider::{
+        Migrator,
+        fjall_migration::{self, FjallMigrator},
+        fjall_provider::FjallProvider,
+        fjall_snapshot_loader::FjallSnapshotLoader,
+    },
     relation_defs::define_relations,
     utils::CachePadded,
 };
@@ -96,6 +101,7 @@ impl Caches {
 }
 
 pub struct MoorDB {
+    monotonic: CachePadded<AtomicU64>,
     keyspace: fjall::Keyspace,
     relations: Relations,
     sequences: [Arc<CachePadded<AtomicI64>>; 16],
@@ -105,7 +111,7 @@ pub struct MoorDB {
     usage_send: Sender<oneshot::Sender<usize>>,
     caches: ArcSwap<Caches>,
     /// Last write transaction timestamp that completed
-    last_write_commit: RwLock<Timestamp>,
+    last_write_commit: AtomicU64,
     jh: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -117,7 +123,10 @@ impl MoorDB {
     {
         // Wait for all write transactions up to the last completed write to finish
         // This ensures the snapshot captures all committed write data
-        let last_write_timestamp = *self.last_write_commit.read().unwrap();
+        let last_write_timestamp = Timestamp(
+            self.last_write_commit
+                .load(std::sync::atomic::Ordering::Acquire),
+        );
         if last_write_timestamp.0 > 0
             && let Err(e) = self
                 .relations
@@ -223,7 +232,10 @@ impl MoorDB {
 
     pub(crate) fn start_transaction(&self) -> WorldStateTransaction {
         let tx = Tx {
-            ts: Timestamp::new(),
+            ts: Timestamp(
+                self.monotonic
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            ),
         };
 
         let caches = self.caches.load();
@@ -262,6 +274,12 @@ impl MoorDB {
             None
         };
         let path = path.unwrap_or_else(|| tmpdir.as_ref().unwrap().path());
+
+        // Check and perform migration BEFORE opening the database
+        // This ensures migration happens atomically via copy-and-swap
+        fjall_migration::fjall_check_and_migrate(path)
+            .unwrap_or_else(|e| panic!("Failed to migrate database: {}", e));
+
         let keyspace = Config::new(path).open().unwrap();
 
         let sequences_partition = keyspace
@@ -275,7 +293,20 @@ impl MoorDB {
             fresh = true;
         }
 
-        if !fresh {
+        let start_tx_num = sequences_partition
+            .get(15_u64.to_le_bytes())
+            .unwrap()
+            .map(|b| u64::from_le_bytes(b[0..8].try_into().unwrap()))
+            .unwrap_or(1);
+
+        if fresh {
+            // Fresh database - mark it with the current version
+            let migrator = FjallMigrator::new(keyspace.clone(), sequences_partition.clone());
+            migrator
+                .mark_current_version()
+                .unwrap_or_else(|e| error!("Failed to mark fresh database version: {}", e));
+        } else {
+            // Load sequences from existing database
             for (i, seq) in sequences.iter().enumerate() {
                 let seq_value = sequences_partition
                     .get(i.to_le_bytes())
@@ -293,6 +324,7 @@ impl MoorDB {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let caches = ArcSwap::new(Arc::new(Caches::new()));
         let s = Arc::new(Self {
+            monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
             relations,
             sequences,
             sequences_partition,
@@ -301,7 +333,7 @@ impl MoorDB {
             kill_switch: kill_switch.clone(),
             keyspace,
             caches,
-            last_write_commit: RwLock::new(Timestamp(0)),
+            last_write_commit: AtomicU64::new(0),
             jh: Mutex::new(None),
         });
 
@@ -387,7 +419,7 @@ impl MoorDB {
                         if checkers.all_clean() {
                             reply.send(CommitResult::Success {
                                 mutations_made: false,
-                                timestamp: tx_timestamp.0 as u64, // Convert u128 to u64 for external API
+                                timestamp: tx_timestamp.0,
                             }).ok();
 
                             let combined_caches = Caches {
@@ -426,7 +458,7 @@ impl MoorDB {
                         checkers.commit_all(&this.relations);
 
                         // Track the last write transaction timestamp for snapshot consistency
-                        *this.last_write_commit.write().unwrap() = tx_timestamp;
+                        this.last_write_commit.store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
 
                         // Send barrier message to providers to track this write transaction completion
                         if let Err(e) = this.relations.send_barrier(tx_timestamp) {
@@ -436,7 +468,7 @@ impl MoorDB {
                         // No need to block the caller while we're doing the final write to disk.
                         reply.send(CommitResult::Success {
                             mutations_made: has_mutations,
-                            timestamp: tx_timestamp.0 as u64, // Convert u128 to u64 for external API
+                            timestamp: tx_timestamp.0,
                         }).ok();
 
                         // And if the commit took a long time, warn before the write to disk is begun.
@@ -471,6 +503,11 @@ impl MoorDB {
                     let _t = PerfTimerGuard::new(&counters.commit_write_phase);
 
                     // Now write out the current state of the sequences to the seq partition.
+                    // Start by making sure that the monotonic sequence is written out.
+                    this.sequences[15].store(
+                        this.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
                     for (i, seq) in this.sequences.iter().enumerate() {
                         this.sequences_partition
                             .insert(
