@@ -6,7 +6,7 @@
 /* Font Face Declarations */
 @font-face {
   font-family: 'Glass_TTY_VT220';
-  src: url('./Glass_TTY_VT220.ttf') format('truetype');
+  src: url('../Glass_TTY_VT220.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: fallback;

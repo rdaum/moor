@@ -16,6 +16,7 @@
 import React from "react";
 import { CommandEchoToggle } from "./CommandEchoToggle";
 import { EncryptionSettings } from "./EncryptionSettings";
+import { FontToggle } from "./FontToggle";
 import { ThemeToggle } from "./ThemeToggle";
 
 interface SettingsPanelProps {
@@ -49,6 +50,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, o
                     <div className="settings-section">
                         <h3>Appearance</h3>
                         <ThemeToggle />
+                        <FontToggle />
                     </div>
 
                     <div className="settings-section">

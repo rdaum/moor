@@ -1314,6 +1314,38 @@ input[type="text"]:focus {
   font-size: 0.9em;
 }
 
+/* Full-width font toggle row in settings */
+.font-toggle-row {
+  width: 100%;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  min-height: 44px;
+}
+
+.font-toggle-row:hover {
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.font-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.font-indicator {
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+}
+
 /* ====== ENCRYPTION COMPONENTS ====== */
 
 /* Input hover states */
