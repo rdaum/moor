@@ -53,7 +53,10 @@ use moor_common::util::PerfTimerGuard;
 use planus::{ReadAsRoot, WriteAsOffset};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex, RwLock, atomic::AtomicBool},
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicBool, AtomicU64},
+    },
     thread::JoinHandle,
     time::Duration,
 };
@@ -113,7 +116,7 @@ where
     /// This is shared across all transactions to avoid redundant database lookups
     tombstones: Arc<RwLock<HashSet<Domain>>>,
     /// Atomic tracking of the highest completed barrier timestamp
-    completed_barrier: Arc<RwLock<u128>>,
+    completed_barrier: Arc<AtomicU64>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
@@ -125,8 +128,8 @@ where
     P: EncodeFor<Codomain, Stored = ByteView>,
 {
     let result: ByteView = user_value.into();
-    let ts = Timestamp(u128::from_le_bytes(result[0..16].try_into().unwrap()));
-    let codomain_bytes = result.slice(16..);
+    let ts = Timestamp(u64::from_le_bytes(result[0..8].try_into().unwrap()));
+    let codomain_bytes = result.slice(8..);
     let codomain = provider.decode(codomain_bytes)?;
     Ok((ts, codomain))
 }
@@ -140,7 +143,7 @@ where
     P: EncodeFor<Codomain, Stored = ByteView>,
 {
     let codomain_stored = provider.encode(codomain)?;
-    let mut result = Vec::with_capacity(16 + codomain_stored.len());
+    let mut result = Vec::with_capacity(8 + codomain_stored.len());
     result.extend_from_slice(&ts.0.to_le_bytes());
     result.extend_from_slice(&codomain_stored);
     Ok(UserValue::from(ByteView::from(result)))
@@ -159,7 +162,7 @@ where
         let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain>>();
         let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
         let tombstones = Arc::new(RwLock::new(HashSet::new()));
-        let completed_barrier = Arc::new(RwLock::new(0));
+        let completed_barrier = Arc::new(AtomicU64::new(0));
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
@@ -205,7 +208,8 @@ where
                         }
                         Ok(WriteOp::Barrier(timestamp, reply)) => {
                             // Mark this barrier as completed and reply
-                            *completed_barrier_bg.write().unwrap() = timestamp.0;
+                            completed_barrier_bg
+                                .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
                             // Reply to indicate barrier is processed
                             reply.send(()).ok();
                         }
@@ -235,7 +239,9 @@ where
     /// This is used after write transactions commit to track their completion.
     pub fn send_barrier(&self, barrier_timestamp: Timestamp) -> Result<(), Error> {
         // Check if we've already processed this barrier or a later one
-        let completed = *self.completed_barrier.read().unwrap();
+        let completed = self
+            .completed_barrier
+            .load(std::sync::atomic::Ordering::Acquire);
         if completed >= barrier_timestamp.0 {
             return Ok(());
         }
@@ -262,7 +268,9 @@ where
         timeout: Duration,
     ) -> Result<(), Error> {
         // Check if we've already processed this barrier or a later one
-        let completed = *self.completed_barrier.read().unwrap();
+        let completed = self
+            .completed_barrier
+            .load(std::sync::atomic::Ordering::Acquire);
         if completed >= barrier_timestamp.0 {
             return Ok(());
         }
@@ -270,7 +278,9 @@ where
         // Wait by polling the completed barrier timestamp
         let start = std::time::Instant::now();
         while start.elapsed() < timeout {
-            let completed = *self.completed_barrier.read().unwrap();
+            let completed = self
+                .completed_barrier
+                .load(std::sync::atomic::Ordering::Acquire);
             if completed >= barrier_timestamp.0 {
                 return Ok(());
             }

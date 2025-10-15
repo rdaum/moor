@@ -2945,6 +2945,7 @@ dependencies = [
  "paste",
  "planus",
  "rand 0.8.5",
+ "semver",
  "serde",
  "shuttle",
  "tempfile",

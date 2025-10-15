@@ -1,0 +1,112 @@
+# Production docker compose - uses IPC sockets for inter-service communication
+# IPC sockets are faster and more secure than TCP when all services are on the same host
+
+networks:
+  moor_net:
+
+# Named volume for shared IPC sockets
+volumes:
+  moor_ipc:
+
+services:
+  moor-daemon:
+    image: moor-moor-daemon:latest
+    container_name: "moor-daemon"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - ./moor-data:/db/moor-data
+      - ./export:/db/export
+      - ./cores:/db/cores:ro
+      - moor_ipc:/tmp/moor_ipc  # Shared volume for IPC sockets
+    command: >
+      ./moor-daemon
+        /db/moor-data
+        --db=development.db
+        --rpc-listen=ipc:///tmp/moor_ipc/rpc.sock
+        --events-listen=ipc:///tmp/moor_ipc/events.sock
+        --workers-response-listen=ipc:///tmp/moor_ipc/workers_response.sock
+        --workers-request-listen=ipc:///tmp/moor_ipc/workers_request.sock
+        --import=/db/cores/lambda-moor/src --import-format=objdef
+        --export=/db/export --export-format objdef
+    networks:
+      - moor_net
+    restart: unless-stopped
+
+  moor-telnet-host:
+    image: moor-moor-telnet-host:latest
+    container_name: "moor-telnet-host"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - moor_ipc:/tmp/moor_ipc  # Shared volume for IPC sockets
+    command: >
+      ./moor-telnet-host
+        --telnet-address=0.0.0.0
+        --telnet-port=8888
+        --rpc-address=ipc:///tmp/moor_ipc/rpc.sock
+        --events-address=ipc:///tmp/moor_ipc/events.sock
+    ports:
+      - "8888:8888"
+    networks:
+      - moor_net
+    restart: unless-stopped
+    depends_on:
+      - moor-daemon
+
+  moor-frontend:
+    image: moor-moor-frontend:latest
+    container_name: "moor-frontend"
+    depends_on:
+      - moor-web-host
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-ssl.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot-webroot:/var/www/certbot:ro
+    networks:
+      - moor_net
+    restart: unless-stopped
+
+  moor-web-host:
+    image: moor-moor-web-host:latest
+    container_name: "moor-web-host"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - ./web-host-production-ipc.yaml:/moor/config.yaml:ro
+      - moor_ipc:/tmp/moor_ipc  # Shared volume for IPC sockets
+    command: >
+      ./moor-web-host --config-file=/moor/config.yaml
+    ports:
+      - "8081:8081"
+    networks:
+      - moor_net
+    restart: unless-stopped
+    depends_on:
+      - moor-daemon
+
+  moor-curl-worker:
+    image: moor-moor-curl-worker:latest
+    container_name: "moor-curl-worker"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - moor_ipc:/tmp/moor_ipc  # Shared volume for IPC sockets
+    command: >
+      ./moor-curl-worker
+        --rpc-address=ipc:///tmp/moor_ipc/rpc.sock
+        --events-address=ipc:///tmp/moor_ipc/events.sock
+        --workers-request-address=ipc:///tmp/moor_ipc/workers_request.sock
+        --workers-response-address=ipc:///tmp/moor_ipc/workers_response.sock
+    networks:
+      - moor_net
+    restart: unless-stopped
+    depends_on:
+      - moor-daemon

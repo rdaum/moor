@@ -68,6 +68,7 @@ lazy_static.workspace = true
 minstant.workspace = true
 paste.workspace = true
 rand.workspace = true
+semver.workspace = true
 uuid.workspace = true
 zerocopy.workspace = true
 

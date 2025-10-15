@@ -1,0 +1,29 @@
+# Production web-host configuration with IPC sockets and Discord OAuth2
+# This file should be copied to VPS and kept secure (contains secrets)
+
+listen_address: "0.0.0.0:8081"
+debug: false
+
+client_args:
+  # Use IPC sockets instead of TCP for better performance and security
+  rpc_address: "ipc:///tmp/moor_ipc/rpc.sock"
+  events_address: "ipc:///tmp/moor_ipc/events.sock"
+  public_key: "/moor/moor-verifying-key.pem"
+  private_key: "/moor/moor-signing-key.pem"
+
+# OAuth2 configuration
+oauth2:
+  enabled: true
+  base_url: "https://timbran.org"
+
+  providers:
+    # Discord OAuth2
+    discord:
+      client_id: "1426055310811861013"
+      client_secret: "U9nHcwxqsMD6mJnj2a5U8jUGVZ0ODmDw"
+      auth_url: "https://discord.com/api/oauth2/authorize"
+      token_url: "https://discord.com/api/oauth2/token"
+      user_info_url: "https://discord.com/api/users/@me"
+      scopes:
+        - "identify"
+        - "email"

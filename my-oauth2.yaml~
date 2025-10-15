@@ -1,0 +1,39 @@
+# OAuth2-enabled web-host configuration for development
+# Copy this file and customize with your OAuth2 credentials
+
+# Standard connection settings
+listen_address: "0.0.0.0:8080"
+debug: true
+rpc_address: "tcp://127.0.0.1:7899"
+events_address: "tcp://127.0.0.1:7898"
+public_key: "moor-data/moor_host.pem.pub"
+private_key: "moor-data/moor_host.pem"
+
+# OAuth2 configuration
+# Set enabled to false to disable OAuth2 entirely
+oauth2:
+  enabled: true
+
+  # Base URL must match your deployment
+  # For development with Vite: use http://localhost:8080 (direct to web-host)
+  # For production: use https://yourdomain.com
+  base_url: "http://localhost:3000"
+
+  providers:
+
+    # GitHub OAuth2 Configuration
+    # Get credentials at: https://github.com/settings/developers
+    github:
+      client_id: "Ov23liCvzvOXyuIkPK9h"
+      client_secret: "48bd277f4a763ec09a65ea69c88fa447732ace28"
+      auth_url: "https://github.com/login/oauth/authorize"
+      token_url: "https://github.com/login/oauth/access_token"
+      user_info_url: "https://api.github.com/user"
+      scopes:
+        - "read:user"
+        - "user:email"
+
+# IMPORTANT: Remember to configure redirect URIs in your OAuth2 provider:
+# - Google: http://localhost:8080/auth/oauth2/google/callback
+# - GitHub: http://localhost:8080/auth/oauth2/github/callback
+# - Discord: http://localhost:8080/auth/oauth2/discord/callback
