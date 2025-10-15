@@ -367,18 +367,28 @@ impl MoorDB {
                         break;
                     }
 
-                    if let Ok(msg) = usage_recv.try_recv() {
-                        msg.send(this.usage_bytes())
-                            .map_err(|e| warn!("{}", e))
-                            .ok();
+                    // Use selector to block on both channels simultaneously
+                    enum DbMessage {
+                        Commit(CommitSet),
+                        Usage(oneshot::Sender<usize>),
                     }
 
-                    let msg = receiver.recv_timeout(Duration::from_millis(100));
-                    let (ws, reply) = match msg {
-                        Ok(CommitSet::CommitWrites(ws, reply)) => {
-                            (ws, reply)
+                    let selector = flume::Selector::new()
+                        .recv(&receiver, |result| {
+                            result.ok().map(DbMessage::Commit)
+                        })
+                        .recv(&usage_recv, |result| {
+                            result.ok().map(DbMessage::Usage)
+                        });
+
+                    let (ws, reply) = match selector.wait_timeout(Duration::from_millis(1000)) {
+                        Ok(Some(DbMessage::Usage(reply))) => {
+                            reply.send(this.usage_bytes())
+                                .map_err(|e| warn!("{}", e))
+                                .ok();
+                            continue;
                         }
-                        Ok(CommitSet::CommitReadOnly(combined_caches)) => {
+                        Ok(Some(DbMessage::Commit(CommitSet::CommitReadOnly(combined_caches)))) => {
                             if combined_caches.has_changed() {
                                 this.caches.store(Arc::new(combined_caches));
                             }
@@ -386,11 +396,13 @@ impl MoorDB {
                             // wait for write transactions when creating snapshots
                             continue;
                         }
-                        Err(flume::RecvTimeoutError::Timeout) => {
-                            continue;
+                        Ok(Some(DbMessage::Commit(CommitSet::CommitWrites(ws, reply)))) => {
+                            // Process commit below
+                            (ws, reply)
                         }
-                        Err(flume::RecvTimeoutError::Disconnected) => {
-                            break;
+                        Ok(None) | Err(_) => {
+                            // Timeout or channel disconnected
+                            continue;
                         }
                     };
 
