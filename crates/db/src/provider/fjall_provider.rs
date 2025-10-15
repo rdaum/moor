@@ -177,7 +177,7 @@ where
                     if ks.load(std::sync::atomic::Ordering::SeqCst) {
                         break;
                     }
-                    match ops_rx.recv_timeout(Duration::from_millis(5)) {
+                    match ops_rx.recv() {
                         Ok(WriteOp::Insert(key_bytes, value, domain)) => {
                             // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual write
@@ -214,7 +214,8 @@ where
                             reply.send(()).ok();
                         }
                         Err(_e) => {
-                            continue;
+                            // Channel closed, exit thread
+                            break;
                         }
                     }
                 }
