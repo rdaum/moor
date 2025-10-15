@@ -18,6 +18,7 @@ members = [
     "crates/textdump",
     "crates/var",
     "crates/web-host",
+    "tools/moor-admin",
     "tools/moorc",
 ]
 default-members = [
@@ -39,6 +40,7 @@ default-members = [
     "crates/testing/load-tools",
     "crates/curl-worker",
     "tools/moorc",
+    "tools/moor-admin",
 ]
 
 [workspace.package]
@@ -202,4 +204,5 @@ test_each_file = "0.3"
 unindent = "0.2"
 
 # Terminal & UI
+rustyline = "17.0"
 termimad = "0.34"

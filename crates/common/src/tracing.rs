@@ -29,16 +29,14 @@ use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 /// * `Ok(())` on successful initialization
 /// * `Err(eyre::Report)` if tracing initialization fails
 pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            if debug_fallback {
-                "debug".into()
-            } else {
-                "info".into()
-            }
-        })
-        // Suppress gdt-cpus permission denied spam when CAP_SYS_NICE is not available
-        .add_directive("gdt_cpus=off".parse().unwrap());
+    let filter = if let Ok(env_filter) = EnvFilter::try_from_default_env() {
+        // User has set RUST_LOG, respect it but still suppress gdt_cpus
+        env_filter.add_directive("gdt_cpus=off".parse().unwrap())
+    } else {
+        // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
+        let level = if debug_fallback { "debug" } else { "info" };
+        EnvFilter::new(format!("{},gdt_cpus=off", level))
+    };
 
     tracing_subscriber::registry()
         .with(
@@ -68,16 +66,14 @@ pub fn init_tracing(debug_fallback: bool) -> Result<(), eyre::Report> {
 /// * `Ok(())` on successful initialization
 /// * `Err(eyre::Report)` if tracing initialization fails
 pub fn init_tracing_simple(debug_fallback: bool) -> Result<(), eyre::Report> {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            if debug_fallback {
-                "debug".into()
-            } else {
-                "info".into()
-            }
-        })
-        // Suppress gdt-cpus permission denied spam when CAP_SYS_NICE is not available
-        .add_directive("gdt_cpus=off".parse().unwrap());
+    let filter = if let Ok(env_filter) = EnvFilter::try_from_default_env() {
+        // User has set RUST_LOG, respect it but still suppress gdt_cpus
+        env_filter.add_directive("gdt_cpus=off".parse().unwrap())
+    } else {
+        // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
+        let level = if debug_fallback { "debug" } else { "info" };
+        EnvFilter::new(format!("{},gdt_cpus=off", level))
+    };
 
     tracing_subscriber::registry()
         .with(
