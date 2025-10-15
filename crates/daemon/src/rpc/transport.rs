@@ -112,7 +112,7 @@ impl RpcTransport {
             }
 
             let poll_result = rpc_socket
-                .poll(zmq::POLLIN, 100)
+                .poll(zmq::POLLIN, 1000)
                 .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
             if poll_result == 0 {
                 continue;
@@ -386,7 +386,7 @@ impl Transport for RpcTransport {
                 return Ok(());
             }
 
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(1000));
         }
     }
     /// Publish narrative events to clients
