@@ -37,3 +37,6 @@ web-host-production.yaml
 
 # Docker Compose environment-specific overrides
 docker-compose.override.yml
+
+# Production deployment directory (contains secrets, configs, scripts)
+prod/

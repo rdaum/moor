@@ -31,17 +31,82 @@ use rpc_common::{
     mk_detach_msg, mk_eval_msg, mk_request_sys_prop_msg, mk_resolve_msg,
 };
 use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
 use tmq::{request, subscribe};
+use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-/// Perform async reverse DNS lookup for an IP address
+/// Extract the real client IP address from proxy headers or ConnectInfo
+/// Checks X-Real-IP and X-Forwarded-For headers first (for nginx/proxy setups),
+/// then falls back to the direct connection address
+fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr {
+    // Try X-Real-IP header first (most direct)
+    if let Some(real_ip) = headers.get("X-Real-IP") {
+        let Ok(ip_str) = real_ip.to_str() else {
+            debug!("X-Real-IP header present but invalid UTF-8");
+            return connect_addr;
+        };
+
+        let Ok(ip) = ip_str.parse::<IpAddr>() else {
+            debug!("X-Real-IP header present but invalid IP: {}", ip_str);
+            return connect_addr;
+        };
+
+        let client_addr = SocketAddr::new(ip, connect_addr.port());
+        debug!(
+            "Using X-Real-IP: {} (from proxy, connect_addr was {})",
+            client_addr, connect_addr
+        );
+        return client_addr;
+    }
+
+    // Try X-Forwarded-For header (may contain multiple IPs, take the first)
+    if let Some(forwarded) = headers.get("X-Forwarded-For") {
+        let Ok(forwarded_str) = forwarded.to_str() else {
+            debug!("X-Forwarded-For header present but invalid UTF-8");
+            return connect_addr;
+        };
+
+        let Some(first_ip) = forwarded_str.split(',').next() else {
+            debug!("X-Forwarded-For header present but empty");
+            return connect_addr;
+        };
+
+        let Ok(ip) = first_ip.trim().parse::<IpAddr>() else {
+            debug!(
+                "X-Forwarded-For header present but invalid IP: {}",
+                first_ip
+            );
+            return connect_addr;
+        };
+
+        let client_addr = SocketAddr::new(ip, connect_addr.port());
+        debug!(
+            "Using X-Forwarded-For: {} (from proxy, connect_addr was {})",
+            client_addr, connect_addr
+        );
+        return client_addr;
+    }
+
+    // Fall back to direct connection address (no proxy)
+    debug!(
+        "No proxy headers found, using direct connection address: {}",
+        connect_addr
+    );
+    connect_addr
+}
+
+/// Perform async reverse DNS lookup for an IP address with timeout
 async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
     // Create a new resolver using system configuration
     let resolver = TokioResolver::builder_tokio()?.build();
 
-    // Perform reverse DNS lookup
-    let response = resolver.reverse_lookup(ip).await?;
+    // Perform reverse DNS lookup with 2 second timeout
+    let lookup_future = resolver.reverse_lookup(ip);
+    let response = timeout(Duration::from_secs(2), lookup_future)
+        .await
+        .map_err(|_| eyre::eyre!("DNS lookup timeout"))??;
 
     // Get the first hostname from the response
     if let Some(name) = response.iter().next() {
@@ -118,16 +183,22 @@ impl WebHost {
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
         // Perform reverse DNS lookup for hostname
+        debug!("Starting reverse DNS lookup for {}", peer_addr.ip());
         let hostname = match resolve_hostname(peer_addr.ip()).await {
             Ok(hostname) => {
                 debug!("Resolved {} to hostname: {}", peer_addr.ip(), hostname);
                 hostname
             }
-            Err(_) => {
-                debug!("Failed to resolve {}, using IP address", peer_addr.ip());
+            Err(e) => {
+                debug!(
+                    "Failed to resolve {} ({}), using IP address",
+                    peer_addr.ip(),
+                    e
+                );
                 peer_addr.to_string()
             }
         };
+        debug!("DNS lookup complete, continuing with attach");
 
         let content_types = vec![
             moor_rpc::Symbol {
@@ -487,26 +558,52 @@ async fn attach(
 
 /// Websocket upgrade handler for authenticated users who are connecting to an existing user
 pub async fn ws_connect_attach_handler(
-    ws: WebSocketUpgrade,
+    headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
+    ws: WebSocketUpgrade,
 ) -> impl IntoResponse + use<> {
-    info!("Connection from {}", addr);
+    debug!(
+        "ws_connect_attach_handler called, ConnectInfo addr: {}",
+        addr
+    );
+    let client_addr = get_client_addr(&headers, addr);
+    info!("WebSocket connection from {}", client_addr);
 
-    attach(ws, addr, moor_rpc::ConnectType::Connected, &ws_host, token).await
+    attach(
+        ws,
+        client_addr,
+        moor_rpc::ConnectType::Connected,
+        &ws_host,
+        token,
+    )
+    .await
 }
 
 /// Websocket upgrade handler for authenticated users who are connecting to a new user
 pub async fn ws_create_attach_handler(
-    ws: WebSocketUpgrade,
+    headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
+    ws: WebSocketUpgrade,
 ) -> impl IntoResponse + use<> {
-    info!("Connection from {}", addr);
+    debug!(
+        "ws_create_attach_handler called, ConnectInfo addr: {}",
+        addr
+    );
+    let client_addr = get_client_addr(&headers, addr);
+    info!("WebSocket connection from {}", client_addr);
 
-    attach(ws, addr, moor_rpc::ConnectType::Created, &ws_host, token).await
+    attach(
+        ws,
+        client_addr,
+        moor_rpc::ConnectType::Created,
+        &ws_host,
+        token,
+    )
+    .await
 }
 
 /// FlatBuffer version: GET /fb/objects/{object} - resolve object reference
