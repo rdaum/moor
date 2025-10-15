@@ -12,6 +12,7 @@
 //
 
 import { parse, renderHTML } from "@djot/djot";
+import { AnsiUp } from "ansi_up";
 import DOMPurify from "dompurify";
 import React, { useMemo } from "react";
 
@@ -39,11 +40,6 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             case "text/html": {
                 // For HTML, join array elements with newlines
                 const htmlContent = getContentString("\n");
-                console.log("HTML Content Received:", {
-                    raw: content,
-                    joined: htmlContent,
-                    contentType,
-                });
                 // Add hook to DOMPurify
                 DOMPurify.addHook("afterSanitizeElements", function(node) {
                     const element = node as Element;
@@ -132,8 +128,6 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
                 // Remove the hook after use to avoid affecting other calls
                 DOMPurify.removeHook("afterSanitizeElements");
-
-                console.log("HTML After Sanitization:", sanitizedHtml);
 
                 return (
                     <div
@@ -312,31 +306,30 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
             }
 
             case "text/plain":
-            default:
-                // For plain text, handle arrays by rendering each item as a separate line
-                if (Array.isArray(content)) {
-                    return (
-                        <div
-                            style={{
-                                whiteSpace: "pre-wrap",
-                                wordWrap: "break-word",
-                            }}
-                        >
-                            {content.map((item, index) => <div key={index}>{String(item)}</div>)}
-                        </div>
-                    );
-                }
+            default: {
+                // For plain text, convert ANSI codes to HTML and render safely
+                const plainContent = getContentString("\n");
+
+                // Convert ANSI escape codes to HTML using ansi_up
+                const ansi_up = new AnsiUp();
+                const htmlFromAnsi = ansi_up.ansi_to_html(plainContent);
+
+                // Sanitize the HTML output from ANSI conversion
+                const sanitizedAnsiHtml = DOMPurify.sanitize(htmlFromAnsi, {
+                    ALLOWED_TAGS: ["span", "div", "br"],
+                    ALLOWED_ATTR: ["style", "class"],
+                });
 
                 return (
                     <div
+                        dangerouslySetInnerHTML={{ __html: sanitizedAnsiHtml }}
                         style={{
                             whiteSpace: "pre-wrap",
                             wordWrap: "break-word",
                         }}
-                    >
-                        {String(content)}
-                    </div>
+                    />
                 );
+            }
         }
     }, [content, contentType]);
 

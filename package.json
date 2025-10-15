@@ -55,6 +55,7 @@
     "@djot/djot": "^0.3.2",
     "@monaco-editor/react": "^4.7.0",
     "age-encryption": "^0.2.4",
+    "ansi_up": "^6.0.6",
     "argon2-browser": "^1.18.0",
     "dompurify": "^3.2.6",
     "flatbuffers": "^25.9.23",
