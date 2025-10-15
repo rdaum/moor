@@ -152,6 +152,9 @@ impl From<WorldStateError> for Error {
 pub trait WorldState: Send {
     // TODO: Combine worldstate owner & flags check into one call, to make perms check more efficient
 
+    /// Get the set of all valid objects in the world.
+    fn all_objects(&self) -> Result<ObjSet, WorldStateError>;
+
     /// Get the set of all objects which are 'players' in the world.
     fn players(&self) -> Result<ObjSet, WorldStateError>;
 

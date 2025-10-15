@@ -163,6 +163,10 @@ impl DbWorldState {
 }
 
 impl WorldState for DbWorldState {
+    fn all_objects(&self) -> Result<ObjSet, WorldStateError> {
+        self.get_tx().get_objects()
+    }
+
     fn players(&self) -> Result<ObjSet, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.players);
         self.get_tx().get_players()

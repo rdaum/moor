@@ -398,7 +398,9 @@ impl Task {
                             return None;
                         };
 
-                        warn!(
+                        // Debug level - this is normal when handle_uncaught_error doesn't exist or returns false
+                        // The exception itself is already being handled and reported to the client
+                        tracing::debug!(
                             task_id = self.task_id,
                             ?original_exception,
                             "Task exception (handle_uncaught_error returned false)"
