@@ -84,8 +84,8 @@ export const useMCPHandler = (
 
     // Handle narrative messages that might be MCP commands or spool content
     const handleNarrativeMessage = useCallback((content: string, isHistorical: boolean = false) => {
-        // Handle null/undefined content
-        if (!content || typeof content !== "string") {
+        // Handle null/undefined content (but allow empty strings!)
+        if (content === null || content === undefined || typeof content !== "string") {
             return false; // Let it pass through if content is invalid
         }
 
