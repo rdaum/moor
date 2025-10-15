@@ -432,7 +432,8 @@ impl Completer for MooAdminHelper {
 
             let obj_str = before_colon[obj_str_start..].trim();
 
-            let Ok(obj) = parse_objref(obj_str) else {
+            let Ok(obj) = parse_objref_with_db(obj_str, Some(self.database.as_ref().as_ref()))
+            else {
                 return Ok((pos, vec![]));
             };
 
@@ -465,7 +466,8 @@ impl Completer for MooAdminHelper {
             };
 
             let obj_str = before_dot[obj_str_start..].trim();
-            let Ok(obj) = parse_objref(obj_str) else {
+            let Ok(obj) = parse_objref_with_db(obj_str, Some(self.database.as_ref().as_ref()))
+            else {
                 return Ok((pos, vec![]));
             };
 
@@ -582,11 +584,45 @@ fn format_scheduler_error(err: &SchedulerError) -> String {
     }
 }
 
-/// Parse an object reference like "#123" into an Obj
-fn parse_objref(s: &str) -> Result<Obj, Report> {
+/// Parse an object reference with optional database for $property resolution
+/// Supports "#123" format and "$player" format (which looks up #0.player)
+fn parse_objref_with_db(s: &str, database: Option<&dyn Database>) -> Result<Obj, Report> {
     let s = s.trim();
+
+    if let Some(prop_name) = s.strip_prefix('$') {
+        // $property reference - need database to resolve
+        let Some(db) = database else {
+            bail!("Cannot resolve $property references without database access");
+        };
+
+        if prop_name.is_empty() {
+            bail!("Invalid $property reference: missing property name");
+        }
+
+        let tx = db
+            .new_world_state()
+            .map_err(|e| eyre!("Failed to access database: {}", e))?;
+
+        let system_obj = Obj::mk_id(0);
+        let prop_symbol = Symbol::mk(prop_name);
+
+        let value = tx
+            .retrieve_property(&SYSTEM_OBJECT, &system_obj, prop_symbol)
+            .map_err(|e| eyre!("Failed to retrieve property ${}: {:?}", prop_name, e))?;
+
+        let Some(obj) = value.as_object() else {
+            bail!(
+                "Property ${} is not an object reference (value: {})",
+                prop_name,
+                to_literal(&value)
+            );
+        };
+
+        return Ok(obj);
+    }
+
     if !s.starts_with('#') {
-        bail!("Object reference must start with '#'");
+        bail!("Object reference must start with '#' or '$'");
     }
     let num_str = &s[1..];
     let num: i32 = num_str
@@ -595,24 +631,24 @@ fn parse_objref(s: &str) -> Result<Obj, Report> {
     Ok(Obj::mk_id(num))
 }
 
-/// Parse "#OBJ.PROP" into (object, property_name)
-fn parse_propref(s: &str) -> Result<(Obj, Symbol), Report> {
+/// Parse "#OBJ.PROP" or "$obj.PROP" into (object, property_name)
+fn parse_propref(s: &str, database: Option<&dyn Database>) -> Result<(Obj, Symbol), Report> {
     let parts: Vec<&str> = s.splitn(2, '.').collect();
     if parts.len() != 2 {
-        bail!("Property reference must be in format #OBJ.PROP");
+        bail!("Property reference must be in format #OBJ.PROP or $obj.PROP");
     }
-    let obj = parse_objref(parts[0])?;
+    let obj = parse_objref_with_db(parts[0], database)?;
     let prop = Symbol::mk(parts[1]);
     Ok((obj, prop))
 }
 
-/// Parse "#OBJ:VERB" into (object, verb_name)
-fn parse_verbref(s: &str) -> Result<(Obj, Symbol), Report> {
+/// Parse "#OBJ:VERB" or "$obj:VERB" into (object, verb_name)
+fn parse_verbref(s: &str, database: Option<&dyn Database>) -> Result<(Obj, Symbol), Report> {
     let parts: Vec<&str> = s.splitn(2, ':').collect();
     if parts.len() != 2 {
-        bail!("Verb reference must be in format #OBJ:VERB");
+        bail!("Verb reference must be in format #OBJ:VERB or $obj:VERB");
     }
-    let obj = parse_objref(parts[0])?;
+    let obj = parse_objref_with_db(parts[0], database)?;
     let verb = Symbol::mk(parts[1]);
     Ok((obj, verb))
 }
@@ -659,8 +695,13 @@ fn eval_expression(
 }
 
 /// Get a property value directly from the database
-fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
-    let (obj, prop) = parse_propref(args)?;
+fn cmd_get(
+    scheduler_client: &SchedulerClient,
+    wizard: &Obj,
+    database: &dyn Database,
+    args: &str,
+) -> Result<(), Report> {
+    let (obj, prop) = parse_propref(args, Some(database))?;
 
     info!(
         "Getting property {} on {}",
@@ -701,7 +742,12 @@ fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
 }
 
 /// Set a property value
-fn cmd_set(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
+fn cmd_set(
+    scheduler_client: &SchedulerClient,
+    wizard: &Obj,
+    database: &dyn Database,
+    args: &str,
+) -> Result<(), Report> {
     // Try to parse with '=' first, fall back to space-separated
     let (propref, value_expr) = if args.contains('=') {
         let parts: Vec<&str> = args.splitn(2, '=').collect();
@@ -718,7 +764,7 @@ fn cmd_set(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
         (parts[0].trim(), parts[1].trim())
     };
 
-    let (obj, prop) = parse_propref(propref)?;
+    let (obj, prop) = parse_propref(propref, Some(database))?;
 
     info!(
         "Setting property {} on {} to {}",
@@ -762,34 +808,15 @@ fn cmd_set(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
 }
 
 /// List all properties on an object
-fn cmd_props(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
-    let obj = parse_objref(args.trim())?;
+fn cmd_props(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let obj = parse_objref_with_db(args.trim(), Some(database))?;
     info!("Listing properties on {}", obj.to_literal());
 
-    let code = format!("return properties({});", obj.to_literal());
-    let session = Arc::new(ConsoleSession::new());
-    let features = Arc::new(FeaturesConfig::default());
+    let tx = database.new_world_state()?;
 
-    let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, session, features)
-        .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
-
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
-
-    let Ok(TaskResult::Result(value)) = result else {
-        if let Err(e) = result {
-            eprintln!("{}", format_scheduler_error(&e));
-            bail!("Failed to list properties");
-        }
-        bail!("Unexpected result");
-    };
-
-    let Some(props) = value.as_list() else {
-        bail!("properties() did not return a list");
-    };
+    let props = tx
+        .properties(wizard, &obj)
+        .map_err(|e| eyre!("Failed to get properties: {:?}", e))?;
 
     let skin = create_skin();
 
@@ -799,10 +826,7 @@ fn cmd_props(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Re
     markdown.push_str("|---|\n");
 
     for prop in props.iter() {
-        let Some(s) = prop.as_string() else {
-            continue;
-        };
-        markdown.push_str(&format!("|{}|\n", s));
+        markdown.push_str(&format!("|{}|\n", prop.name().as_string()));
     }
 
     markdown.push_str(&format!("\n*{} properties*\n", props.len()));
@@ -812,50 +836,31 @@ fn cmd_props(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Re
 }
 
 /// List all verbs on an object
-fn cmd_verbs(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
-    let obj = parse_objref(args.trim())?;
+fn cmd_verbs(database: &dyn Database, wizard: &Obj, args: &str) -> Result<(), Report> {
+    let obj = parse_objref_with_db(args.trim(), Some(database))?;
     info!("Listing verbs on {}", obj.to_literal());
 
-    let code = format!("return verbs({});", obj.to_literal());
-    let session = Arc::new(ConsoleSession::new());
-    let features = Arc::new(FeaturesConfig::default());
+    let tx = database.new_world_state()?;
 
-    let handle = scheduler_client
-        .submit_eval_task(wizard, wizard, code, session, features)
-        .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
-
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
-
-    let Ok(TaskResult::Result(value)) = result else {
-        if let Err(e) = result {
-            eprintln!("{}", format_scheduler_error(&e));
-            bail!("Failed to list verbs");
-        }
-        bail!("Unexpected result");
-    };
-
-    let Some(verb_list) = value.as_list() else {
-        bail!("verbs() did not return a list");
-    };
+    let verbs = tx
+        .verbs(wizard, &obj)
+        .map_err(|e| eyre!("Failed to get verbs: {:?}", e))?;
 
     let skin = create_skin();
 
-    // Build markdown table - verbs() returns a simple list of strings
+    // Build markdown table
     let mut markdown = format!("# Verbs on {}\n\n", obj.to_literal());
     markdown.push_str("|Verb|\n");
     markdown.push_str("|---|\n");
 
-    for verb_name in verb_list.iter() {
-        let Some(verb_str) = verb_name.as_string() else {
-            continue;
-        };
-        markdown.push_str(&format!("|**{}**|\n", verb_str));
+    for verb in verbs.iter() {
+        // Get the first name of the verb
+        if let Some(name) = verb.names().first() {
+            markdown.push_str(&format!("|**{}**|\n", name.as_string()));
+        }
     }
 
-    markdown.push_str(&format!("\n*{} verbs*\n", verb_list.len()));
+    markdown.push_str(&format!("\n*{} verbs*\n", verbs.len()));
 
     println!("{}", skin.term_text(&markdown));
     Ok(())
@@ -865,10 +870,11 @@ fn cmd_verbs(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Re
 fn cmd_prog(
     scheduler_client: &SchedulerClient,
     wizard: &Obj,
+    database: &dyn Database,
     args: &str,
     rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
 ) -> Result<(), Report> {
-    let (obj, verb) = parse_verbref(args)?;
+    let (obj, verb) = parse_verbref(args, Some(database))?;
     info!(
         "Programming verb {} on {}",
         verb.as_string(),
@@ -959,7 +965,7 @@ fn cmd_prog(
 
 /// Switch to a different player object
 fn cmd_su(database: &dyn Database, args: &str) -> Result<Obj, Report> {
-    let obj = parse_objref(args.trim())?;
+    let obj = parse_objref_with_db(args.trim(), Some(database))?;
     info!("Attempting to switch to object {}", obj.to_literal());
 
     let tx = database.new_world_state()?;
@@ -985,8 +991,13 @@ fn cmd_su(database: &dyn Database, args: &str) -> Result<Obj, Report> {
 }
 
 /// List a verb's code
-fn cmd_list(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Result<(), Report> {
-    let (obj, verb) = parse_verbref(args)?;
+fn cmd_list(
+    scheduler_client: &SchedulerClient,
+    wizard: &Obj,
+    database: &dyn Database,
+    args: &str,
+) -> Result<(), Report> {
+    let (obj, verb) = parse_verbref(args, Some(database))?;
     info!("Listing verb {} on {}", verb.as_string(), obj.to_literal());
 
     let code = format!(
@@ -1090,7 +1101,9 @@ Type `help` for available commands or `quit` to deactivate.
                     // Eval expression or execute code block
                     if let Some(code) = line.strip_prefix(";;") {
                         // ;; executes code as-is without wrapping in return
-                        let session_result = session_factory.clone().mk_background_session(&current_wizard);
+                        let session_result = session_factory
+                            .clone()
+                            .mk_background_session(&current_wizard);
 
                         let Ok(session) =
                             session_result.map_err(|e| eyre!("Failed to create session: {:?}", e))
@@ -1139,32 +1152,53 @@ Type `help` for available commands or `quit` to deactivate.
                     }
                 } else if line.starts_with("get ") {
                     let args = line.strip_prefix("get ").unwrap().trim();
-                    if let Err(e) = cmd_get(&scheduler_client, &current_wizard, args) {
+                    if let Err(e) = cmd_get(
+                        &scheduler_client,
+                        &current_wizard,
+                        database.as_ref().as_ref(),
+                        args,
+                    ) {
                         error!("Get failed: {}", e);
                     }
                 } else if line.starts_with("set ") {
                     let args = line.strip_prefix("set ").unwrap().trim();
-                    if let Err(e) = cmd_set(&scheduler_client, &current_wizard, args) {
+                    if let Err(e) = cmd_set(
+                        &scheduler_client,
+                        &current_wizard,
+                        database.as_ref().as_ref(),
+                        args,
+                    ) {
                         error!("Set failed: {}", e);
                     }
                 } else if line.starts_with("props ") {
                     let args = line.strip_prefix("props ").unwrap().trim();
-                    if let Err(e) = cmd_props(&scheduler_client, &current_wizard, args) {
+                    if let Err(e) = cmd_props(database.as_ref().as_ref(), &current_wizard, args) {
                         error!("Props failed: {}", e);
                     }
                 } else if line.starts_with("verbs ") {
                     let args = line.strip_prefix("verbs ").unwrap().trim();
-                    if let Err(e) = cmd_verbs(&scheduler_client, &current_wizard, args) {
+                    if let Err(e) = cmd_verbs(database.as_ref().as_ref(), &current_wizard, args) {
                         error!("Verbs failed: {}", e);
                     }
                 } else if line.starts_with("prog ") {
                     let args = line.strip_prefix("prog ").unwrap().trim();
-                    if let Err(e) = cmd_prog(&scheduler_client, &current_wizard, args, &mut rl) {
+                    if let Err(e) = cmd_prog(
+                        &scheduler_client,
+                        &current_wizard,
+                        database.as_ref().as_ref(),
+                        args,
+                        &mut rl,
+                    ) {
                         error!("Prog failed: {}", e);
                     }
                 } else if line.starts_with("list ") {
                     let args = line.strip_prefix("list ").unwrap().trim();
-                    if let Err(e) = cmd_list(&scheduler_client, &current_wizard, args) {
+                    if let Err(e) = cmd_list(
+                        &scheduler_client,
+                        &current_wizard,
+                        database.as_ref().as_ref(),
+                        args,
+                    ) {
                         error!("List failed: {}", e);
                     }
                 } else if line.starts_with("su ") {

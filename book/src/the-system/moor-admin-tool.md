@@ -80,6 +80,15 @@ Type help for available commands or quit to deactivate.
 
 The prompt shows the wizard object you're operating as (e.g., `(#2):`).
 
+### Object Reference Syntax
+
+Throughout moor-admin, you can reference objects in two ways:
+
+- **Direct reference:** `#123` - References object with ID 123
+- **Property reference:** `$player` - Looks up the value of `#0.player` property
+
+Property references (`$name`) are resolved by reading the property `name` from system object `#0`. This matches MOO syntax and allows you to use symbolic names instead of hardcoded object IDs. For example, if `#0.wiz` contains `#2`, then you can use `$wiz` anywhere you would use `#2`.
+
 ## Available Commands
 
 ### Basic Commands
@@ -123,11 +132,14 @@ Execute MOO expressions and code blocks directly:
 (#2): get #1.name
 #1.name = "Root Object"
 
+(#2): get $player.name
+$player.name = "Wizard"
+
 (#2): set #1.description = "The root of all objects"
 ✓ Property #1.description set successfully
 
-(#2): props #1
-# Properties on #1
+(#2): props $player
+# Properties on #2
 
 |Property|
 |--------|
@@ -157,6 +169,7 @@ name  description  programmer  wizard  ...
 | Command | Description |
 |---------|-------------|
 | `su #OBJ` | Switch to a different player object |
+| `su $property` | Switch to player referenced by #0.property |
 
 The `su` command allows you to change the wizard/player object you're operating as. This is useful when you need to test permissions, debug player-specific issues, or perform operations as a different user.
 
@@ -164,7 +177,11 @@ The `su` command allows you to change the wizard/player object you're operating 
 - The target object must exist in the database
 - The target object must have the User flag set (must be a player object)
 
-**Example:**
+**Object Reference Formats:**
+- `#123` - Direct object ID reference
+- `$player` - Property reference (looks up `#0.player`)
+
+**Examples:**
 ```moo
 (#2): su #3
 ✓ Switched to player #3
@@ -172,13 +189,13 @@ The `su` command allows you to change the wizard/player object you're operating 
 (#3): get #3.name
 #3.name = "Programmer"
 
-(#3): su #2
+(#3): su $wiz
 ✓ Switched to player #2
 
 (#2):
 ```
 
-**Note:** The prompt updates to show the current wizard object you're operating as.
+**Note:** The prompt updates to show the current wizard object you're operating as. Property references (`$name`) work by looking up the property on system object `#0`.
 
 **Examples:**
 ```moo
