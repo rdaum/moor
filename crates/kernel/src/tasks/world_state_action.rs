@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
+use moor_common::model::{ObjAttrs, ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_var::{Obj, Symbol, Var};
 use uuid::Uuid;
 
@@ -72,14 +72,21 @@ pub enum WorldStateAction {
 
     /// Request all objects in the database
     RequestAllObjects { player: Obj },
-    // TODO: Add more operations
-    // Future additions might include:
-    // - CreateObject
-    // - SetProperty
-    // - AddVerb
-    // - DeleteVerb
-    // - UpdateVerbFlags
-    // - MoveObject
+
+    /// List all objects with metadata (for object browser)
+    ListObjects { player: Obj },
+
+    /// Update a property value
+    UpdateProperty {
+        player: Obj,
+        perms: Obj,
+        obj: ObjectRef,
+        property: Symbol,
+        value: Var,
+    },
+
+    /// Get flags for a specific object
+    GetObjectFlags { obj: Obj },
 }
 
 /// A request wrapper that includes a correlation ID for tracking
@@ -128,6 +135,15 @@ pub enum WorldStateResult {
 
     /// Result of RequestAllObjects
     AllObjects(Vec<Obj>),
+
+    /// Result of ListObjects - returns (obj, attrs, verbs_count, props_count)
+    ObjectsList(Vec<(Obj, ObjAttrs, usize, usize)>),
+
+    /// Result of UpdateProperty
+    PropertyUpdated,
+
+    /// Result of GetObjectFlags
+    ObjectFlags(u16),
 }
 
 impl WorldStateRequest {

@@ -22,6 +22,7 @@ import { EncryptionSetupPrompt } from "./components/EncryptionSetupPrompt";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeRef } from "./components/Narrative";
+import { ObjectBrowser } from "./components/ObjectBrowser";
 import { PropertyEditor } from "./components/PropertyEditor";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ThemeProvider } from "./components/ThemeProvider";
@@ -42,6 +43,9 @@ import { MoorRemoteObject } from "./lib/rpc";
 import { oidRef } from "./lib/var";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
+
+// ObjFlag enum values (must match server-side ObjFlag::Programmer = 1)
+const OBJFLAG_PROGRAMMER = 1 << 1; // Bit position 1 -> value 2
 
 // Simple React App component to test the setup
 function AppContent({
@@ -82,6 +86,7 @@ function AppContent({
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+    const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [userSkippedEncryption, setUserSkippedEncryption] = useState(false);
@@ -300,6 +305,7 @@ function AppContent({
         // Check for auth token (existing user flow)
         const authToken = urlParams.get("auth_token");
         const playerOid = urlParams.get("player");
+        const flagsParam = urlParams.get("flags");
         if (authToken && playerOid) {
             // Clear URL parameters immediately
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -307,6 +313,9 @@ function AppContent({
             // Store in localStorage so useAuth can pick it up (persists across reloads)
             localStorage.setItem("oauth2_auth_token", authToken);
             localStorage.setItem("oauth2_player_oid", playerOid);
+            if (flagsParam) {
+                localStorage.setItem("oauth2_player_flags", flagsParam);
+            }
 
             showMessage("Logged in successfully via OAuth2!", 2);
         }
@@ -369,9 +378,12 @@ function AppContent({
                 // Clear OAuth2 user info
                 setOAuth2UserInfo(null);
 
-                // Store credentials in localStorage for useAuth to pick up (persists across reloads)
+                // Store credentials in localStorage for useAuth to pick it up (persists across reloads)
                 localStorage.setItem("oauth2_auth_token", result.auth_token);
                 localStorage.setItem("oauth2_player_oid", result.player);
+                if (result.player_flags !== undefined) {
+                    localStorage.setItem("oauth2_player_flags", result.player_flags.toString());
+                }
 
                 showMessage(`Account ${choice.mode === "oauth2_create" ? "created" : "linked"}! Connecting...`, 2);
 
@@ -661,7 +673,22 @@ function AppContent({
             />
 
             {/* Top navigation bar - only show when connected */}
-            {isConnected && <TopNavBar onSettingsToggle={() => setIsSettingsOpen(true)} />}
+            {isConnected && (
+                <>
+                    {console.log(
+                        "[ObjectBrowser] Player flags:",
+                        authState.player?.flags,
+                        "Has Programmer?",
+                        !!(authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)),
+                    )}
+                    <TopNavBar
+                        onSettingsToggle={() => setIsSettingsOpen(true)}
+                        onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
+                            ? () => setIsObjectBrowserOpen(true)
+                            : undefined}
+                    />
+                </>
+            )}
 
             {/* Settings panel */}
             <SettingsPanel
@@ -866,6 +893,16 @@ function AppContent({
                     }}
                 />
             )}
+
+            {/* Object Browser - only show for Programmer players */}
+            {isConnected && authState.player?.authToken && authState.player.flags
+                && (authState.player.flags & OBJFLAG_PROGRAMMER) && (
+                <ObjectBrowser
+                    visible={isObjectBrowserOpen}
+                    onClose={() => setIsObjectBrowserOpen(false)}
+                    authToken={authState.player.authToken}
+                />
+            )}
         </div>
     );
 }
@@ -898,7 +935,7 @@ function EncryptionWrapper() {
 }
 
 function AppWrapper() {
-    const { authState, setPlayerConnected } = useAuthContext();
+    const { authState, setPlayerConnected, setPlayerFlags } = useAuthContext();
     const { addPresentation, removePresentation } = usePresentationContext();
     const { showMessage } = useSystemMessage();
     const narrativeRef = useRef<NarrativeRef>(null);
@@ -1027,6 +1064,7 @@ function AppWrapper() {
             player={authState.player}
             showMessage={showMessage}
             setPlayerConnected={setPlayerConnected}
+            setPlayerFlags={setPlayerFlags}
             handleNarrativeMessage={handleNarrativeMessage}
             handlePresentMessage={handlePresentMessage}
             handleUnpresentMessage={handleUnpresentMessage}

@@ -451,3 +451,39 @@ pub fn mk_invoke_verb_msg(
         })),
     })
 }
+
+/// Build a ListObjects message
+#[inline]
+pub fn mk_list_objects_msg(
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::ListObjects(Box::new(rpc::ListObjects {
+            client_token: client_token_fb(client_token),
+            auth_token: auth_token_fb(auth_token),
+        })),
+    }
+}
+
+/// Build an UpdateProperty message
+#[inline]
+pub fn mk_update_property_msg(
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+    object: &ObjectRef,
+    property: &Symbol,
+    value: &Var,
+) -> Option<rpc::HostClientToDaemonMessage> {
+    Some(rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::UpdateProperty(Box::new(
+            rpc::UpdateProperty {
+                client_token: client_token_fb(client_token),
+                auth_token: auth_token_fb(auth_token),
+                object: objectref_fb(object),
+                property: symbol_fb(property),
+                value: var_fb(value)?,
+            },
+        )),
+    })
+}

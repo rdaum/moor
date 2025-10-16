@@ -467,7 +467,9 @@ union HostClientToDaemonMessageUnion {
     Detach,
     GetEventLogPublicKey,
     SetEventLogPublicKey,
-    DeleteEventLogHistory
+    DeleteEventLogHistory,
+    ListObjects,
+    UpdateProperty
 }
 
 table ConnectionEstablish {
@@ -625,6 +627,19 @@ table DeleteEventLogHistory {
     auth_token: AuthToken (required);
 }
 
+table ListObjects {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+}
+
+table UpdateProperty {
+    client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    object: MoorCommon.ObjectRef (required);
+    property: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
 table HostClientToDaemonMessage {
     message: HostClientToDaemonMessageUnion (required);
 }
@@ -654,7 +669,9 @@ union DaemonToClientReplyUnion {
     ClientAttributeSet,
     Disconnected,
     EventLogPublicKey,
-    EventLogHistoryDeleted
+    EventLogHistoryDeleted,
+    ListObjectsReply,
+    PropertyUpdated
 }
 
 table NewConnection {
@@ -667,12 +684,14 @@ table LoginResult {
     auth_token: AuthToken;
     connect_type: ConnectType;
     player: MoorCommon.Obj;
+    player_flags: uint16;  // BitEnum<ObjFlag> for player object
 }
 
 table AttachResult {
     success: bool;
     client_token: ClientToken;
     player: MoorCommon.Obj;
+    player_flags: uint16;  // BitEnum<ObjFlag> for player object
 }
 
 table SysPropValue {
@@ -743,6 +762,25 @@ table EventLogPublicKey {
 
 table EventLogHistoryDeleted {
     success: bool;
+}
+
+table ObjectInfo {
+    obj: MoorCommon.Obj (required);
+    name: MoorCommon.Symbol;  // Optional - object name if it has one
+    parent: MoorCommon.Obj;   // Optional - parent object
+    owner: MoorCommon.Obj (required);
+    flags: uint16;  // BitEnum<ObjFlag>
+    location: MoorCommon.Obj;  // Optional - current location
+    contents_count: uint32;
+    verbs_count: uint32;
+    properties_count: uint32;
+}
+
+table ListObjectsReply {
+    objects: [ObjectInfo] (required);
+}
+
+table PropertyUpdated {
 }
 
 table DaemonToClientReply {

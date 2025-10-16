@@ -25,6 +25,7 @@ export const useWebSocket = (
     player: Player | null,
     onSystemMessage: (message: string, duration?: number) => void,
     onPlayerConnectedChange?: (connected: boolean) => void,
+    onPlayerFlagsChange?: (flags: number) => void,
     onNarrativeMessage?: (
         content: string | string[],
         timestamp?: string,
@@ -66,6 +67,7 @@ export const useWebSocket = (
                         onNarrativeMessage,
                         onPresentMessage,
                         onUnpresentMessage,
+                        onPlayerFlagsChange,
                         lastEventTimestampRef,
                     );
                 } else {
@@ -75,7 +77,7 @@ export const useWebSocket = (
                 console.error("Failed to parse WebSocket message:", error);
             }
         });
-    }, [onSystemMessage, onNarrativeMessage, onPresentMessage, onUnpresentMessage]);
+    }, [onSystemMessage, onNarrativeMessage, onPresentMessage, onUnpresentMessage, onPlayerFlagsChange]);
 
     // Connect to WebSocket
     const connect = useCallback(async (mode: "connect" | "create") => {

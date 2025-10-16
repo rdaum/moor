@@ -11,12 +11,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+import * as flatbuffers from "flatbuffers";
 import { useCallback, useEffect, useState } from "react";
+import { ClientSuccess } from "../generated/moor-rpc/client-success";
+import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to-client-reply-union";
+import { LoginResult } from "../generated/moor-rpc/login-result";
+import { ReplyResult } from "../generated/moor-rpc/reply-result";
+import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union";
+import { objToString } from "../lib/var";
 
 export interface Player {
     oid: string;
     authToken: string;
     connected: boolean;
+    flags: number;
 }
 
 export interface AuthState {
@@ -38,12 +46,17 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         const oauth2PlayerOid = localStorage.getItem("oauth2_player_oid");
 
         if (oauth2Token && oauth2PlayerOid) {
+            // Get flags from localStorage (stored during OAuth2 login)
+            const oauth2Flags = localStorage.getItem("oauth2_player_flags");
+            const flags = oauth2Flags ? parseInt(oauth2Flags, 10) : 0;
+
             // Set auth state (keep credentials in localStorage for future sessions)
             setAuthState({
                 player: {
                     oid: oauth2PlayerOid,
                     authToken: oauth2Token,
                     connected: false,
+                    flags,
                 },
                 isConnecting: false,
                 error: null,
@@ -99,10 +112,12 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 return;
             }
 
-            // Parse authentication response
-            const loginResult = await result.text();
-            const loginComponents = loginResult.split(" ");
-            const playerOid = loginComponents[0];
+            // Parse FlatBuffer response
+            const arrayBuffer = await result.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const replyResult = ReplyResult.getRootAsReplyResult(
+                new flatbuffers.ByteBuffer(bytes),
+            );
             const authToken = result.headers.get("X-Moor-Auth-Token");
 
             // Validate authentication token
@@ -114,11 +129,88 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 return;
             }
 
+            // Extract player info from LoginResult
+            const resultType = replyResult.resultType();
+            if (resultType !== ReplyResultUnion.ClientSuccess) {
+                const error = `Authentication failed: ${ReplyResultUnion[resultType]}`;
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const clientSuccess = unionToReplyResultUnion(
+                resultType,
+                (obj) => replyResult.result(obj),
+            ) as ClientSuccess | null;
+
+            if (!clientSuccess) {
+                const error = "Authentication failed: Failed to parse response";
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const daemonReply = clientSuccess.reply();
+            if (!daemonReply) {
+                const error = "Authentication failed: Missing daemon reply";
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const replyType = daemonReply.replyType();
+            const replyUnion = unionToDaemonToClientReplyUnion(
+                replyType,
+                (obj: any) => daemonReply.reply(obj),
+            );
+
+            if (!replyUnion || !(replyUnion instanceof LoginResult)) {
+                const error = "Authentication failed: Invalid login result";
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const loginResult = replyUnion as LoginResult;
+
+            if (!loginResult.success()) {
+                const error = "Authentication failed: Login not successful";
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const playerObj = loginResult.player();
+            if (!playerObj) {
+                const error = "Authentication failed: No player object";
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const playerOid = objToString(playerObj);
+            if (!playerOid) {
+                const error = "Authentication failed: Invalid player object";
+                console.error(error);
+                onSystemMessage(error, 5);
+                setAuthState(prev => ({ ...prev, isConnecting: false, error }));
+                return;
+            }
+
+            const playerFlags = loginResult.playerFlags() || 0;
+
             // Update player state (authorized but not yet connected)
             const player: Player = {
                 oid: playerOid,
                 authToken,
                 connected: false,
+                flags: playerFlags,
             };
 
             setAuthState({
@@ -163,10 +255,18 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         }));
     }, []);
 
+    const setPlayerFlags = useCallback((flags: number) => {
+        setAuthState(prev => ({
+            ...prev,
+            player: prev.player ? { ...prev.player, flags } : null,
+        }));
+    }, []);
+
     return {
         authState,
         connect,
         disconnect,
         setPlayerConnected,
+        setPlayerFlags,
     };
 };

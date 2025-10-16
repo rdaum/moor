@@ -385,6 +385,12 @@ impl MessageHandler for RpcMessageHandler {
             HostClientToDaemonMessageUnionRef::DeleteEventLogHistory(req) => {
                 self.handle_delete_event_log_history(client_id, req)
             }
+            HostClientToDaemonMessageUnionRef::ListObjects(req) => {
+                self.handle_list_objects(scheduler_client, client_id, req)
+            }
+            HostClientToDaemonMessageUnionRef::UpdateProperty(req) => {
+                self.handle_update_property(scheduler_client, client_id, req)
+            }
         }
     }
 
@@ -842,7 +848,7 @@ impl RpcMessageHandler {
 
             if let Err(e) = self.submit_connected_task(
                 &handler_object,
-                scheduler_client,
+                scheduler_client.clone(),
                 client_id,
                 &player,
                 &connection,
@@ -851,6 +857,10 @@ impl RpcMessageHandler {
                 error!(error = ?e, "Error submitting user_connected task");
             }
         }
+
+        // Get player flags for client-side permission checks
+        let player_flags = scheduler_client.get_object_flags(&player).unwrap_or(0);
+
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::AttachResult(Box::new(moor_rpc::AttachResult {
                 success: true,
@@ -858,6 +868,7 @@ impl RpcMessageHandler {
                     token: client_token.0.clone(),
                 })),
                 player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                player_flags,
             })),
         })
     }
@@ -1792,6 +1803,95 @@ impl RpcMessageHandler {
         Ok(DaemonToClientReply {
             reply: DaemonToClientReplyUnion::EventLogHistoryDeleted(Box::new(
                 moor_rpc::EventLogHistoryDeleted { success },
+            )),
+        })
+    }
+
+    fn handle_list_objects(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        req: moor_rpc::ListObjectsRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &req,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        // Get list of all objects the player can see
+        let objects = scheduler_client.list_objects(&player).map_err(|e| {
+            error!(error = ?e, "Error listing objects");
+            RpcMessageError::EntityRetrievalError("error listing objects".to_string())
+        })?;
+
+        // Convert to ObjectInfo FlatBuffer structures
+        let object_infos: Result<Vec<_>, _> = objects
+            .iter()
+            .map(|(obj, attrs, verbs_count, props_count)| {
+                // Get contents count - for MVP we'll skip this expensive operation
+                let contents_count = 0;
+
+                Ok(moor_rpc::ObjectInfo {
+                    obj: Box::new(obj_to_flatbuffer_struct(obj)),
+                    name: attrs
+                        .name()
+                        .map(|n| Box::new(moor_rpc::Symbol { value: n })),
+                    parent: attrs
+                        .parent()
+                        .map(|p| Box::new(obj_to_flatbuffer_struct(&p))),
+                    owner: Box::new(obj_to_flatbuffer_struct(&attrs.owner().unwrap_or(*obj))),
+                    flags: attrs.flags().to_u16(),
+                    location: attrs
+                        .location()
+                        .map(|l| Box::new(obj_to_flatbuffer_struct(&l))),
+                    contents_count,
+                    verbs_count: *verbs_count as u32,
+                    properties_count: *props_count as u32,
+                })
+            })
+            .collect();
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::ListObjectsReply(Box::new(
+                moor_rpc::ListObjectsReply {
+                    objects: object_infos.map_err(|e: &str| {
+                        RpcMessageError::InternalError(format!("Failed to convert object: {e}"))
+                    })?,
+                },
+            )),
+        })
+    }
+
+    fn handle_update_property(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        req: moor_rpc::UpdatePropertyRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let (_connection, player) = self.extract_and_verify_tokens(
+            &req,
+            client_id,
+            |r| r.client_token(),
+            |r| r.auth_token(),
+        )?;
+
+        let object = extract_object_ref_rpc(&req, "object", |r| r.object())?;
+        let property = extract_symbol_rpc(&req, "property", |r| r.property())?;
+        let value = extract_var_rpc(&req, "value", |r| r.value())?;
+
+        // Update the property
+        scheduler_client
+            .update_property(&player, &player, &object, property, value)
+            .map_err(|e| {
+                error!(error = ?e, "Error updating property");
+                RpcMessageError::EntityRetrievalError("error updating property".to_string())
+            })?;
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::PropertyUpdated(Box::new(
+                moor_rpc::PropertyUpdated {},
             )),
         })
     }

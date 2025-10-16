@@ -524,6 +524,82 @@ impl SchedulerClient {
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
+
+    /// List all objects with metadata (for object browser)
+    pub fn list_objects(
+        &self,
+        player: &Obj,
+    ) -> Result<Vec<(Obj, moor_common::model::ObjAttrs, usize, usize)>, SchedulerError> {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
+
+        let action = WorldStateAction::ListObjects { player: *player };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::ObjectsList(objects),
+                ..
+            }) => Ok(objects),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
+    }
+
+    /// Get flags for a specific object
+    pub fn get_object_flags(&self, obj: &Obj) -> Result<u16, SchedulerError> {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
+
+        let action = WorldStateAction::GetObjectFlags { obj: *obj };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::ObjectFlags(flags),
+                ..
+            }) => Ok(flags),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
+    }
+
+    /// Update a property value
+    pub fn update_property(
+        &self,
+        player: &Obj,
+        perms: &Obj,
+        obj: &ObjectRef,
+        property: Symbol,
+        value: Var,
+    ) -> Result<(), SchedulerError> {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
+
+        let action = WorldStateAction::UpdateProperty {
+            player: *player,
+            perms: *perms,
+            obj: obj.clone(),
+            property,
+            value,
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::PropertyUpdated,
+                ..
+            }) => Ok(()),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
+    }
 }
 
 pub enum SchedulerClientMsg {

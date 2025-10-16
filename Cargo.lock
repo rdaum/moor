@@ -3255,6 +3255,7 @@ dependencies = [
  "futures-util",
  "hickory-resolver",
  "moor-common",
+ "moor-compiler",
  "moor-schema",
  "moor-var",
  "oauth2",

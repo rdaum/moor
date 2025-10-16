@@ -486,6 +486,31 @@ fn parse_literal_atom(
     }
 }
 
+/// Parse a single MOO literal value from a string
+/// Example: "123", "\"hello\"", "{1, 2, 3}", "[1 -> \"a\"]"
+pub fn parse_literal_value(literal_str: &str) -> Result<Var, ObjDefParseError> {
+    let mut context = ObjFileContext::new();
+    let mut pairs = match MooParser::parse(Rule::literal, literal_str) {
+        Ok(pairs) => pairs,
+        Err(e) => {
+            let ((line, column), end_line_col) = match e.line_col {
+                LineColLocation::Pos(lc) => (lc, None),
+                LineColLocation::Span(begin, end) => (begin, Some(end)),
+            };
+
+            return Err(VerbCompileError(CompileError::ParseError {
+                error_position: CompileContext::new((line, column)),
+                end_line_col,
+                context: e.line().to_string(),
+                message: e.variant.message().to_string(),
+            }));
+        }
+    };
+
+    let literal_pair = pairs.next().unwrap();
+    parse_literal(&mut context, literal_pair)
+}
+
 pub fn compile_object_definitions(
     objdef: &str,
     options: &CompileOptions,

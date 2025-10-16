@@ -256,6 +256,11 @@ fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Resu
             "/fb/properties/{object}/{name}",
             get(host::property_retrieval_handler),
         )
+        .route(
+            "/fb/properties/{object}/{name}",
+            post(host::update_property_handler),
+        )
+        .route("/fb/objects", get(host::list_objects_handler))
         .route("/fb/objects/{object}", get(host::resolve_objref_handler))
         .route("/fb/api/history", get(host::history_handler))
         .route("/fb/api/presentations", get(host::presentations_handler))

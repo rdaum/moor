@@ -15,6 +15,7 @@ mod auth;
 mod event_log;
 mod oauth2;
 mod oauth2_handlers;
+mod objects;
 mod props;
 mod verbs;
 pub mod web_host;
@@ -30,6 +31,7 @@ pub use oauth2_handlers::{
     OAuth2State, oauth2_account_choice_handler, oauth2_authorize_handler, oauth2_callback_handler,
     oauth2_config_handler,
 };
+pub use objects::{list_objects_handler, update_property_handler};
 pub use props::{properties_handler, property_retrieval_handler};
 pub use verbs::{invoke_verb_handler, verb_program_handler, verb_retrieval_handler, verbs_handler};
 pub use web_host::{

@@ -17,11 +17,12 @@ use crate::host::{
 };
 use axum::{
     Form,
+    body::Body,
     extract::{ConnectInfo, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
+use moor_schema::rpc as moor_rpc;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
 use serde_derive::Deserialize;
@@ -68,14 +69,14 @@ async fn auth_handler(
                 warn!("Authentication failed for {}", player);
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
-                    .body("".to_string())
+                    .body(Body::empty())
                     .unwrap();
             }
             Err(e) => {
                 error!("Unable to establish connection: {}", e);
                 return Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body("".to_string())
+                    .body(Body::empty())
                     .unwrap();
             }
         };
@@ -97,7 +98,8 @@ async fn auth_handler(
     let reply =
         moor_rpc::ReplyResultRef::read_as_root(&reply_bytes).expect("Failed to parse reply");
 
-    let (auth_token, player) = match reply.result().expect("Missing result") {
+    // Check if login was successful and extract auth_token
+    let auth_token = match reply.result().expect("Missing result") {
         moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
             let daemon_reply = client_success.reply().expect("Missing reply");
             match daemon_reply.reply().expect("Missing reply union") {
@@ -107,22 +109,12 @@ async fn auth_handler(
                             .auth_token()
                             .expect("Missing auth_token")
                             .expect("Missing auth token");
-                        let auth_token =
-                            AuthToken(auth_token_ref.token().expect("Missing token").to_string());
-                        let player_ref = login_result
-                            .player()
-                            .expect("Missing player")
-                            .expect("Missing player obj");
-                        let player_struct =
-                            moor_rpc::Obj::try_from(player_ref).expect("Failed to convert player");
-                        let player = obj_from_flatbuffer_struct(&player_struct)
-                            .expect("Failed to decode player");
-                        (auth_token, player)
+                        AuthToken(auth_token_ref.token().expect("Missing token").to_string())
                     } else {
                         error!("Login failed");
                         return Response::builder()
                             .status(StatusCode::UNAUTHORIZED)
-                            .body("".to_string())
+                            .body(Body::empty())
                             .unwrap();
                     }
                 }
@@ -130,7 +122,7 @@ async fn auth_handler(
                     error!("Unexpected reply type");
                     return Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body("".to_string())
+                        .body(Body::empty())
                         .unwrap();
                 }
             }
@@ -139,19 +131,10 @@ async fn auth_handler(
             error!("Login failed");
             return Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
-                .body("".to_string())
+                .body(Body::empty())
                 .unwrap();
         }
     };
-
-    // We now have a valid auth token for the player, so we return it in the response headers.
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "X-Moor-Auth-Token",
-        HeaderValue::from_str(&auth_token.0).expect("Invalid token"),
-    );
-
-    // We now need to wait for the login message completion.
 
     // We're done with this RPC connection, so we detach it.
     let detach_msg = moor_rpc::HostClientToDaemonMessage {
@@ -162,10 +145,12 @@ async fn auth_handler(
         .await
         .expect("Unable to send detach to RPC server");
 
+    // Return the entire ReplyResult FlatBuffer which includes player_flags
     Response::builder()
         .status(StatusCode::OK)
+        .header("Content-Type", "application/x-flatbuffer")
         .header("X-Moor-Auth-Token", auth_token.0)
-        .body(format!("{player} {auth_verb}"))
+        .body(Body::from(reply_bytes))
         .unwrap()
 }
 

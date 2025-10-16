@@ -317,6 +317,88 @@ impl WorldStateActionExecutor {
 
                 Ok(WorldStateResult::AllObjects(objects.iter().collect()))
             }
+
+            WorldStateAction::ListObjects { player } => {
+                use moor_common::model::ObjAttrs;
+
+                // Get all objects with metadata
+                let objects = self
+                    .tx
+                    .all_objects()
+                    .map_err(SchedulerError::PropertyRetrievalFailed)?;
+
+                let mut object_list = Vec::new();
+                for obj in objects.iter() {
+                    // Get individual attributes to build ObjAttrs
+                    let owner = self
+                        .tx
+                        .owner_of(&obj)
+                        .map_err(SchedulerError::PropertyRetrievalFailed)?;
+                    let parent = self
+                        .tx
+                        .parent_of(&player, &obj)
+                        .unwrap_or(moor_var::NOTHING);
+                    let location = self
+                        .tx
+                        .location_of(&player, &obj)
+                        .unwrap_or(moor_var::NOTHING);
+                    let flags = self
+                        .tx
+                        .flags_of(&obj)
+                        .map_err(SchedulerError::PropertyRetrievalFailed)?;
+                    let name = self.tx.name_of(&player, &obj).unwrap_or_default();
+
+                    // Construct ObjAttrs
+                    let attrs = ObjAttrs::new(owner, parent, location, flags, &name);
+
+                    // Count verbs
+                    let verbs = self
+                        .tx
+                        .verbs(&player, &obj)
+                        .map_err(SchedulerError::VerbRetrievalFailed)?;
+                    let verbs_count = verbs.len();
+
+                    // Count properties
+                    let props = self
+                        .tx
+                        .properties(&player, &obj)
+                        .map_err(SchedulerError::PropertyRetrievalFailed)?;
+                    let props_count = props.len();
+
+                    object_list.push((obj, attrs, verbs_count, props_count));
+                }
+
+                Ok(WorldStateResult::ObjectsList(object_list))
+            }
+
+            WorldStateAction::UpdateProperty {
+                player,
+                perms,
+                obj,
+                property,
+                value,
+            } => {
+                // Resolve the object reference
+                let object = match_object_ref(&player, &perms, &obj, self.tx.as_mut())
+                    .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
+
+                // Set the property value (this will check permissions internally)
+                self.tx
+                    .update_property(&perms, &object, property, &value)
+                    .map_err(SchedulerError::PropertyRetrievalFailed)?;
+
+                Ok(WorldStateResult::PropertyUpdated)
+            }
+
+            WorldStateAction::GetObjectFlags { obj } => {
+                // Get flags for the specified object (no permission check - flags are public)
+                let flags = self
+                    .tx
+                    .flags_of(&obj)
+                    .map_err(SchedulerError::PropertyRetrievalFailed)?;
+
+                Ok(WorldStateResult::ObjectFlags(flags.to_u16()))
+            }
         }
     }
 }

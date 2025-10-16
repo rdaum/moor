@@ -60,6 +60,7 @@ pub struct OAuth2LoginResponse {
     pub success: bool,
     pub auth_token: Option<String>,
     pub player: Option<String>,
+    pub player_flags: Option<u16>,
     pub error: Option<String>,
 }
 
@@ -250,11 +251,23 @@ pub async fn oauth2_callback_handler(
             return Redirect::to("/?error=internal_error").into_response();
         };
 
-        info!("Existing OAuth2 user logged in: {}", player_obj);
+        // Extract player flags
+        let Ok(player_flags) = login_result.player_flags() else {
+            error!("Missing player_flags in login result");
+            return Redirect::to("/?error=internal_error").into_response();
+        };
+
+        info!(
+            "Existing OAuth2 user logged in: {} (flags: {})",
+            player_obj, player_flags
+        );
         // URL-encode the player OID to handle # character
         let player_oid_str = player_obj.to_string();
         let player_oid_encoded = urlencoding::encode(&player_oid_str);
-        let redirect_url = format!("/?auth_token={}&player={}", auth_token, player_oid_encoded);
+        let redirect_url = format!(
+            "/?auth_token={}&player={}&flags={}",
+            auth_token, player_oid_encoded, player_flags
+        );
         Redirect::to(&redirect_url).into_response()
     } else {
         // New user - redirect to account choice page with user info
@@ -390,6 +403,7 @@ pub async fn oauth2_account_choice_handler(
                 success: false,
                 auth_token: None,
                 player: None,
+                player_flags: None,
                 error: Some("Authentication failed".to_string()),
             }),
         )
@@ -479,13 +493,27 @@ pub async fn oauth2_account_choice_handler(
                 .into_response();
         };
 
-        info!("OAuth2 account {} successful", choice.mode);
+        // Extract player flags
+        let Ok(player_flags) = login_result.player_flags() else {
+            error!("Missing player_flags in login result");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal error"})),
+            )
+                .into_response();
+        };
 
-        // Return JSON with auth token and player OID
+        info!(
+            "OAuth2 account {} successful (player: {}, flags: {})",
+            choice.mode, player_obj, player_flags
+        );
+
+        // Return JSON with auth token, player OID, and flags
         Json(OAuth2LoginResponse {
             success: true,
             auth_token: Some(auth_token.to_string()),
             player: Some(player_obj.to_string()),
+            player_flags: Some(player_flags),
             error: None,
         })
         .into_response()
@@ -498,6 +526,7 @@ pub async fn oauth2_account_choice_handler(
                 success: false,
                 auth_token: None,
                 player: None,
+                player_flags: None,
                 error: Some("Authentication failed".to_string()),
             }),
         )

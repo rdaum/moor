@@ -61,6 +61,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<CompileError[]>([]);
     const [isCompiling, setIsCompiling] = useState(false);
+    const [compileSuccess, setCompileSuccess] = useState(false);
     const [position, setPosition] = useState({ x: 50, y: 50 });
     const [size, setSize] = useState({ width: 800, height: 600 });
     const [isDragging, setIsDragging] = useState(false);
@@ -714,6 +715,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         setIsCompiling(true);
         setErrors([]);
+        setCompileSuccess(false);
 
         try {
             if (uploadAction && onSendMessage) {
@@ -746,56 +748,53 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 console.log("WebSocket compilation completed");
             } else {
                 // REST API compilation for present-triggered editors
-                const response = await fetch(
-                    `/verbs/${objectCurie}/${encodeURIComponent(verbName)}`,
-                    {
-                        method: "POST",
-                        headers: {
-                            "X-Moor-Auth-Token": authToken,
-                            "Content-Type": "text/plain",
-                        },
-                        body: content,
-                    },
+                const { compileVerbFlatBuffer } = await import("../lib/rpc-fb.js");
+                const { unionToCompileErrorUnion } = await import(
+                    "../generated/moor-common/compile-error-union.js"
                 );
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const result = await response.json();
+                const { ParseError } = await import("../generated/moor-common/parse-error.js");
+                const result = await compileVerbFlatBuffer(authToken, objectCurie, verbName, content);
 
                 // Check for compilation errors
-                if (result && typeof result === "object" && result.errors) {
-                    // Parse compilation errors from nested structure
+                if (!result.success) {
                     const compilationErrors: CompileError[] = [];
 
-                    if (result.errors.ParseError) {
-                        const parseError = result.errors.ParseError;
-                        if (
-                            parseError.error_position && parseError.error_position.line_col
-                            && Array.isArray(parseError.error_position.line_col)
-                        ) {
-                            const lineCol = parseError.error_position.line_col;
-                            const line = lineCol[0];
-                            const column = lineCol[1];
-                            compilationErrors.push({
-                                type: "parse",
-                                message: parseError.message || "Parse error",
-                                line: line,
-                                column: column,
-                            });
-                        } else {
-                            compilationErrors.push({
-                                type: "parse",
-                                message: parseError.message || "Parse error",
-                            });
-                        }
-                    } else if (result.errors) {
-                        // Handle other error types if they exist
+                    // Handle string errors (non-compilation errors)
+                    if (typeof result.error === "string") {
                         compilationErrors.push({
                             type: "other",
-                            message: JSON.stringify(result.errors),
+                            message: result.error,
                         });
+                    } else {
+                        // Parse FlatBuffer CompileError
+                        const compileError = result.error;
+                        const errorType = compileError.errorType();
+
+                        // Get the actual error object from the union
+                        const errorObj = unionToCompileErrorUnion(
+                            errorType,
+                            (obj: any) => compileError.error(obj),
+                        );
+
+                        if (errorObj instanceof ParseError) {
+                            const context = errorObj.errorPosition();
+                            const line = context ? Number(context.line()) : undefined;
+                            const column = context ? Number(context.col()) : undefined;
+                            const message = errorObj.message() || "Parse error";
+
+                            compilationErrors.push({
+                                type: "parse",
+                                message,
+                                line,
+                                column,
+                            });
+                        } else {
+                            // Handle other error types - just use the toString for now
+                            compilationErrors.push({
+                                type: "other",
+                                message: compileError.toString() || "Compilation error",
+                            });
+                        }
                     }
 
                     setErrors(compilationErrors);
@@ -852,6 +851,12 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 } else {
                     // Successful compilation
                     setErrors([]);
+                    setCompileSuccess(true);
+
+                    // Auto-hide success message after 3 seconds
+                    setTimeout(() => {
+                        setCompileSuccess(false);
+                    }, 3000);
 
                     // Clear Monaco error markers and decorations
                     if (editorRef.current) {
@@ -881,6 +886,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         }
         return error.message;
     };
+
+    // Track if content has changed from original
+    const hasUnsavedChanges = content !== initialContent;
 
     // Focus management for modal
     useEffect(() => {
@@ -1007,7 +1015,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     }}
                 >
                     <span style={{ fontWeight: "700" }}>
-                        Verb editor
+                        Verb editor{hasUnsavedChanges && (
+                            <span
+                                style={{ color: "var(--color-text-secondary)", marginLeft: "4px", fontSize: "0.8em" }}
+                            >
+                                ●
+                            </span>
+                        )}
                     </span>
                     <span
                         style={{
@@ -1113,6 +1127,26 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     >
                         {errors.map(formatError).join('\n')}
                     </pre>
+                </div>
+            )}
+
+            {/* Success banner */}
+            {compileSuccess && (
+                <div
+                    style={{
+                        padding: "var(--space-sm)",
+                        backgroundColor: "#10b981",
+                        borderTop: "1px solid var(--color-border-light)",
+                        borderBottom: "1px solid var(--color-border-light)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-sm)",
+                    }}
+                >
+                    <span style={{ fontSize: "1.2em" }}>✓</span>
+                    <span style={{ color: "white", fontWeight: "600" }}>
+                        Verb compiled successfully
+                    </span>
                 </div>
             )}
 

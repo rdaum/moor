@@ -32,6 +32,7 @@ systemd-units = { enable = false }
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../common" }
+moor-compiler = { path = "../compiler" }
 moor-schema = { path = "../schema" }
 moor-var = { path = "../var" }
 rpc-async-client = { path = "../rpc/rpc-async-client" }

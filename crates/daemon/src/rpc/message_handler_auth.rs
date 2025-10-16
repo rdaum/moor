@@ -202,6 +202,7 @@ impl RpcMessageHandler {
                                         auth_token: None,
                                         connect_type: moor_rpc::ConnectType::Connected,
                                         player: None,
+                                        player_flags: 0,
                                     },
                                 )),
                             });
@@ -233,7 +234,7 @@ impl RpcMessageHandler {
         if attach
             && let Err(e) = self.submit_connected_task(
                 handler_object,
-                scheduler_client,
+                scheduler_client.clone(),
                 client_id,
                 &player,
                 connection,
@@ -248,6 +249,9 @@ impl RpcMessageHandler {
 
         let auth_token = self.make_auth_token(&player);
 
+        // Get player flags for client-side permission checks
+        let player_flags = scheduler_client.get_object_flags(&player).unwrap_or(0);
+
         Ok(DaemonToClientReply {
             reply: moor_rpc::DaemonToClientReplyUnion::LoginResult(Box::new(
                 moor_rpc::LoginResult {
@@ -257,6 +261,7 @@ impl RpcMessageHandler {
                     })),
                     connect_type,
                     player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                    player_flags,
                 },
             )),
         })

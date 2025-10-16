@@ -18,9 +18,10 @@ import { useTitle } from "../hooks/useTitle";
 
 interface TopNavBarProps {
     onSettingsToggle: () => void;
+    onBrowserToggle?: () => void;
 }
 
-export const TopNavBar: React.FC<TopNavBarProps> = ({ onSettingsToggle }) => {
+export const TopNavBar: React.FC<TopNavBarProps> = ({ onSettingsToggle, onBrowserToggle }) => {
     const title = useTitle();
 
     return (
@@ -37,15 +38,50 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onSettingsToggle }) => {
 
             <div className="nav-title">{title}</div>
 
-            <button
-                className="account-icon"
-                aria-label="Account settings"
-            >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z" />
-                </svg>
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {onBrowserToggle && (
+                    <button
+                        className="browser-icon"
+                        onClick={onBrowserToggle}
+                        aria-label="Open object browser"
+                        title="Object Browser"
+                        style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--color-text-primary)",
+                        }}
+                    >
+                        <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                        >
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                        </svg>
+                    </button>
+                )}
+
+                <button
+                    className="account-icon"
+                    aria-label="Account settings"
+                >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z" />
+                    </svg>
+                </button>
+            </div>
         </div>
     );
 };

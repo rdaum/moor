@@ -15,6 +15,7 @@
 // Proof of concept for direct FlatBuffer communication
 
 import * as flatbuffers from "flatbuffers";
+import { CompileError } from "../generated/moor-common/compile-error.js";
 import { EventUnion } from "../generated/moor-common/event-union.js";
 import { NarrativeEvent } from "../generated/moor-common/narrative-event.js";
 import { NotifyEvent } from "../generated/moor-common/notify-event.js";
@@ -22,6 +23,7 @@ import { PresentEvent } from "../generated/moor-common/present-event.js";
 import { TracebackEvent } from "../generated/moor-common/traceback-event.js";
 import { UnpresentEvent } from "../generated/moor-common/unpresent-event.js";
 import { AbortLimitReason } from "../generated/moor-rpc/abort-limit-reason.js";
+import { AttachResult } from "../generated/moor-rpc/attach-result.js";
 import { ClientEventUnion } from "../generated/moor-rpc/client-event-union.js";
 import { ClientEvent } from "../generated/moor-rpc/client-event.js";
 import { ClientSuccess } from "../generated/moor-rpc/client-success.js";
@@ -31,8 +33,11 @@ import { CurrentPresentations } from "../generated/moor-rpc/current-presentation
 import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to-client-reply-union.js";
 import { EvalResult } from "../generated/moor-rpc/eval-result.js";
 import { HistoryResponseReply } from "../generated/moor-rpc/history-response-reply.js";
+import { ListObjectsReply } from "../generated/moor-rpc/list-objects-reply.js";
+import { LoginResult } from "../generated/moor-rpc/login-result.js";
 import { NarrativeEventMessage } from "../generated/moor-rpc/narrative-event-message.js";
 import { PropertiesReply } from "../generated/moor-rpc/properties-reply.js";
+import { PropertyUpdated } from "../generated/moor-rpc/property-updated.js";
 import { PropertyValue } from "../generated/moor-rpc/property-value.js";
 import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union.js";
 import { ReplyResult } from "../generated/moor-rpc/reply-result.js";
@@ -509,6 +514,7 @@ export function handleClientEventFlatBuffer(
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
+    onPlayerFlagsChange?: (flags: number) => void,
     lastEventTimestampRef?: React.MutableRefObject<bigint | null>,
 ): void {
     try {
@@ -1156,14 +1162,14 @@ export async function getCurrentPresentationsFlatBuffer(
  * @param objectCurie - Object CURIE (e.g., "oid:123")
  * @param verbName - Name of the verb to compile
  * @param code - Source code to compile
- * @returns Promise resolving to empty object on success, or object with errors on failure
+ * @returns Promise resolving to empty object on success, or object with CompileError on failure
  */
 export async function compileVerbFlatBuffer(
     authToken: string,
     objectCurie: string,
     verbName: string,
     code: string,
-): Promise<Record<string, any>> {
+): Promise<{ success: true } | { success: false; error: CompileError | string }> {
     const response = await fetch(`/fb/verbs/${objectCurie}/${verbName}`, {
         method: "POST",
         headers: {
@@ -1212,12 +1218,17 @@ export async function compileVerbFlatBuffer(
         throw new Error("Failed to parse reply union");
     }
 
-    // Check if it's a VerbProgramResponse
-    const verbProgramResponse = replyUnion as any;
+    // replyUnion is VerbProgramResponseReply, get the VerbProgramResponse from it
+    const verbProgramResponseReply = replyUnion as any;
+    const verbProgramResponse = verbProgramResponseReply.response();
+    if (!verbProgramResponse) {
+        throw new Error("Missing VerbProgramResponse");
+    }
+
     const responseType = verbProgramResponse.responseType();
 
     if (responseType === VerbProgramResponseUnion.VerbProgramSuccess) {
-        return {}; // Success
+        return { success: true };
     } else if (responseType === VerbProgramResponseUnion.VerbProgramFailure) {
         const failureResponse = unionToVerbProgramResponseUnion(
             responseType,
@@ -1238,22 +1249,160 @@ export async function compileVerbFlatBuffer(
                         ) as VerbCompilationError | null;
 
                         if (compError && compError.error()) {
-                            // Convert CompileError to string - it should have a toString or similar
-                            return { "errors": compError.error()!.toString() };
+                            // Return the full structured CompileError FlatBuffer object
+                            return { success: false, error: compError.error()! };
                         }
-                        return { "errors": "Compilation error" };
+                        return { success: false, error: "Compilation error" };
                     }
                     case VerbProgramErrorUnionType.NoVerbToProgram:
-                        return { "errors": "No verb to program" };
+                        return { success: false, error: "No verb to program" };
                     case VerbProgramErrorUnionType.VerbDatabaseError:
-                        return { "errors": "Database error" };
+                        return { success: false, error: "Database error" };
                     default:
-                        return { "errors": "Unknown compilation error" };
+                        return { success: false, error: "Unknown compilation error" };
                 }
             }
         }
-        return { "errors": "Compilation failed" };
+        return { success: false, error: "Compilation failed" };
     } else {
         throw new Error(`Unexpected VerbProgramResponse type: ${responseType}`);
     }
+}
+
+/**
+ * Get list of all objects using FlatBuffer protocol
+ *
+ * @param authToken - Authentication token
+ * @returns Promise resolving to ListObjectsReply FlatBuffer
+ */
+export async function listObjectsFlatBuffer(
+    authToken: string,
+): Promise<ListObjectsReply> {
+    const response = await fetch(`/fb/objects`, {
+        method: "GET",
+        headers: {
+            "X-Moor-Auth-Token": authToken,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`List objects failed: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    const replyResult = ReplyResult.getRootAsReplyResult(
+        new flatbuffers.ByteBuffer(bytes),
+    );
+
+    const resultType = replyResult.resultType();
+    if (resultType !== ReplyResultUnion.ClientSuccess) {
+        throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
+    }
+
+    const clientSuccess = unionToReplyResultUnion(
+        resultType,
+        (obj) => replyResult.result(obj),
+    ) as ClientSuccess | null;
+
+    if (!clientSuccess) {
+        throw new Error("Failed to parse ClientSuccess");
+    }
+
+    const daemonReply = clientSuccess.reply();
+    if (!daemonReply) {
+        throw new Error("Missing daemon reply");
+    }
+
+    const replyType = daemonReply.replyType();
+    const replyUnion = unionToDaemonToClientReplyUnion(
+        replyType,
+        (obj: any) => daemonReply.reply(obj),
+    );
+
+    if (!replyUnion) {
+        throw new Error("Failed to parse reply union");
+    }
+
+    // Return the ListObjectsReply FlatBuffer wrapper
+    if (!(replyUnion instanceof ListObjectsReply)) {
+        throw new Error(`Unexpected reply type: ${replyUnion.constructor.name}`);
+    }
+
+    return replyUnion as ListObjectsReply;
+}
+
+/**
+ * Update a property value using FlatBuffer protocol
+ *
+ * @param authToken - Authentication token
+ * @param objectCurie - Object CURIE
+ * @param propertyName - Property name
+ * @param value - New value (will be converted to FlatBuffer Var)
+ * @returns Promise resolving when property is updated
+ */
+export async function updatePropertyFlatBuffer(
+    authToken: string,
+    objectCurie: string,
+    propertyName: string,
+    value: string, // MOO literal string
+): Promise<void> {
+    // Send MOO literal string directly (like eval endpoint)
+    // Backend will parse it into a Var
+    const response = await fetch(`/fb/properties/${objectCurie}/${encodeURIComponent(propertyName)}`, {
+        method: "POST",
+        headers: {
+            "X-Moor-Auth-Token": authToken,
+            "Content-Type": "text/plain",
+        },
+        body: value,
+    });
+
+    if (!response.ok) {
+        throw new Error(`Update property failed: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    const replyResult = ReplyResult.getRootAsReplyResult(
+        new flatbuffers.ByteBuffer(bytes),
+    );
+
+    const resultType = replyResult.resultType();
+    if (resultType !== ReplyResultUnion.ClientSuccess) {
+        throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
+    }
+
+    const clientSuccess = unionToReplyResultUnion(
+        resultType,
+        (obj) => replyResult.result(obj),
+    ) as ClientSuccess | null;
+
+    if (!clientSuccess) {
+        throw new Error("Failed to parse ClientSuccess");
+    }
+
+    const daemonReply = clientSuccess.reply();
+    if (!daemonReply) {
+        throw new Error("Missing daemon reply");
+    }
+
+    const replyType = daemonReply.replyType();
+    const replyUnion = unionToDaemonToClientReplyUnion(
+        replyType,
+        (obj: any) => daemonReply.reply(obj),
+    );
+
+    if (!replyUnion) {
+        throw new Error("Failed to parse reply union");
+    }
+
+    // Verify it's a PropertyUpdated response
+    if (!(replyUnion instanceof PropertyUpdated)) {
+        throw new Error(`Unexpected reply type: ${replyUnion.constructor.name}`);
+    }
+
+    // Success - no return value needed
 }

@@ -19,6 +19,7 @@ interface AuthContextType {
     connect: (mode: "connect" | "create", username: string, password: string) => Promise<void>;
     disconnect: () => void;
     setPlayerConnected: (connected: boolean) => void;
+    setPlayerFlags: (flags: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

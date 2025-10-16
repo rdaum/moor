@@ -8,6 +8,26 @@ This web client provides a browser interface for interacting with mooR worlds, c
 the backend through WebSocket connections and RESTful API calls handled by the `moor-web-host`
 binary.
 
+## FlatBuffer Schema Generation
+
+The web client uses FlatBuffers for efficient communication with the backend. When schema files
+(`.fbs`) are modified in `crates/schema/schema/`, you must regenerate both Rust and TypeScript code:
+
+**Rust code generation:**
+
+```bash
+planus rust -o ./crates/schema/src/schemas_generated.rs ./crates/schema/schema/all_schemas.fbs
+```
+
+**TypeScript code generation:**
+
+```bash
+flatc --ts --gen-all -o web-client/src/generated crates/schema/schema/all_schemas.fbs
+```
+
+Generated TypeScript types are located in `web-client/src/generated/` and are checked into version
+control.
+
 ## Development
 
 ```bash
