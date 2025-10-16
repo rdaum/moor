@@ -44,6 +44,7 @@ pub const DEFAULT_FG_SECONDS: u64 = 5;
 pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 30;
+pub const DEFAULT_MAX_TASK_RETRIES: u8 = 10;
 
 lazy_static! {
     static ref SCHED_COUNTERS: SchedulerPerfCounters = SchedulerPerfCounters::new();
@@ -130,6 +131,8 @@ pub struct ServerOptions {
     pub dump_interval: Option<u64>,
     /// The interval in seconds for automatic garbage collection.
     pub gc_interval: Option<u64>,
+    /// Maximum number of times a task can be retried on transaction conflict before aborting.
+    pub max_task_retries: u8,
 }
 
 impl ServerOptions {

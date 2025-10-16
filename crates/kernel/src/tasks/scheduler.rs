@@ -35,8 +35,8 @@ use crate::{
     config::{Config, ImportExportFormat},
     tasks::{
         DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-        DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle,
-        TaskResult, TaskStart,
+        DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, DEFAULT_MAX_TASK_RETRIES,
+        ServerOptions, TaskHandle, TaskResult, TaskStart,
         gc_thread::spawn_gc_mark_phase,
         sched_counters,
         scheduler_client::{SchedulerClient, SchedulerClientMsg},
@@ -82,10 +82,6 @@ pub enum ResumeAction {
     Raise(Error),
 }
 
-/// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
-// TODO: we could also look into some exponential-ish backoff
-const MAX_TASK_RETRIES: u8 = 10;
-
 lazy_static! {
     static ref SERVER_OPTIONS: Symbol = Symbol::mk("server_options");
     static ref BG_SECONDS: Symbol = Symbol::mk("bg_seconds");
@@ -95,6 +91,7 @@ lazy_static! {
     static ref MAX_STACK_DEPTH: Symbol = Symbol::mk("max_stack_depth");
     static ref DUMP_INTERVAL: Symbol = Symbol::mk("dump_interval");
     static ref GC_INTERVAL: Symbol = Symbol::mk("gc_interval");
+    static ref MAX_TASK_RETRIES: Symbol = Symbol::mk("max_task_retries");
     static ref DO_OUT_OF_BAND_COMMAND: Symbol = Symbol::mk("do_out_of_band_command");
 }
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
@@ -187,6 +184,7 @@ impl Scheduler {
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
             dump_interval: None,
             gc_interval: None,
+            max_task_retries: DEFAULT_MAX_TASK_RETRIES,
         };
         let builtin_registry = BuiltinRegistry::new();
 
@@ -387,6 +385,11 @@ impl Scheduler {
             load_int_sysprop(&server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
         {
             so.max_stack_depth = max_stack_depth as usize;
+        }
+        if let Some(max_task_retries) =
+            load_int_sysprop(&server_options_obj, *MAX_TASK_RETRIES, tx.as_ref())
+        {
+            so.max_task_retries = max_task_retries as u8;
         }
         if let Some(dump_interval) = load_int_sysprop(&SYSTEM_OBJECT, *DUMP_INTERVAL, tx.as_ref()) {
             info!(
@@ -884,6 +887,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
                     self.config.clone(),
+                    self.server_options.max_task_retries,
                 );
             }
             TaskControlMsg::TaskVerbNotFound(..) => {
@@ -2326,6 +2330,7 @@ impl TaskQ {
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
+        max_task_retries: u8,
     ) {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.retry_task);
@@ -2347,7 +2352,7 @@ impl TaskQ {
         };
 
         // If the number of retries has been exceeded, we'll just immediately respond with abort.
-        if task.retries > MAX_TASK_RETRIES {
+        if task.retries > max_task_retries {
             info!(
                 "Maximum number of retries exceeded for task {}.  Aborting.",
                 task.task_id

@@ -16,7 +16,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)
 
 [[bin]]
 name = "moor-model-checker"
-path = "src/tx-list-append.rs"
+path = "src/direct-db-list-append.rs"
 
 [[bin]]
 name = "load-test"
@@ -31,13 +31,15 @@ name = "anonymous-object-load-test"
 path = "src/anonymous-object-load-test.rs"
 
 [dependencies]
-# Internal Dependencies
+# Internal Dependencies - Direct DB access only
 moor-common = { path = "../../common" }
-moor-compiler = { path = "../../compiler" }
 moor-db = { path = "../../db" }
+moor-var = { path = "../../var" }
+
+# Other binaries still need these
+moor-compiler = { path = "../../compiler" }
 moor-kernel = { path = "../../kernel" }
 moor-schema = { path = "../../schema" }
-moor-var = { path = "../../var" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
 rpc-common = { path = "../../rpc/rpc-common" }
 
@@ -45,27 +47,26 @@ rpc-common = { path = "../../rpc/rpc-common" }
 clap.workspace = true
 clap_derive.workspace = true
 
-# Serialization & Data Formats
-csv.workspace = true
-planus.workspace = true
-
-# Networking & Communication
-tmq.workspace = true
-
-# Error Handling & Logging
+# Error Handling
 color-eyre.workspace = true
 eyre.workspace = true
+
+# EDN format for Elle
+edn-format.workspace = true
+
+# Random operations
+rand.workspace = true
+
+# Temporary database
+tempfile.workspace = true
+
+# Dependencies for other binaries
+csv.workspace = true
+planus.workspace = true
+tmq.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
-
-## Asynchronous transaction processing & networking
 futures.workspace = true
 tokio.workspace = true
-
-edn-format.workspace = true
-rand.workspace = true
-
-# Additional dependencies for direct scheduler test
 semver.workspace = true
-tempfile.workspace = true

@@ -1,0 +1,55 @@
+# Dockerfile for Elle consistency testing
+# Builds tx-list-append, installs elle-cli, runs workload, and checks consistency
+
+FROM rust:1.88.0 AS builder
+
+# Build the tx-list-append tool from the workspace
+WORKDIR /build
+COPY . /build
+RUN cargo build --release --bin moor-model-checker
+
+# Runtime stage with JVM for elle-cli
+FROM debian:bookworm-slim
+
+# Install Java and dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    openjdk-17-jdk-headless \
+    wget \
+    git \
+    curl \
+    graphviz \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Leiningen
+RUN wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && \
+    chmod +x lein && \
+    mv lein /usr/local/bin/ && \
+    lein version
+
+# Clone and build elle-cli
+RUN git clone https://github.com/ligurio/elle-cli.git /opt/elle-cli && \
+    cd /opt/elle-cli && \
+    lein deps && \
+    lein uberjar
+
+# Copy the built binary from builder stage
+COPY --from=builder /build/target/release/moor-model-checker /usr/local/bin/
+
+# Copy analysis script
+COPY crates/testing/load-tools/analyze-elle-failure.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/analyze-elle-failure.sh
+
+# Create output directory
+RUN mkdir -p /output
+
+WORKDIR /output
+
+# Default command: run workload and analyze with script
+# Direct database access - no scheduler overhead
+CMD moor-model-checker \
+    --num-props ${NUM_PROPS:-3} \
+    --num-concurrent-workloads ${NUM_CONCURRENT:-10} \
+    --num-workload-iterations ${NUM_ITERATIONS:-1000} \
+    --output-file /output/workload.edn && \
+    analyze-elle-failure.sh /output/workload.edn

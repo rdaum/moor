@@ -1022,6 +1022,7 @@ mod tests {
         E_DIV, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_int, v_obj, v_str,
     };
 
+    use crate::tasks::DEFAULT_MAX_TASK_RETRIES;
     use crate::{
         config::Config,
         tasks::{
@@ -1061,6 +1062,7 @@ mod tests {
             max_stack_depth: 5,
             dump_interval: None,
             gc_interval: None,
+            max_task_retries: DEFAULT_MAX_TASK_RETRIES,
         };
         let task_scheduler_client = TaskSchedulerClient::new(1, control_sender.clone());
         let task = Task::new(

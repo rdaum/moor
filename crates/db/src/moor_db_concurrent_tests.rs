@@ -776,4 +776,104 @@ mod tests {
             10,
         );
     }
+
+    #[test]
+    fn test_g_single_item_realtime_anomaly() {
+        // Test for a G-single-item-realtime anomaly detected by Jepsen-Elle:
+        // T2 commits at index N, T1 invokes at index N+1 (AFTER T2 completes),
+        // but T1 does NOT see T2's writes - violates serializability
+        check_random(
+            || {
+                let db = setup_test_db();
+                let obj = Obj::mk_id(1);
+                let prop_name = Symbol::mk("realtime_test");
+
+                // Define initial property with value 0
+                {
+                    let tx = db.start_transaction();
+                    let mut ws = DbWorldState { tx };
+                    ws.define_property(
+                        &SYSTEM_OBJECT,
+                        &obj,
+                        &obj,
+                        prop_name,
+                        &SYSTEM_OBJECT,
+                        BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                        Some(v_int(0)),
+                    )
+                    .unwrap();
+                    Box::new(ws).commit().unwrap();
+                }
+
+                let violations = Arc::new(AtomicUsize::new(0));
+
+                // Run with high concurrency to increase chance of hitting the race
+                let handles: Vec<_> = (0..8)
+                    .map(|thread_id| {
+                        let db = db.clone();
+                        let violations = violations.clone();
+
+                        thread::spawn(move || {
+                            for iteration in 0..100 {
+                                // T2: Write and commit
+                                let write_value = (thread_id * 1000 + iteration) as i64;
+                                let tx2 = db.start_transaction();
+                                let mut ws2 = DbWorldState { tx: tx2 };
+                                ws2.update_property(
+                                    &SYSTEM_OBJECT,
+                                    &obj,
+                                    prop_name,
+                                    &v_int(write_value),
+                                )
+                                .ok();
+
+                                let commit_result = Box::new(ws2).commit();
+
+                                // If T2 committed successfully
+                                if matches!(commit_result, Ok(CommitResult::Success { .. })) {
+                                    // Immediately start T1 - this is AFTER T2 committed in real-time
+                                    let tx1 = db.start_transaction();
+                                    let ws1 = DbWorldState { tx: tx1 };
+
+                                    // T1 reads the property
+                                    if let Ok(value) = ws1.retrieve_property(&SYSTEM_OBJECT, &obj, prop_name) {
+                                        let read_value = value.as_integer().unwrap_or(-1);
+
+                                        // T1 started AFTER T2 committed, so MUST see T2's write
+                                        // If T1 sees 0 (initial value) or any value older than write_value,
+                                        // that's a serializability violation
+                                        if read_value == 0 {
+                                            violations.fetch_add(1, Ordering::Relaxed);
+                                            eprintln!(
+                                                "G-single-item-realtime violation! Thread {} iteration {}: \
+                                                 T2 committed value {} but T1 (started AFTER commit) saw {}",
+                                                thread_id, iteration, write_value, read_value
+                                            );
+                                        }
+                                    }
+                                }
+
+                                // Yield to increase thread interleaving
+                                if iteration % 10 == 0 {
+                                    thread::yield_now();
+                                }
+                            }
+                        })
+                    })
+                    .collect();
+
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+                let total_violations = violations.load(Ordering::Relaxed);
+                assert_eq!(
+                    total_violations, 0,
+                    "Detected {} G-single-item-realtime serializability violations",
+                    total_violations
+                );
+            },
+            100, // Run many shuttle iterations to explore different schedules
+        );
+    }
 }

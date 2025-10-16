@@ -24,7 +24,10 @@ use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
 use crate::{
-    task_context::{current_session, current_task_scheduler_client, with_current_transaction, with_current_transaction_mut},
+    task_context::{
+        current_session, current_task_scheduler_client, with_current_transaction,
+        with_current_transaction_mut,
+    },
     tasks::{TaskStart, sched_counters, task_scheduler_client::TaskControlMsg},
     vm::{
         TaskSuspend,
@@ -2196,9 +2199,7 @@ fn bf_flush_caches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_is_wizard()
         .map_err(world_state_bf_err)?
     {
-        return Err(ErrValue(
-            E_PERM.msg("Only wizards may call flush_caches()"),
-        ));
+        return Err(ErrValue(E_PERM.msg("Only wizards may call flush_caches()")));
     }
 
     with_current_transaction_mut(|tx| tx.flush_caches());
