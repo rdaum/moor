@@ -74,6 +74,9 @@ impl FjallConnectionRegistry {
         info!("Opening connections database at {:?}", path);
         let keyspace = Config::new(&path).open()?;
 
+        info!("Compacting connections database journals...");
+        keyspace.persist(fjall::PersistMode::SyncAll)?;
+
         let sequences_partition =
             keyspace.open_partition("connection_sequences", PartitionCreateOptions::default())?;
 
