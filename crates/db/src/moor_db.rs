@@ -492,9 +492,17 @@ impl MoorDB {
                             }
                         };
 
-                        // Use seqlock coordination to atomically swap relation indexes.
-                        // Transaction starts will retry if they race with this commit window.
-                        checkers.commit_all(&this.relations, &this.commit_version);
+                        // Use seqlock coordination to atomically swap relation indexes AND update caches.
+                        // Caches must be updated INSIDE seqlock protection to prevent transactions from
+                        // seeing stable seqlock with stale caches (which would cause old verb code to execute).
+                        checkers.commit_all(
+                            &this.relations,
+                            &this.commit_version,
+                            &this.caches,
+                            verb_cache,
+                            prop_cache,
+                            ancestry_cache,
+                        );
 
                         // Track the last write transaction timestamp for snapshot consistency
                         this.last_write_commit.store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
@@ -521,24 +529,8 @@ impl MoorDB {
                         drop(_t);
                     }
 
-
-                    // All locks now dropped, now we can do the write to disk, swap in the (maybe)
-                    // updated verb resolution cache update sequences, and move on.
-                    // NOTE: hopefully this all happens before the next commit comes in, otherwise
-                    //  we can end up backlogged here.
-
-                    // Swap the commit set's cache with the main cache.
-                    {
-                        let combined_caches = Caches {
-                            verb_resolution_cache: verb_cache,
-                            prop_resolution_cache: prop_cache,
-                            ancestry_cache,
-                        };
-                        if combined_caches.has_changed() {
-                            this.caches.store(Arc::new(combined_caches));
-                        }
-                    }
-
+                    // Now persist sequences to disk
+                    // (Caches were already updated inside commit_all before seqlock was marked stable)
                     let _t = PerfTimerGuard::new(&counters.commit_write_phase);
 
                     // Now write out the current state of the sequences to the seq partition.

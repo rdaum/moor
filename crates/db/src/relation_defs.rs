@@ -144,8 +144,19 @@ macro_rules! define_relations {
                 ///
                 /// Uses the commit_version counter as a seqlock to ensure transaction starts
                 /// see atomic snapshots. Increments version to odd (in-progress), swaps all
-                /// dirty relation indexes, then increments to even (complete).
-                fn commit_all(self, relations: &Relations, commit_version: &std::sync::atomic::AtomicU64) {
+                /// dirty relation indexes AND updates caches, then increments to even (complete).
+                ///
+                /// CRITICAL: Cache updates must happen BEFORE marking seqlock complete to prevent
+                /// transactions from seeing stale cache + new relations (race condition).
+                fn commit_all(
+                    self,
+                    relations: &Relations,
+                    commit_version: &std::sync::atomic::AtomicU64,
+                    caches: &arc_swap::ArcSwap<crate::moor_db::Caches>,
+                    verb_cache: Box<VerbResolutionCache>,
+                    prop_cache: Box<PropResolutionCache>,
+                    ancestry_cache: Box<AncestryCache>,
+                ) {
                     // Mark commit in progress (odd version)
                     commit_version.fetch_add(1, std::sync::atomic::Ordering::Release);
 
@@ -156,7 +167,18 @@ macro_rules! define_relations {
                         }
                     )*
 
-                    // Release fence ensures all swaps are visible before marking complete
+                    // Update caches BEFORE marking seqlock complete
+                    // This prevents transactions from seeing stable seqlock with stale caches
+                    let combined_caches = crate::moor_db::Caches {
+                        verb_resolution_cache: verb_cache,
+                        prop_resolution_cache: prop_cache,
+                        ancestry_cache,
+                    };
+                    if combined_caches.has_changed() {
+                        caches.store(std::sync::Arc::new(combined_caches));
+                    }
+
+                    // Release fence ensures all swaps AND cache updates are visible before marking complete
                     std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
 
                     // Mark commit complete (even version)

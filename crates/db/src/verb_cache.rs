@@ -12,13 +12,10 @@
 //
 
 use ahash::AHasher;
+use arc_swap::ArcSwap;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
-use std::{
-    collections::HashMap,
-    hash::BuildHasherDefault,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u64.
 /// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
@@ -29,7 +26,7 @@ fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
 use crate::prop_cache::{ANCESTRY_CACHE_STATS, VERB_CACHE_STATS};
 
 pub struct VerbResolutionCache {
-    inner: Mutex<Inner>,
+    inner: ArcSwap<Inner>,
 }
 
 impl Default for VerbResolutionCache {
@@ -41,13 +38,13 @@ impl Default for VerbResolutionCache {
 impl VerbResolutionCache {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(Inner {
+            inner: ArcSwap::new(Arc::new(Inner {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
                 first_parent_with_verbs_cache: Arc::new(HashMap::default()),
-            }),
+            })),
         }
     }
 }
@@ -78,36 +75,38 @@ impl Inner {
 
 impl VerbResolutionCache {
     pub fn fork(&self) -> Box<Self> {
-        let inner = self.inner.lock().unwrap();
-        let mut forked_inner = inner.clone();
+        let inner = self.inner.load_full();
+        let mut forked_inner = (*inner).clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: Mutex::new(forked_inner),
+            inner: ArcSwap::new(Arc::new(forked_inner)),
         })
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.load();
         inner.version > inner.orig_version
     }
 
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.load();
         inner.first_parent_with_verbs_cache.get(obj).cloned()
     }
 
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.version += 1;
-        inner.first_parent_cache_mut().insert(*obj, parent);
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            new_inner.version += 1;
+            new_inner.first_parent_cache_mut().insert(*obj, parent);
+            Arc::new(new_inner)
+        });
     }
 
     pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.load();
         let key = make_cache_key(obj, verb);
-        let entry = inner.entries.get(&key);
-        let result = entry.cloned();
+        let result = inner.entries.get(&key).cloned();
 
         if result.is_some() {
             VERB_CACHE_STATS.hit();
@@ -119,53 +118,63 @@ impl VerbResolutionCache {
     }
 
     pub fn flush(&self) {
-        let mut inner = self.inner.lock().unwrap();
-        let entries_count = inner.entries.len() as isize;
-        inner.flushed = true;
-        inner.version += 1;
-        inner.entries_mut().clear();
-        inner.first_parent_cache_mut().clear();
+        let entries_count = self.inner.load().entries.len() as isize;
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            new_inner.flushed = true;
+            new_inner.version += 1;
+            new_inner.entries_mut().clear();
+            new_inner.first_parent_cache_mut().clear();
+            Arc::new(new_inner)
+        });
         VERB_CACHE_STATS.flush();
         VERB_CACHE_STATS.remove_entries(entries_count);
     }
 
     pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.version += 1;
         let key = make_cache_key(obj, verb);
-        let is_new_entry = !inner.entries.contains_key(&key);
-        inner.entries_mut().insert(key, Some(verbdef.clone()));
-        if is_new_entry {
-            VERB_CACHE_STATS.add_entry();
-        }
+        let verbdef = verbdef.clone();
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            new_inner.version += 1;
+            let is_new_entry = !new_inner.entries.contains_key(&key);
+            new_inner.entries_mut().insert(key, Some(verbdef.clone()));
+            if is_new_entry {
+                VERB_CACHE_STATS.add_entry();
+            }
+            Arc::new(new_inner)
+        });
     }
 
     pub fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.version += 1;
         let key = make_cache_key(obj, verb);
-        let is_new_entry = !inner.entries.contains_key(&key);
-        inner.entries_mut().insert(key, None);
-        if is_new_entry {
-            VERB_CACHE_STATS.add_entry();
-        }
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            new_inner.version += 1;
+            let is_new_entry = !new_inner.entries.contains_key(&key);
+            new_inner.entries_mut().insert(key, None);
+            if is_new_entry {
+                VERB_CACHE_STATS.add_entry();
+            }
+            Arc::new(new_inner)
+        });
     }
 }
 
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
-    inner: Mutex<AncestryInner>,
+    inner: ArcSwap<AncestryInner>,
 }
 
 impl Default for AncestryCache {
     fn default() -> Self {
         Self {
-            inner: Mutex::new(AncestryInner {
+            inner: ArcSwap::new(Arc::new(AncestryInner {
                 orig_version: 0,
                 version: 0,
                 flushed: false,
                 entries: Arc::new(HashMap::default()),
-            }),
+            })),
         }
     }
 }
@@ -189,16 +198,16 @@ impl AncestryInner {
 
 impl AncestryCache {
     pub fn fork(&self) -> Box<Self> {
-        let inner = self.inner.lock().unwrap();
-        let mut forked_inner = inner.clone();
+        let inner = self.inner.load_full();
+        let mut forked_inner = (*inner).clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: Mutex::new(forked_inner),
+            inner: ArcSwap::new(Arc::new(forked_inner)),
         })
     }
     pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.load();
         let result = inner.entries.get(obj).cloned();
 
         if result.is_some() {
@@ -211,27 +220,35 @@ impl AncestryCache {
     }
 
     pub fn flush(&self) {
-        let mut inner = self.inner.lock().unwrap();
-        let entries_count = inner.entries.len() as isize;
-        inner.flushed = true;
-        inner.version += 1;
-        inner.entries_mut().clear();
+        let entries_count = self.inner.load().entries.len() as isize;
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            new_inner.flushed = true;
+            new_inner.version += 1;
+            new_inner.entries_mut().clear();
+            Arc::new(new_inner)
+        });
         ANCESTRY_CACHE_STATS.flush();
         ANCESTRY_CACHE_STATS.remove_entries(entries_count);
     }
 
     pub fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.version += 1;
-        let is_new_entry = !inner.entries.contains_key(obj);
-        inner.entries_mut().insert(*obj, ancestors.to_vec());
-        if is_new_entry {
-            ANCESTRY_CACHE_STATS.add_entry();
-        }
+        let obj = *obj;
+        let ancestors = ancestors.to_vec();
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            new_inner.version += 1;
+            let is_new_entry = !new_inner.entries.contains_key(&obj);
+            new_inner.entries_mut().insert(obj, ancestors.clone());
+            if is_new_entry {
+                ANCESTRY_CACHE_STATS.add_entry();
+            }
+            Arc::new(new_inner)
+        });
     }
 
     pub fn has_changed(&self) -> bool {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.load();
         inner.version > inner.orig_version
     }
 }
