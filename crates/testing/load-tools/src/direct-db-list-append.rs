@@ -21,13 +21,7 @@ use edn_format::{Keyword, Value};
 use moor_common::model::{ObjAttrs, WorldStateSource};
 use moor_db::{Database, TxDB};
 use moor_var::{Obj, Symbol, v_int, v_list};
-use std::{
-    collections::BTreeMap,
-    path::PathBuf,
-    sync::Arc,
-    thread,
-    time::Instant,
-};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc, thread, time::Instant};
 
 #[derive(Clone, Parser, Debug)]
 struct Args {
@@ -121,8 +115,10 @@ fn workload_thread(
     for iteration in 0..num_iterations {
         // Print progress every 100 iterations
         if iteration > 0 && iteration % 100 == 0 {
-            println!("Thread {} progress: {}/{} iterations, {} total retries, {} skipped",
-                     process_id, iteration, num_iterations, total_retries, skipped_ops);
+            println!(
+                "Thread {} progress: {}/{} iterations, {} total retries, {} skipped",
+                process_id, iteration, num_iterations, total_retries, skipped_ops
+            );
         }
 
         // Pick random property and operation type once per iteration
@@ -159,8 +155,14 @@ fn workload_thread(
                             vec![]
                         };
 
-                        workload.push((start, WorkItem::Read(process_id, vec![(prop_idx, values.clone())])));
-                        workload.push((Instant::now(), WorkItem::ReadEnd(process_id, vec![(prop_idx, values)])));
+                        workload.push((
+                            start,
+                            WorkItem::Read(process_id, vec![(prop_idx, values.clone())]),
+                        ));
+                        workload.push((
+                            Instant::now(),
+                            WorkItem::ReadEnd(process_id, vec![(prop_idx, values)]),
+                        ));
                         break 'retry; // Success, move to next iteration
                     }
                     moor_common::model::CommitResult::ConflictRetry => {
@@ -191,15 +193,38 @@ fn workload_thread(
                     }
                     v_list(&list_values)
                 } else {
-                    v_list(&new_values_to_append.iter().map(|v| v_int(*v)).collect::<Vec<_>>())
+                    v_list(
+                        &new_values_to_append
+                            .iter()
+                            .map(|v| v_int(*v))
+                            .collect::<Vec<_>>(),
+                    )
                 };
 
                 tx.update_property(&obj, &obj, prop_sym, &new_list)?;
 
                 match tx.commit()? {
                     moor_common::model::CommitResult::Success { .. } => {
-                        workload.push((start, WorkItem::Append(process_id, new_values_to_append.iter().map(|v| (prop_idx, *v)).collect())));
-                        workload.push((Instant::now(), WorkItem::AppendEnd(process_id, new_values_to_append.iter().map(|v| (prop_idx, *v)).collect())));
+                        workload.push((
+                            start,
+                            WorkItem::Append(
+                                process_id,
+                                new_values_to_append
+                                    .iter()
+                                    .map(|v| (prop_idx, *v))
+                                    .collect(),
+                            ),
+                        ));
+                        workload.push((
+                            Instant::now(),
+                            WorkItem::AppendEnd(
+                                process_id,
+                                new_values_to_append
+                                    .iter()
+                                    .map(|v| (prop_idx, *v))
+                                    .collect(),
+                            ),
+                        ));
                         break 'retry; // Success, move to next iteration
                     }
                     moor_common::model::CommitResult::ConflictRetry => {
@@ -212,13 +237,21 @@ fn workload_thread(
         }
     }
 
-    println!("Thread {} completed: {} operations, {} total retries, {} skipped",
-             process_id, workload.len() / 2, total_retries, skipped_ops);
+    println!(
+        "Thread {} completed: {} operations, {} total retries, {} skipped",
+        process_id,
+        workload.len() / 2,
+        total_retries,
+        skipped_ops
+    );
 
     Ok(workload)
 }
 
-fn write_edn_output(workload_results: &[(Instant, WorkItem)], output_path: &PathBuf) -> Result<(), eyre::Error> {
+fn write_edn_output(
+    workload_results: &[(Instant, WorkItem)],
+    output_path: &PathBuf,
+) -> Result<(), eyre::Error> {
     let mut output_document = String::new();
 
     for (i, workload) in workload_results.iter().enumerate() {
@@ -351,7 +384,10 @@ fn main() -> Result<(), eyre::Error> {
     println!("Configuration:");
     println!("  Properties: {}", args.num_props);
     println!("  Concurrent workloads: {}", args.num_concurrent_workloads);
-    println!("  Iterations per workload: {}", args.num_workload_iterations);
+    println!(
+        "  Iterations per workload: {}",
+        args.num_workload_iterations
+    );
     println!("  Output file: {}", args.output_file.display());
     println!();
 
@@ -374,7 +410,10 @@ fn main() -> Result<(), eyre::Error> {
     // Setup database
     let (obj, prop_symbols) = setup_database(&db, args.num_props)?;
 
-    println!("Starting {} concurrent workloads", args.num_concurrent_workloads);
+    println!(
+        "Starting {} concurrent workloads",
+        args.num_concurrent_workloads
+    );
 
     // Spawn workload threads
     let mut handles = vec![];
@@ -398,7 +437,10 @@ fn main() -> Result<(), eyre::Error> {
         workload_results.extend(result);
         completed += 1;
         if completed % 5 == 0 {
-            println!("Collected results from {}/{} threads", completed, args.num_concurrent_workloads);
+            println!(
+                "Collected results from {}/{} threads",
+                completed, args.num_concurrent_workloads
+            );
         }
     }
 

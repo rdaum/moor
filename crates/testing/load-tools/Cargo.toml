@@ -14,9 +14,22 @@ description = "Load testing and transaction model checking"
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
+[lib]
+name = "moor_model_checker"
+path = "src/lib.rs"
+
 [[bin]]
 name = "moor-model-checker"
 path = "src/direct-db-list-append.rs"
+
+[[bin]]
+name = "rw-register"
+path = "src/rw-register.rs"
+
+# Note: this model currently fails with 0.1.9 of elle, but elle also fails for their reference files for it, too...
+[[bin]]
+name = "bank"
+path = "src/bank.rs"
 
 [[bin]]
 name = "load-test"
@@ -62,11 +75,11 @@ tempfile.workspace = true
 
 # Dependencies for other binaries
 csv.workspace = true
+futures.workspace = true
 planus.workspace = true
+semver.workspace = true
 tmq.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
-futures.workspace = true
-tokio.workspace = true
-semver.workspace = true

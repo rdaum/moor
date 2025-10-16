@@ -1,12 +1,13 @@
 # Dockerfile for Elle consistency testing
-# Builds tx-list-append, installs elle-cli, runs workload, and checks consistency
+# Builds Elle model checkers, installs elle-cli, runs workload, and checks consistency
 
 FROM rust:1.88.0 AS builder
 
-# Build the tx-list-append tool from the workspace
+# Build all Elle model checker binaries from the workspace
 WORKDIR /build
 COPY . /build
 RUN cargo build --release --bin moor-model-checker
+RUN cargo build --release --bin rw-register
 
 # Runtime stage with JVM for elle-cli
 FROM debian:bookworm-slim
@@ -33,8 +34,9 @@ RUN git clone https://github.com/ligurio/elle-cli.git /opt/elle-cli && \
     lein deps && \
     lein uberjar
 
-# Copy the built binary from builder stage
+# Copy the built binaries from builder stage
 COPY --from=builder /build/target/release/moor-model-checker /usr/local/bin/
+COPY --from=builder /build/target/release/rw-register /usr/local/bin/
 
 # Copy analysis script
 COPY crates/testing/load-tools/analyze-elle-failure.sh /usr/local/bin/
@@ -45,11 +47,25 @@ RUN mkdir -p /output
 
 WORKDIR /output
 
-# Default command: run workload and analyze with script
+# Default command: run list-append workload
+# Set MODEL=rw-register to run rw-register instead
 # Direct database access - no scheduler overhead
-CMD moor-model-checker \
-    --num-props ${NUM_PROPS:-3} \
-    --num-concurrent-workloads ${NUM_CONCURRENT:-10} \
-    --num-workload-iterations ${NUM_ITERATIONS:-1000} \
-    --output-file /output/workload.edn && \
-    analyze-elle-failure.sh /output/workload.edn
+CMD if [ "${MODEL}" = "rw-register" ]; then \
+      rw-register \
+        --num-registers ${NUM_REGISTERS:-5} \
+        --num-concurrent-workloads ${NUM_CONCURRENT:-10} \
+        --num-workload-iterations ${NUM_ITERATIONS:-1000} \
+        --output-file /output/workload.edn && \
+      cd /opt/elle-cli && \
+      java -jar target/elle-cli-0.1.9-standalone.jar \
+        -m rw-register \
+        -c serializable \
+        /output/workload.edn; \
+    else \
+      moor-model-checker \
+        --num-props ${NUM_PROPS:-3} \
+        --num-concurrent-workloads ${NUM_CONCURRENT:-10} \
+        --num-workload-iterations ${NUM_ITERATIONS:-1000} \
+        --output-file /output/workload.edn && \
+      analyze-elle-failure.sh /output/workload.edn; \
+    fi

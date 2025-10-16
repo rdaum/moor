@@ -33,9 +33,11 @@ jobs:
           lein deps
           lein uberjar
 
-      # Build the moor-model-checker workload tool (direct DB access, no scheduler)
-      - name: Build moor-model-checker
-        run: cargo build --bin moor-model-checker
+      # Build Elle model checker binaries
+      - name: Build Elle model checkers
+        run: |
+          cargo build --bin list-append
+          cargo build --bin rw-register
 
       # Run the direct database list-append workload with reasonable parameters for CI
       - name: Run list-append workload
@@ -45,34 +47,33 @@ jobs:
             --num-props 3 \
             --num-concurrent-workloads 4 \
             --num-workload-iterations 1000 \
-            --output-file test-output/workload.edn
+            --output-file test-output/list-append.edn
 
-      # Verify strict serializability with elle-cli (with cycle graph generation)
-      - name: Check consistency with Elle
+      # Verify list-append serializability
+      - name: Check list-append consistency with Elle
         run: |
           cd /tmp/elle-cli
           java -jar target/elle-cli-0.1.9-standalone.jar \
-            --model list-append \
-            --consistency-model strict-serializable \
+            -m list-append \
+            -c serializable \
             --directory $GITHUB_WORKSPACE/test-output/elle-graphs \
             --plot-format svg \
             --cycle-search-timeout 5000 \
-            $GITHUB_WORKSPACE/test-output/workload.edn | tee $GITHUB_WORKSPACE/test-output/elle-result.txt
+            $GITHUB_WORKSPACE/test-output/list-append.edn | tee $GITHUB_WORKSPACE/test-output/elle-list-append-result.txt
 
-          echo "Workload statistics:"
-          echo "  Total operations: $(grep -c '^{' $GITHUB_WORKSPACE/test-output/workload.edn)"
-          echo "  Invoke operations: $(grep -c ':type :invoke' $GITHUB_WORKSPACE/test-output/workload.edn)"
-          echo "  OK operations: $(grep -c ':type :ok' $GITHUB_WORKSPACE/test-output/workload.edn)"
+          echo "List-append workload statistics:"
+          echo "  Total operations: $(grep -c '^{' $GITHUB_WORKSPACE/test-output/list-append.edn)"
+          echo "  Invoke operations: $(grep -c ':type :invoke' $GITHUB_WORKSPACE/test-output/list-append.edn)"
+          echo "  OK operations: $(grep -c ':type :ok' $GITHUB_WORKSPACE/test-output/list-append.edn)"
 
           if ls $GITHUB_WORKSPACE/test-output/elle-graphs/*.svg 2>/dev/null; then
             echo "Cycle graphs generated: $(ls -1 $GITHUB_WORKSPACE/test-output/elle-graphs/*.svg | wc -l)"
           fi
 
-          if grep -q "true" $GITHUB_WORKSPACE/test-output/elle-result.txt; then
-            echo "✓ Consistency check PASSED: No anomalies detected"
-            exit 0
+          if grep -q "true" $GITHUB_WORKSPACE/test-output/elle-list-append-result.txt; then
+            echo "✓ List-append consistency check PASSED: No anomalies detected"
           else
-            echo "✗ Consistency check FAILED: Anomalies detected"
+            echo "✗ List-append consistency check FAILED: Anomalies detected"
             echo ""
             echo "Anomaly Summary:"
             echo "================"
@@ -80,8 +81,8 @@ jobs:
             # Count anomalies by type from elle-result.txt
             # Check for each known Elle anomaly type
             for anomaly in "G0" "G1a" "G1b" "G1c" "G-single-realtime" "G-single" "G-nonadjacent-realtime" "G-nonadjacent" "G2-item" "G2"; do
-              if grep -q "$anomaly" $GITHUB_WORKSPACE/test-output/elle-result.txt; then
-                count=$(grep -c "$anomaly" $GITHUB_WORKSPACE/test-output/elle-result.txt || echo "0")
+              if grep -q "$anomaly" $GITHUB_WORKSPACE/test-output/elle-list-append-result.txt; then
+                count=$(grep -c "$anomaly" $GITHUB_WORKSPACE/test-output/elle-list-append-result.txt || echo "0")
                 echo "  $anomaly: $count"
               fi
             done
@@ -90,14 +91,45 @@ jobs:
             echo "First anomaly example:"
             echo "====================="
             # Show first anomaly with some context (up to 15 lines)
-            grep -A 15 "G-single\|G-nonadjacent\|G1c\|G2" $GITHUB_WORKSPACE/test-output/elle-result.txt | head -20
+            grep -A 15 "G-single\|G-nonadjacent\|G1c\|G2" $GITHUB_WORKSPACE/test-output/elle-list-append-result.txt | head -20
 
             echo ""
-            echo "See full results in test-output/elle-result.txt"
+            echo "See full results in test-output/elle-list-append-result.txt"
             if ls $GITHUB_WORKSPACE/test-output/elle-graphs/*.svg 2>/dev/null; then
               echo "Cycle graphs available in test-output/elle-graphs/"
             fi
 
+            exit 1
+          fi
+
+      # Run the rw-register workload
+      - name: Run rw-register workload
+        run: |
+          ./target/debug/rw-register \
+            --num-registers 5 \
+            --num-concurrent-workloads 4 \
+            --num-workload-iterations 1000 \
+            --output-file test-output/rw-register.edn
+
+      # Verify rw-register serializability
+      - name: Check rw-register consistency with Elle
+        run: |
+          cd /tmp/elle-cli
+          java -jar target/elle-cli-0.1.9-standalone.jar \
+            -m rw-register \
+            -c serializable \
+            $GITHUB_WORKSPACE/test-output/rw-register.edn | tee $GITHUB_WORKSPACE/test-output/elle-rw-register-result.txt
+
+          echo "RW-register workload statistics:"
+          echo "  Total operations: $(grep -c '^{' $GITHUB_WORKSPACE/test-output/rw-register.edn)"
+          echo "  Invoke operations: $(grep -c ':type :invoke' $GITHUB_WORKSPACE/test-output/rw-register.edn)"
+          echo "  OK operations: $(grep -c ':type :ok' $GITHUB_WORKSPACE/test-output/rw-register.edn)"
+
+          if grep -q "true" $GITHUB_WORKSPACE/test-output/elle-rw-register-result.txt; then
+            echo "✓ RW-register consistency check PASSED: No anomalies detected"
+          else
+            echo "✗ RW-register consistency check FAILED: Anomalies detected"
+            echo "See full results in test-output/elle-rw-register-result.txt"
             exit 1
           fi
 
