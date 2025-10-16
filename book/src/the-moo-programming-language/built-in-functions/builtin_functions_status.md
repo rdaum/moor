@@ -266,11 +266,12 @@ Functions not part of the original LambdaMOO, but added in moor
 
 ### Admin
 
-| Name             | Description                                                     | Notes |
-|------------------|-----------------------------------------------------------------|-------|
-| `bf_counters`    | Performance counters for profiling builtin function performance |       |
-| `db_counters`    | Performance counters for profiling DB performance               |       |
-| `sched_counters` | Performance counters for profiling scheduling performance       |       |
+| Name             | Description                                                     | Notes       |
+|------------------|-----------------------------------------------------------------|-------------|
+| `bf_counters`    | Performance counters for profiling builtin function performance |             |
+| `db_counters`    | Performance counters for profiling DB performance               |             |
+| `sched_counters` | Performance counters for profiling scheduling performance       |             |
+| `flush_caches`   | Flushes all internal caches (verb, property, ancestry)          | Wizard only |
 
 ### Tasks
 

@@ -443,6 +443,10 @@ pub trait WorldState: Send {
         target: Option<&Obj>,
     ) -> Result<Obj, WorldStateError>;
 
+    /// Flush all internal caches (verb resolution, property resolution, ancestry).
+    /// This is useful when you want to ensure that subsequent queries see fresh data.
+    fn flush_caches(&mut self);
+
     /// Commit all modifications made to the state of this world since the start of its transaction.
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 

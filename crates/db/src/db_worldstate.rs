@@ -970,6 +970,10 @@ impl WorldState for DbWorldState {
         self.get_tx().db_usage()
     }
 
+    fn flush_caches(&mut self) {
+        self.get_tx_mut().flush_caches();
+    }
+
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.commit);
         self.tx.commit()

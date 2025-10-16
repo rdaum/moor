@@ -24,7 +24,7 @@ use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
 use crate::{
-    task_context::{current_session, current_task_scheduler_client, with_current_transaction},
+    task_context::{current_session, current_task_scheduler_client, with_current_transaction, with_current_transaction_mut},
     tasks::{TaskStart, sched_counters, task_scheduler_client::TaskControlMsg},
     vm::{
         TaskSuspend,
@@ -2182,6 +2182,29 @@ fn bf_ancestry_cache_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(make_cache_stats_list(&ANCESTRY_CACHE_STATS)))
 }
 
+/// Flushes all internal caches (verb resolution, property resolution, ancestry). Wizard-only.
+/// MOO: `none flush_caches()`
+fn bf_flush_caches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("flush_caches() does not take any arguments"),
+        ));
+    }
+    if !bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_PERM.msg("Only wizards may call flush_caches()"),
+        ));
+    }
+
+    with_current_transaction_mut(|tx| tx.flush_caches());
+    Ok(RetNil)
+}
+
 /// Returns information about all available worker types and their current state.
 /// Wizard-only function that provides insights into worker queue sizes, response times, etc.
 /// MOO: `list workers()`
@@ -2536,6 +2559,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("verb_cache_stats")] = Box::new(bf_verb_cache_stats);
     builtins[offset_for_builtin("property_cache_stats")] = Box::new(bf_property_cache_stats);
     builtins[offset_for_builtin("ancestry_cache_stats")] = Box::new(bf_ancestry_cache_stats);
+    builtins[offset_for_builtin("flush_caches")] = Box::new(bf_flush_caches);
     builtins[offset_for_builtin("force_input")] = Box::new(bf_force_input);
     builtins[offset_for_builtin("wait_task")] = Box::new(bf_wait_task);
     builtins[offset_for_builtin("commit")] = Box::new(bf_commit);

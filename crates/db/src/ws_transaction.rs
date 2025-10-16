@@ -1373,6 +1373,14 @@ impl WorldStateTransaction {
 
         Ok(descendant_set)
     }
+
+    /// Flush all internal caches (verb resolution, property resolution, ancestry).
+    /// This ensures that subsequent queries will see fresh data.
+    pub fn flush_caches(&mut self) {
+        self.verb_resolution_cache.flush();
+        self.prop_resolution_cache.flush();
+        self.ancestry_cache.flush();
+    }
 }
 
 impl WorldStateTransaction {
