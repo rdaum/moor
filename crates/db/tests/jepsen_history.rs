@@ -274,8 +274,7 @@ mod tests {
                         let mut cr = backing_store.begin_check();
                         cr.check(&ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
-                        let w = backing_store.write_lock();
-                        cr.commit(Some(w))
+                        cr.commit(backing_store.index());
                     }
                 }
                 Type::Fail => {
@@ -326,8 +325,7 @@ mod tests {
                             Err(Error::Conflict) => {}
                             Err(e) => panic!("unexpected error: {e:?}"),
                         }
-                        let w = backing_store.write_lock();
-                        cr.commit(Some(w));
+                        cr.commit(backing_store.index());
                         Ok(())
                     };
                     return fail_check_fn();

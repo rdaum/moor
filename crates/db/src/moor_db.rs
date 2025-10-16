@@ -102,6 +102,8 @@ impl Caches {
 
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
+    /// Seqlock version counter: even = stable, odd = commit in progress
+    commit_version: CachePadded<AtomicU64>,
     keyspace: fjall::Keyspace,
     relations: Relations,
     sequences: [Arc<CachePadded<AtomicI64>>; 16],
@@ -231,25 +233,50 @@ impl MoorDB {
     }
 
     pub(crate) fn start_transaction(&self) -> WorldStateTransaction {
-        let tx = Tx {
-            ts: Timestamp(
-                self.monotonic
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            ),
-        };
+        loop {
+            // Check if commit is in progress (odd version)
+            let v1 = self
+                .commit_version
+                .load(std::sync::atomic::Ordering::Acquire);
+            if v1 & 1 == 1 {
+                // Commit in progress, spin
+                std::hint::spin_loop();
+                continue;
+            }
 
-        let caches = self.caches.load();
-        let forked_caches = caches.fork();
+            // Acquire fence ensures all relation loads see committed data
+            std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
 
-        self.relations.start_transaction(
-            tx,
-            self.commit_channel.clone(),
-            self.usage_send.clone(),
-            self.sequences.clone(),
-            forked_caches.verb_resolution_cache,
-            forked_caches.prop_resolution_cache,
-            forked_caches.ancestry_cache,
-        )
+            let tx = Tx {
+                ts: Timestamp(
+                    self.monotonic
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                ),
+            };
+
+            let caches = self.caches.load();
+            let forked_caches = caches.fork();
+
+            let ws_tx = self.relations.start_transaction(
+                tx,
+                self.commit_channel.clone(),
+                self.usage_send.clone(),
+                self.sequences.clone(),
+                forked_caches.verb_resolution_cache,
+                forked_caches.prop_resolution_cache,
+                forked_caches.ancestry_cache,
+            );
+
+            // Verify version didn't change during snapshot (detect commit race)
+            if self
+                .commit_version
+                .load(std::sync::atomic::Ordering::Acquire)
+                == v1
+            {
+                return ws_tx;
+            }
+            // Retry if commit happened during snapshot
+        }
     }
 
     pub fn stop(&self) {
@@ -325,6 +352,7 @@ impl MoorDB {
         let caches = ArcSwap::new(Arc::new(Caches::new()));
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
+            commit_version: CachePadded::new(AtomicU64::new(0)),
             relations,
             sequences,
             sequences_partition,
@@ -464,10 +492,9 @@ impl MoorDB {
                             }
                         };
 
-                        // Now take write-lock on all relations just for the very instant that we swap em out.
-                        // This will hold up new transactions starting, unfortunately.
-                        // TODO: this is the major source of low throughput in benchmarking
-                        checkers.commit_all(&this.relations);
+                        // Use seqlock coordination to atomically swap relation indexes.
+                        // Transaction starts will retry if they race with this commit window.
+                        checkers.commit_all(&this.relations, &this.commit_version);
 
                         // Track the last write transaction timestamp for snapshot consistency
                         this.last_write_commit.store(tx_timestamp.0, std::sync::atomic::Ordering::Release);

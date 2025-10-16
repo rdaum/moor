@@ -21,13 +21,10 @@ use crate::{
         relation_tx::{OpType, RelationTransaction, WorkingSet},
     },
 };
+use arc_swap::ArcSwap;
 use minstant::Instant;
 use moor_var::Symbol;
-use std::{
-    hash::Hash,
-    sync::{Arc, RwLock, RwLockWriteGuard},
-    time::Duration,
-};
+use std::{hash::Hash, sync::Arc, time::Duration};
 use tracing::warn;
 
 /// Represents the current "canonical" state of a relation.
@@ -39,7 +36,7 @@ where
 {
     relation_name: Symbol,
 
-    index: Arc<RwLock<Box<dyn RelationIndex<Domain, Codomain>>>>,
+    index: Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>,
 
     source: Arc<Source>,
 }
@@ -68,7 +65,7 @@ where
     pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
         Self {
             relation_name,
-            index: Arc::new(RwLock::new(Box::new(HashRelationIndex::new()))),
+            index: Arc::new(ArcSwap::new(Arc::new(Box::new(HashRelationIndex::new())))),
             source: provider,
         }
     }
@@ -80,22 +77,24 @@ where
         use crate::tx_management::indexes::SecondaryIndexRelation;
         Self {
             relation_name,
-            index: Arc::new(RwLock::new(Box::new(SecondaryIndexRelation::new()))),
+            index: Arc::new(ArcSwap::new(Arc::new(Box::new(
+                SecondaryIndexRelation::new(),
+            )))),
             source: provider,
         }
-    }
-
-    pub fn write_lock(&self) -> RwLockWriteGuard<'_, Box<dyn RelationIndex<Domain, Codomain>>> {
-        self.index.write().unwrap()
     }
 
     pub fn source(&self) -> &Arc<Source> {
         &self.source
     }
+
+    pub fn index(&self) -> &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>> {
+        &self.index
+    }
 }
 
-/// Holds a lock on the cache while a transaction commit is in progress.
-/// (Just wraps the lock to avoid leaking the Inner type.)
+/// Holds a forked snapshot of the relation index during transaction commit.
+/// Obtained lock-free via ArcSwap, enabling concurrent transaction starts.
 pub struct CheckRelation<Domain, Codomain, P>
 where
     Domain: Clone + Hash + Eq + Send + Sync + 'static,
@@ -122,10 +121,10 @@ where
         self.dirty
     }
 
-    /// Check the cache for conflicts with the given working set.
-    /// Holds a lock on the cache while checking.
+    /// Check the forked index for conflicts with the given working set.
+    /// Operates on a lock-free snapshot, so does not block concurrent transaction starts.
     /// This is the first phase of transaction commit, and does not mutate the contents of
-    /// the cache.
+    /// the canonical index.
     pub fn check(&mut self, working_set: &WorkingSet<Domain, Codomain>) -> Result<(), Error> {
         let start_time = Instant::now();
         let mut last_check_time = start_time;
@@ -219,10 +218,8 @@ where
         Ok(())
     }
 
-    pub fn commit(self, inner: Option<RwLockWriteGuard<Box<dyn RelationIndex<Domain, Codomain>>>>) {
-        if let Some(mut inner) = inner {
-            *inner = self.index;
-        }
+    pub fn commit(self, index_swap: &Arc<ArcSwap<Box<dyn RelationIndex<Domain, Codomain>>>>) {
+        index_swap.store(Arc::new(self.index));
     }
 }
 
@@ -233,14 +230,14 @@ where
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
-        let index = self.index.read().unwrap();
-        RelationTransaction::new(*tx, index.fork(), self.clone())
+        let index = self.index.load();
+        RelationTransaction::new(*tx, (**index).fork(), self.clone())
     }
 
     pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
-        let index = self.index.read().unwrap();
+        let index = self.index.load();
         CheckRelation {
-            index: index.fork(),
+            index: (**index).fork(),
             relation_name: self.relation_name,
             source: self.source.clone(),
             dirty: false,
@@ -255,27 +252,21 @@ where
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
-        // First try with read lock
-        {
-            let inner = self.index.read().unwrap();
-            if let Some(entry) = inner.index_lookup(domain) {
-                return Ok(Some((entry.ts, entry.value.clone())));
-            }
+        // Try read path first
+        let index = self.index.load();
+        if let Some(entry) = index.index_lookup(domain) {
+            return Ok(Some((entry.ts, entry.value.clone())));
         }
 
-        // Not in cache, need write lock to potentially insert from backing store
-        let mut inner = self.index.write().unwrap();
-        // Double-check since another thread might have inserted while we waited for write lock
-        if let Some(entry) = inner.index_lookup(domain) {
-            Ok(Some((entry.ts, entry.value.clone())))
+        // Not in cache, need to insert from backing store
+        // Fork the index, insert the new entry, and swap it in
+        let mut new_index = (**index).fork();
+        if let Some((ts, codomain)) = self.source.get(domain)? {
+            new_index.insert_entry(ts, domain.clone(), codomain.clone());
+            self.index.store(Arc::new(new_index));
+            Ok(Some((ts, codomain)))
         } else {
-            // Pull from backing store (provider handles tombstone checking internally)
-            if let Some((ts, codomain)) = self.source.get(domain)? {
-                inner.insert_entry(ts, domain.clone(), codomain.clone());
-                Ok(Some((ts, codomain)))
-            } else {
-                Ok(None)
-            }
+            Ok(None)
         }
     }
 
@@ -284,23 +275,25 @@ where
         F: Fn(&Domain, &Codomain) -> bool,
     {
         let results = self.source.scan(&predicate)?;
-        {
-            let mut index = self.index.write().unwrap();
-            for (ts, domain, codomain) in &results {
-                index.insert_entry(*ts, domain.clone(), codomain.clone());
-            }
-            // If we're scanning with a predicate that accepts everything, mark as fully loaded
-            if self.is_full_scan_predicate(predicate) {
-                index.set_provider_fully_loaded(true);
-            }
+        let index = self.index.load();
+        let mut new_index = (**index).fork();
+
+        for (ts, domain, codomain) in &results {
+            new_index.insert_entry(*ts, domain.clone(), codomain.clone());
         }
 
+        // If we're scanning with a predicate that accepts everything, mark as fully loaded
+        if self.is_full_scan_predicate(predicate) {
+            new_index.set_provider_fully_loaded(true);
+        }
+
+        self.index.store(Arc::new(new_index));
         Ok(results)
     }
 
     fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
-        let inner = self.index.read().unwrap();
-        inner.get_by_codomain(codomain)
+        let index = self.index.load();
+        index.get_by_codomain(codomain)
     }
 }
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
@@ -443,8 +436,7 @@ mod tests {
             let mut cr_a = relation.begin_check();
             cr_a.check(&ws_a).unwrap();
             cr_a.apply(ws_a).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_a.index;
+            cr_a.commit(relation.index());
         }
         {
             let mut cr_b = relation.begin_check();
@@ -484,8 +476,7 @@ mod tests {
             let mut cr_2 = relation.begin_check();
             cr_2.check(&ws_2).unwrap();
             cr_2.apply(ws_2).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_2.index;
+            cr_2.commit(relation.index());
         }
 
         // Now T1 tries to update based on its read - this should conflict
@@ -522,8 +513,7 @@ mod tests {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&ws_1).unwrap();
             cr_1.apply(ws_1).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_1.index;
+            cr_1.commit(relation.index());
         }
 
         // T2 should conflict
@@ -561,8 +551,7 @@ mod tests {
             let mut cr_2 = relation.begin_check();
             cr_2.check(&ws_2).unwrap();
             cr_2.apply(ws_2).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_2.index;
+            cr_2.commit(relation.index());
         }
 
         // T1 now inserts another entry - this should succeed since it's a different key
@@ -598,8 +587,7 @@ mod tests {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&ws_1).unwrap();
             cr_1.apply(ws_1).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_1.index;
+            cr_1.commit(relation.index());
         }
 
         // Now T2 tries to insert the same key - should succeed since key was deleted
@@ -659,8 +647,7 @@ mod tests {
             let mut cr = relation.begin_check();
             cr.check(&ws).unwrap();
             cr.apply(ws).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr.index;
+            cr.commit(relation.index());
         }
 
         // Final value should be 5 (0 + 5 increments)
@@ -697,8 +684,7 @@ mod tests {
             let mut cr_1 = relation.begin_check();
             cr_1.check(&ws_1).unwrap();
             cr_1.apply(ws_1).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_1.index;
+            cr_1.commit(relation.index());
         }
 
         // T2 should conflict because it tries to update what T1 already updated
@@ -721,8 +707,7 @@ mod tests {
             let mut cr_3 = relation.begin_check();
             cr_3.check(&ws_3).unwrap();
             cr_3.apply(ws_3).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_3.index;
+            cr_3.commit(relation.index());
         }
 
         // Verify final state: T1's insert and T3's update should be there
@@ -764,8 +749,7 @@ mod tests {
             let mut cr_newer = relation.begin_check();
             cr_newer.check(&ws_newer).unwrap();
             cr_newer.apply(ws_newer).unwrap();
-            let mut r = relation.index.write().unwrap();
-            *r = cr_newer.index;
+            cr_newer.commit(relation.index());
         }
 
         // Now older transaction tries to update - should conflict due to newer timestamp in cache
@@ -803,8 +787,7 @@ mod tests {
         cr.apply(ws).unwrap();
 
         // Commit the changes to the relation
-        let guard = relation.index.write().unwrap();
-        cr.commit(Some(guard));
+        cr.commit(relation.index());
 
         // Verify the update was applied correctly
         assert_eq!(
@@ -824,7 +807,9 @@ mod tests {
         // Create relation with secondary index support
         let relation = Arc::new(Relation {
             relation_name: Symbol::mk("test"),
-            index: Arc::new(RwLock::new(Box::new(SecondaryIndexRelation::new()))),
+            index: Arc::new(ArcSwap::new(Arc::new(Box::new(
+                SecondaryIndexRelation::new(),
+            )))),
             source: provider,
         });
 
@@ -857,8 +842,7 @@ mod tests {
         let mut cr = relation.begin_check();
         cr.check(&ws).unwrap();
         cr.apply(ws).unwrap();
-        let guard = relation.index.write().unwrap();
-        cr.commit(Some(guard));
+        cr.commit(relation.index());
 
         // Test that committed secondary index state is visible in new transaction
         let tx2 = Tx { ts: Timestamp(20) };

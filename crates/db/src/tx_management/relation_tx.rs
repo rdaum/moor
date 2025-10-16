@@ -737,7 +737,6 @@ where
     }
 
     /// Helper method to fully load all data from the provider into the master index
-    /// Now that we fixed the lock contention in Canonical::scan(), this should work properly
     fn fully_load_from_provider(&mut self) -> Result<(), Error> {
         // Scan all data from the provider that's visible to this transaction
         let _provider_data = self.backing_source.scan(&|_domain, _codomain| true)?;

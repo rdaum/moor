@@ -140,15 +140,27 @@ macro_rules! define_relations {
                     Ok(self)
                 }
 
-                /// Commit all changes to the relations with appropriate write locking.
+                /// Commit all changes to the relations with seqlock coordination.
                 ///
-                /// This method takes write locks only on relations that have changes,
-                /// minimizing lock contention during the commit process.
-                fn commit_all(self, relations: &Relations) {
+                /// Uses the commit_version counter as a seqlock to ensure transaction starts
+                /// see atomic snapshots. Increments version to odd (in-progress), swaps all
+                /// dirty relation indexes, then increments to even (complete).
+                fn commit_all(self, relations: &Relations, commit_version: &std::sync::atomic::AtomicU64) {
+                    // Mark commit in progress (odd version)
+                    commit_version.fetch_add(1, std::sync::atomic::Ordering::Release);
+
+                    // Swap all dirty relations
                     $(
-                        let [<$field _lock>] = self.$field.dirty().then(|| relations.$field.write_lock());
-                        self.$field.commit([<$field _lock>]);
+                        if self.$field.dirty() {
+                            self.$field.commit(relations.$field.index());
+                        }
                     )*
+
+                    // Release fence ensures all swaps are visible before marking complete
+                    std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
+
+                    // Mark commit complete (even version)
+                    commit_version.fetch_add(1, std::sync::atomic::Ordering::Release);
                 }
             }
 

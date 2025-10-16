@@ -21,7 +21,13 @@ use edn_format::{Keyword, Value};
 use moor_common::model::{ObjAttrs, WorldStateSource};
 use moor_db::{Database, TxDB};
 use moor_var::{Obj, Symbol, v_int, v_list};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc, thread, time::{Duration, Instant}};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 
 #[derive(Clone, Parser, Debug)]
 struct Args {
@@ -300,7 +306,10 @@ fn print_performance_metrics(workload_results: &[(Instant, WorkItem)], total_dur
     println!("════════════════════════════════════════════════════════════");
     println!("\nOverall:");
     println!("  Total operations:     {}", total_ops);
-    println!("  Total duration:       {:.2}s", total_duration.as_secs_f64());
+    println!(
+        "  Total duration:       {:.2}s",
+        total_duration.as_secs_f64()
+    );
     println!("  Throughput:           {:.2} ops/sec", throughput);
 
     if !read_durations.is_empty() {
@@ -308,11 +317,26 @@ fn print_performance_metrics(workload_results: &[(Instant, WorkItem)], total_dur
             / read_durations.len() as f64;
         println!("\nRead Operations ({} total):", read_durations.len());
         println!("  Mean latency:         {:.2}ms", read_mean / 1000.0);
-        println!("  Median (p50):         {:.2}ms", calculate_percentile(&read_durations, 0.50).as_micros() as f64 / 1000.0);
-        println!("  p95:                  {:.2}ms", calculate_percentile(&read_durations, 0.95).as_micros() as f64 / 1000.0);
-        println!("  p99:                  {:.2}ms", calculate_percentile(&read_durations, 0.99).as_micros() as f64 / 1000.0);
-        println!("  Max:                  {:.2}ms", read_durations.last().unwrap().as_micros() as f64 / 1000.0);
-        println!("  Min:                  {:.2}ms", read_durations.first().unwrap().as_micros() as f64 / 1000.0);
+        println!(
+            "  Median (p50):         {:.2}ms",
+            calculate_percentile(&read_durations, 0.50).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p95:                  {:.2}ms",
+            calculate_percentile(&read_durations, 0.95).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p99:                  {:.2}ms",
+            calculate_percentile(&read_durations, 0.99).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Max:                  {:.2}ms",
+            read_durations.last().unwrap().as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Min:                  {:.2}ms",
+            read_durations.first().unwrap().as_micros() as f64 / 1000.0
+        );
     }
 
     if !append_durations.is_empty() {
@@ -320,11 +344,26 @@ fn print_performance_metrics(workload_results: &[(Instant, WorkItem)], total_dur
             / append_durations.len() as f64;
         println!("\nAppend Operations ({} total):", append_durations.len());
         println!("  Mean latency:         {:.2}ms", append_mean / 1000.0);
-        println!("  Median (p50):         {:.2}ms", calculate_percentile(&append_durations, 0.50).as_micros() as f64 / 1000.0);
-        println!("  p95:                  {:.2}ms", calculate_percentile(&append_durations, 0.95).as_micros() as f64 / 1000.0);
-        println!("  p99:                  {:.2}ms", calculate_percentile(&append_durations, 0.99).as_micros() as f64 / 1000.0);
-        println!("  Max:                  {:.2}ms", append_durations.last().unwrap().as_micros() as f64 / 1000.0);
-        println!("  Min:                  {:.2}ms", append_durations.first().unwrap().as_micros() as f64 / 1000.0);
+        println!(
+            "  Median (p50):         {:.2}ms",
+            calculate_percentile(&append_durations, 0.50).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p95:                  {:.2}ms",
+            calculate_percentile(&append_durations, 0.95).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p99:                  {:.2}ms",
+            calculate_percentile(&append_durations, 0.99).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Max:                  {:.2}ms",
+            append_durations.last().unwrap().as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Min:                  {:.2}ms",
+            append_durations.first().unwrap().as_micros() as f64 / 1000.0
+        );
     }
 
     println!("\n════════════════════════════════════════════════════════════\n");

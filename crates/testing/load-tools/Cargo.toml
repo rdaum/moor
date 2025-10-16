@@ -19,17 +19,17 @@ name = "moor_model_checker"
 path = "src/lib.rs"
 
 [[bin]]
-name = "moor-model-checker"
-path = "src/direct-db-list-append.rs"
+name = "list-append"
+path = "src/elle-list-append.rs"
 
 [[bin]]
 name = "rw-register"
-path = "src/rw-register.rs"
+path = "src/elle-rw-register.rs"
 
 # Note: this model currently fails with 0.1.9 of elle, but elle also fails for their reference files for it, too...
 [[bin]]
 name = "bank"
-path = "src/bank.rs"
+path = "src/elle-bank.rs"
 
 [[bin]]
 name = "load-test"

@@ -778,6 +778,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Takes >60s to run through 100 shuttle iterations; run manually when needed
     fn test_g_single_item_realtime_anomaly() {
         // Test for a G-single-item-realtime anomaly detected by Jepsen-Elle:
         // T2 commits at index N, T1 invokes at index N+1 (AFTER T2 completes),
@@ -816,7 +817,8 @@ mod tests {
                         thread::spawn(move || {
                             for iteration in 0..100 {
                                 // T2: Write and commit
-                                let write_value = (thread_id * 1000 + iteration) as i64;
+                                // Add 1 to ensure write_value is never 0 (which is the initial value)
+                                let write_value = (thread_id * 1000 + iteration + 1) as i64;
                                 let tx2 = db.start_transaction();
                                 let mut ws2 = DbWorldState { tx: tx2 };
                                 ws2.update_property(

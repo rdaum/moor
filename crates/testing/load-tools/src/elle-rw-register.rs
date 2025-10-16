@@ -1,3 +1,16 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 //! Elle rw-register consistency checker workload generator
 //! Tests read-write register operations for serializability anomalies
 
@@ -166,12 +179,11 @@ fn calculate_percentile(sorted_durations: &[Duration], percentile: f64) -> Durat
 fn is_read_operation(event: &EdnEvent) -> bool {
     // Extract operation type from the value
     // Format: [[:r register-id value]] or [[:w register-id value]]
-    if let Value::Vector(ops) = &event.value {
-        if let Some(Value::Vector(mop)) = ops.first() {
-            if let Some(Value::Keyword(op_type)) = mop.first() {
-                return op_type.name() == "r";
-            }
-        }
+    if let Value::Vector(ops) = &event.value
+        && let Some(Value::Vector(mop)) = ops.first()
+        && let Some(Value::Keyword(op_type)) = mop.first()
+    {
+        return op_type.name() == "r";
     }
     false
 }
