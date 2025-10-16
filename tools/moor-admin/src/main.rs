@@ -225,9 +225,9 @@ impl Session for ConsoleSession {
                 } => {
                     let output = to_literal(value);
                     if *no_newline {
-                        print!("{}", output);
+                        print!("{output}");
                     } else {
-                        println!("{}", output);
+                        println!("{output}");
                     }
                 }
                 Event::Traceback(exception) => {
@@ -263,13 +263,13 @@ impl Session for ConsoleSession {
     }
 
     fn send_system_msg(&self, _player: Obj, msg: &str) -> Result<(), SessionError> {
-        println!("** {} **", msg);
+        println!("** {msg} **");
         Ok(())
     }
 
     fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         if let Some(msg) = msg {
-            println!("** Server shutting down: {} **", msg);
+            println!("** Server shutting down: {msg} **");
         } else {
             println!("** Server shutting down **");
         }
@@ -424,11 +424,11 @@ impl MooAdminHelper {
                 let replacement = if dir_path == "./" {
                     file_name.clone()
                 } else {
-                    format!("{}{}", dir_path, file_name)
+                    format!("{dir_path}{file_name}")
                 };
 
                 let display = if is_dir {
-                    format!("{}/", file_name)
+                    format!("{file_name}/")
                 } else {
                     file_name
                 };
@@ -436,7 +436,7 @@ impl MooAdminHelper {
                 matches.push(Pair {
                     display,
                     replacement: if is_dir {
-                        format!("{}/", replacement)
+                        format!("{replacement}/")
                     } else {
                         replacement
                     },
@@ -539,10 +539,10 @@ impl Completer for MooAdminHelper {
 
                     let matches: Vec<Pair> = flags
                         .iter()
-                        .filter(|flag| flag.starts_with(&format!("--{}", after_dashes)))
+                        .filter(|flag| flag.starts_with(&format!("--{after_dashes}")))
                         .map(|flag| Pair {
                             display: flag.to_string(),
-                            replacement: format!("{} ", flag),
+                            replacement: format!("{flag} "),
                         })
                         .collect();
                     return Ok((flag_start, matches));
@@ -835,13 +835,13 @@ fn format_scheduler_error(err: &SchedulerError) -> String {
                 msg.push_str("Traceback:\n");
                 for line in &exception.backtrace {
                     if let Some(s) = line.as_string() {
-                        msg.push_str(&format!("  {}\n", s));
+                        msg.push_str(&format!("  {s}\n"));
                     }
                 }
             }
             msg
         }
-        _ => format!("{}", err),
+        _ => format!("{err}"),
     }
 }
 
@@ -941,7 +941,7 @@ fn eval_expression(
         .mk_background_session(wizard)
         .map_err(|e| eyre!("Failed to create session: {:?}", e))?;
 
-    let code = format!("return {};", expr);
+    let code = format!("return {expr};");
 
     let handle = scheduler_client
         .submit_eval_task(wizard, wizard, code, session, features)
@@ -956,7 +956,7 @@ fn eval_expression(
         Ok(TaskResult::Result(value)) => {
             let skin = create_skin();
             let output = to_literal(&value);
-            let markdown = format!("**=>** `{}`", output);
+            let markdown = format!("**=>** `{output}`");
             println!("{}", skin.term_text(&markdown));
         }
         Ok(TaskResult::Replaced(_)) => {
@@ -1189,7 +1189,7 @@ fn cmd_prog(
         .iter()
         .map(|line| {
             let escaped = line.replace('\\', "\\\\").replace('"', "\\\"");
-            format!("\"{}\"", escaped)
+            format!("\"{escaped}\"")
         })
         .collect();
 
@@ -1398,7 +1398,7 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
             let Some(s) = line.as_string() else {
                 continue;
             };
-            writeln!(file, "{}", s)
+            writeln!(file, "{s}")
                 .map_err(|e| eyre!("Failed to write to file {:?}: {}", path, e))?;
         }
 
@@ -1418,7 +1418,7 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
             let Some(s) = line.as_string() else {
                 continue;
             };
-            println!("{}", s);
+            println!("{s}");
         }
 
         let summary = format!("\n*{} lines dumped*", lines.len());
@@ -1648,7 +1648,7 @@ Type `help` for available commands or `quit` to deactivate.
                             Ok((_task_id, Ok(TaskResult::Result(value)))) => {
                                 let skin = create_skin();
                                 let output = to_literal(&value);
-                                let markdown = format!("**=>** `{}`", output);
+                                let markdown = format!("**=>** `{output}`");
                                 println!("{}", skin.term_text(&markdown));
                             }
                             Ok((_task_id, Err(e))) => {
@@ -1751,7 +1751,7 @@ fn main() -> Result<(), Report> {
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 
-    eprintln!("moor-admin {} starting", version);
+    eprintln!("moor-admin {version} starting");
 
     // We'll create the editor after we have the database
     let rl_config = rustyline::Config::builder().auto_add_history(true).build();
@@ -1765,7 +1765,7 @@ fn main() -> Result<(), Report> {
     } else {
         // No RUST_LOG set, build filter from scratch with gdt_cpus suppressed
         let level = if args.debug { "debug" } else { "info" };
-        EnvFilter::new(format!("{},gdt_cpus=off", level))
+        EnvFilter::new(format!("{level},gdt_cpus=off"))
     };
 
     // Create a temporary editor just for the ExternalPrinter

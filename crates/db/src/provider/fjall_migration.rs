@@ -87,11 +87,11 @@ pub fn fjall_check_and_migrate(db_path: &Path) -> Result<(), String> {
     // Open database read-only to check version
     let keyspace = Config::new(db_path)
         .open()
-        .map_err(|e| format!("Failed to open database to check version: {}", e))?;
+        .map_err(|e| format!("Failed to open database to check version: {e}"))?;
 
     let sequences_partition = keyspace
         .open_partition("sequences", PartitionCreateOptions::default())
-        .map_err(|e| format!("Failed to open sequences partition: {}", e))?;
+        .map_err(|e| format!("Failed to open sequences partition: {e}"))?;
 
     // Check version
     let current_version = get_db_version_static(&sequences_partition).unwrap_or_else(|_| {
@@ -132,12 +132,12 @@ fn fjall_migrate_via_copy(
     if migrating_path.exists() {
         warn!("Found leftover migration directory, cleaning up");
         fs::remove_dir_all(&migrating_path)
-            .map_err(|e| format!("Failed to clean up old migration directory: {}", e))?;
+            .map_err(|e| format!("Failed to clean up old migration directory: {e}"))?;
     }
     if old_path.exists() {
         warn!("Found leftover old database directory, cleaning up");
         fs::remove_dir_all(&old_path)
-            .map_err(|e| format!("Failed to clean up old database directory: {}", e))?;
+            .map_err(|e| format!("Failed to clean up old database directory: {e}"))?;
     }
 
     info!("Copying database to {:?} for migration", migrating_path);
@@ -150,11 +150,11 @@ fn fjall_migrate_via_copy(
     // Open the copy and perform migration
     let keyspace = Config::new(&migrating_path)
         .open()
-        .map_err(|e| format!("Failed to open copied database: {}", e))?;
+        .map_err(|e| format!("Failed to open copied database: {e}"))?;
 
     let sequences_partition = keyspace
         .open_partition("sequences", PartitionCreateOptions::default())
-        .map_err(|e| format!("Failed to open sequences partition in copy: {}", e))?;
+        .map_err(|e| format!("Failed to open sequences partition in copy: {e}"))?;
 
     let migrator = FjallMigrator::new(keyspace, sequences_partition);
 
@@ -162,11 +162,11 @@ fn fjall_migrate_via_copy(
 
     // Run migration on the copy
     if let Err(e) = migrator.migrate_if_needed() {
-        error!("Migration failed: {}", e);
+        error!("Migration failed: {e}");
         // Clean up failed migration
         drop(migrator);
         fs::remove_dir_all(&migrating_path).ok();
-        return Err(format!("Migration failed: {}", e));
+        return Err(format!("Migration failed: {e}"));
     }
 
     // Close the migrated copy
@@ -178,19 +178,19 @@ fn fjall_migrate_via_copy(
     // 1. Rename original to .old
     // 2. Rename .migrating to original name
     fs::rename(db_path, &old_path)
-        .map_err(|e| format!("Failed to rename original database: {}", e))?;
+        .map_err(|e| format!("Failed to rename original database: {e}"))?;
 
     if let Err(e) = fs::rename(&migrating_path, db_path) {
         // Try to restore original
-        error!("Failed to rename migrated database: {}", e);
+        error!("Failed to rename migrated database: {e}");
         fs::rename(&old_path, db_path).ok();
-        return Err(format!("Failed to swap migrated database: {}", e));
+        return Err(format!("Failed to swap migrated database: {e}"));
     }
 
     info!("Successfully swapped to migrated database");
 
     // Clean up old database
-    fs::remove_dir_all(&old_path).map_err(|e| format!("Failed to remove old database: {}", e))?;
+    fs::remove_dir_all(&old_path).map_err(|e| format!("Failed to remove old database: {e}"))?;
 
     info!("Migration complete: {} -> {}", from_version, to_version);
 
@@ -199,11 +199,10 @@ fn fjall_migrate_via_copy(
 
 /// Recursively copy a directory
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
-    fs::create_dir_all(dst)
-        .map_err(|e| format!("Failed to create destination directory: {}", e))?;
+    fs::create_dir_all(dst).map_err(|e| format!("Failed to create destination directory: {e}"))?;
 
-    for entry in fs::read_dir(src).map_err(|e| format!("Failed to read source directory: {}", e))? {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+    for entry in fs::read_dir(src).map_err(|e| format!("Failed to read source directory: {e}"))? {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {e}"))?;
         let path = entry.path();
         let file_name = entry.file_name();
         let dst_path = dst.join(&file_name);
@@ -212,7 +211,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
             copy_dir_recursive(&path, &dst_path)?;
         } else {
             fs::copy(&path, &dst_path)
-                .map_err(|e| format!("Failed to copy file {:?}: {}", file_name, e))?;
+                .map_err(|e| format!("Failed to copy file {file_name:?}: {e}"))?;
         }
     }
 
@@ -223,14 +222,13 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
 fn get_db_version_static(sequences_partition: &PartitionHandle) -> Result<Version, String> {
     let version_bytes = sequences_partition
         .get(VERSION_KEY)
-        .map_err(|e| format!("Failed to read version: {}", e))?
+        .map_err(|e| format!("Failed to read version: {e}"))?
         .ok_or_else(|| "No version marker found".to_string())?;
 
     let version_str = String::from_utf8(version_bytes.to_vec())
-        .map_err(|e| format!("Invalid UTF-8 in version string: {}", e))?;
+        .map_err(|e| format!("Invalid UTF-8 in version string: {e}"))?;
 
-    Version::parse(&version_str)
-        .map_err(|e| format!("Invalid semver version '{}': {}", version_str, e))
+    Version::parse(&version_str).map_err(|e| format!("Invalid semver version '{version_str}': {e}"))
 }
 
 /// Fjall-specific migration handler
@@ -252,14 +250,14 @@ impl FjallMigrator {
         let version_bytes = self
             .sequences_partition
             .get(VERSION_KEY)
-            .map_err(|e| format!("Failed to read version: {}", e))?
+            .map_err(|e| format!("Failed to read version: {e}"))?
             .ok_or_else(|| "No version marker found".to_string())?;
 
         let version_str = String::from_utf8(version_bytes.to_vec())
-            .map_err(|e| format!("Invalid UTF-8 in version string: {}", e))?;
+            .map_err(|e| format!("Invalid UTF-8 in version string: {e}"))?;
 
         Version::parse(&version_str)
-            .map_err(|e| format!("Invalid semver version '{}': {}", version_str, e))
+            .map_err(|e| format!("Invalid semver version '{version_str}': {e}"))
     }
 
     /// Migration from version 1 (u128 timestamps) to version 2 (u64 timestamps)
@@ -286,7 +284,7 @@ impl FjallMigrator {
                 let partition = self
                     .keyspace
                     .open_partition(name, PartitionCreateOptions::default())
-                    .map_err(|e| format!("Failed to open partition {}: {}", name, e))?;
+                    .map_err(|e| format!("Failed to open partition {name}: {e}"))?;
                 Self::fjall_migrate_partition_u128_to_u64(&partition, name)?;
             }
         }
@@ -296,7 +294,7 @@ impl FjallMigrator {
         info!("Resetting monotonic transaction counter to 1");
         self.sequences_partition
             .insert(15_u64.to_le_bytes(), 1u64.to_le_bytes())
-            .map_err(|e| format!("Failed to reset transaction counter: {}", e))?;
+            .map_err(|e| format!("Failed to reset transaction counter: {e}"))?;
 
         Ok(())
     }
@@ -315,7 +313,7 @@ impl FjallMigrator {
         let mut entry_count = 0;
 
         for entry in partition.iter() {
-            let (key, value) = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let (key, value) = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
 
             let value_bytes: ByteView = value.into();
 
@@ -339,7 +337,7 @@ impl FjallMigrator {
 
             partition
                 .insert(ByteView::from(key.to_vec()), ByteView::from(new_value))
-                .map_err(|e| format!("Failed to rewrite entry: {}", e))?;
+                .map_err(|e| format!("Failed to rewrite entry: {e}"))?;
 
             entry_count += 1;
         }
@@ -381,8 +379,7 @@ impl Migrator for FjallMigrator {
                 }
                 _ => {
                     return Err(format!(
-                        "Unknown Fjall migration path from version {}",
-                        from_version
+                        "Unknown Fjall migration path from version {from_version}"
                     ));
                 }
             }
@@ -398,7 +395,7 @@ impl Migrator for FjallMigrator {
     fn mark_current_version(&self) -> Result<(), String> {
         self.sequences_partition
             .insert(VERSION_KEY, CURRENT_DB_VERSION.as_bytes())
-            .map_err(|e| format!("Failed to write version marker: {}", e))?;
+            .map_err(|e| format!("Failed to write version marker: {e}"))?;
 
         info!("Marked Fjall database as version {}", CURRENT_DB_VERSION);
         Ok(())

@@ -139,7 +139,7 @@ pub async fn oauth2_callback_handler(
         Ok(info) => info,
         Err(e) => {
             error!("OAuth2 flow failed: {}", e);
-            return Redirect::to(&format!("/?error=oauth2_failed&details={}", e)).into_response();
+            return Redirect::to(&format!("/?error=oauth2_failed&details={e}")).into_response();
         }
     };
 
@@ -264,10 +264,8 @@ pub async fn oauth2_callback_handler(
         // URL-encode the player OID to handle # character
         let player_oid_str = player_obj.to_string();
         let player_oid_encoded = urlencoding::encode(&player_oid_str);
-        let redirect_url = format!(
-            "/?auth_token={}&player={}&flags={}",
-            auth_token, player_oid_encoded, player_flags
-        );
+        let redirect_url =
+            format!("/?auth_token={auth_token}&player={player_oid_encoded}&flags={player_flags}");
         Redirect::to(&redirect_url).into_response()
     } else {
         // New user - redirect to account choice page with user info

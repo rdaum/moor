@@ -23,7 +23,6 @@ import { PresentEvent } from "../generated/moor-common/present-event.js";
 import { TracebackEvent } from "../generated/moor-common/traceback-event.js";
 import { UnpresentEvent } from "../generated/moor-common/unpresent-event.js";
 import { AbortLimitReason } from "../generated/moor-rpc/abort-limit-reason.js";
-import { AttachResult } from "../generated/moor-rpc/attach-result.js";
 import { ClientEventUnion } from "../generated/moor-rpc/client-event-union.js";
 import { ClientEvent } from "../generated/moor-rpc/client-event.js";
 import { ClientSuccess } from "../generated/moor-rpc/client-success.js";
@@ -34,7 +33,6 @@ import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to
 import { EvalResult } from "../generated/moor-rpc/eval-result.js";
 import { HistoryResponseReply } from "../generated/moor-rpc/history-response-reply.js";
 import { ListObjectsReply } from "../generated/moor-rpc/list-objects-reply.js";
-import { LoginResult } from "../generated/moor-rpc/login-result.js";
 import { NarrativeEventMessage } from "../generated/moor-rpc/narrative-event-message.js";
 import { PropertiesReply } from "../generated/moor-rpc/properties-reply.js";
 import { PropertyUpdated } from "../generated/moor-rpc/property-updated.js";

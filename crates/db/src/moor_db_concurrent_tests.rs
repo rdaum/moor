@@ -847,9 +847,8 @@ mod tests {
                                         if read_value == 0 {
                                             violations.fetch_add(1, Ordering::Relaxed);
                                             eprintln!(
-                                                "G-single-item-realtime violation! Thread {} iteration {}: \
-                                                 T2 committed value {} but T1 (started AFTER commit) saw {}",
-                                                thread_id, iteration, write_value, read_value
+                                                "G-single-item-realtime violation! Thread {thread_id} iteration {iteration}: \
+                                                 T2 committed value {write_value} but T1 (started AFTER commit) saw {read_value}"
                                             );
                                         }
                                     }
@@ -871,8 +870,7 @@ mod tests {
                 let total_violations = violations.load(Ordering::Relaxed);
                 assert_eq!(
                     total_violations, 0,
-                    "Detected {} G-single-item-realtime serializability violations",
-                    total_violations
+                    "Detected {total_violations} G-single-item-realtime serializability violations"
                 );
             },
             100, // Run many shuttle iterations to explore different schedules

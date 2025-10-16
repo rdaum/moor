@@ -305,7 +305,7 @@ impl MoorDB {
         // Check and perform migration BEFORE opening the database
         // This ensures migration happens atomically via copy-and-swap
         fjall_migration::fjall_check_and_migrate(path)
-            .unwrap_or_else(|e| panic!("Failed to migrate database: {}", e));
+            .unwrap_or_else(|e| panic!("Failed to migrate database: {e}"));
 
         let keyspace = Config::new(path).open().unwrap();
 
