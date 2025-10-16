@@ -21,7 +21,7 @@ use edn_format::{Keyword, Value};
 use moor_common::model::{ObjAttrs, WorldStateSource};
 use moor_db::{Database, TxDB};
 use moor_var::{Obj, Symbol, v_int, v_list};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc, thread, time::Instant};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc, thread, time::{Duration, Instant}};
 
 #[derive(Clone, Parser, Debug)]
 struct Args {
@@ -248,6 +248,88 @@ fn workload_thread(
     Ok(workload)
 }
 
+fn calculate_percentile(sorted_durations: &[Duration], percentile: f64) -> Duration {
+    if sorted_durations.is_empty() {
+        return Duration::ZERO;
+    }
+    let index = ((sorted_durations.len() as f64 - 1.0) * percentile).round() as usize;
+    sorted_durations[index]
+}
+
+fn print_performance_metrics(workload_results: &[(Instant, WorkItem)], total_duration: Duration) {
+    // Pair up invoke/ok events to calculate operation durations
+    let mut read_durations = Vec::new();
+    let mut append_durations = Vec::new();
+    let mut pending_reads: BTreeMap<(usize, usize), Instant> = BTreeMap::new(); // (process_id, index) -> start_time
+    let mut pending_appends: BTreeMap<(usize, usize), Instant> = BTreeMap::new();
+
+    for (timestamp, item) in workload_results.iter() {
+        match item {
+            WorkItem::Read(process_id, ops) => {
+                let key = (*process_id, ops.len());
+                pending_reads.insert(key, *timestamp);
+            }
+            WorkItem::Append(process_id, ops) => {
+                let key = (*process_id, ops.len());
+                pending_appends.insert(key, *timestamp);
+            }
+            WorkItem::ReadEnd(process_id, ops) => {
+                let key = (*process_id, ops.len());
+                if let Some(start_time) = pending_reads.remove(&key) {
+                    read_durations.push(timestamp.duration_since(start_time));
+                }
+            }
+            WorkItem::AppendEnd(process_id, ops) => {
+                let key = (*process_id, ops.len());
+                if let Some(start_time) = pending_appends.remove(&key) {
+                    append_durations.push(timestamp.duration_since(start_time));
+                }
+            }
+        }
+    }
+
+    // Sort for percentile calculations
+    read_durations.sort();
+    append_durations.sort();
+
+    let total_ops = read_durations.len() + append_durations.len();
+    let throughput = total_ops as f64 / total_duration.as_secs_f64();
+
+    println!("\n════════════════════════════════════════════════════════════");
+    println!("Performance Metrics");
+    println!("════════════════════════════════════════════════════════════");
+    println!("\nOverall:");
+    println!("  Total operations:     {}", total_ops);
+    println!("  Total duration:       {:.2}s", total_duration.as_secs_f64());
+    println!("  Throughput:           {:.2} ops/sec", throughput);
+
+    if !read_durations.is_empty() {
+        let read_mean = read_durations.iter().sum::<Duration>().as_micros() as f64
+            / read_durations.len() as f64;
+        println!("\nRead Operations ({} total):", read_durations.len());
+        println!("  Mean latency:         {:.2}ms", read_mean / 1000.0);
+        println!("  Median (p50):         {:.2}ms", calculate_percentile(&read_durations, 0.50).as_micros() as f64 / 1000.0);
+        println!("  p95:                  {:.2}ms", calculate_percentile(&read_durations, 0.95).as_micros() as f64 / 1000.0);
+        println!("  p99:                  {:.2}ms", calculate_percentile(&read_durations, 0.99).as_micros() as f64 / 1000.0);
+        println!("  Max:                  {:.2}ms", read_durations.last().unwrap().as_micros() as f64 / 1000.0);
+        println!("  Min:                  {:.2}ms", read_durations.first().unwrap().as_micros() as f64 / 1000.0);
+    }
+
+    if !append_durations.is_empty() {
+        let append_mean = append_durations.iter().sum::<Duration>().as_micros() as f64
+            / append_durations.len() as f64;
+        println!("\nAppend Operations ({} total):", append_durations.len());
+        println!("  Mean latency:         {:.2}ms", append_mean / 1000.0);
+        println!("  Median (p50):         {:.2}ms", calculate_percentile(&append_durations, 0.50).as_micros() as f64 / 1000.0);
+        println!("  p95:                  {:.2}ms", calculate_percentile(&append_durations, 0.95).as_micros() as f64 / 1000.0);
+        println!("  p99:                  {:.2}ms", calculate_percentile(&append_durations, 0.99).as_micros() as f64 / 1000.0);
+        println!("  Max:                  {:.2}ms", append_durations.last().unwrap().as_micros() as f64 / 1000.0);
+        println!("  Min:                  {:.2}ms", append_durations.first().unwrap().as_micros() as f64 / 1000.0);
+    }
+
+    println!("\n════════════════════════════════════════════════════════════\n");
+}
+
 fn write_edn_output(
     workload_results: &[(Instant, WorkItem)],
     output_path: &PathBuf,
@@ -415,6 +497,8 @@ fn main() -> Result<(), eyre::Error> {
         args.num_concurrent_workloads
     );
 
+    let workload_start = Instant::now();
+
     // Spawn workload threads
     let mut handles = vec![];
     for process_id in 0..args.num_concurrent_workloads {
@@ -444,10 +528,15 @@ fn main() -> Result<(), eyre::Error> {
         }
     }
 
+    let total_duration = workload_start.elapsed();
+
     // Sort by timestamp
     workload_results.sort_by(|a, b| a.0.cmp(&b.0));
 
     println!("Collected {} operations", workload_results.len());
+
+    // Print performance metrics
+    print_performance_metrics(&workload_results, total_duration);
 
     // Write EDN output
     write_edn_output(&workload_results, &args.output_file)?;

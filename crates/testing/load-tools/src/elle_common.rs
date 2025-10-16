@@ -16,7 +16,7 @@
 use edn_format::{Keyword, Value};
 use moor_common::model::{CommitResult, ObjAttrs};
 use moor_db::{Database, TxDB};
-use moor_var::{Obj, Symbol, v_list};
+use moor_var::{Obj, Symbol};
 use std::{
     collections::BTreeMap, fs::File, io::Write as _, path::PathBuf, sync::Arc, thread,
     time::Instant,

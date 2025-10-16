@@ -5,11 +5,16 @@ use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
 use moor_common::model::{CommitResult, WorldStateSource};
-use moor_db::{Database, TxDB};
-use moor_model_checker::elle_common::{self, EdnEvent};
+use moor_db::TxDB;
+use moor_model_checker::elle_common::{self, EdnEvent, EventType};
 use moor_var::{Obj, Symbol, v_int};
 use rand::Rng;
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 #[derive(Clone, Parser, Debug)]
 struct Args {
@@ -150,6 +155,134 @@ fn workload_thread(
     Ok(events)
 }
 
+fn calculate_percentile(sorted_durations: &[Duration], percentile: f64) -> Duration {
+    if sorted_durations.is_empty() {
+        return Duration::ZERO;
+    }
+    let index = ((sorted_durations.len() as f64 - 1.0) * percentile).round() as usize;
+    sorted_durations[index]
+}
+
+fn is_read_operation(event: &EdnEvent) -> bool {
+    // Extract operation type from the value
+    // Format: [[:r register-id value]] or [[:w register-id value]]
+    if let Value::Vector(ops) = &event.value {
+        if let Some(Value::Vector(mop)) = ops.first() {
+            if let Some(Value::Keyword(op_type)) = mop.first() {
+                return op_type.name() == "r";
+            }
+        }
+    }
+    false
+}
+
+fn print_performance_metrics(events: &[EdnEvent], total_duration: Duration) {
+    // Pair up invoke/ok events to calculate operation durations
+    let mut read_durations = Vec::new();
+    let mut write_durations = Vec::new();
+    let mut pending_ops: BTreeMap<(usize, String), Instant> = BTreeMap::new();
+
+    for event in events.iter() {
+        match event.event_type {
+            EventType::Invoke => {
+                // Use process_id and value as key to match invoke with ok
+                let key = (event.process_id, format!("{:?}", event.value));
+                pending_ops.insert(key, event.timestamp);
+            }
+            EventType::Ok => {
+                let key = (event.process_id, format!("{:?}", event.value));
+                if let Some(start_time) = pending_ops.remove(&key) {
+                    let duration = event.timestamp.duration_since(start_time);
+                    if is_read_operation(event) {
+                        read_durations.push(duration);
+                    } else {
+                        write_durations.push(duration);
+                    }
+                }
+            }
+            EventType::Fail => {
+                // Remove from pending on failure
+                let key = (event.process_id, format!("{:?}", event.value));
+                pending_ops.remove(&key);
+            }
+        }
+    }
+
+    // Sort for percentile calculations
+    read_durations.sort();
+    write_durations.sort();
+
+    let total_ops = read_durations.len() + write_durations.len();
+    let throughput = total_ops as f64 / total_duration.as_secs_f64();
+
+    println!("\n════════════════════════════════════════════════════════════");
+    println!("Performance Metrics");
+    println!("════════════════════════════════════════════════════════════");
+    println!("\nOverall:");
+    println!("  Total operations:     {}", total_ops);
+    println!(
+        "  Total duration:       {:.2}s",
+        total_duration.as_secs_f64()
+    );
+    println!("  Throughput:           {:.2} ops/sec", throughput);
+
+    if !read_durations.is_empty() {
+        let read_mean = read_durations.iter().sum::<Duration>().as_micros() as f64
+            / read_durations.len() as f64;
+        println!("\nRead Operations ({} total):", read_durations.len());
+        println!("  Mean latency:         {:.2}ms", read_mean / 1000.0);
+        println!(
+            "  Median (p50):         {:.2}ms",
+            calculate_percentile(&read_durations, 0.50).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p95:                  {:.2}ms",
+            calculate_percentile(&read_durations, 0.95).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p99:                  {:.2}ms",
+            calculate_percentile(&read_durations, 0.99).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Max:                  {:.2}ms",
+            read_durations.last().unwrap().as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Min:                  {:.2}ms",
+            read_durations.first().unwrap().as_micros() as f64 / 1000.0
+        );
+    }
+
+    if !write_durations.is_empty() {
+        let write_mean = write_durations.iter().sum::<Duration>().as_micros() as f64
+            / write_durations.len() as f64;
+        println!("\nWrite Operations ({} total):", write_durations.len());
+        println!("  Mean latency:         {:.2}ms", write_mean / 1000.0);
+        println!(
+            "  Median (p50):         {:.2}ms",
+            calculate_percentile(&write_durations, 0.50).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p95:                  {:.2}ms",
+            calculate_percentile(&write_durations, 0.95).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  p99:                  {:.2}ms",
+            calculate_percentile(&write_durations, 0.99).as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Max:                  {:.2}ms",
+            write_durations.last().unwrap().as_micros() as f64 / 1000.0
+        );
+        println!(
+            "  Min:                  {:.2}ms",
+            write_durations.first().unwrap().as_micros() as f64 / 1000.0
+        );
+    }
+
+    println!("\n════════════════════════════════════════════════════════════\n");
+}
+
 fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
     let args: Args = Args::parse();
@@ -185,6 +318,8 @@ fn main() -> Result<(), eyre::Error> {
     let (obj, register_symbols) =
         elle_common::setup_test_database(&db, args.num_registers, "register", |_| v_int(0))?;
 
+    let workload_start = Instant::now();
+
     // Run workloads
     let mut all_events = elle_common::run_concurrent_workloads(
         db,
@@ -195,10 +330,15 @@ fn main() -> Result<(), eyre::Error> {
         workload_thread,
     )?;
 
+    let total_duration = workload_start.elapsed();
+
     // Sort by timestamp
     all_events.sort_by_key(|e| e.timestamp);
 
     println!("Collected {} events", all_events.len());
+
+    // Print performance metrics
+    print_performance_metrics(&all_events, total_duration);
 
     // Write EDN output
     elle_common::write_edn_history(&all_events, &args.output_file)?;
