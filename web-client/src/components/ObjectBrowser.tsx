@@ -457,18 +457,31 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         return null;
     }
 
-    // Filter and sort objects
+    // Helper to check if object ID is UUID-based
+    const isUuidObject = (objId: string): boolean => {
+        return objId.includes("-");
+    };
+
+    // Filter and group objects by type
     const filteredObjects = objects
         .filter(obj =>
             obj.name.toLowerCase().includes(filter.toLowerCase())
             || obj.obj.includes(filter)
-        )
+        );
+
+    // Separate numeric OIDs from UUIDs
+    const numericObjects = filteredObjects
+        .filter(obj => !isUuidObject(obj.obj))
         .sort((a, b) => {
             // Sort by object ID numerically
             const aNum = parseInt(a.obj);
             const bNum = parseInt(b.obj);
             return aNum - bNum;
         });
+
+    const uuidObjects = filteredObjects
+        .filter(obj => isUuidObject(obj.obj))
+        .sort((a, b) => a.obj.localeCompare(b.obj));
 
     // Split mode styling
     const splitStyle = {
@@ -640,51 +653,122 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     </div>
                                 )
                                 : (
-                                    filteredObjects.map((obj) => (
-                                        <div
-                                            key={obj.obj}
-                                            onClick={() => handleObjectSelect(obj)}
-                                            style={{
-                                                padding: "var(--space-xs) var(--space-sm)",
-                                                cursor: "pointer",
-                                                backgroundColor: selectedObject?.obj === obj.obj
-                                                    ? "var(--color-text-primary)"
-                                                    : "transparent",
-                                                color: selectedObject?.obj === obj.obj
-                                                    ? "var(--color-bg-input)"
-                                                    : "inherit",
-                                                borderBottom: "1px solid var(--color-border-light)",
-                                                fontFamily: "var(--font-mono)",
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                if (selectedObject?.obj !== obj.obj) {
-                                                    e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                if (selectedObject?.obj !== obj.obj) {
-                                                    e.currentTarget.style.backgroundColor = "transparent";
-                                                }
-                                            }}
-                                        >
-                                            <div style={{ fontWeight: "600" }}>
-                                                #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
-                                                {formatObjectFlags(obj.flags) && (
-                                                    <span
+                                    <>
+                                        {/* Numeric OID objects */}
+                                        {numericObjects.map((obj) => (
+                                            <div
+                                                key={obj.obj}
+                                                onClick={() => handleObjectSelect(obj)}
+                                                style={{
+                                                    padding: "var(--space-xs) var(--space-sm)",
+                                                    cursor: "pointer",
+                                                    backgroundColor: selectedObject?.obj === obj.obj
+                                                        ? "var(--color-text-primary)"
+                                                        : "transparent",
+                                                    color: selectedObject?.obj === obj.obj
+                                                        ? "var(--color-bg-input)"
+                                                        : "inherit",
+                                                    borderBottom: "1px solid var(--color-border-light)",
+                                                    fontFamily: "var(--font-mono)",
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    if (selectedObject?.obj !== obj.obj) {
+                                                        e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
+                                                    }
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (selectedObject?.obj !== obj.obj) {
+                                                        e.currentTarget.style.backgroundColor = "transparent";
+                                                    }
+                                                }}
+                                            >
+                                                <div style={{ fontWeight: "600" }}>
+                                                    #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
+                                                    {formatObjectFlags(obj.flags) && (
+                                                        <span
+                                                            style={{
+                                                                opacity: selectedObject?.obj === obj.obj ? "0.7" : "1",
+                                                                color: selectedObject?.obj === obj.obj
+                                                                    ? "inherit"
+                                                                    : "var(--color-text-secondary)",
+                                                                fontWeight: "400",
+                                                            }}
+                                                        >
+                                                            ({formatObjectFlags(obj.flags)})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {/* Separator and UUID objects section */}
+                                        {uuidObjects.length > 0 && (
+                                            <>
+                                                <div
+                                                    style={{
+                                                        padding: "var(--space-xs) var(--space-sm)",
+                                                        backgroundColor: "var(--color-bg-secondary)",
+                                                        borderTop: "2px solid var(--color-border-medium)",
+                                                        borderBottom: "1px solid var(--color-border-light)",
+                                                        fontSize: "11px",
+                                                        fontWeight: "600",
+                                                        color: "var(--color-text-secondary)",
+                                                        fontFamily: "var(--font-mono)",
+                                                    }}
+                                                >
+                                                    UUID Objects
+                                                </div>
+                                                {uuidObjects.map((obj) => (
+                                                    <div
+                                                        key={obj.obj}
+                                                        onClick={() => handleObjectSelect(obj)}
                                                         style={{
-                                                            opacity: selectedObject?.obj === obj.obj ? "0.7" : "1",
+                                                            padding: "var(--space-xs) var(--space-sm)",
+                                                            cursor: "pointer",
+                                                            backgroundColor: selectedObject?.obj === obj.obj
+                                                                ? "var(--color-text-primary)"
+                                                                : "transparent",
                                                             color: selectedObject?.obj === obj.obj
-                                                                ? "inherit"
-                                                                : "var(--color-text-secondary)",
-                                                            fontWeight: "400",
+                                                                ? "var(--color-bg-input)"
+                                                                : "inherit",
+                                                            borderBottom: "1px solid var(--color-border-light)",
+                                                            fontFamily: "var(--font-mono)",
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (selectedObject?.obj !== obj.obj) {
+                                                                e.currentTarget.style.backgroundColor =
+                                                                    "var(--color-bg-hover)";
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (selectedObject?.obj !== obj.obj) {
+                                                                e.currentTarget.style.backgroundColor = "transparent";
+                                                            }
                                                         }}
                                                     >
-                                                        ({formatObjectFlags(obj.flags)})
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))
+                                                        <div style={{ fontWeight: "600" }}>
+                                                            #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
+                                                            {formatObjectFlags(obj.flags) && (
+                                                                <span
+                                                                    style={{
+                                                                        opacity: selectedObject?.obj === obj.obj
+                                                                            ? "0.7"
+                                                                            : "1",
+                                                                        color: selectedObject?.obj === obj.obj
+                                                                            ? "inherit"
+                                                                            : "var(--color-text-secondary)",
+                                                                        fontWeight: "400",
+                                                                    }}
+                                                                >
+                                                                    ({formatObjectFlags(obj.flags)})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
+                                    </>
                                 )}
                         </div>
                         {/* Object info panel */}

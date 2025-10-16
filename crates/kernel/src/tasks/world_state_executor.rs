@@ -11,6 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::{
+    config::Config,
+    tasks::world_state_action::{WorldStateAction, WorldStateResult},
+};
+use moor_common::model::ObjAttrs;
 use moor_common::{
     matching::{
         ObjectNameMatcher, complex_object_matcher::ComplexObjectNameMatcher,
@@ -26,11 +31,6 @@ use moor_common::{
 use moor_compiler::{compile, program_to_tree, unparse};
 use moor_var::{E_INVIND, Obj, SYSTEM_OBJECT, program::ProgramType, v_err, v_obj};
 use std::sync::Arc;
-
-use crate::{
-    config::Config,
-    tasks::world_state_action::{WorldStateAction, WorldStateResult},
-};
 
 /// Executes WorldStateActions within a transaction.
 /// Takes ownership of a transaction and executes actions within it.
@@ -163,18 +163,18 @@ impl WorldStateActionExecutor {
 
                     // Collect properties from all ancestors (including self)
                     for ancestor in ancestors.iter() {
-                        let ancestor_properties = self
-                            .tx
-                            .properties(&perms, &ancestor)
-                            .map_err(|e| CommandExecutionError(CommandError::DatabaseError(e)))?;
+                        // Skip ancestors that error during retrieval (permission denied, etc)
+                        let Ok(ancestor_properties) = self.tx.properties(&perms, &ancestor) else {
+                            continue;
+                        };
 
                         for prop in ancestor_properties.iter() {
-                            let (info, prop_perms) = self
-                                .tx
-                                .get_property_info(&perms, &ancestor, prop.name())
-                                .map_err(|e| {
-                                    CommandExecutionError(CommandError::DatabaseError(e))
-                                })?;
+                            // Skip properties that error during info retrieval
+                            let Ok((info, prop_perms)) =
+                                self.tx.get_property_info(&perms, &ancestor, prop.name())
+                            else {
+                                continue;
+                            };
                             props.push((info, prop_perms));
                         }
                     }
@@ -238,10 +238,10 @@ impl WorldStateActionExecutor {
                     // Collect verbs from all ancestors (including self)
                     let mut all_verbs = Vec::new();
                     for ancestor in ancestors.iter() {
-                        let ancestor_verbs = self
-                            .tx
-                            .verbs(&perms, &ancestor)
-                            .map_err(SchedulerError::VerbRetrievalFailed)?;
+                        // Skip ancestors that error during retrieval (permission denied, etc)
+                        let Ok(ancestor_verbs) = self.tx.verbs(&perms, &ancestor) else {
+                            continue;
+                        };
                         all_verbs.extend(ancestor_verbs.iter());
                     }
                     all_verbs.into_iter().collect()
@@ -319,8 +319,6 @@ impl WorldStateActionExecutor {
             }
 
             WorldStateAction::ListObjects { player } => {
-                use moor_common::model::ObjAttrs;
-
                 // Get all objects with metadata
                 let objects = self
                     .tx
@@ -329,41 +327,10 @@ impl WorldStateActionExecutor {
 
                 let mut object_list = Vec::new();
                 for obj in objects.iter() {
-                    // Get individual attributes to build ObjAttrs
-                    let owner = self
-                        .tx
-                        .owner_of(&obj)
-                        .map_err(SchedulerError::PropertyRetrievalFailed)?;
-                    let parent = self
-                        .tx
-                        .parent_of(&player, &obj)
-                        .unwrap_or(moor_var::NOTHING);
-                    let location = self
-                        .tx
-                        .location_of(&player, &obj)
-                        .unwrap_or(moor_var::NOTHING);
-                    let flags = self
-                        .tx
-                        .flags_of(&obj)
-                        .map_err(SchedulerError::PropertyRetrievalFailed)?;
-                    let name = self.tx.name_of(&player, &obj).unwrap_or_default();
-
-                    // Construct ObjAttrs
-                    let attrs = ObjAttrs::new(owner, parent, location, flags, &name);
-
-                    // Count verbs
-                    let verbs = self
-                        .tx
-                        .verbs(&player, &obj)
-                        .map_err(SchedulerError::VerbRetrievalFailed)?;
-                    let verbs_count = verbs.len();
-
-                    // Count properties
-                    let props = self
-                        .tx
-                        .properties(&player, &obj)
-                        .map_err(SchedulerError::PropertyRetrievalFailed)?;
-                    let props_count = props.len();
+                    let Ok((attrs, verbs_count, props_count)) = self.get_object(&player, &obj)
+                    else {
+                        continue;
+                    };
 
                     object_list.push((obj, attrs, verbs_count, props_count));
                 }
@@ -400,6 +367,46 @@ impl WorldStateActionExecutor {
                 Ok(WorldStateResult::ObjectFlags(flags.to_u16()))
             }
         }
+    }
+
+    fn get_object(
+        &mut self,
+        player: &Obj,
+        obj: &Obj,
+    ) -> Result<(ObjAttrs, usize, usize), SchedulerError> {
+        // Get individual attributes to build ObjAttrs
+        let owner = self
+            .tx
+            .owner_of(obj)
+            .map_err(SchedulerError::PropertyRetrievalFailed)?;
+        let parent = self.tx.parent_of(player, obj).unwrap_or(moor_var::NOTHING);
+        let location = self
+            .tx
+            .location_of(player, obj)
+            .unwrap_or(moor_var::NOTHING);
+        let flags = self
+            .tx
+            .flags_of(obj)
+            .map_err(SchedulerError::PropertyRetrievalFailed)?;
+        let name = self.tx.name_of(player, obj).unwrap_or_default();
+
+        // Construct ObjAttrs
+        let attrs = ObjAttrs::new(owner, parent, location, flags, &name);
+
+        // Count verbs
+        let verbs = self
+            .tx
+            .verbs(player, obj)
+            .map_err(SchedulerError::VerbRetrievalFailed)?;
+        let verbs_count = verbs.len();
+
+        // Count properties
+        let props = self
+            .tx
+            .properties(player, obj)
+            .map_err(SchedulerError::PropertyRetrievalFailed)?;
+        let props_count = props.len();
+        Ok((attrs, verbs_count, props_count))
     }
 }
 

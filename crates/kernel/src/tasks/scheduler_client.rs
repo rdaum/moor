@@ -19,6 +19,9 @@ use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_compiler::{Program, compile};
 use moor_var::{List, Obj, Symbol, Var};
 
+use crate::tasks::world_state_action::{
+    WorldStateAction, WorldStateRequest, WorldStateResponse, WorldStateResult,
+};
 use crate::{config::FeaturesConfig, tasks::TaskHandle};
 use moor_common::tasks::{SchedulerError, SchedulerError::CompilationError, Session};
 
@@ -213,14 +216,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result:
-                    crate::tasks::world_state_action::WorldStateResult::VerbProgrammed { object, verb },
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::VerbProgrammed { object, verb },
                 ..
             }) => Ok((object, verb)),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -242,13 +242,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::SystemProperty(value),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::SystemProperty(value),
                 ..
             }) => Ok(value),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -342,13 +340,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::Verbs(verbs),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::Verbs(verbs),
                 ..
             }) => Ok(verbs),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -372,13 +368,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::VerbCode(verbdef, code),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::VerbCode(verbdef, code),
                 ..
             }) => Ok((verbdef, code)),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -402,13 +396,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::Properties(props),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::Properties(props),
                 ..
             }) => Ok(props),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -432,14 +424,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result:
-                    crate::tasks::world_state_action::WorldStateResult::Property(info, perms, value),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::Property(info, perms, value),
                 ..
             }) => Ok((info, perms, value)),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -452,13 +441,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::ResolvedObject(value),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::ResolvedObject(value),
                 ..
             }) => Ok(value),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -468,7 +455,7 @@ impl SchedulerClient {
         &self,
         actions: Vec<crate::tasks::world_state_action::WorldStateRequest>,
         rollback: bool,
-    ) -> Result<Vec<crate::tasks::world_state_action::WorldStateResponse>, SchedulerError> {
+    ) -> Result<Vec<WorldStateResponse>, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::ExecuteWorldStateActions {
@@ -507,20 +494,16 @@ impl SchedulerClient {
 
     /// Get all objects in the database (for tab completion)
     pub fn request_all_objects(&self, player: Obj) -> Result<Vec<Obj>, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::RequestAllObjects { player };
         let request = WorldStateRequest::new(action);
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::AllObjects(objects),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::AllObjects(objects),
                 ..
             }) => Ok(objects),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -530,40 +513,32 @@ impl SchedulerClient {
         &self,
         player: &Obj,
     ) -> Result<Vec<(Obj, moor_common::model::ObjAttrs, usize, usize)>, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::ListObjects { player: *player };
         let request = WorldStateRequest::new(action);
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::ObjectsList(objects),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::ObjectsList(objects),
                 ..
             }) => Ok(objects),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
 
     /// Get flags for a specific object
     pub fn get_object_flags(&self, obj: &Obj) -> Result<u16, SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::GetObjectFlags { obj: *obj };
         let request = WorldStateRequest::new(action);
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::ObjectFlags(flags),
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::ObjectFlags(flags),
                 ..
             }) => Ok(flags),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -577,8 +552,6 @@ impl SchedulerClient {
         property: Symbol,
         value: Var,
     ) -> Result<(), SchedulerError> {
-        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
-
         let action = WorldStateAction::UpdateProperty {
             player: *player,
             perms: *perms,
@@ -590,13 +563,11 @@ impl SchedulerClient {
         let responses = self.execute_world_state_actions(vec![request], false)?;
 
         match responses.into_iter().next() {
-            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
-                result: crate::tasks::world_state_action::WorldStateResult::PropertyUpdated,
+            Some(WorldStateResponse::Success {
+                result: WorldStateResult::PropertyUpdated,
                 ..
             }) => Ok(()),
-            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
-                Err(error)
-            }
+            Some(WorldStateResponse::Error { error, .. }) => Err(error),
             _ => Err(SchedulerError::SchedulerNotResponding),
         }
     }
@@ -659,9 +630,7 @@ pub enum SchedulerClientMsg {
         /// Rollback after performing the operations, leaving the world in the state it was before
         /// we ran. (For exploratory actions)
         rollback: bool,
-        reply: oneshot::Sender<
-            Result<Vec<crate::tasks::world_state_action::WorldStateResponse>, SchedulerError>,
-        >,
+        reply: oneshot::Sender<Result<Vec<WorldStateResponse>, SchedulerError>>,
     },
     /// Get garbage collection statistics
     GetGCStats(oneshot::Sender<Result<GCStats, SchedulerError>>),
