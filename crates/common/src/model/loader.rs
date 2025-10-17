@@ -77,7 +77,13 @@ pub trait LoaderInterface: Send {
     ) -> Result<Obj, WorldStateError>;
 
     /// Set the parent of an object
-    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
+    /// If validate is true, checks for cycles, invalid parents, and descendant property conflicts
+    fn set_object_parent(
+        &mut self,
+        obj: &Obj,
+        parent: &Obj,
+        validate: bool,
+    ) -> Result<(), WorldStateError>;
 
     /// Set the location of an object
     fn set_object_location(&mut self, o: &Obj, location: &Obj) -> Result<(), WorldStateError>;
@@ -332,7 +338,7 @@ fn apply_mutation(
 
         ObjectMutation::SetObjectFlags { flags } => loader.update_object_flags(target, *flags),
 
-        ObjectMutation::SetParent { parent } => loader.set_object_parent(target, parent),
+        ObjectMutation::SetParent { parent } => loader.set_object_parent(target, parent, false),
 
         ObjectMutation::SetLocation { location } => loader.set_object_location(target, location),
     }

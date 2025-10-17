@@ -1530,9 +1530,8 @@ fn cmd_load(
         conflict_mode,
         target_object,
         create_new,
-        constants: None,
-        overrides: Vec::new(),
-        removals: Vec::new(),
+        validate_parent_changes: true, // Individual load_object command should validate
+        ..Default::default()
     };
 
     // Load through the scheduler client so it uses the scheduler's database

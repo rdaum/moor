@@ -421,6 +421,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         constants,
         overrides,
         removals,
+        validate_parent_changes: true, // Individual loads should validate parent changes
     };
 
     // Get the compile options from the config

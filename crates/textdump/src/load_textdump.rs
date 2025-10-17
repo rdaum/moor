@@ -180,9 +180,11 @@ pub fn read_textdump<T: io::Read>(
         loader.set_object_owner(objid, &o.owner).map_err(|e| {
             TextdumpReaderError::LoadError(format!("setting owner of {objid}"), e.clone())
         })?;
-        loader.set_object_parent(objid, &o.parent).map_err(|e| {
-            TextdumpReaderError::LoadError(format!("setting parent of {objid}"), e.clone())
-        })?;
+        loader
+            .set_object_parent(objid, &o.parent, false)
+            .map_err(|e| {
+                TextdumpReaderError::LoadError(format!("setting parent of {objid}"), e.clone())
+            })?;
         loader.set_object_location(objid, &o.location).unwrap();
     }
 

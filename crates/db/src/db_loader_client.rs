@@ -36,11 +36,8 @@ impl LoaderInterface for DbWorldState {
             Some(id) => {
                 // Check if object already exists
                 if self.object_exists(&id)? {
-                    // Object exists, update its attributes
-                    self.get_tx_mut().set_object_flags(&id, attrs.flags())?;
-                    if let Some(name) = attrs.name() {
-                        self.get_tx_mut().set_object_name(&id, name)?;
-                    }
+                    // Object exists - just return it without updating attributes
+                    // This allows apply_attributes to detect conflicts properly
                     return Ok(id);
                 } else {
                     ObjectKind::Objid(id)
@@ -50,7 +47,56 @@ impl LoaderInterface for DbWorldState {
         };
         self.get_tx_mut().create_object(id_kind, attrs.clone())
     }
-    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
+    fn set_object_parent(
+        &mut self,
+        obj: &Obj,
+        parent: &Obj,
+        validate: bool,
+    ) -> Result<(), WorldStateError> {
+        if validate {
+            // Check for cycles: walk up from new_parent, ensure we never hit obj
+            let mut curr = *parent;
+            while !curr.is_nothing() {
+                if &curr == obj {
+                    return Err(WorldStateError::RecursiveMove(*obj, *parent));
+                }
+                curr = self.get_tx().get_object_parent(&curr)?;
+            }
+
+            // Check that parent exists (unless it's NOTHING which is always valid)
+            if !parent.is_nothing() && !self.get_tx().object_valid(parent)? {
+                return Err(WorldStateError::ObjectNotFound(
+                    moor_common::model::ObjectRef::Id(*parent),
+                ));
+            }
+
+            // Check for descendant property conflicts
+            // Get all properties defined by obj or its descendants
+            let descendants = self.get_tx().descendants(obj, true)?;
+            let mut descendant_props = std::collections::HashSet::new();
+            for descendant in descendants.iter() {
+                let props = self.get_tx().get_properties(&descendant)?;
+                for prop in props.iter() {
+                    descendant_props.insert(prop.name());
+                }
+            }
+
+            // Get all properties defined by new_parent or its ancestors
+            let ancestors = self.get_tx().ancestors(parent, true)?;
+            for ancestor in ancestors.iter() {
+                let props = self.get_tx().get_properties(&ancestor)?;
+                for prop in props.iter() {
+                    if descendant_props.contains(&prop.name()) {
+                        return Err(WorldStateError::ChparentPropertyNameConflict(
+                            *obj,
+                            *parent,
+                            prop.name().to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+
         self.get_tx_mut().set_object_parent(obj, parent)
     }
     fn set_object_location(&mut self, o: &Obj, location: &Obj) -> Result<(), WorldStateError> {

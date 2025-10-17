@@ -217,15 +217,7 @@ fn main() -> Result<(), eyre::Report> {
         let start = std::time::Instant::now();
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
 
-        let options = moor_objdef::ObjDefLoaderOptions {
-            dry_run: false,
-            conflict_mode: moor_objdef::ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-        };
+        let options = moor_objdef::ObjDefLoaderOptions::default();
         let commit = match od.load_objdef_directory(
             features.compile_options(),
             objdef_dir.as_ref(),

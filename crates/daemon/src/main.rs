@@ -113,15 +113,7 @@ fn perform_import(
     let commit = match &config.import_export.import_format {
         ImportExportFormat::Objdef => {
             let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-            let options = moor_objdef::ObjDefLoaderOptions {
-                dry_run: false,
-                conflict_mode: moor_objdef::ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
-                constants: None,
-                overrides: vec![],
-                removals: vec![],
-            };
+            let options = moor_objdef::ObjDefLoaderOptions::default();
             let results = od.load_objdef_directory(
                 config.features.compile_options(),
                 import_path.as_ref(),

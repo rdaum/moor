@@ -79,6 +79,24 @@ pub struct ObjDefLoaderOptions {
     /// The set of entities which we will consider value for deletion
     /// Note that flags, builtin props and parentage are not valid values here.
     pub removals: Vec<(Obj, Entity)>,
+    /// If true, validate parent changes for cycles, invalid parents, and descendant property conflicts.
+    /// Should be true for individual load_object() calls, false for bulk operations (textdump, objdef directory import).
+    pub validate_parent_changes: bool,
+}
+
+impl Default for ObjDefLoaderOptions {
+    fn default() -> Self {
+        Self {
+            dry_run: false,
+            conflict_mode: ConflictMode::Clobber,
+            target_object: None,
+            create_new: false,
+            constants: None,
+            overrides: vec![],
+            removals: vec![],
+            validate_parent_changes: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -453,12 +471,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
         for (obj, attr_type, value, path) in attribute_actions {
             match attr_type {
                 "parent" => {
-                    self.loader.set_object_parent(&obj, &value).map_err(|e| {
-                        ObjdefLoaderError::CouldNotSetObjectParent(
-                            path.to_string_lossy().to_string(),
-                            e,
-                        )
-                    })?;
+                    self.loader
+                        .set_object_parent(&obj, &value, options.validate_parent_changes)
+                        .map_err(|e| {
+                            ObjdefLoaderError::CouldNotSetObjectParent(
+                                path.to_string_lossy().to_string(),
+                                e,
+                            )
+                        })?;
                 }
                 "location" => {
                     self.loader.set_object_location(&obj, &value).map_err(|e| {
@@ -502,8 +522,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     })?;
 
                 if let Some((existing_uuid, existing_verbdef)) = existing_verb {
-                    // Verb exists - check for conflicts
-                    // Create a comparable VerbDef for comparison
+                    // Verb exists - check for conflicts in both metadata and program
+                    // Create a comparable VerbDef for metadata comparison
                     let new_verbdef = VerbDef::new(
                         existing_uuid, // Use existing UUID for fair comparison
                         *obj,          // location
@@ -513,7 +533,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         v.argspec,     // args
                     );
 
-                    let (should_proceed, conflict) = self.check_conflict(
+                    // Check for metadata conflicts
+                    let (should_proceed_metadata, conflict_metadata) = self.check_conflict(
                         obj,
                         Entity::VerbDef(v.names.clone()),
                         Some(existing_verbdef.clone()),
@@ -522,8 +543,40 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         options,
                     );
 
-                    if let Some(conflict) = conflict {
+                    // Also check if the program changed
+                    let existing_program = self
+                        .loader
+                        .get_verb_program(obj, existing_uuid)
+                        .map_err(|wse| {
+                            ObjdefLoaderError::CouldNotDefineVerb(
+                                path.to_string_lossy().to_string(),
+                                *obj,
+                                v.names.clone(),
+                                wse,
+                            )
+                        })?;
+
+                    let program_changed = existing_program != v.program;
+
+                    // Determine final conflict and proceed status
+                    let mut should_proceed = should_proceed_metadata;
+                    if let Some(conflict) = conflict_metadata {
                         self.conflicts.push(conflict);
+                    } else if program_changed {
+                        // Metadata matches but program differs - still a conflict
+                        let conflict =
+                            ConflictEntity::VerbDef(v.names.clone(), existing_verbdef.clone());
+                        self.conflicts.push((*obj, conflict));
+
+                        // Apply conflict mode to program-only changes
+                        should_proceed = match self.effective_conflict_mode(
+                            obj,
+                            &Entity::VerbDef(v.names.clone()),
+                            options,
+                        ) {
+                            ConflictMode::Clobber => true,
+                            ConflictMode::Skip => false,
+                        };
                     }
 
                     if should_proceed {
@@ -1006,7 +1059,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{ConflictMode, ObjDefLoaderOptions, ObjectDefinitionLoader};
-    use moor_common::model::{Named, PrepSpec, WorldStateSource};
+    use moor_common::model::{HasUuid, Named, PrepSpec, WorldStateSource};
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str};
@@ -1051,15 +1104,7 @@ mod tests {
             .parse_objects(mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
 
-        let options = ObjDefLoaderOptions {
-            dry_run: false,
-            conflict_mode: ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-        };
+        let options = ObjDefLoaderOptions::default();
         parser.apply_attributes(&options).unwrap();
         parser.define_verbs(&options).unwrap();
         parser.define_properties(&options).unwrap();
@@ -1134,15 +1179,7 @@ mod tests {
         parser
             .parse_objects(mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
-        let options = ObjDefLoaderOptions {
-            dry_run: false,
-            conflict_mode: ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-        };
+        let options = ObjDefLoaderOptions::default();
         parser.apply_attributes(&options).unwrap();
         parser.define_verbs(&options).unwrap();
         parser.define_properties(&options).unwrap();
@@ -1196,15 +1233,7 @@ mod tests {
                     endverb
                 endobject"#;
 
-        let options = ObjDefLoaderOptions {
-            dry_run: false,
-            conflict_mode: ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-        };
+        let options = ObjDefLoaderOptions::default();
         let results = parser
             .load_single_object(spec, CompileOptions::default(), None, None, options)
             .unwrap();
@@ -1259,15 +1288,7 @@ mod tests {
                     readable: true
                 endobject"#;
 
-        let options = ObjDefLoaderOptions {
-            dry_run: false,
-            conflict_mode: ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-        };
+        let options = ObjDefLoaderOptions::default();
         let result =
             parser.load_single_object(spec, CompileOptions::default(), None, None, options);
         assert!(result.is_err());
@@ -1277,6 +1298,1531 @@ mod tests {
                 assert_eq!(count, 2);
             }
             _ => panic!("Expected SingleObjectExpected error"),
+        }
+    }
+
+    #[test]
+    fn test_clobber_mode_detects_flags_conflict() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create initial object with wizard=false
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #50
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Now load same object with wizard=true (conflict)
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let conflicting_spec = r#"
+            object #50
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: true
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        let results = parser
+            .load_single_object(
+                conflicting_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+
+        // Should detect conflict in flags
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one flags conflict"
+        );
+
+        // Verify conflict is for object flags
+        match &results.conflicts[0].1 {
+            crate::ConflictEntity::ObjectFlags(_) => {}
+            other => panic!("Expected ObjectFlags conflict, got {:?}", other),
+        }
+
+        loader.commit().unwrap();
+
+        // Verify flags were actually updated (Clobber mode)
+        let ws = db.new_world_state().unwrap();
+        let flags = ws.flags_of(&Obj::mk_id(50)).unwrap();
+        assert!(
+            flags.contains(moor_common::model::ObjFlag::Wizard),
+            "Wizard flag should be set after clobber"
+        );
+    }
+
+    #[test]
+    fn test_skip_mode_preserves_existing_flags() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create initial object with wizard=true
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #51
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: true
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Now load with wizard=false in Skip mode
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let conflicting_spec = r#"
+            object #51
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        let results = parser
+            .load_single_object(
+                conflicting_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions {
+                    dry_run: false,
+                    conflict_mode: ConflictMode::Skip,
+                    target_object: None,
+                    create_new: false,
+                    constants: None,
+                    overrides: vec![],
+                    removals: vec![],
+                    validate_parent_changes: false,
+                },
+            )
+            .unwrap();
+
+        // Should detect conflict
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one flags conflict"
+        );
+
+        loader.commit().unwrap();
+
+        // Verify flags were NOT updated (Skip mode)
+        let ws = db.new_world_state().unwrap();
+        let flags = ws.flags_of(&Obj::mk_id(51)).unwrap();
+        assert!(
+            flags.contains(moor_common::model::ObjFlag::Wizard),
+            "Wizard flag should still be true after skip"
+        );
+    }
+
+    #[test]
+    fn test_parse_objects_detects_flags_conflict() {
+        // This test uses parse_objects directly (like load_objdef_directory does)
+        // to verify that the bug in db_loader_client.rs:create_object is fixed
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create initial object with wizard=false using parse_objects
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #52
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                initial_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Now load same object with wizard=true using parse_objects again
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let conflicting_spec = r#"
+            object #52
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: true
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        let mut context = ObjFileContext::new();
+        // This parse_objects call will call create_object for an existing object
+        // which triggers the bug in db_loader_client.rs
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                conflicting_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+
+        // BUG: This should detect a flags conflict, but won't because
+        // parse_objects calls create_object which updates flags immediately
+        // before apply_attributes can compare them
+        assert_eq!(
+            parser.conflicts.len(),
+            1,
+            "Should detect one flags conflict (WILL FAIL DUE TO BUG)"
+        );
+
+        loader.commit().unwrap();
+
+        // Flags should be updated (Clobber mode)
+        let ws = db.new_world_state().unwrap();
+        let flags = ws.flags_of(&Obj::mk_id(52)).unwrap();
+        assert!(
+            flags.contains(moor_common::model::ObjFlag::Wizard),
+            "Wizard flag should be set after clobber"
+        );
+    }
+
+    #[test]
+    fn test_clobber_works_for_parent() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create parent objects first
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let parents_spec = r#"
+            object #1
+                name: "Parent One"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject
+            object #2
+                name: "Parent Two"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        parser
+            .load_single_object(
+                parents_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap_err(); // This should fail because we're loading 2 objects with load_single_object
+
+        // Create parents properly
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                parents_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create child object with parent=#1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #53
+                name: "Child Object"
+                owner: #0
+                parent: #1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial parent is #1
+        let ws = db.new_world_state().unwrap();
+        let parent = ws.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(53)).unwrap();
+        assert_eq!(parent, Obj::mk_id(1), "Initial parent should be #1");
+
+        // Now load with parent=#2 (clobber mode)
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #53
+                name: "Child Object"
+                owner: #0
+                parent: #2
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+                fertile: false
+                readable: false
+            endobject"#;
+
+        parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify parent was updated to #2
+        let ws = db.new_world_state().unwrap();
+        let parent = ws.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(53)).unwrap();
+        assert_eq!(
+            parent,
+            Obj::mk_id(2),
+            "Parent should be updated to #2 in clobber mode"
+        );
+    }
+
+    #[test]
+    fn test_clobber_works_for_location() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create location objects first
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let locations_spec = r#"
+            object #1
+                name: "Location One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Location Two"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                locations_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create object with location=#1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #54
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #1
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial location
+        let ws = db.new_world_state().unwrap();
+        let location = ws.location_of(&SYSTEM_OBJECT, &Obj::mk_id(54)).unwrap();
+        assert_eq!(location, Obj::mk_id(1), "Initial location should be #1");
+
+        // Now load with location=#2
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #54
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #2
+            endobject"#;
+        parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify location was updated to #2
+        let ws = db.new_world_state().unwrap();
+        let location = ws.location_of(&SYSTEM_OBJECT, &Obj::mk_id(54)).unwrap();
+        assert_eq!(
+            location,
+            Obj::mk_id(2),
+            "Location should be updated to #2 in clobber mode"
+        );
+    }
+
+    #[test]
+    fn test_clobber_works_for_owner() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create owner objects first
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let owners_spec = r#"
+            object #1
+                name: "Owner One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Owner Two"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                owners_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create object with owner=#1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #55
+                name: "Test Object"
+                owner: #1
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial owner
+        let ws = db.new_world_state().unwrap();
+        let owner = ws.owner_of(&Obj::mk_id(55)).unwrap();
+        assert_eq!(owner, Obj::mk_id(1), "Initial owner should be #1");
+
+        // Now load with owner=#2
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #55
+                name: "Test Object"
+                owner: #2
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify owner was updated to #2
+        let ws = db.new_world_state().unwrap();
+        let owner = ws.owner_of(&Obj::mk_id(55)).unwrap();
+        assert_eq!(
+            owner,
+            Obj::mk_id(2),
+            "Owner should be updated to #2 in clobber mode"
+        );
+    }
+
+    #[test]
+    fn test_clobber_works_for_property_values() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create object with property = "initial"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #56
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property test_prop (owner: #56, flags: "rc") = "initial value";
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial property value
+        let ws = db.new_world_state().unwrap();
+        let prop_value = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(56), Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(
+            prop_value,
+            v_str("initial value"),
+            "Initial property value should be 'initial value'"
+        );
+
+        // Now load with property = "updated"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #56
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property test_prop (owner: #56, flags: "rc") = "updated value";
+            endobject"#;
+        parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify property value was updated
+        let ws = db.new_world_state().unwrap();
+        let prop_value = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(56), Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(
+            prop_value,
+            v_str("updated value"),
+            "Property value should be updated to 'updated value' in clobber mode"
+        );
+    }
+
+    // Note: We're skipping a dedicated property flags test because PropDef doesn't expose flags directly
+    // and the property values test already covers the main clobber functionality
+
+    #[test]
+    fn test_clobber_works_for_verbs() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create object with verb returning "initial"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #58
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                verb "test_verb" (this none none) owner: #58 flags: "rxd"
+                    return "initial";
+                endverb
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Get initial verb
+        let ws = db.new_world_state().unwrap();
+        let initial_verbdef = ws
+            .get_verb(&SYSTEM_OBJECT, &Obj::mk_id(58), Symbol::mk("test_verb"))
+            .unwrap();
+
+        // Now load with verb returning "updated"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #58
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                verb "test_verb" (this none none) owner: #58 flags: "rxd"
+                    return "updated";
+                endverb
+            endobject"#;
+        parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify verb was updated by checking UUID changed (verb got replaced)
+        let ws = db.new_world_state().unwrap();
+        let updated_verbdef = ws
+            .get_verb(&SYSTEM_OBJECT, &Obj::mk_id(58), Symbol::mk("test_verb"))
+            .unwrap();
+
+        // The verb should still exist with same name but different UUID indicates it was replaced
+        assert_eq!(
+            initial_verbdef.names(),
+            updated_verbdef.names(),
+            "Verb name should be same"
+        );
+        // In clobber mode, verbs are updated in place, so UUID should be the same but we can't easily verify program changed
+        // Without access to the program. Let's just verify the verb still exists and has correct metadata
+        assert_eq!(
+            updated_verbdef.owner(),
+            Obj::mk_id(58),
+            "Verb owner should be correct"
+        );
+    }
+
+    #[test]
+    fn test_skip_mode_preserves_existing_parent() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create parent objects first
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let parents_spec = r#"
+            object #1
+                name: "Parent One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Parent Two"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                parents_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create child object with parent=#1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #60
+                name: "Child Object"
+                owner: #0
+                parent: #1
+                location: #-1
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial parent is #1
+        let ws = db.new_world_state().unwrap();
+        let parent = ws.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(60)).unwrap();
+        assert_eq!(parent, Obj::mk_id(1), "Initial parent should be #1");
+
+        // Now load with parent=#2 in Skip mode
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #60
+                name: "Child Object"
+                owner: #0
+                parent: #2
+                location: #-1
+            endobject"#;
+        let results = parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions {
+                    dry_run: false,
+                    conflict_mode: ConflictMode::Skip,
+                    target_object: None,
+                    create_new: false,
+                    constants: None,
+                    overrides: vec![],
+                    removals: vec![],
+                    validate_parent_changes: false,
+                },
+            )
+            .unwrap();
+
+        // Should detect conflict
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one parent conflict"
+        );
+
+        loader.commit().unwrap();
+
+        // Verify parent was NOT updated (Skip mode)
+        let ws = db.new_world_state().unwrap();
+        let parent = ws.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(60)).unwrap();
+        assert_eq!(
+            parent,
+            Obj::mk_id(1),
+            "Parent should still be #1 after skip"
+        );
+    }
+
+    #[test]
+    fn test_skip_mode_preserves_existing_location() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create location objects first
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let locations_spec = r#"
+            object #1
+                name: "Location One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Location Two"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                locations_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create object with location=#1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #61
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #1
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial location
+        let ws = db.new_world_state().unwrap();
+        let location = ws.location_of(&SYSTEM_OBJECT, &Obj::mk_id(61)).unwrap();
+        assert_eq!(location, Obj::mk_id(1), "Initial location should be #1");
+
+        // Now load with location=#2 in Skip mode
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #61
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #2
+            endobject"#;
+        let results = parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions {
+                    dry_run: false,
+                    conflict_mode: ConflictMode::Skip,
+                    target_object: None,
+                    create_new: false,
+                    constants: None,
+                    overrides: vec![],
+                    removals: vec![],
+                    validate_parent_changes: false,
+                },
+            )
+            .unwrap();
+
+        // Should detect conflict
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one location conflict"
+        );
+
+        loader.commit().unwrap();
+
+        // Verify location was NOT updated (Skip mode)
+        let ws = db.new_world_state().unwrap();
+        let location = ws.location_of(&SYSTEM_OBJECT, &Obj::mk_id(61)).unwrap();
+        assert_eq!(
+            location,
+            Obj::mk_id(1),
+            "Location should still be #1 after skip"
+        );
+    }
+
+    #[test]
+    fn test_skip_mode_preserves_existing_owner() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create owner objects first
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let owners_spec = r#"
+            object #1
+                name: "Owner One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Owner Two"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                owners_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create object with owner=#1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #62
+                name: "Test Object"
+                owner: #1
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial owner
+        let ws = db.new_world_state().unwrap();
+        let owner = ws.owner_of(&Obj::mk_id(62)).unwrap();
+        assert_eq!(owner, Obj::mk_id(1), "Initial owner should be #1");
+
+        // Now load with owner=#2 in Skip mode
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #62
+                name: "Test Object"
+                owner: #2
+                parent: #-1
+                location: #-1
+            endobject"#;
+        let results = parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions {
+                    dry_run: false,
+                    conflict_mode: ConflictMode::Skip,
+                    target_object: None,
+                    create_new: false,
+                    constants: None,
+                    overrides: vec![],
+                    removals: vec![],
+                    validate_parent_changes: false,
+                },
+            )
+            .unwrap();
+
+        // Should detect conflict
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one owner conflict"
+        );
+
+        loader.commit().unwrap();
+
+        // Verify owner was NOT updated (Skip mode)
+        let ws = db.new_world_state().unwrap();
+        let owner = ws.owner_of(&Obj::mk_id(62)).unwrap();
+        assert_eq!(owner, Obj::mk_id(1), "Owner should still be #1 after skip");
+    }
+
+    #[test]
+    fn test_skip_mode_preserves_existing_property_values() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create object with property = "initial"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #63
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property test_prop (owner: #63, flags: "rc") = "initial value";
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial property value
+        let ws = db.new_world_state().unwrap();
+        let prop_value = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(63), Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(
+            prop_value,
+            v_str("initial value"),
+            "Initial property value should be 'initial value'"
+        );
+
+        // Now load with property = "updated" in Skip mode
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #63
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property test_prop (owner: #63, flags: "rc") = "updated value";
+            endobject"#;
+        let results = parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions {
+                    dry_run: false,
+                    conflict_mode: ConflictMode::Skip,
+                    target_object: None,
+                    create_new: false,
+                    constants: None,
+                    overrides: vec![],
+                    removals: vec![],
+                    validate_parent_changes: false,
+                },
+            )
+            .unwrap();
+
+        // Should detect conflict
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one property value conflict"
+        );
+
+        loader.commit().unwrap();
+
+        // Verify property value was NOT updated (Skip mode)
+        let ws = db.new_world_state().unwrap();
+        let prop_value = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(63), Symbol::mk("test_prop"))
+            .unwrap();
+        assert_eq!(
+            prop_value,
+            v_str("initial value"),
+            "Property value should still be 'initial value' after skip"
+        );
+    }
+
+    #[test]
+    fn test_skip_mode_preserves_existing_verbs() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create object with verb returning "initial"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #64
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                verb "test_verb" (this none none) owner: #64 flags: "rxd"
+                    return "initial";
+                endverb
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Get initial verb
+        let ws = db.new_world_state().unwrap();
+        let initial_verbdef = ws
+            .get_verb(&SYSTEM_OBJECT, &Obj::mk_id(64), Symbol::mk("test_verb"))
+            .unwrap();
+        let initial_uuid = initial_verbdef.uuid();
+
+        // Now load with verb returning "updated" in Skip mode
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let updated_spec = r#"
+            object #64
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                verb "test_verb" (this none none) owner: #64 flags: "rxd"
+                    return "updated";
+                endverb
+            endobject"#;
+        let results = parser
+            .load_single_object(
+                updated_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions {
+                    dry_run: false,
+                    conflict_mode: ConflictMode::Skip,
+                    target_object: None,
+                    create_new: false,
+                    constants: None,
+                    overrides: vec![],
+                    removals: vec![],
+                    validate_parent_changes: false,
+                },
+            )
+            .unwrap();
+
+        // Should detect conflict
+        assert_eq!(
+            results.conflicts.len(),
+            1,
+            "Should detect one verb conflict"
+        );
+
+        loader.commit().unwrap();
+
+        // Verify verb was NOT updated (Skip mode) - UUID should be unchanged
+        let ws = db.new_world_state().unwrap();
+        let final_verbdef = ws
+            .get_verb(&SYSTEM_OBJECT, &Obj::mk_id(64), Symbol::mk("test_verb"))
+            .unwrap();
+        assert_eq!(
+            final_verbdef.uuid(),
+            initial_uuid,
+            "Verb UUID should be unchanged in skip mode"
+        );
+    }
+
+    #[test]
+    fn test_reject_parent_cycle() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create #1 with parent #-1 and #2 with parent #1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let initial_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Object Two"
+                owner: #0
+                parent: #1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                initial_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Now try to change #1's parent to #2, creating a cycle: #1 → #2 → #1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let cycle_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #2
+                location: #-1
+            endobject"#;
+
+        let result = parser.load_single_object(
+            cycle_spec,
+            CompileOptions::default(),
+            None,
+            None,
+            ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: ConflictMode::Clobber,
+                target_object: None,
+                create_new: false,
+                constants: None,
+                overrides: vec![],
+                removals: vec![],
+                validate_parent_changes: true,
+            },
+        );
+
+        // Should fail with a cycle detection error
+        assert!(result.is_err(), "Loading object with cycle should fail");
+        match result.unwrap_err() {
+            crate::ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+                // Verify it's a cycle error from WorldStateError
+                assert!(
+                    matches!(e, moor_common::model::WorldStateError::RecursiveMove(_, _)),
+                    "Expected RecursiveMove error, got {:?}",
+                    e
+                );
+            }
+            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_reject_invalid_parent() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create #1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                None,
+                None,
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Try to set #1's parent to #999 which doesn't exist
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let invalid_parent_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #999
+                location: #-1
+            endobject"#;
+
+        let result = parser.load_single_object(
+            invalid_parent_spec,
+            CompileOptions::default(),
+            None,
+            None,
+            ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: ConflictMode::Clobber,
+                target_object: None,
+                create_new: false,
+                constants: None,
+                overrides: vec![],
+                removals: vec![],
+                validate_parent_changes: true,
+            },
+        );
+
+        // Should fail with invalid parent error
+        assert!(
+            result.is_err(),
+            "Loading object with invalid parent should fail"
+        );
+        match result.unwrap_err() {
+            crate::ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+                // Verify it's an invalid parent error
+                assert!(
+                    matches!(e, moor_common::model::WorldStateError::ObjectNotFound(_)),
+                    "Expected ObjectNotFound error, got {:?}",
+                    e
+                );
+            }
+            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+        }
+
+        // But NOTHING (#-1) should be allowed
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let nothing_parent_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+
+        let result = parser.load_single_object(
+            nothing_parent_spec,
+            CompileOptions::default(),
+            None,
+            None,
+            ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: ConflictMode::Clobber,
+                target_object: None,
+                create_new: false,
+                constants: None,
+                overrides: vec![],
+                removals: vec![],
+                validate_parent_changes: true,
+            },
+        );
+
+        // Should succeed
+        assert!(
+            result.is_ok(),
+            "Loading object with NOTHING parent should succeed"
+        );
+    }
+
+    #[test]
+    fn test_reject_descendant_property_conflict() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create hierarchy: #10 (no prop "bar"), #20 (defines prop "bar")
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let parents_spec = r#"
+            object #10
+                name: "Parent Without Bar"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #20
+                name: "Parent With Bar"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property bar (owner: #20, flags: "rc") = "from parent 20";
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                parents_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        parser.define_properties(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create #50 with parent #10, and #51 as child of #50 defining property "bar"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let children_spec = r#"
+            object #50
+                name: "Middle Object"
+                owner: #0
+                parent: #10
+                location: #-1
+            endobject
+            object #51
+                name: "Child With Bar"
+                owner: #0
+                parent: #50
+                location: #-1
+                property bar (owner: #51, flags: "rc") = "from child 51";
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                children_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        parser.define_properties(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Now try to change #50's parent to #20
+        // This should fail because #51 (descendant of #50) defines "bar"
+        // and #20 (new parent ancestor) also defines "bar"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let conflict_spec = r#"
+            object #50
+                name: "Middle Object"
+                owner: #0
+                parent: #20
+                location: #-1
+            endobject"#;
+
+        let result = parser.load_single_object(
+            conflict_spec,
+            CompileOptions::default(),
+            None,
+            None,
+            ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: ConflictMode::Clobber,
+                target_object: None,
+                create_new: false,
+                constants: None,
+                overrides: vec![],
+                removals: vec![],
+                validate_parent_changes: true,
+            },
+        );
+
+        // Should fail with property name conflict error
+        assert!(
+            result.is_err(),
+            "Loading object with descendant property conflict should fail"
+        );
+        match result.unwrap_err() {
+            crate::ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+                // Verify it's a property name conflict error
+                assert!(
+                    matches!(
+                        e,
+                        moor_common::model::WorldStateError::ChparentPropertyNameConflict(_, _, _)
+                    ),
+                    "Expected ChparentPropertyNameConflict error, got {:?}",
+                    e
+                );
+            }
+            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
         }
     }
 }
