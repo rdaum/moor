@@ -14,7 +14,6 @@
 pub use crate::model::{
     defset::{Defs, DefsIter, HasUuid, Named},
     r#match::{ArgSpec, PrepSpec, VerbArgsSpec, parse_preposition_spec, preposition_to_string},
-    mutations::{BatchMutationResult, MutationResult, ObjectMutation},
     objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectRef, obj_flags_string},
     objset::{ObjSet, ObjSetIter},
     permissions::Perms,
@@ -31,7 +30,6 @@ use thiserror::Error;
 mod defset;
 pub mod loader;
 mod r#match;
-pub mod mutations;
 mod objects;
 mod objset;
 mod permissions;

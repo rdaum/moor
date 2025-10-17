@@ -246,7 +246,6 @@ Functions not part of the original LambdaMOO, but added in moor
 |---------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|-------------------|
 | [`load_object`](../../the-system/object-packaging.md#load_object)         | Load an object from objdef format with optional conflict detection and resolution options.         | Wiz only          |
 | [`dump_object`](../../the-system/object-packaging.md#dump_object)         | Takes an object and returns a list of strings representing the object definition in objdef format. | Wiz or owner only |
-| [`mutate_objects`](../../the-system/object-packaging.md#batch-mutations)  | Apply atomic batch mutations (properties, verbs, flags) across multiple objects in one transaction | Wiz only          |
 
 ### Flyweights & Symbols (new types)
 
