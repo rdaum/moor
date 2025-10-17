@@ -39,10 +39,16 @@ ARG CARGO_BUILD_FLAGS=""
 # ENV RUSTFLAGS="-C target-cpu=native"
 
 # Build either debug (fast) or release (optimized) based on BUILD_PROFILE
-RUN if [ "$BUILD_PROFILE" = "release" ]; then \
-        CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release $CARGO_BUILD_FLAGS; \
+# Note: Cache mounts are ephemeral, so we copy binaries out to persist them in the image layer
+# sharing=locked prevents race conditions when docker-compose builds multiple services in parallel
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/moor-build/target,sharing=locked \
+    if [ "$BUILD_PROFILE" = "release" ]; then \
+        CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release $CARGO_BUILD_FLAGS && \
+        cp -r target/release /moor-build/target-final; \
     else \
-        cargo build $CARGO_BUILD_FLAGS; \
+        cargo build $CARGO_BUILD_FLAGS && \
+        cp -r target/debug /moor-build/target-final; \
     fi
 
 # But we don't need the source code and all the rust stuff and packages in our final image. Just slim.
@@ -62,16 +68,17 @@ COPY --from=backend-build ./moor-build/moor-signing-key.pem ./moor-signing-key.p
 COPY --from=backend-build ./moor-build/moor-verifying-key.pem ./moor-verifying-key.pem
 
 # The compiled service binaries from the backend build (debug or release depending on BUILD_PROFILE)
-COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-daemon /moor/moor-daemon
-COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-web-host /moor/moor-web-host
-COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-telnet-host /moor/moor-telnet-host
-COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-curl-worker /moor/moor-curl-worker
+COPY --from=backend-build /moor-build/target-final/moor-daemon /moor/moor-daemon
+COPY --from=backend-build /moor-build/target-final/moor-web-host /moor/moor-web-host
+COPY --from=backend-build /moor-build/target-final/moor-telnet-host /moor/moor-telnet-host
+COPY --from=backend-build /moor-build/target-final/moor-curl-worker /moor/moor-curl-worker
 
 # The built web client static files from the frontend build
 COPY --from=frontend-build /moor-frontend/dist /moor/web-client
 
-# `moorc` binary can be used to compile objdef or textdump sources without running a full daemon
-COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moorc /moor/moorc
+# Utility binaries
+COPY --from=backend-build /moor-build/target-final/moorc /moor/moorc
+COPY --from=backend-build /moor-build/target-final/moor-admin /moor/moor-admin
 
 EXPOSE 8080
 
