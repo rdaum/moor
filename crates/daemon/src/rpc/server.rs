@@ -163,7 +163,7 @@ impl RpcServer {
             }
 
             // Check the mailbox - just process session events
-            if let Ok(session_event) = self.mailbox_receive.recv_timeout(Duration::from_millis(5)) {
+            if let Ok(session_event) = self.mailbox_receive.recv_timeout(Duration::from_secs(1)) {
                 // Delegate all session event handling to message handler
                 if let Err(e) = self.message_handler.handle_session_event(session_event) {
                     error!(error = ?e, "Error handling session event");
