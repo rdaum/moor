@@ -14,7 +14,7 @@
 //! Shared utilities for Elle consistency model checkers
 
 use edn_format::{Keyword, Value};
-use moor_common::model::{CommitResult, ObjAttrs};
+use moor_common::model::{CommitResult, ObjAttrs, ObjectKind};
 use moor_db::{Database, TxDB};
 use moor_var::{Obj, Symbol};
 use std::{
@@ -36,7 +36,7 @@ where
 
     // Create test object
     let obj_attrs = ObjAttrs::default();
-    let obj = loader.create_object(None, &obj_attrs)?;
+    let obj = loader.create_object(ObjectKind::NextObjid, &obj_attrs)?;
 
     // Create properties
     let mut prop_symbols = vec![];

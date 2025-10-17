@@ -650,8 +650,7 @@ mod tests {
         let options = crate::ObjDefLoaderOptions {
             dry_run: false,
             conflict_mode: crate::ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
+            object_kind: None,
             constants: None,
             overrides: vec![],
             removals: vec![],
@@ -806,8 +805,7 @@ mod tests {
             let options = crate::ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: crate::ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
+                object_kind: None,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],
@@ -1039,8 +1037,7 @@ mod tests {
             let options = crate::ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: crate::ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
+                object_kind: None,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],

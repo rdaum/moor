@@ -18,6 +18,7 @@ use clap::Parser;
 use clap_derive::Parser as DeriveParser;
 use eyre::{Report, bail, eyre};
 use fs2::FileExt;
+use moor_common::model::ObjectKind;
 use moor_common::{
     build,
     model::{Named, ObjFlag, ValSet},
@@ -504,9 +505,10 @@ impl Completer for MooAdminHelper {
                             })
                             .collect();
                         return Ok((value_start, matches));
-                    } else if flag_name == "target-object" {
-                        // Object completion - use existing object ID completion
+                    } else if flag_name == "as" {
+                        // Complete object kinds or object IDs
                         if partial_value.starts_with('#') {
+                            // Object ID completion
                             let objects = self.get_all_objects();
                             let matches: Vec<Pair> = objects
                                 .iter()
@@ -516,6 +518,18 @@ impl Completer for MooAdminHelper {
                                 .map(|lit| Pair {
                                     display: lit.clone(),
                                     replacement: lit.clone(),
+                                })
+                                .collect();
+                            return Ok((value_start, matches));
+                        } else {
+                            // Complete descriptive words
+                            let kinds = ["new", "anonymous", "anon", "uuid"];
+                            let matches: Vec<Pair> = kinds
+                                .iter()
+                                .filter(|kind| kind.starts_with(partial_value))
+                                .map(|kind| Pair {
+                                    display: kind.to_string(),
+                                    replacement: kind.to_string(),
                                 })
                                 .collect();
                             return Ok((value_start, matches));
@@ -531,8 +545,7 @@ impl Completer for MooAdminHelper {
                             "--file",
                             "--dry-run",
                             "--conflict-mode",
-                            "--target-object",
-                            "--create-new",
+                            "--as",
                             "--return-conflicts",
                         ]
                     };
@@ -804,13 +817,14 @@ fn print_help() {
 - `--file PATH` - Load from file instead of stdin
 - `--dry-run` - Validate without making changes
 - `--conflict-mode MODE` - How to handle conflicts: clobber, skip, or detect
-- `--target-object #OBJ` - Load into existing object
-- `--create-new` - Force creation of new object
+- `--as SPEC` - Where to load: `new`, `anonymous` (or `anon`), `uuid`, or `#OBJ`
 - `--return-conflicts` - Return detailed conflict information
 
 **Examples:**
 - `load --file obj.moo --dry-run` - Validate without loading
-- `load --file obj.moo --target-object #123` - Load into existing object
+- `load --file obj.moo --as #123` - Load into specific object
+- `load --file obj.moo --as new` - Create new numbered object
+- `load --file obj.moo --as anonymous` - Create anonymous object
 - `load --file obj.moo --conflict-mode skip` - Skip conflicting properties
 
 "#;
@@ -1507,29 +1521,32 @@ fn cmd_load(
         ConflictMode::Clobber
     };
 
-    let target_object = if let Some(target_str) = parsed.get_string("target-object") {
-        Some(parse_objref_with_scheduler(
-            target_str,
-            Some(scheduler_client),
-            Some(wizard),
-        )?)
+    // Parse object specification: "new", "anonymous"/"anon", "uuid", #N=specific ID, omitted=use objdef's ID
+    let object_kind = if let Some(spec_str) = parsed.get_string("as") {
+        if spec_str.starts_with('#') {
+            // Object ID like #123
+            let obj = parse_objref_with_scheduler(spec_str, Some(scheduler_client), Some(wizard))?;
+            Some(ObjectKind::Objid(obj))
+        } else {
+            // Named specification
+            match spec_str {
+                "new" => Some(ObjectKind::NextObjid),
+                "anonymous" | "anon" => Some(ObjectKind::Anonymous),
+                "uuid" => Some(ObjectKind::UuObjId),
+                _ => bail!(
+                    "Invalid --as value: {spec_str}. Must be 'new', 'anonymous', 'uuid', or #ID"
+                ),
+            }
+        }
     } else {
         None
     };
-
-    let create_new = parsed.get_bool("create-new");
-
-    // Validate mutual exclusivity
-    if target_object.is_some() && create_new {
-        bail!("Cannot specify both --target-object and --create-new");
-    }
 
     // No explicit permission check needed - load_object will check permissions internally
     let loader_options = ObjDefLoaderOptions {
         dry_run,
         conflict_mode,
-        target_object,
-        create_new,
+        object_kind,
         validate_parent_changes: true, // Individual load_object command should validate
         ..Default::default()
     };

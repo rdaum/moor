@@ -17,7 +17,7 @@
 mod tests {
     use crate::{Database, DatabaseConfig, TxDB};
     use moor_common::model::{
-        ObjAttrs, ObjFlag, PropFlag, VerbArgsSpec, VerbFlag, WorldStateSource,
+        ObjAttrs, ObjFlag, ObjectKind, PropFlag, VerbArgsSpec, VerbFlag, WorldStateSource,
         loader::batch_mutate, mutations::ObjectMutation,
     };
     use moor_common::util::BitEnum;
@@ -41,7 +41,7 @@ mod tests {
         // Create an object and define a property
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -86,7 +86,7 @@ mod tests {
         // Create an object and add a verb
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -130,7 +130,7 @@ mod tests {
         // Create an object and add a verb
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -169,7 +169,7 @@ mod tests {
         // Create an object
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -205,7 +205,7 @@ mod tests {
         // Create an object with a property
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -247,7 +247,7 @@ mod tests {
         // Create an object with a property
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -291,7 +291,7 @@ mod tests {
         // Create an object
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -326,7 +326,7 @@ mod tests {
         // Create an object with a verb
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -368,7 +368,7 @@ mod tests {
         // Create an object
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -441,7 +441,7 @@ mod tests {
         // Create an object
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -489,7 +489,7 @@ mod tests {
         // Create an object with a verb
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
@@ -535,7 +535,7 @@ mod tests {
         // Create an object with a verb
         let obj = loader
             .create_object(
-                None,
+                ObjectKind::NextObjid,
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();

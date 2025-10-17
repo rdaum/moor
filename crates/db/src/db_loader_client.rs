@@ -29,23 +29,18 @@ use moor_var::{Obj, Symbol, Var, program::ProgramType};
 impl LoaderInterface for DbWorldState {
     fn create_object(
         &mut self,
-        objid: Option<Obj>,
+        objid: ObjectKind,
         attrs: &ObjAttrs,
     ) -> Result<Obj, WorldStateError> {
-        let id_kind = match objid {
-            Some(id) => {
-                // Check if object already exists
-                if self.object_exists(&id)? {
-                    // Object exists - just return it without updating attributes
-                    // This allows apply_attributes to detect conflicts properly
-                    return Ok(id);
-                } else {
-                    ObjectKind::Objid(id)
-                }
-            }
-            None => ObjectKind::NextObjid,
-        };
-        self.get_tx_mut().create_object(id_kind, attrs.clone())
+        // If creating at a specific ID, check if object already exists
+        if let ObjectKind::Objid(id) = objid
+            && self.object_exists(&id)?
+        {
+            // Object exists - just return it without updating attributes
+            // This allows apply_attributes to detect conflicts properly
+            return Ok(id);
+        }
+        self.get_tx_mut().create_object(objid, attrs.clone())
     }
     fn set_object_parent(
         &mut self,

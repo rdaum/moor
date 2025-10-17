@@ -58,7 +58,7 @@ mod tests {
                 endverb
             endobject
         "#;
-        parser.load_single_object(root_spec, CompileOptions::default(), None, None, options)?;
+        parser.load_single_object(root_spec, CompileOptions::default(), None, options)?;
 
         // Create child object #2 inheriting from #1
         let child_spec = r#"
@@ -84,7 +84,7 @@ mod tests {
 
         let options2 = ObjDefLoaderOptions::default();
         let mut parser2 = ObjectDefinitionLoader::new(loader.as_mut());
-        parser2.load_single_object(child_spec, CompileOptions::default(), None, None, options2)?;
+        parser2.load_single_object(child_spec, CompileOptions::default(), None, options2)?;
 
         loader.commit()?;
         Ok(db)
@@ -115,20 +115,13 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions {
-            dry_run: false,
             conflict_mode: ConflictMode::Skip,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -185,7 +178,6 @@ mod tests {
             conflicting_spec,
             CompileOptions::default(),
             None,
-            None,
             options,
         )?;
         loader.commit()?;
@@ -226,20 +218,13 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions {
-            dry_run: false,
             conflict_mode: ConflictMode::Skip,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -303,21 +288,15 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions {
-            dry_run: false,
             conflict_mode: ConflictMode::Skip,
-            target_object: None,
-            create_new: false,
-            constants: None,
             // Override only object flags, but skip property changes
             overrides: vec![(Obj::mk_id(1), Entity::ObjectFlags)],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -365,7 +344,6 @@ mod tests {
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -416,18 +394,12 @@ mod tests {
         let options = ObjDefLoaderOptions {
             dry_run: true,
             conflict_mode: ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -470,20 +442,13 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions {
-            dry_run: false,
             conflict_mode: ConflictMode::Skip,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -529,20 +494,13 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions {
-            dry_run: false,
             conflict_mode: ConflictMode::Skip,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -594,7 +552,6 @@ mod tests {
             conflicting_spec,
             CompileOptions::default(),
             None,
-            None,
             options,
         )?;
         loader.commit()?;
@@ -641,7 +598,6 @@ mod tests {
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -692,7 +648,6 @@ mod tests {
         let _results = parser.load_single_object(
             conflicting_spec,
             CompileOptions::default(),
-            None,
             None,
             options,
         )?;
@@ -756,7 +711,6 @@ mod tests {
             first_override_spec,
             CompileOptions::default(),
             None,
-            None,
             options,
         )?;
         loader1.commit()?;
@@ -782,20 +736,13 @@ mod tests {
         "#;
 
         let skip_options = ObjDefLoaderOptions {
-            dry_run: false,
             conflict_mode: ConflictMode::Skip,
-            target_object: None,
-            create_new: false,
-            constants: None,
-            overrides: vec![],
-            removals: vec![],
-            validate_parent_changes: false,
+            ..ObjDefLoaderOptions::default()
         };
 
         let results = parser2.load_single_object(
             conflicting_override_spec,
             CompileOptions::default(),
-            None,
             None,
             skip_options,
         )?;
@@ -849,7 +796,6 @@ mod tests {
             first_override_spec,
             CompileOptions::default(),
             None,
-            None,
             options,
         )?;
         loader1.commit()?;
@@ -879,7 +825,6 @@ mod tests {
         let _results = parser2.load_single_object(
             conflicting_override_spec,
             CompileOptions::default(),
-            None,
             None,
             clobber_options,
         )?;

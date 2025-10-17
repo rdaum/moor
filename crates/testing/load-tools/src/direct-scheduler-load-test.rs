@@ -22,7 +22,9 @@ use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
 use moor_common::{
-    model::{CommitResult, ObjAttrs, ObjFlag, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag},
+    model::{
+        CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
+    },
     tasks::{NarrativeEvent, Session, SessionError, SessionFactory, SystemControl},
     util::BitEnum,
 };
@@ -265,7 +267,7 @@ fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre:
         "Wizard", // name
     );
 
-    let player = loader.create_object(Some(Obj::mk_id(1)), &player_attrs)?;
+    let player = loader.create_object(ObjectKind::Objid(Obj::mk_id(1)), &player_attrs)?;
     info!("Created wizard player object: {}", player);
 
     // Set the player to own itself
@@ -292,7 +294,7 @@ fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre:
             &format!("TestObject{}", i + 1), // name
         );
 
-        let new_obj = loader.create_object(None, &obj_attrs)?;
+        let new_obj = loader.create_object(ObjectKind::NextObjid, &obj_attrs)?;
         test_objects.push(v_obj(new_obj));
         info!("Created test object: {}", new_obj);
     }
@@ -314,7 +316,7 @@ fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre:
         ObjFlag::User.into(), // flags
         "System Object",      // name
     );
-    let system_obj = loader.create_object(Some(Obj::mk_id(0)), &system_attrs)?;
+    let system_obj = loader.create_object(ObjectKind::Objid(Obj::mk_id(0)), &system_attrs)?;
     loader.set_object_owner(&system_obj, &system_obj)?;
 
     // Create server options object with higher tick limits for load testing
@@ -325,7 +327,7 @@ fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre:
         ObjFlag::User.into(), // flags
         "server_options",     // name
     );
-    let server_options_obj = loader.create_object(None, &server_options_attrs)?;
+    let server_options_obj = loader.create_object(ObjectKind::NextObjid, &server_options_attrs)?;
 
     // Set much higher tick limits - our workload needs ~7000 * 100+ ticks per task
     loader.define_property(

@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use crate::{
     model::{
-        CommitResult, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs, PropFlag, PropPerms,
-        VerbArgsSpec, VerbDef, VerbDefs, VerbFlag, WorldStateError,
+        CommitResult, ObjAttrs, ObjFlag, ObjSet, ObjectKind, PropDef, PropDefs, PropFlag,
+        PropPerms, VerbArgsSpec, VerbDef, VerbDefs, VerbFlag, WorldStateError,
         mutations::{BatchMutationResult, MutationResult, ObjectMutation},
     },
     util::BitEnum,
@@ -69,10 +69,10 @@ pub trait SnapshotInterface: Send {
 /// Overlap of functionality with what WorldState could provide, but potentially different
 /// constraints/semantics (e.g. no perms checks)
 pub trait LoaderInterface: Send {
-    /// Create a new object with the given attributes
+    /// Create a new object with the given attributes and specified ObjectKind
     fn create_object(
         &mut self,
-        objid: Option<Obj>,
+        objid: ObjectKind,
         attrs: &ObjAttrs,
     ) -> Result<Obj, WorldStateError>;
 
@@ -330,7 +330,8 @@ fn apply_mutation(
             use crate::model::ObjAttrs;
             // Note: CreateObject ignores the 'target' parameter - objid specifies the ID
             let attrs = ObjAttrs::new(*parent, *location, *owner, *flags, "");
-            loader.create_object(*objid, &attrs)?;
+            let object_kind = objid.map_or(ObjectKind::NextObjid, ObjectKind::Objid);
+            loader.create_object(object_kind, &attrs)?;
             Ok(())
         }
 

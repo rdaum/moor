@@ -1362,17 +1362,10 @@ impl Scheduler {
 
         // Load the object with the provided options
         let compile_options = self.config.features.compile_options();
-        let target_obj = options.target_object;
         let constants = options.constants.clone();
 
         let result = object_loader
-            .load_single_object(
-                &object_definition,
-                compile_options,
-                target_obj,
-                constants,
-                options,
-            )
+            .load_single_object(&object_definition, compile_options, constants, options)
             .map_err(|_| SchedulerError::CouldNotStartTask)?;
 
         // Commit the transaction if the result says we should

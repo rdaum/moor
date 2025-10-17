@@ -19,8 +19,8 @@ use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_stat
 use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{
-    ArgSpec, ObjFlag, ObjectMutation, PropFlag, VerbArgsSpec, VerbFlag, obj_flags_string,
-    parse_preposition_spec, prop_flags_string,
+    ArgSpec, ObjFlag, ObjectKind, ObjectMutation, PropFlag, VerbArgsSpec, VerbFlag,
+    obj_flags_string, parse_preposition_spec, prop_flags_string,
 };
 use moor_common::util::BitEnum;
 use moor_objdef::{ConflictEntity, ConflictMode, Entity, ObjDefLoaderOptions};
@@ -265,13 +265,135 @@ fn entity_to_moo(bf_args: &mut BfCallState<'_>, entity: &Entity) -> Var {
     }
 }
 
+/// Parse object kind specification from the third argument
+fn parse_object_kind_spec(
+    bf_args: &BfCallState<'_>,
+    arg: &Var,
+) -> Result<Option<ObjectKind>, BfErr> {
+    match arg.variant() {
+        Variant::Int(0) => Ok(Some(ObjectKind::NextObjid)),
+        Variant::Int(1) => {
+            if !bf_args.config.anonymous_objects {
+                return Err(BfErr::ErrValue(E_INVARG.msg(
+                    "Anonymous objects not available (anonymous_objects feature is disabled)",
+                )));
+            }
+            Ok(Some(ObjectKind::Anonymous))
+        }
+        Variant::Int(2) => {
+            if !bf_args.config.use_uuobjids {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("UUID objects not available (use_uuobjids is false)"),
+                ));
+            }
+            Ok(Some(ObjectKind::UuObjId))
+        }
+        Variant::Int(_) => Err(BfErr::ErrValue(E_INVARG.msg(
+            "load_object() object_spec must be 0 (NextObjid), 1 (Anonymous), 2 (UuObjId), or an object ID",
+        ))),
+        Variant::Obj(obj) => Ok(Some(ObjectKind::Objid(*obj))),
+        _ => Err(BfErr::ErrValue(E_TYPE.msg(
+            "load_object() third argument must be an integer (0, 1, 2) or an object ID",
+        ))),
+    }
+}
+
+/// Parse a single override/removal pair: {obj, entity}
+fn parse_obj_entity_pair(
+    bf_args: &mut BfCallState<'_>,
+    pair: &Var,
+    pair_type: &str,
+) -> Result<(moor_var::Obj, Entity), BfErr> {
+    let Some(pair_list) = pair.as_list() else {
+        return Err(BfErr::ErrValue(E_TYPE.msg(format!(
+            "{pair_type} must be a list of {{obj, entity}} pairs"
+        ))));
+    };
+
+    if pair_list.len() != 2 {
+        return Err(BfErr::ErrValue(E_ARGS.msg(format!(
+            "{pair_type} pairs must have exactly 2 elements: {{obj, entity}}"
+        ))));
+    }
+
+    let obj_var = pair_list.index(0).map_err(BfErr::ErrValue)?;
+    let Some(obj) = obj_var.as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg(format!("{pair_type} object must be an object")),
+        ));
+    };
+
+    let entity_var = pair_list.index(1).map_err(BfErr::ErrValue)?;
+    let entity = moo_entity_to_entity(bf_args, &entity_var)?;
+
+    Ok((obj, entity))
+}
+
+/// Parse conflict mode from symbol
+fn parse_conflict_mode(mode_sym: Symbol) -> Result<(ConflictMode, bool, bool), BfErr> {
+    if mode_sym == *CLOBBER_SYM {
+        Ok((ConflictMode::Clobber, false, false))
+    } else if mode_sym == *SKIP_SYM {
+        Ok((ConflictMode::Skip, false, false))
+    } else if mode_sym == *DETECT_SYM {
+        // "detect" mode is essentially dry_run + return_conflicts
+        Ok((ConflictMode::Clobber, true, true))
+    } else {
+        Err(BfErr::ErrValue(
+            E_INVARG.msg("conflict_mode must be `clobber, `skip, or `detect"),
+        ))
+    }
+}
+
+/// Format load result for return to MOO code
+fn format_load_result(
+    bf_args: &mut BfCallState<'_>,
+    result: &moor_objdef::ObjDefLoaderResults,
+    return_conflicts: bool,
+) -> Result<Var, BfErr> {
+    if !return_conflicts {
+        // Return simple object ID (backward compatibility)
+        if result.loaded_objects.is_empty() {
+            return Err(BfErr::ErrValue(E_INVARG.msg("No objects were loaded")));
+        }
+        return Ok(v_obj(result.loaded_objects[0]));
+    }
+
+    // Return detailed result: {success, conflicts, removals, loaded_objects}
+    let conflicts: Vec<_> = result
+        .conflicts
+        .iter()
+        .map(|(obj, conflict)| v_list(&[v_obj(*obj), conflict_entity_to_moo(bf_args, conflict)]))
+        .collect();
+
+    let removals_result: Vec<_> = result
+        .removals
+        .iter()
+        .map(|(obj, entity)| v_list(&[v_obj(*obj), entity_to_moo(bf_args, entity)]))
+        .collect();
+
+    let loaded_objects: Vec<_> = result
+        .loaded_objects
+        .iter()
+        .map(|obj| v_obj(*obj))
+        .collect();
+
+    Ok(v_list(&[
+        bf_args.v_bool(result.commit),
+        v_list(&conflicts),
+        v_list(&removals_result),
+        v_list(&loaded_objects),
+    ]))
+}
+
 /// Loads a single object definition from a list of strings and creates it in the database.
 /// This creates the object and all its properties/verbs. Wizard-only.
-/// MOO: `obj load_object(list object_lines [, map options])`
+/// MOO: `obj load_object(list object_lines [, map options] [, obj|int object_spec])`
+/// object_spec: 0=NextObjid, 1=Anonymous, 2=UuObjId, #N=specific ID, omitted=use objdef's ID
 fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("load_object() requires 1-2 arguments"),
+            E_ARGS.msg("load_object() requires 1-3 arguments"),
         ));
     }
 
@@ -294,17 +416,22 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let object_definition = lines.join("\n");
 
     // Parse options map (second argument)
-    let options_map = if bf_args.args.len() == 2 {
+    let options_map = if bf_args.args.len() >= 2 {
         bf_args.map_or_alist_to_map(&bf_args.args[1])?
     } else {
         v_empty_map().as_map().unwrap().clone()
     };
 
+    // Parse the object specification (third argument)
+    let object_kind = if bf_args.args.len() == 3 {
+        parse_object_kind_spec(bf_args, &bf_args.args[2])?
+    } else {
+        None
+    };
+
     // Extract options from the map using symbol constants
     let mut dry_run = false;
     let mut conflict_mode = ConflictMode::Clobber;
-    let mut target_object = None;
-    let mut create_new = false;
     let mut constants = None;
     let mut overrides = Vec::new();
     let mut removals = Vec::new();
@@ -315,97 +442,57 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         if key_sym == *DRY_RUN_SYM {
             dry_run = value.is_true();
-        } else if key_sym == *CONFLICT_MODE_SYM {
+            continue;
+        }
+
+        if key_sym == *CONFLICT_MODE_SYM {
             let mode_sym = value.as_symbol().map_err(BfErr::ErrValue)?;
-            if mode_sym == *CLOBBER_SYM {
-                conflict_mode = ConflictMode::Clobber;
-            } else if mode_sym == *SKIP_SYM {
-                conflict_mode = ConflictMode::Skip;
-            } else if mode_sym == *DETECT_SYM {
-                // "detect" mode is essentially dry_run + return_conflicts
+            let (mode, dr, rc) = parse_conflict_mode(mode_sym)?;
+            conflict_mode = mode;
+            if dr {
                 dry_run = true;
-                return_conflicts = true;
-            } else {
-                return Err(BfErr::ErrValue(
-                    E_INVARG.msg("conflict_mode must be `clobber, `skip, or `detect"),
-                ));
             }
-        } else if key_sym == *TARGET_OBJECT_SYM {
-            target_object =
-                Some(value.as_object().ok_or_else(|| {
-                    BfErr::ErrValue(E_TYPE.msg("target_object must be an object"))
-                })?);
-        } else if key_sym == *CREATE_NEW_SYM {
-            create_new = value.is_true();
-        } else if key_sym == *CONSTANTS_SYM {
+            if rc {
+                return_conflicts = true;
+            }
+            continue;
+        }
+
+        if key_sym == *CONSTANTS_SYM {
             let const_map = bf_args.map_or_alist_to_map(&value)?;
             constants = Some(const_map);
-        } else if key_sym == *OVERRIDES_SYM {
+            continue;
+        }
+
+        if key_sym == *OVERRIDES_SYM {
             let Some(overrides_list) = value.as_list() else {
                 return Err(BfErr::ErrValue(
                     E_TYPE.msg("overrides must be a list of {obj, entity} pairs"),
                 ));
             };
             for override_pair in overrides_list.iter() {
-                let Some(pair_list) = override_pair.as_list() else {
-                    return Err(BfErr::ErrValue(
-                        E_TYPE.msg("overrides must be a list of {obj, entity} pairs"),
-                    ));
-                };
-                if pair_list.len() != 2 {
-                    return Err(BfErr::ErrValue(
-                        E_ARGS.msg("override pairs must have exactly 2 elements: {obj, entity}"),
-                    ));
-                }
-                let obj = pair_list
-                    .index(0)
-                    .map_err(BfErr::ErrValue)?
-                    .as_object()
-                    .ok_or_else(|| {
-                        BfErr::ErrValue(E_TYPE.msg("override object must be an object"))
-                    })?;
-                let entity =
-                    moo_entity_to_entity(bf_args, &pair_list.index(1).map_err(BfErr::ErrValue)?)?;
+                let (obj, entity) = parse_obj_entity_pair(bf_args, &override_pair, "overrides")?;
                 overrides.push((obj, entity));
             }
-        } else if key_sym == *REMOVALS_SYM {
+            continue;
+        }
+
+        if key_sym == *REMOVALS_SYM {
             let Some(removals_list) = value.as_list() else {
                 return Err(BfErr::ErrValue(
                     E_TYPE.msg("removals must be a list of {obj, entity} pairs"),
                 ));
             };
             for removal_pair in removals_list.iter() {
-                let Some(pair_list) = removal_pair.as_list() else {
-                    return Err(BfErr::ErrValue(
-                        E_TYPE.msg("removals must be a list of {obj, entity} pairs"),
-                    ));
-                };
-                if pair_list.len() != 2 {
-                    return Err(BfErr::ErrValue(
-                        E_ARGS.msg("removal pairs must have exactly 2 elements: {obj, entity}"),
-                    ));
-                }
-                let obj = pair_list
-                    .index(0)
-                    .map_err(BfErr::ErrValue)?
-                    .as_object()
-                    .ok_or_else(|| {
-                        BfErr::ErrValue(E_TYPE.msg("removal object must be an object"))
-                    })?;
-                let entity =
-                    moo_entity_to_entity(bf_args, &pair_list.index(1).map_err(BfErr::ErrValue)?)?;
+                let (obj, entity) = parse_obj_entity_pair(bf_args, &removal_pair, "removals")?;
                 removals.push((obj, entity));
             }
-        } else if key_sym == *RETURN_CONFLICTS_SYM {
+            continue;
+        }
+
+        if key_sym == *RETURN_CONFLICTS_SYM {
             return_conflicts = value.is_true();
         }
-    }
-
-    // Validate mutual exclusivity of target_object and create_new
-    if target_object.is_some() && create_new {
-        return Err(BfErr::ErrValue(
-            E_INVARG.msg("Cannot specify both target_object and create_new options"),
-        ));
     }
 
     // Check permissions: wizard only (object creation with arbitrary properties/verbs)
@@ -416,9 +503,8 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let loader_options = ObjDefLoaderOptions {
         dry_run,
         conflict_mode,
-        target_object,
-        create_new,
-        constants,
+        object_kind,
+        constants: constants.clone(),
         overrides,
         removals,
         validate_parent_changes: true, // Individual loads should validate parent changes
@@ -428,19 +514,15 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let compile_options = bf_args.config.compile_options();
 
     // Use the current task's transaction via loader interface
-    // This avoids creating a separate transaction and the TaskSuspend::Commit issue
     let result = with_loader_interface(|loader| {
         let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader);
 
         // Load the single object with provided options
-        let target_obj = loader_options.target_object;
-        let constants_clone = loader_options.constants.clone();
         let results = object_loader
             .load_single_object(
                 &object_definition,
                 compile_options,
-                target_obj,
-                constants_clone,
+                constants,
                 loader_options,
             )
             .map_err(|e| {
@@ -449,52 +531,12 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 ))
             })?;
 
-        // Note: We don't commit here - the loader operations are happening in the task's transaction
-        // The transaction will be committed normally when the task completes
-
         Ok(results)
     })
     .map_err(world_state_bf_err)?;
 
-    // Format the return value based on return_conflicts flag
-    let return_value = if return_conflicts {
-        // Return detailed result: {success, conflicts, removals, loaded_objects}
-        let conflicts = result
-            .conflicts
-            .iter()
-            .map(|(obj, conflict)| {
-                v_list(&[v_obj(*obj), conflict_entity_to_moo(bf_args, conflict)])
-            })
-            .collect::<Vec<_>>();
-
-        let removals_result = result
-            .removals
-            .iter()
-            .map(|(obj, entity)| v_list(&[v_obj(*obj), entity_to_moo(bf_args, entity)]))
-            .collect::<Vec<_>>();
-
-        let loaded_objects = result
-            .loaded_objects
-            .iter()
-            .map(|obj| v_obj(*obj))
-            .collect::<Vec<_>>();
-
-        v_list(&[
-            bf_args.v_bool(result.commit),
-            v_list(&conflicts),
-            v_list(&removals_result),
-            v_list(&loaded_objects),
-        ])
-    } else {
-        // Return simple object ID (backward compatibility)
-        if result.loaded_objects.is_empty() {
-            return Err(BfErr::ErrValue(E_INVARG.msg("No objects were loaded")));
-        }
-        v_obj(result.loaded_objects[0])
-    };
-
-    // Return the result - the loaded objects are already in the current transaction
-    // No need for TaskSuspend::Commit since we used the same transaction
+    // Format and return the result
+    let return_value = format_load_result(bf_args, &result, return_conflicts)?;
     Ok(Ret(return_value))
 }
 

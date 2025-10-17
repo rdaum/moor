@@ -30,7 +30,7 @@ mod tests {
         let wizard = Obj::mk_id(2);
         loader
             .create_object(
-                Some(wizard),
+                ObjectKind::Objid(wizard),
                 &ObjAttrs::new(WIZARD, NOTHING, NOTHING, BitEnum::all(), "Wizard"),
             )
             .unwrap();

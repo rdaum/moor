@@ -19,7 +19,7 @@ use crate::{
 use moor_common::{
     matching::Preposition,
     model::{
-        ArgSpec, ObjAttrs, ObjFlag, PrepSpec, PropFlag, VerbArgsSpec, VerbFlag,
+        ArgSpec, ObjAttrs, ObjFlag, ObjectKind, PrepSpec, PropFlag, VerbArgsSpec, VerbFlag,
         loader::LoaderInterface,
     },
     util::BitEnum,
@@ -168,7 +168,7 @@ pub fn read_textdump<T: io::Read>(
         );
         loader
             .create_object(
-                Some(*objid),
+                ObjectKind::Objid(*objid),
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, &o.name),
             )
             .unwrap();

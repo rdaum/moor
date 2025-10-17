@@ -18,7 +18,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
-use moor_common::model::{ObjAttrs, WorldStateSource};
+use moor_common::model::{ObjAttrs, ObjectKind, WorldStateSource};
 use moor_db::{Database, TxDB};
 use moor_var::{Obj, Symbol, v_int, v_list};
 use std::{
@@ -80,7 +80,7 @@ fn setup_database(db: &TxDB, num_props: usize) -> Result<(Obj, Vec<Symbol>), eyr
 
     // Create test object
     let obj_attrs = ObjAttrs::default();
-    let obj = loader.create_object(None, &obj_attrs)?;
+    let obj = loader.create_object(ObjectKind::NextObjid, &obj_attrs)?;
 
     // Create properties for list-append workload
     let mut prop_symbols = vec![];

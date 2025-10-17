@@ -404,15 +404,21 @@ The `load_object` function recreates objects from their text definitions:
 new_obj = load_object(definition);
 
 // Create a new object with next available ID (ignoring dump's ID)
-new_obj = load_object(definition, [`create_new -> true]);
+new_obj = load_object(definition, [], 0);
 
 // Update an existing object
-new_obj = load_object(definition, [`target_object -> #456]);
+new_obj = load_object(definition, [], #456);
 
-// Load with multiple options
+// Create an anonymous object
+new_obj = load_object(definition, [], 1);
+
+// Create a UUID-based object
+new_obj = load_object(definition, [], 2);
+
+// Load with options and object kind
 new_obj = load_object(definition, [
     `constants -> [`MY_CONSTANT -> "value"]  // Set compilation constants
-]);
+], 0);  // Create new with next ID
 ```
 
 ### Batch Mutations
@@ -623,12 +629,32 @@ works. This map can contain any combination of the following options:
 `"dry_run"`),
 > integers (`1`/`0`), and alists (`{{"key", "value"}, ...}`) instead throughout - they work identically.
 
-The following table provides a complete reference for all `load_object` options:
+The `load_object` function accepts up to three arguments:
+
+```moo
+load_object(definition)                    // Use object ID from dump
+load_object(definition, options)           // Use object ID from dump with options
+load_object(definition, options, object_kind) // Specify where to load
+```
+
+**Third Parameter - Object Kind:**
+
+The optional third parameter specifies where to create/load the object:
+
+| Value         | Description                                            |
+|---------------|--------------------------------------------------------|
+| (omitted)     | Use the object ID from the dump file                   |
+| `0`           | Create new object with next available ID (NextObjid)   |
+| `1`           | Create anonymous object                                |
+| `2`           | Create UUID-based object (requires `use_uuobjids`)     |
+| Object ID     | Load into the specified existing object                |
+
+**Options Map:**
+
+The second parameter is a map with the following options:
 
 | Option             | Type    | Default    | Description                                                      |
 |--------------------|---------|------------|------------------------------------------------------------------|
-| `target_object`    | Object  | None       | Existing object to update instead of creating new                |
-| `create_new`       | Boolean | `false`    | Allocate new object ID instead of using ID from dump             |
 | `constants`        | Map     | `[]`       | Compilation constants available during verb compilation          |
 | `conflict_mode`    | Symbol  | `'clobber` | How to handle conflicts: `'clobber`, `'skip`, `'detect`          |
 | `dry_run`          | Boolean | `false`    | Test mode - don't make actual changes                            |
@@ -636,64 +662,60 @@ The following table provides a complete reference for all `load_object` options:
 | `overrides`        | List    | `{}`       | Force specific entities to use `clobber` mode                    |
 | `removals`         | List    | `{}`       | Remove specified entities not in definition                      |
 
-**Note:** `target_object` and `create_new` are mutually exclusive - specifying both will raise `E_INVARG`.
-
 ### Option Details
 
-### Object ID Handling
+### Object Kind (Third Parameter)
 
-When loading an object, you have three options for handling object IDs:
+The third parameter to `load_object` controls where the object is created or loaded. This parameter is optional and has different behaviors depending on the value:
 
-1. **Default behavior (no options)**: Use the object ID from the dump
-2. **`create_new` option**: Allocate a new object ID (next available)
-3. **`target_object` option**: Load into a specific existing object
-
-These options are mutually exclusive - you cannot specify both `create_new` and `target_object`.
-
-### Create New Object
-
-**Option:** `create_new`
-**Type:** Boolean
-**Default:** `false`
-**Mutually exclusive with:** `target_object`
-
-Allocate a new object ID instead of using the object ID from the dump:
-
+**Using Object ID from Dump (default):**
 ```moo
-// Create a new object, ignoring the dump's object ID
-new_obj = load_object(definition, [`create_new -> true]);
-
-// Useful for duplicating objects or sharing object definitions
-// between databases where object IDs may conflict
-copy_of_widget = load_object(dump_object($my_widget), [`create_new -> true]);
+// When omitted, use the object ID specified in the dump
+new_obj = load_object(definition);
+new_obj = load_object(definition, [`conflict_mode -> `skip]);
 ```
 
-**When to use `create_new`:**
+**Create New Numbered Object (`0`):**
+```moo
+// Allocate next available object ID, ignoring dump's ID
+new_obj = load_object(definition, [], 0);
+
+// With options
+copy = load_object(dump_object($widget), [`constants -> my_constants], 0);
+```
+
+**When to use `0` (NextObjid):**
 - Duplicating an object within the same database
 - Importing objects that might have conflicting IDs
 - Creating instances from a template definition
 - Sharing object packages between different MOO servers
 
-**Important:** The new object will get the next available ID from the database sequence, not the ID specified in the dump.
-
-### Target Object
-
-**Option:** `target_object`
-**Type:** Object
-**Default:** None
-**Mutually exclusive with:** `create_new`
-
-Load the definition into an existing object instead of creating a new one:
-
+**Create Anonymous Object (`1`):**
 ```moo
-// Update an existing object with new definition
-load_object(definition, [`target_object -> #123]);
-
-// Useful for updating objects in place
-load_object(new_widget_def, [`target_object -> $my_widget]);
+// Create anonymous object (requires anonymous_objects feature)
+anon_obj = load_object(definition, [], 1);
 ```
 
-**When to use `target_object`:**
+Anonymous objects don't have traditional object IDs and are used for temporary or transient data that shouldn't persist in the main object hierarchy.
+
+**Create UUID-Based Object (`2`):**
+```moo
+// Create UUID-based object (requires use_uuobjids configuration)
+uuid_obj = load_object(definition, [], 2);
+```
+
+UUID-based objects use universally unique identifiers, useful for distributed systems or when object IDs need to be globally unique.
+
+**Load into Existing Object:**
+```moo
+// Update an existing object with new definition
+load_object(definition, [], #123);
+
+// With options
+load_object(new_widget_def, [`conflict_mode -> `skip], $my_widget);
+```
+
+**When to load into existing object:**
 - Updating an existing object with a new version
 - Applying a template to an existing object
 - Restoring an object from a backup
@@ -945,7 +967,6 @@ load_object(definition, [
 
 // Complex selective update preserving user customizations
 load_object(package_update, [
-    `target_object -> $package_obj,
     `conflict_mode -> `skip,           // Preserve existing data by default
     `overrides -> [
         // Force update these core components
@@ -958,7 +979,7 @@ load_object(package_update, [
         {$package_obj, {'property_def, 'legacy_setting}},
         {$package_obj, {'verb_def, {'old_interface}}}
     ]
-]);
+], $package_obj);  // Load into existing package object
 ```
 
 ### Entity Selection Tips
@@ -1097,13 +1118,12 @@ Updating an object while preserving user customizations:
 ```moo
 // Update only the core functionality, skip user properties
 load_object(new_version, [
-    `target_object -> $my_object,
     `conflict_mode -> `skip,
     `overrides -> [
         {$my_object, {'verb_program, {'main_function}}},
         {$my_object, {'property_value, 'version}}
     ]
-]);
+], $my_object);  // Load into existing object
 ```
 
 ### Database Migration
@@ -1122,7 +1142,7 @@ for obj in (keys(definitions))
     load_object(definitions[obj], [
         `constants -> [`THING -> #789, `ROOM -> #456, `PLAYER -> #123],
         `conflict_mode -> `skip  // Don't overwrite existing customizations
-    ]);
+    ]);  // Uses object ID from dump by default
 endfor
 ```
 
@@ -1204,10 +1224,10 @@ Create backups before making significant changes:
 ```moo
 backup = dump_object($important_object);
 // Store backup somewhere safe
-result = load_object(new_definition, [`target_object -> $important_object]);
+result = load_object(new_definition, [], $important_object);
 if (!result[1])
     // Restore from backup if needed
-    load_object(backup, [`target_object -> $important_object]);
+    load_object(backup, [], $important_object);
 endif
 ```
 
@@ -1218,13 +1238,12 @@ Always test packages in a development environment:
 ```moo
 // Load into test objects first
 test_result = load_object(package, [
-    `target_object -> $test_object,
     `return_conflicts -> true
-]);
+], $test_object);
 
 // Only proceed to production if tests pass
 if (test_passes(test_result))
-    load_object(package, [`target_object -> $production_object]);
+    load_object(package, [], $production_object);
 endif
 ```
 

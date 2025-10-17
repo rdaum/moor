@@ -13,7 +13,9 @@
 
 use crate::ObjdefLoaderError;
 use moor_common::{
-    model::{ObjAttrs, ObjFlag, PropDef, PropFlag, ValSet, VerbDef, loader::LoaderInterface},
+    model::{
+        ObjAttrs, ObjFlag, ObjectKind, PropDef, PropFlag, ValSet, VerbDef, loader::LoaderInterface,
+    },
     util::BitEnum,
 };
 use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_object_definitions};
@@ -66,11 +68,9 @@ pub struct ObjDefLoaderOptions {
     pub dry_run: bool,
     /// How to handle conflicts.
     pub conflict_mode: ConflictMode,
-    /// Optional target object to update instead of creating new
-    pub target_object: Option<Obj>,
-    /// If true, allocate a new object ID instead of using the one from the dump.
-    /// Mutually exclusive with target_object.
-    pub create_new: bool,
+    /// How to allocate the object ID. If None, uses the ID from the objdef file (default).
+    /// Can be NextObjid (0), Anonymous (1), UuObjId (2), or Objid(#123) for a specific ID.
+    pub object_kind: Option<ObjectKind>,
     /// Optional constants for compilation
     pub constants: Option<moor_var::Map>,
     /// The set of entities for which we will allow overriding and treat as if their specific
@@ -89,8 +89,7 @@ impl Default for ObjDefLoaderOptions {
         Self {
             dry_run: false,
             conflict_mode: ConflictMode::Clobber,
-            target_object: None,
-            create_new: false,
+            object_kind: None,
             constants: None,
             overrides: vec![],
             removals: vec![],
@@ -319,7 +318,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
             self.loader
                 .create_object(
-                    Some(oid),
+                    ObjectKind::Objid(oid),
                     &ObjAttrs::new(
                         NOTHING,
                         NOTHING,
@@ -913,7 +912,6 @@ impl<'a> ObjectDefinitionLoader<'a> {
         &mut self,
         object_definition: &str,
         compile_options: CompileOptions,
-        target_object: Option<moor_var::Obj>,
         constants: Option<moor_var::Map>,
         options: ObjDefLoaderOptions,
     ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
@@ -953,30 +951,20 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         let compiled_def = compiled_defs.into_iter().next().unwrap();
 
-        // Validate mutual exclusivity of target_object and create_new
-        if target_object.is_some() && options.create_new {
-            return Err(ObjdefLoaderError::ObjectDefParseError(
-                source_name.clone(),
-                moor_compiler::ObjDefParseError::ConstantNotFound(
-                    "Cannot specify both target_object and create_new".to_string(),
-                ),
-            ));
-        }
-
-        // Determine the object ID to use for creation
-        let objid_to_pass = if options.create_new {
-            // Allocate new object ID via NextObjid sequence
-            None
-        } else if let Some(target_obj) = target_object {
-            // Use specified target object
-            Some(target_obj)
-        } else {
-            // Use the object ID from the dump (default behavior)
-            Some(compiled_def.oid)
+        // Determine the ObjectKind to use for creation
+        let object_kind = match &options.object_kind {
+            None => ObjectKind::Objid(compiled_def.oid), // Use the ID from objdef file (default)
+            Some(kind) => kind.clone(), // Use specified kind (NextObjid, UuObjId, Anonymous, or specific Objid)
         };
 
-        // Check if object already exists to avoid overwriting
-        let existing_obj = if let Some(obj_id) = objid_to_pass {
+        // Extract the expected object ID for conflict detection (only valid for Objid kind)
+        let expected_oid = match object_kind {
+            ObjectKind::Objid(id) => Some(id),
+            _ => None,
+        };
+
+        // Check if object already exists (only for specific Objid)
+        let existing_obj = if let Some(obj_id) = expected_oid {
             self.loader
                 .get_existing_object(&obj_id)
                 .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(source_name.clone(), e))?
@@ -988,7 +976,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         let oid = if existing_obj.is_none() {
             self.loader
                 .create_object(
-                    objid_to_pass,
+                    object_kind,
                     &ObjAttrs::new(
                         NOTHING,
                         NOTHING,
@@ -1000,13 +988,13 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 .map_err(|wse| {
                     ObjdefLoaderError::CouldNotCreateObject(
                         source_name.clone(),
-                        objid_to_pass.unwrap_or(NOTHING),
+                        expected_oid.unwrap_or(NOTHING),
                         wse,
                     )
                 })?
         } else {
             // Object exists, use its ID
-            objid_to_pass.unwrap()
+            expected_oid.unwrap()
         };
 
         // Store the definition for processing
@@ -1235,7 +1223,7 @@ mod tests {
 
         let options = ObjDefLoaderOptions::default();
         let results = parser
-            .load_single_object(spec, CompileOptions::default(), None, None, options)
+            .load_single_object(spec, CompileOptions::default(), None, options)
             .unwrap();
         assert_eq!(results.loaded_objects.len(), 1);
         assert!(results.commit);
@@ -1289,8 +1277,7 @@ mod tests {
                 endobject"#;
 
         let options = ObjDefLoaderOptions::default();
-        let result =
-            parser.load_single_object(spec, CompileOptions::default(), None, None, options);
+        let result = parser.load_single_object(spec, CompileOptions::default(), None, options);
         assert!(result.is_err());
 
         match result.unwrap_err() {
@@ -1327,7 +1314,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1353,7 +1339,6 @@ mod tests {
             .load_single_object(
                 conflicting_spec,
                 CompileOptions::default(),
-                None,
                 None,
                 ObjDefLoaderOptions::default(),
             )
@@ -1409,7 +1394,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1436,16 +1420,9 @@ mod tests {
                 conflicting_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions {
-                    dry_run: false,
                     conflict_mode: ConflictMode::Skip,
-                    target_object: None,
-                    create_new: false,
-                    constants: None,
-                    overrides: vec![],
-                    removals: vec![],
-                    validate_parent_changes: false,
+                    ..ObjDefLoaderOptions::default()
                 },
             )
             .unwrap();
@@ -1594,7 +1571,6 @@ mod tests {
                 parents_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap_err(); // This should fail because we're loading 2 objects with load_single_object
@@ -1635,7 +1611,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1666,7 +1641,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 None,
                 ObjDefLoaderOptions::default(),
             )
@@ -1733,7 +1707,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1758,7 +1731,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 None,
                 ObjDefLoaderOptions::default(),
             )
@@ -1825,7 +1797,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1850,7 +1821,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 None,
                 ObjDefLoaderOptions::default(),
             )
@@ -1888,7 +1858,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1920,7 +1889,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 None,
                 ObjDefLoaderOptions::default(),
             )
@@ -1965,7 +1933,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1994,7 +1961,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 None,
                 ObjDefLoaderOptions::default(),
             )
@@ -2072,7 +2038,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2098,16 +2063,9 @@ mod tests {
                 updated_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions {
-                    dry_run: false,
                     conflict_mode: ConflictMode::Skip,
-                    target_object: None,
-                    create_new: false,
-                    constants: None,
-                    overrides: vec![],
-                    removals: vec![],
-                    validate_parent_changes: false,
+                    ..ObjDefLoaderOptions::default()
                 },
             )
             .unwrap();
@@ -2181,7 +2139,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2207,16 +2164,9 @@ mod tests {
                 updated_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions {
-                    dry_run: false,
                     conflict_mode: ConflictMode::Skip,
-                    target_object: None,
-                    create_new: false,
-                    constants: None,
-                    overrides: vec![],
-                    removals: vec![],
-                    validate_parent_changes: false,
+                    ..ObjDefLoaderOptions::default()
                 },
             )
             .unwrap();
@@ -2290,7 +2240,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2316,16 +2265,9 @@ mod tests {
                 updated_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions {
-                    dry_run: false,
                     conflict_mode: ConflictMode::Skip,
-                    target_object: None,
-                    create_new: false,
-                    constants: None,
-                    overrides: vec![],
-                    removals: vec![],
-                    validate_parent_changes: false,
+                    ..ObjDefLoaderOptions::default()
                 },
             )
             .unwrap();
@@ -2366,7 +2308,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2399,16 +2340,9 @@ mod tests {
                 updated_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions {
-                    dry_run: false,
                     conflict_mode: ConflictMode::Skip,
-                    target_object: None,
-                    create_new: false,
-                    constants: None,
-                    overrides: vec![],
-                    removals: vec![],
-                    validate_parent_changes: false,
+                    ..ObjDefLoaderOptions::default()
                 },
             )
             .unwrap();
@@ -2457,7 +2391,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2488,16 +2421,9 @@ mod tests {
                 updated_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions {
-                    dry_run: false,
                     conflict_mode: ConflictMode::Skip,
-                    target_object: None,
-                    create_new: false,
-                    constants: None,
-                    overrides: vec![],
-                    removals: vec![],
-                    validate_parent_changes: false,
+                    ..ObjDefLoaderOptions::default()
                 },
             )
             .unwrap();
@@ -2573,12 +2499,10 @@ mod tests {
             cycle_spec,
             CompileOptions::default(),
             None,
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
+                object_kind: None,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],
@@ -2621,7 +2545,6 @@ mod tests {
                 initial_spec,
                 CompileOptions::default(),
                 None,
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2642,12 +2565,10 @@ mod tests {
             invalid_parent_spec,
             CompileOptions::default(),
             None,
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
+                object_kind: None,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],
@@ -2687,12 +2608,10 @@ mod tests {
             nothing_parent_spec,
             CompileOptions::default(),
             None,
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
+                object_kind: None,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],
@@ -2792,12 +2711,10 @@ mod tests {
             conflict_spec,
             CompileOptions::default(),
             None,
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
-                target_object: None,
-                create_new: false,
+                object_kind: None,
                 constants: None,
                 overrides: vec![],
                 removals: vec![],
