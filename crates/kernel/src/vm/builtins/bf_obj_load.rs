@@ -493,7 +493,12 @@ fn bf_reload_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Parse constants map (second argument)
     let constants = if bf_args.args.len() >= 2 {
-        let const_map = bf_args.map_or_alist_to_map(&bf_args.args[1])?;
+        let Ok(const_map) = bf_args.map_or_alist_to_map(&bf_args.args[1]) else {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg( ||
+                format!("invalid second argument for reload_object(); was {}, should be map or alist of constant substitutions",
+                         bf_args.args[1].type_code().to_literal())
+            )));
+        };
         Some(Constants::Map(const_map))
     } else {
         None
@@ -526,21 +531,19 @@ fn bf_reload_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     task_perms.check_wizard().map_err(world_state_bf_err)?;
 
     // Use the current task's transaction via loader interface
-    let result = with_loader_interface(|loader| {
+    let result = match with_loader_interface(|loader| {
         let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader);
 
         // Reload the object with the provided constants and target
-        let results = object_loader
-            .reload_single_object(&object_definition, constants, target_obj)
-            .map_err(|e| {
-                moor_common::model::WorldStateError::DatabaseError(format!(
-                    "Failed to reload object: {e}"
-                ))
-            })?;
-
-        Ok(results)
-    })
-    .map_err(world_state_bf_err)?;
+        object_loader.reload_single_object(&object_definition, constants, target_obj)
+    }) {
+        Ok(result) => result,
+        Err(e) => {
+            return Err(BfErr::ErrValue(
+                E_INVARG.with_msg(|| format!("failed to load object: {e}")),
+            ));
+        }
+    };
 
     // Return the loaded object ID (should be exactly one)
     if result.loaded_objects.is_empty() {

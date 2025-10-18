@@ -359,9 +359,9 @@ where
 /// This temporarily extracts the WorldState, converts it to LoaderInterface using
 /// the same underlying transaction, executes the closure, then restores it as WorldState.
 /// Returns an error if no context is active or if the WorldState doesn't support conversion.
-pub fn with_loader_interface<F, R>(f: F) -> Result<R, WorldStateError>
+pub fn with_loader_interface<F, R, E>(f: F) -> Result<R, E>
 where
-    F: FnOnce(&mut dyn LoaderInterface) -> Result<R, WorldStateError>,
+    F: FnOnce(&mut dyn LoaderInterface) -> Result<R, E>,
 {
     // Extract the current WorldState and context info
     let (world_state, task_scheduler_client, task_id, player, session) =
@@ -377,13 +377,17 @@ where
         });
 
     // Convert WorldState to LoaderInterface
-    let mut loader = world_state.as_loader_interface()?;
+    let mut loader = world_state
+        .as_loader_interface()
+        .expect("Could not extract loader from world state");
 
     // Execute the closure with loader interface
     let result = f(loader.as_mut());
 
     // Convert back to WorldState
-    let world_state = loader.as_world_state()?;
+    let world_state = loader
+        .as_world_state()
+        .expect("Could not extract world state from loader");
 
     // Restore the context
     CURRENT_CONTEXT.with(|ctx| {
