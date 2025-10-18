@@ -759,6 +759,17 @@ impl Scheduler {
                     error!(?e, "Could not send load_object reply to requester");
                 }
             }
+            SchedulerClientMsg::ReloadObject {
+                object_definition,
+                constants,
+                target_obj,
+                reply,
+            } => {
+                let result = self.handle_reload_object(object_definition, constants, target_obj);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send reload_object reply to requester");
+                }
+            }
             SchedulerClientMsg::GCMarkPhaseComplete {
                 unreachable_objects,
                 mutation_timestamp_before_mark,
@@ -1362,10 +1373,9 @@ impl Scheduler {
 
         // Load the object with the provided options
         let compile_options = self.config.features.compile_options();
-        let constants = options.constants.clone();
 
         let result = object_loader
-            .load_single_object(&object_definition, compile_options, constants, options)
+            .load_single_object(&object_definition, compile_options, options)
             .map_err(|_| SchedulerError::CouldNotStartTask)?;
 
         // Commit the transaction if the result says we should
@@ -1374,6 +1384,39 @@ impl Scheduler {
                 .commit()
                 .map_err(|_| SchedulerError::CouldNotStartTask)?;
         }
+
+        Ok(result)
+    }
+
+    fn handle_reload_object(
+        &self,
+        object_definition: String,
+        constants: Option<moor_objdef::Constants>,
+        target_obj: Option<Obj>,
+    ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
+        use moor_objdef::ObjectDefinitionLoader;
+
+        // Create a new world state for reloading
+        let world_state = self
+            .database
+            .new_world_state()
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+
+        let mut loader = Box::new(world_state)
+            .as_loader_interface()
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+
+        let mut object_loader = ObjectDefinitionLoader::new(loader.as_mut());
+
+        // Reload the object with the provided constants and target
+        let result = object_loader
+            .reload_single_object(&object_definition, constants, target_obj)
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+
+        // Always commit for reload operations (they don't have dry-run mode)
+        loader
+            .commit()
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
 
         Ok(result)
     }

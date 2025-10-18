@@ -465,7 +465,7 @@ impl Completer for MooAdminHelper {
         if !line_before_cursor.contains(' ') {
             let commands = [
                 "help", "?", "quit", "exit", "get", "set", "props", "verbs", "list", "prog",
-                "dump", "load", "su",
+                "dump", "load", "reload", "su",
             ];
             let matches: Vec<Pair> = commands
                 .iter()
@@ -478,8 +478,11 @@ impl Completer for MooAdminHelper {
             return Ok((0, matches));
         }
 
-        // Flag completion for dump/load commands
-        if line_before_cursor.starts_with("dump ") || line_before_cursor.starts_with("load ") {
+        // Flag completion for dump/load/reload commands
+        if line_before_cursor.starts_with("dump ")
+            || line_before_cursor.starts_with("load ")
+            || line_before_cursor.starts_with("reload ")
+        {
             // Check if we're in a flag context
             if let Some(flag_start) = line_before_cursor.rfind("--") {
                 let after_dashes = &line_before_cursor[flag_start + 2..];
@@ -491,8 +494,8 @@ impl Completer for MooAdminHelper {
                     let partial_value = &line_before_cursor[value_start..];
 
                     // Complete flag values
-                    if flag_name == "file" {
-                        // Filename completion
+                    if flag_name == "file" || flag_name == "constants" {
+                        // Filename completion for both --file and --constants
                         return self.complete_filename(partial_value, value_start);
                     } else if flag_name == "conflict-mode" {
                         let modes = ["clobber", "skip", "detect"];
@@ -538,16 +541,24 @@ impl Completer for MooAdminHelper {
                 } else if !after_dashes.contains('=') {
                     // Completing the flag name itself
                     let is_dump = line_before_cursor.starts_with("dump ");
+                    let is_reload = line_before_cursor.starts_with("reload ");
+                    let is_load = line_before_cursor.starts_with("load ");
+
                     let flags = if is_dump {
                         vec!["--file"]
-                    } else {
+                    } else if is_reload {
+                        vec!["--file", "--constants"]
+                    } else if is_load {
                         vec![
                             "--file",
+                            "--constants",
                             "--dry-run",
                             "--conflict-mode",
                             "--as",
                             "--return-conflicts",
                         ]
+                    } else {
+                        vec![]
                     };
 
                     let matches: Vec<Pair> = flags
@@ -645,6 +656,8 @@ impl Completer for MooAdminHelper {
             || line_before_cursor.starts_with("verbs ")
             || line_before_cursor.starts_with("list ")
             || line_before_cursor.starts_with("prog ")
+            || line_before_cursor.starts_with("dump ")
+            || line_before_cursor.starts_with("reload ")
             || line_before_cursor.starts_with("su ");
 
         if is_obj_command {
@@ -799,6 +812,7 @@ fn print_help() {
 |`list #OBJ:VERB`|Show verb code|
 |`dump #OBJ [--file PATH]`|Dump object to file or console|
 |`load [--file PATH] [options]`|Load object from file or console|
+|`reload [#OBJ] [--file PATH]`|Replace object contents from file or console|
 |`su #OBJ`|Switch to different player object|
 |`help, ?`|Show this help|
 |`quit, exit`|Save and exit|
@@ -815,17 +829,30 @@ fn print_help() {
 
 **Load options:**
 - `--file PATH` - Load from file instead of stdin
+- `--constants PATH` - MOO file with constant definitions
 - `--dry-run` - Validate without making changes
 - `--conflict-mode MODE` - How to handle conflicts: clobber, skip, or detect
 - `--as SPEC` - Where to load: `new`, `anonymous` (or `anon`), `uuid`, or `#OBJ`
 - `--return-conflicts` - Return detailed conflict information
 
-**Examples:**
+**Load examples:**
 - `load --file obj.moo --dry-run` - Validate without loading
 - `load --file obj.moo --as #123` - Load into specific object
 - `load --file obj.moo --as new` - Create new numbered object
 - `load --file obj.moo --as anonymous` - Create anonymous object
 - `load --file obj.moo --conflict-mode skip` - Skip conflicting properties
+- `load --file obj.moo --constants defs.moo` - Load with constants file
+
+**Reload command:**
+- `reload [#OBJ]` - Paste object definition, then type `.` to finish
+- `reload [#OBJ] --file filename.moo` - Replace object with definition from file
+- `reload [#OBJ] --constants defs.moo` - Use constants file for compilation
+
+**Reload examples:**
+- `reload --file obj.moo` - Reload object (uses objid from file)
+- `reload #123 --file obj.moo` - Force reload into #123
+- `reload $player --file player.moo` - Replace player object from file
+- `reload --file obj.moo --constants defs.moo` - Reload with constants
 
 "#;
     println!("{}", skin.term_text(markdown));
@@ -1542,11 +1569,23 @@ fn cmd_load(
         None
     };
 
+    // Read constants file if provided
+    let constants = if let Some(constants_path) = parsed.get_string("constants") {
+        let constants_path = PathBuf::from(constants_path);
+        let content = std::fs::read_to_string(&constants_path)
+            .map_err(|e| eyre!("Failed to read constants file {:?}: {}", constants_path, e))?;
+        info!("Loaded constants from {:?}", constants_path);
+        Some(moor_objdef::Constants::FileContent(content))
+    } else {
+        None
+    };
+
     // No explicit permission check needed - load_object will check permissions internally
     let loader_options = ObjDefLoaderOptions {
         dry_run,
         conflict_mode,
         object_kind,
+        constants,
         validate_parent_changes: true, // Individual load_object command should validate
         ..Default::default()
     };
@@ -1560,18 +1599,16 @@ fn cmd_load(
     if return_conflicts {
         let markdown = if result.commit {
             format!(
-                "**✓** Load completed successfully\n\n**Loaded objects:** {}\n**Conflicts:** {}\n**Removals:** {}\n\n*{} lines processed*",
+                "**✓** Load completed successfully\n\n**Loaded objects:** {}\n**Conflicts:** {}\n\n*{} lines processed*",
                 result.loaded_objects.len(),
                 result.conflicts.len(),
-                result.removals.len(),
                 definition_lines.len()
             )
         } else {
             format!(
-                "**⚠** Load would have conflicts (dry-run or detect mode)\n\n**Would load:** {}\n**Conflicts:** {}\n**Removals:** {}\n\n*{} lines processed*",
+                "**⚠** Load would have conflicts (dry-run or detect mode)\n\n**Would load:** {}\n**Conflicts:** {}\n\n*{} lines processed*",
                 result.loaded_objects.len(),
                 result.conflicts.len(),
-                result.removals.len(),
                 definition_lines.len()
             )
         };
@@ -1587,6 +1624,114 @@ fn cmd_load(
         );
         println!("{}", skin.term_text(&markdown));
     }
+
+    Ok(())
+}
+
+/// Reload an object definition, completely replacing its contents
+fn cmd_reload(
+    scheduler_client: &SchedulerClient,
+    wizard: &Obj,
+    args: &str,
+    rl: &mut Editor<MooAdminHelper, rustyline::history::DefaultHistory>,
+) -> Result<(), Report> {
+    let skin = create_skin();
+
+    // Parse args with flag parser
+    let parsed = parse_flags(args);
+
+    // First positional arg is optional target object
+    let target_obj = if let Some(obj_str) = parsed.first_positional() {
+        Some(parse_objref_with_scheduler(
+            obj_str,
+            Some(scheduler_client),
+            Some(wizard),
+        )?)
+    } else {
+        None
+    };
+
+    let filename = parsed.get_string("file").map(PathBuf::from);
+
+    let definition_lines = if let Some(path) = &filename {
+        // Read from file
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| eyre!("Failed to read file {:?}: {}", path, e))?;
+        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        info!("Loaded {} lines from {:?}", lines.len(), path);
+        lines
+    } else {
+        // Read from stdin
+        let intro = if let Some(obj) = target_obj {
+            format!(
+                "**Reloading object `{}`**\n\nPaste object definition (type `.` on a line by itself to finish):",
+                obj.to_literal()
+            )
+        } else {
+            "**Reloading object**\n\nPaste object definition (type `.` on a line by itself to finish):".to_string()
+        };
+        println!("{}", skin.term_text(&intro));
+
+        let mut lines = Vec::new();
+        loop {
+            let line_result = rl.readline(">> ");
+            match line_result {
+                Ok(line) => {
+                    if line.trim() == "." {
+                        break;
+                    }
+                    lines.push(line);
+                }
+                Err(ReadlineError::Interrupted) => {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+                Err(ReadlineError::Eof) => {
+                    break;
+                }
+                Err(e) => {
+                    bail!("Error reading input: {}", e);
+                }
+            }
+        }
+        lines
+    };
+
+    if definition_lines.is_empty() {
+        println!("No definition entered, nothing reloaded.");
+        return Ok(());
+    }
+
+    let object_definition = definition_lines.join("\n");
+
+    // Read constants file if provided
+    let constants = if let Some(constants_path) = parsed.get_string("constants") {
+        let constants_path = PathBuf::from(constants_path);
+        let content = std::fs::read_to_string(&constants_path)
+            .map_err(|e| eyre!("Failed to read constants file {:?}: {}", constants_path, e))?;
+        info!("Loaded constants from {:?}", constants_path);
+        Some(moor_objdef::Constants::FileContent(content))
+    } else {
+        None
+    };
+
+    // Reload through the scheduler client
+    let result = scheduler_client
+        .reload_object(object_definition, constants, target_obj)
+        .map_err(|e| eyre!("Failed to reload object: {}", e))?;
+
+    // Display results
+    if result.loaded_objects.is_empty() {
+        bail!("No objects were reloaded");
+    }
+
+    let obj = result.loaded_objects[0];
+    let markdown = format!(
+        "**✓** Object `{}` reloaded successfully\n\n*{} lines processed*",
+        obj.to_literal(),
+        definition_lines.len()
+    );
+    println!("{}", skin.term_text(&markdown));
 
     Ok(())
 }
@@ -1728,6 +1873,11 @@ Type `help` for available commands or `quit` to deactivate.
                     let args = line.strip_prefix("load").unwrap_or("").trim();
                     if let Err(e) = cmd_load(&scheduler_client, &current_wizard, args, &mut rl) {
                         error!("Load failed: {}", e);
+                    }
+                } else if line.starts_with("reload ") {
+                    let args = line.strip_prefix("reload ").unwrap().trim();
+                    if let Err(e) = cmd_reload(&scheduler_client, &current_wizard, args, &mut rl) {
+                        error!("Reload failed: {}", e);
                     }
                 } else if line.starts_with("su ") {
                     let args = line.strip_prefix("su ").unwrap().trim();

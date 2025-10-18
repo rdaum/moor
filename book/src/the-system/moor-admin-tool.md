@@ -10,6 +10,8 @@ Think of `moor-admin` as the Emergency Medical Hologram for your MOO database - 
 - View and edit verb code
 - Execute MOO code directly
 - List objects, properties, and verbs
+- Export and import objects in objdef format
+- Reload objects from version-controlled source files
 - Perform emergency database repairs
 
 ## When to Use moor-admin
@@ -21,6 +23,8 @@ Use `moor-admin` when:
 - The wizard character is locked out or corrupted
 - You need to perform emergency maintenance without starting the full server
 - You want to inspect or modify the database in a safe, read-only context
+- You need to reload objects from version-controlled source files
+- You want to export objects for backup or sharing with other MOOs
 
 **Important:** `moor-admin` acquires an exclusive lock on the database, preventing other mooR processes from accessing it. Always shut down your mooR server before using this tool.
 
@@ -164,6 +168,149 @@ name  description  programmer  wizard  ...
 | `list #OBJ:VERB` | Display the code of a verb |
 | `prog #OBJ:VERB` | Program a verb (multi-line editor) |
 
+**Tab Completion:** When typing verb names, you can press Tab to see available verbs:
+```moo
+(#2): list #1:<TAB>
+initialize  recycle  set_name  title  ...
+
+(#2): list #1:init<TAB>
+(#2): list #1:initialize
+```
+
+### Object Import/Export
+
+| Command | Description |
+|---------|-------------|
+| `dump #OBJ [--file PATH]` | Dump object definition to file or console |
+| `load [--file PATH] [options]` | Load object from objdef format |
+| `reload [#OBJ] [--file PATH]` | Replace object contents completely |
+
+#### Dumping Objects
+
+The `dump` command exports an object's complete definition in objdef format:
+
+**Examples:**
+```moo
+(#2): dump #1
+# Object Definition: #1
+
+object #1 "System Object"
+  flags programmer wizard
+  parent #-1
+  property name "System Object" #1 r
+  property description "" #1 rw
+  ...
+endobj
+
+42 lines dumped
+
+(#2): dump #1 --file system.moo
+✓ Object #1 dumped to system.moo
+
+42 lines written
+```
+
+#### Loading Objects
+
+The `load` command imports objects from objdef format with flexible conflict handling:
+
+**Basic Usage:**
+```moo
+(#2): load --file package.moo
+✓ Object #123 loaded successfully
+
+156 lines processed
+
+(#2): load --file new-feature.moo --as new
+✓ Object #201 loaded successfully
+
+89 lines processed
+```
+
+**Load Options:**
+- `--file PATH` - Load from file instead of stdin
+- `--constants PATH` - MOO file with constant definitions for compilation
+- `--dry-run` - Validate without making changes
+- `--conflict-mode MODE` - How to handle conflicts: `clobber`, `skip`, or `detect`
+- `--as SPEC` - Where to load: `new`, `anonymous` (or `anon`), `uuid`, or `#OBJ`
+- `--return-conflicts` - Return detailed conflict information
+
+**Advanced Examples:**
+```moo
+(#2): load --file obj.moo --dry-run
+⚠ Load would have conflicts (dry-run or detect mode)
+
+Would load: 1
+Conflicts: 3
+
+156 lines processed
+
+(#2): load --file obj.moo --as #123
+✓ Object #123 loaded successfully
+
+156 lines processed
+
+(#2): load --file obj.moo --as anonymous
+✓ Object 01234567-89ab-cdef-0123-456789abcdef loaded successfully
+
+156 lines processed
+
+(#2): load --file package.moo --constants defs.moo --conflict-mode skip
+✓ Object #150 loaded successfully
+
+203 lines processed
+```
+
+**Interactive Loading (from stdin):**
+```moo
+(#2): load
+**Loading object definition**
+
+Paste object definition (type . on a line by itself to finish):
+>> object #1 "System"
+>>   property name "System" #0 r
+>> endobject
+>> .
+✓ Object #1 loaded successfully
+
+3 lines processed
+```
+
+#### Reloading Objects
+
+The `reload` command completely replaces an object's contents, removing all properties and verbs not in the new definition:
+
+**Examples:**
+```moo
+(#2): reload --file updated-core.moo
+✓ Object #1 reloaded successfully
+
+234 lines processed
+
+(#2): reload #123 --file feature.moo
+✓ Object #123 reloaded successfully
+
+156 lines processed
+
+(#2): reload --file package.moo --constants shared-defs.moo
+✓ Object #45 reloaded successfully
+
+189 lines processed
+```
+
+**When to Use Each Command:**
+
+- **`dump`** - Export objects for version control, backup, or sharing
+- **`load`** - Import new objects or merge updates into existing objects with conflict control
+- **`reload`** - Completely replace an object's definition, removing obsolete properties/verbs
+
+**Important Notes:**
+
+- `reload` is destructive - it removes anything not in the new definition
+- Use `load --dry-run` to preview changes before applying them
+- The `--constants` flag allows you to share common definitions across multiple objects
+- Object IDs can be inferred from the objdef file or explicitly specified with `--as #OBJ`
+
 ### Switching User Context
 
 | Command | Description |
@@ -197,41 +344,6 @@ The `su` command allows you to change the wizard/player object you're operating 
 
 **Note:** The prompt updates to show the current wizard object you're operating as. Property references (`$name`) work by looking up the property on system object `#0`.
 
-**Examples:**
-```moo
-(#2): verbs #1
-# Verbs on #1
-
-|Verb|
-|----|
-|initialize|
-|recycle|
-|set_name|
-|...  |
-
-37 verbs
-
-(#2): list #1:initialize
-# Verb: #1:initialize
-
-```moo
-if (this.location != #-1)
-  this.location:announce_all_but(this.name + " has arrived.", this);
-endif
-```
-
-7 lines
-```
-
-**Tab Completion:** When typing verb names, you can press Tab to see available verbs:
-```moo
-(#2): list #1:<TAB>
-initialize  recycle  set_name  title  ...
-
-(#2): list #1:init<TAB>
-(#2): list #1:initialize
-```
-
 ### Object ID Completion
 
 When typing object IDs, press Tab to see available objects:
@@ -248,9 +360,11 @@ When typing object IDs, press Tab to see available objects:
 `moor-admin` provides comprehensive tab completion to make navigation easier:
 
 - **Commands:** Type the beginning of a command and press Tab
-- **Object IDs:** Type `#` followed by Tab to see all objects (works with `props`, `verbs`, `list`, `prog`, and `su`)
+- **Object IDs:** Type `#` followed by Tab to see all objects (works with `props`, `verbs`, `list`, `prog`, `dump`, `reload`, and `su`)
 - **Properties:** Type `get #OBJ.` or `set #OBJ.` and press Tab
 - **Verbs:** Type `list #OBJ:` or `prog #OBJ:` and press Tab
+- **File Paths:** Type `--file ` or `--constants ` and press Tab to complete file paths
+- **Flags:** Type `--` and press Tab to see available flags for `dump`, `load`, and `reload` commands
 
 The completion system queries the database in real-time, so you always see the current state of your MOO.
 
@@ -291,6 +405,49 @@ The completion system queries the database in real-time, so you always see the c
 ```moo
 (#2): ;;objs = children(#0); results = {}; for o in (objs) if ("owner" in (properties(o))) results = {@results, o}; endif endfor return results;
 => {#1, #2, #5, #10}
+```
+
+**Export an object for version control:**
+```moo
+(#2): dump #1 --file system-object.moo
+✓ Object #1 dumped to system-object.moo
+
+234 lines written
+```
+
+**Update an object from a file:**
+```moo
+(#2): reload #1 --file system-object.moo
+✓ Object #1 reloaded successfully
+
+234 lines processed
+```
+
+**Import a package with conflict detection:**
+```moo
+(#2): load --file new-package.moo --dry-run --return-conflicts
+⚠ Load would have conflicts (dry-run or detect mode)
+
+Would load: 1
+Conflicts: 2
+
+156 lines processed
+```
+
+**Create a new object from a template:**
+```moo
+(#2): load --file feature-template.moo --as new
+✓ Object #201 loaded successfully
+
+89 lines processed
+```
+
+**Load with shared constants:**
+```moo
+(#2): reload #45 --file package.moo --constants shared-defs.moo
+✓ Object #45 reloaded successfully
+
+189 lines processed
 ```
 
 ## Terminal Features
@@ -352,6 +509,7 @@ The tool consists of:
 
 ## See Also
 
+- [Object Packaging (dump/load/reload)](./object-packaging.md) - Detailed documentation on the objdef format
 - [Server Configuration](./server-configuration.md)
 - [Server Assumptions About the Database](./server-assumptions-about-the-database.md)
 - [Controlling the Execution of Tasks](./controlling-the-execution-of-tasks.md)

@@ -90,6 +90,9 @@ pub trait LoaderInterface: Send {
     /// Set the owner of an object
     fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
 
+    /// Set the name of an object
+    fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError>;
+
     /// Add a verb to an object
     fn add_verb(
         &mut self,

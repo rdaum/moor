@@ -466,7 +466,6 @@ The second parameter is a map with the following options:
 | `dry_run`          | Boolean | `false`    | Test mode - don't make actual changes                            |
 | `return_conflicts` | Boolean | `false`    | Return detailed conflict information                             |
 | `overrides`        | List    | `{}`       | Force specific entities to use `clobber` mode                    |
-| `removals`         | List    | `{}`       | Remove specified entities not in definition                      |
 
 ### Option Details
 
@@ -644,23 +643,6 @@ Available entity types (see Entity Reference below for complete details):
 - `{'verb_def, {names}}` - Verb definition (names is list like {'look, 'l})
 - `{'verb_program, {names}}` - Verb code
 
-### Selective Removals
-
-**Option:** `removals`
-**Type:** List of `{object, entity}` pairs
-**Default:** Empty list
-
-Remove specific properties or verbs that aren't in the definition:
-
-```moo
-load_object(definition, [
-    `removals -> [
-        {#123, {'property_def, 'old_property}},
-        {#123, {'verb_def, {'obsolete_verb}}}
-    ]
-]);
-```
-
 ### Detailed Results
 
 **Option:** `return_conflicts`
@@ -673,13 +655,12 @@ Get detailed information about the loading process:
 result = load_object(definition, [`return_conflicts -> true]);
 // result[1]: success (boolean)
 // result[2]: conflicts (list of conflict details)
-// result[3]: removals (list of what was removed)
-// result[4]: loaded objects (list of object numbers)
+// result[3]: loaded objects (list of object numbers)
 ```
 
 ## Entity Reference
 
-When working with `overrides` and `removals` options, you specify entities using symbol-based identifiers. Each entity
+When working with the `overrides` option, you specify entities using symbol-based identifiers. Each entity
 type targets a specific part of an object's data:
 
 ### Object-Level Entities
@@ -763,14 +744,6 @@ load_object(definition, [
     ]
 ]);
 
-// Remove obsolete properties and verbs not in the new definition
-load_object(definition, [
-    `removals -> [
-        {$my_object, {'property_def, 'old_config}},
-        {$my_object, {'verb_def, {'deprecated_verb}}}
-    ]
-]);
-
 // Complex selective update preserving user customizations
 load_object(package_update, [
     `conflict_mode -> `skip,           // Preserve existing data by default
@@ -779,11 +752,6 @@ load_object(package_update, [
         {$package_obj, {'verb_program, {'init, 'initialize}}},
         {$package_obj, {'property_value, 'version}},
         {$package_obj, 'object_flags}   // Simple entities are just symbols
-    ],
-    `removals -> [
-        // Clean up deprecated features
-        {$package_obj, {'property_def, 'legacy_setting}},
-        {$package_obj, {'verb_def, {'old_interface}}}
     ]
 ], $package_obj);  // Load into existing package object
 ```
@@ -800,11 +768,6 @@ load_object(package_update, [
 
 - Use `{'verb_def, {names}}` when changing verb names, permissions, or argument specifications
 - Use `{'verb_program, {names}}` when just updating the code
-
-**Removal Safety**:
-
-- Only specify removals for entities you're certain should be deleted
-- Test with `dry_run` first to see what would be removed
 
 ## Important: Verb Name Behavior
 
@@ -863,19 +826,7 @@ Since the intent is ambiguous, the loader treats different name sets as differen
 // 2. Then export to capture the change in objdef format
 ```
 
-**Option 2: Explicit Removal + Recreation**
-
-```moo
-// To replace a verb with a new alias set:
-load_object(new_definition, [
-    `removals -> [
-        {$my_object, {'verb_def, {'old_names}}}  // Remove old version
-    ]
-    // The new definition will create the verb with new names
-]);
-```
-
-**Option 3: Target Object Strategy**
+**Option 2: Target Object Strategy**
 
 ```moo
 // Load into a temporary object first, then manually copy verbs

@@ -58,7 +58,7 @@ mod tests {
                 endverb
             endobject
         "#;
-        parser.load_single_object(root_spec, CompileOptions::default(), None, options)?;
+        parser.load_single_object(root_spec, CompileOptions::default(), options)?;
 
         // Create child object #2 inheriting from #1
         let child_spec = r#"
@@ -84,7 +84,7 @@ mod tests {
 
         let options2 = ObjDefLoaderOptions::default();
         let mut parser2 = ObjectDefinitionLoader::new(loader.as_mut());
-        parser2.load_single_object(child_spec, CompileOptions::default(), None, options2)?;
+        parser2.load_single_object(child_spec, CompileOptions::default(), options2)?;
 
         loader.commit()?;
         Ok(db)
@@ -119,12 +119,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Should detect conflicts
@@ -174,12 +170,8 @@ mod tests {
 
         let options = ObjDefLoaderOptions::default();
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Values should be changed due to Clobber mode
@@ -222,12 +214,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Should detect conflicts
@@ -294,12 +282,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         let ws = db.new_world_state()?;
@@ -341,12 +325,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Check if original verb is unchanged
@@ -397,12 +377,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
 
         // Should recommend not to commit
         assert!(!_results.commit);
@@ -446,12 +422,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Should detect parentage conflict
@@ -498,12 +470,8 @@ mod tests {
             ..ObjDefLoaderOptions::default()
         };
 
-        let results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Should detect property conflicts
@@ -548,12 +516,8 @@ mod tests {
 
         let options = ObjDefLoaderOptions::default();
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // May or may not detect conflict (Clobber mode applies the change)
@@ -595,12 +559,8 @@ mod tests {
 
         let options = ObjDefLoaderOptions::default();
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Check if verb was changed due to Clobber mode
@@ -645,12 +605,8 @@ mod tests {
 
         let options = ObjDefLoaderOptions::default();
 
-        let _results = parser.load_single_object(
-            conflicting_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        let _results =
+            parser.load_single_object(conflicting_spec, CompileOptions::default(), options)?;
         loader.commit()?;
 
         // Check if flags were changed due to Clobber mode
@@ -707,12 +663,7 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions::default();
-        parser1.load_single_object(
-            first_override_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        parser1.load_single_object(first_override_spec, CompileOptions::default(), options)?;
         loader1.commit()?;
 
         // Now try to load conflicting overrides in Skip mode
@@ -743,7 +694,6 @@ mod tests {
         let results = parser2.load_single_object(
             conflicting_override_spec,
             CompileOptions::default(),
-            None,
             skip_options,
         )?;
         loader2.commit()?;
@@ -792,12 +742,7 @@ mod tests {
         "#;
 
         let options = ObjDefLoaderOptions::default();
-        parser1.load_single_object(
-            first_override_spec,
-            CompileOptions::default(),
-            None,
-            options,
-        )?;
+        parser1.load_single_object(first_override_spec, CompileOptions::default(), options)?;
         loader1.commit()?;
 
         // Now try to load conflicting overrides in Clobber mode
@@ -825,7 +770,6 @@ mod tests {
         let _results = parser2.load_single_object(
             conflicting_override_spec,
             CompileOptions::default(),
-            None,
             clobber_options,
         )?;
         loader2.commit()?;

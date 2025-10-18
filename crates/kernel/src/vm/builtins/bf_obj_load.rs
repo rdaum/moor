@@ -19,7 +19,7 @@ use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_stat
 use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{ObjectKind, obj_flags_string, prop_flags_string};
-use moor_objdef::{ConflictEntity, ConflictMode, Entity, ObjDefLoaderOptions};
+use moor_objdef::{ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions};
 use moor_var::{
     E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_empty_map, v_list, v_obj, v_str,
     v_sym,
@@ -215,35 +215,6 @@ fn conflict_entity_to_moo(bf_args: &mut BfCallState<'_>, conflict: &ConflictEnti
     }
 }
 
-/// Convert an internal Entity back to MOO format for return values.
-fn entity_to_moo(bf_args: &mut BfCallState<'_>, entity: &Entity) -> Var {
-    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
-    let sym_or_str = |sym: Symbol| {
-        if use_symbols {
-            v_sym(sym)
-        } else {
-            v_str(&sym.as_string())
-        }
-    };
-
-    match entity {
-        Entity::ObjectFlags => sym_or_str(*OBJECT_FLAGS_SYM),
-        Entity::BuiltinProps => sym_or_str(*BUILTIN_PROPS_SYM),
-        Entity::Parentage => sym_or_str(*PARENTAGE_SYM),
-        Entity::PropertyDef(prop) => v_list(&[sym_or_str(*PROPERTY_DEF_SYM), v_sym(*prop)]),
-        Entity::PropertyValue(prop) => v_list(&[sym_or_str(*PROPERTY_VALUE_SYM), v_sym(*prop)]),
-        Entity::PropertyFlag(prop) => v_list(&[sym_or_str(*PROPERTY_FLAG_SYM), v_sym(*prop)]),
-        Entity::VerbDef(names) => {
-            let name_vars = names.iter().map(|n| v_sym(*n)).collect::<Vec<_>>();
-            v_list(&[sym_or_str(*VERB_DEF_SYM), v_list(&name_vars)])
-        }
-        Entity::VerbProgram(names) => {
-            let name_vars = names.iter().map(|n| v_sym(*n)).collect::<Vec<_>>();
-            v_list(&[sym_or_str(*VERB_PROGRAM_SYM), v_list(&name_vars)])
-        }
-    }
-}
-
 /// Parse object kind specification from the third argument
 fn parse_object_kind_spec(
     bf_args: &BfCallState<'_>,
@@ -338,17 +309,11 @@ fn format_load_result(
         return Ok(v_obj(result.loaded_objects[0]));
     }
 
-    // Return detailed result: {success, conflicts, removals, loaded_objects}
+    // Return detailed result: {success, conflicts, loaded_objects}
     let conflicts: Vec<_> = result
         .conflicts
         .iter()
         .map(|(obj, conflict)| v_list(&[v_obj(*obj), conflict_entity_to_moo(bf_args, conflict)]))
-        .collect();
-
-    let removals_result: Vec<_> = result
-        .removals
-        .iter()
-        .map(|(obj, entity)| v_list(&[v_obj(*obj), entity_to_moo(bf_args, entity)]))
         .collect();
 
     let loaded_objects: Vec<_> = result
@@ -360,7 +325,6 @@ fn format_load_result(
     Ok(v_list(&[
         bf_args.v_bool(result.commit),
         v_list(&conflicts),
-        v_list(&removals_result),
         v_list(&loaded_objects),
     ]))
 }
@@ -411,9 +375,8 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Extract options from the map using symbol constants
     let mut dry_run = false;
     let mut conflict_mode = ConflictMode::Clobber;
-    let mut constants = None;
+    let mut constants: Option<Constants> = None;
     let mut overrides = Vec::new();
-    let mut removals = Vec::new();
     let mut return_conflicts = false;
 
     for (key, value) in options_map.iter() {
@@ -439,7 +402,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         if key_sym == *CONSTANTS_SYM {
             let const_map = bf_args.map_or_alist_to_map(&value)?;
-            constants = Some(const_map);
+            constants = Some(Constants::Map(const_map));
             continue;
         }
 
@@ -452,19 +415,6 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             for override_pair in overrides_list.iter() {
                 let (obj, entity) = parse_obj_entity_pair(bf_args, &override_pair, "overrides")?;
                 overrides.push((obj, entity));
-            }
-            continue;
-        }
-
-        if key_sym == *REMOVALS_SYM {
-            let Some(removals_list) = value.as_list() else {
-                return Err(BfErr::ErrValue(
-                    E_TYPE.msg("removals must be a list of {obj, entity} pairs"),
-                ));
-            };
-            for removal_pair in removals_list.iter() {
-                let (obj, entity) = parse_obj_entity_pair(bf_args, &removal_pair, "removals")?;
-                removals.push((obj, entity));
             }
             continue;
         }
@@ -485,7 +435,6 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         object_kind,
         constants: constants.clone(),
         overrides,
-        removals,
         validate_parent_changes: true, // Individual loads should validate parent changes
     };
 
@@ -498,12 +447,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         // Load the single object with provided options
         let results = object_loader
-            .load_single_object(
-                &object_definition,
-                compile_options,
-                constants,
-                loader_options,
-            )
+            .load_single_object(&object_definition, compile_options, loader_options)
             .map_err(|e| {
                 moor_common::model::WorldStateError::DatabaseError(format!(
                     "Failed to load object: {e}"
@@ -519,7 +463,95 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(return_value))
 }
 
+/// Completely replaces an existing object with a new definition from objdef format.
+/// This deletes all properties and verbs not in the new definition.
+/// MOO: `obj reload_object(list object_lines [, map constants] [, obj target])`
+fn bf_reload_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("reload_object() requires 1-3 arguments"),
+        ));
+    }
+
+    let Some(lines_list) = bf_args.args[0].as_list() else {
+        return Err(BfErr::ErrValue(E_TYPE.msg(
+            "reload_object() requires a list of strings as the first argument",
+        )));
+    };
+
+    // Convert list of values to list of strings, joining with newlines
+    let mut lines = Vec::new();
+    for line_val in lines_list.iter() {
+        let Some(line_str) = line_val.as_string() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("reload_object() requires a list of strings"),
+            ));
+        };
+        lines.push(line_str.to_string());
+    }
+    let object_definition = lines.join("\n");
+
+    // Parse constants map (second argument)
+    let constants = if bf_args.args.len() >= 2 {
+        let const_map = bf_args.map_or_alist_to_map(&bf_args.args[1])?;
+        Some(Constants::Map(const_map))
+    } else {
+        None
+    };
+
+    // Parse target object (third argument)
+    let target_obj = if bf_args.args.len() == 3 {
+        let Some(obj) = bf_args.args[2].as_object() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("reload_object() target must be an object"),
+            ));
+        };
+
+        // Verify the target object exists
+        if !with_current_transaction(|world_state| world_state.valid(&obj))
+            .map_err(world_state_bf_err)?
+        {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("reload_object() target object does not exist"),
+            ));
+        }
+
+        Some(obj)
+    } else {
+        None
+    };
+
+    // Check permissions: wizard only
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms.check_wizard().map_err(world_state_bf_err)?;
+
+    // Use the current task's transaction via loader interface
+    let result = with_loader_interface(|loader| {
+        let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader);
+
+        // Reload the object with the provided constants and target
+        let results = object_loader
+            .reload_single_object(&object_definition, constants, target_obj)
+            .map_err(|e| {
+                moor_common::model::WorldStateError::DatabaseError(format!(
+                    "Failed to reload object: {e}"
+                ))
+            })?;
+
+        Ok(results)
+    })
+    .map_err(world_state_bf_err)?;
+
+    // Return the loaded object ID (should be exactly one)
+    if result.loaded_objects.is_empty() {
+        return Err(BfErr::ErrValue(E_INVARG.msg("No objects were loaded")));
+    }
+
+    Ok(Ret(v_obj(result.loaded_objects[0])))
+}
+
 pub(crate) fn register_bf_obj_load(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("dump_object")] = Box::new(bf_dump_object);
     builtins[offset_for_builtin("load_object")] = Box::new(bf_load_object);
+    builtins[offset_for_builtin("reload_object")] = Box::new(bf_reload_object);
 }

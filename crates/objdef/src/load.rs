@@ -14,7 +14,8 @@
 use crate::ObjdefLoaderError;
 use moor_common::{
     model::{
-        ObjAttrs, ObjFlag, ObjectKind, PropDef, PropFlag, ValSet, VerbDef, loader::LoaderInterface,
+        HasUuid, Named, ObjAttrs, ObjFlag, ObjectKind, PropDef, PropFlag, ValSet, VerbDef,
+        loader::LoaderInterface,
     },
     util::BitEnum,
 };
@@ -27,12 +28,20 @@ use std::{
 };
 use tracing::info;
 
+/// Constants can be provided either as a pre-parsed map or as MOO file content to parse
+#[derive(Clone)]
+pub enum Constants {
+    /// Pre-parsed constants map
+    Map(moor_var::Map),
+    /// MOO file content containing constant definitions to parse
+    FileContent(String),
+}
+
 pub struct ObjectDefinitionLoader<'a> {
     object_definitions: HashMap<Obj, (PathBuf, ObjectDefinition)>,
     loader: &'a mut dyn LoaderInterface,
-    // Track conflicts and removals as we go
+    // Track conflicts as we go
     conflicts: Vec<(Obj, ConflictEntity)>,
-    removals: Vec<(Obj, Entity)>,
 }
 
 /// How to handle a situation where:
@@ -71,14 +80,11 @@ pub struct ObjDefLoaderOptions {
     /// How to allocate the object ID. If None, uses the ID from the objdef file (default).
     /// Can be NextObjid (0), Anonymous (1), UuObjId (2), or Objid(#123) for a specific ID.
     pub object_kind: Option<ObjectKind>,
-    /// Optional constants for compilation
-    pub constants: Option<moor_var::Map>,
+    /// Optional constants for compilation (either as a map or as file content to parse)
+    pub constants: Option<Constants>,
     /// The set of entities for which we will allow overriding and treat as if their specific
-    /// ConflicTMode was "Clobber"
+    /// ConflictMode was "Clobber"
     pub overrides: Vec<(Obj, Entity)>,
-    /// The set of entities which we will consider value for deletion
-    /// Note that flags, builtin props and parentage are not valid values here.
-    pub removals: Vec<(Obj, Entity)>,
     /// If true, validate parent changes for cycles, invalid parents, and descendant property conflicts.
     /// Should be true for individual load_object() calls, false for bulk operations (textdump, objdef directory import).
     pub validate_parent_changes: bool,
@@ -92,7 +98,6 @@ impl Default for ObjDefLoaderOptions {
             object_kind: None,
             constants: None,
             overrides: vec![],
-            removals: vec![],
             validate_parent_changes: false,
         }
     }
@@ -120,9 +125,6 @@ pub struct ObjDefLoaderResults {
     pub commit: bool,
     /// The set of conflicts discovered during loading, and handled using ConflictMode above
     pub conflicts: Vec<(Obj, ConflictEntity)>,
-    /// The set of proposed or completed deletions (where objdef was lacking an entity found in
-    /// existing)
-    pub removals: Vec<(Obj, Entity)>,
     pub loaded_objects: Vec<Obj>,
     pub num_loaded_verbs: usize,
     pub num_loaded_property_definitions: usize,
@@ -135,7 +137,6 @@ impl<'a> ObjectDefinitionLoader<'a> {
             object_definitions: HashMap::new(),
             loader,
             conflicts: Vec::new(),
-            removals: Vec::new(),
         }
     }
 
@@ -287,13 +288,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
         info!("Defining and compiling {} verbs...", num_loaded_verbs);
         self.define_verbs(&options)?;
 
-        // Detect removals if specified in options
-        self.detect_removals(&options)?;
-
         Ok(ObjDefLoaderResults {
             commit: !options.dry_run,
             conflicts: self.conflicts.clone(),
-            removals: self.removals.clone(),
             loaded_objects: self.object_definitions.keys().cloned().collect(),
             num_loaded_verbs,
             num_loaded_property_definitions,
@@ -824,95 +821,12 @@ impl<'a> ObjectDefinitionLoader<'a> {
         Ok(())
     }
 
-    /// Detect entities that exist in the database but not in the objdef files
-    /// These are candidates for removal based on the options.removals list
-    fn detect_removals(&mut self, options: &ObjDefLoaderOptions) -> Result<(), ObjdefLoaderError> {
-        for (obj, entity) in &options.removals {
-            match entity {
-                Entity::PropertyDef(prop_name) => {
-                    // Check if this property exists in database but not in objdef
-                    let existing_props = self.loader.get_existing_properties(obj).map_err(|e| {
-                        ObjdefLoaderError::CouldNotDefineProperty(
-                            format!("object {obj}"),
-                            *obj,
-                            prop_name.as_arc_string().to_string(),
-                            e,
-                        )
-                    })?;
-
-                    // Check if property exists in database
-                    let prop_exists_in_db = existing_props.iter().any(|p| p.name() == *prop_name);
-
-                    if prop_exists_in_db {
-                        // Check if property is defined in any objdef file
-                        let prop_exists_in_objdef = self
-                            .object_definitions
-                            .get(obj)
-                            .map(|(_, def)| {
-                                def.property_definitions
-                                    .iter()
-                                    .any(|pd| pd.name == *prop_name)
-                            })
-                            .unwrap_or(false);
-
-                        if !prop_exists_in_objdef {
-                            // Property exists in DB but not in objdef - mark for removal
-                            self.removals.push((*obj, entity.clone()));
-                        }
-                    }
-                }
-
-                Entity::VerbDef(verb_names) => {
-                    // Check if this verb exists in database but not in objdef
-                    let existing_verb = self
-                        .loader
-                        .get_existing_verb_by_names(obj, verb_names)
-                        .map_err(|e| {
-                            ObjdefLoaderError::CouldNotDefineVerb(
-                                format!("object {obj}"),
-                                *obj,
-                                verb_names.clone(),
-                                e,
-                            )
-                        })?;
-
-                    if existing_verb.is_some() {
-                        // Check if verb is defined in objdef file
-                        let verb_exists_in_objdef = self
-                            .object_definitions
-                            .get(obj)
-                            .map(|(_, def)| {
-                                def.verbs.iter().any(|v| {
-                                    // Check if any verb name matches
-                                    v.names.iter().any(|name| verb_names.contains(name))
-                                })
-                            })
-                            .unwrap_or(false);
-
-                        if !verb_exists_in_objdef {
-                            // Verb exists in DB but not in objdef - mark for removal
-                            self.removals.push((*obj, entity.clone()));
-                        }
-                    }
-                }
-
-                // Other entity types can be added as needed
-                _ => {
-                    // For now, only support property and verb removal detection
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Loads a single object definition from a string.
     /// This is a simplified alternative to `read_dirdump` for loading individual objects.
     pub fn load_single_object(
         &mut self,
         object_definition: &str,
         compile_options: CompileOptions,
-        constants: Option<moor_var::Map>,
         options: ObjDefLoaderOptions,
     ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
         let start_time = Instant::now();
@@ -921,18 +835,30 @@ impl<'a> ObjectDefinitionLoader<'a> {
         // Create a fresh context for this single object
         let mut context = ObjFileContext::new();
 
-        // Add constants to the context if provided
-        if let Some(constants_map) = constants {
-            for (key, value) in constants_map.iter() {
-                let key_symbol = key.as_symbol().map_err(|_| {
-                    ObjdefLoaderError::ObjectDefParseError(
-                        source_name.clone(),
-                        moor_compiler::ObjDefParseError::ConstantNotFound(format!(
-                            "Constants map key must be string or symbol, got: {key:?}"
-                        )),
-                    )
-                })?;
-                context.add_constant(key_symbol, value.clone());
+        // Parse constants if provided
+        if let Some(constants) = &options.constants {
+            match constants {
+                Constants::Map(map) => {
+                    // Add constants from the provided map
+                    for (key, value) in map.iter() {
+                        let key_symbol = key.as_symbol().map_err(|_| {
+                            ObjdefLoaderError::ObjectDefParseError(
+                                source_name.clone(),
+                                moor_compiler::ObjDefParseError::ConstantNotFound(format!(
+                                    "Constants map key must be string or symbol, got: {key:?}"
+                                )),
+                            )
+                        })?;
+                        context.add_constant(key_symbol, value.clone());
+                    }
+                }
+                Constants::FileContent(content) => {
+                    // Parse the constants file content
+                    let compile_opts = CompileOptions::default();
+                    compile_object_definitions(content, &compile_opts, &mut context).map_err(
+                        |e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e),
+                    )?;
+                }
             }
         }
 
@@ -1023,9 +949,6 @@ impl<'a> ObjectDefinitionLoader<'a> {
             .map(|(_, d)| d.property_overrides.len())
             .sum::<usize>();
 
-        // Detect removals if specified in options
-        self.detect_removals(&options)?;
-
         info!(
             "Loaded single object {} in {} ms",
             oid,
@@ -1035,8 +958,225 @@ impl<'a> ObjectDefinitionLoader<'a> {
         Ok(ObjDefLoaderResults {
             commit: !options.dry_run,
             conflicts: self.conflicts.clone(),
-            removals: self.removals.clone(),
             loaded_objects: vec![oid],
+            num_loaded_verbs,
+            num_loaded_property_definitions,
+            num_loaded_property_overrides,
+        })
+    }
+
+    /// Completely replaces an object with the contents of the objdef.
+    /// All existing verbs and properties not in the objdef are deleted.
+    /// All flags and attributes are replaced with those from the objdef.
+    ///
+    /// # Arguments
+    /// * `object_definition` - The MOO object definition string
+    /// * `constants` - Optional constants (either as a map or as file content to parse)
+    /// * `target_obj` - Optional target object ID. If None, uses the ID from the objdef
+    pub fn reload_single_object(
+        &mut self,
+        object_definition: &str,
+        constants: Option<Constants>,
+        target_obj: Option<Obj>,
+    ) -> Result<ObjDefLoaderResults, ObjdefLoaderError> {
+        let start_time = Instant::now();
+        let source_name = "<reload>".to_string();
+
+        // Create a fresh context for this object
+        let mut context = ObjFileContext::new();
+
+        // Parse constants if provided
+        if let Some(constants) = &constants {
+            match constants {
+                Constants::Map(map) => {
+                    // Add constants from the provided map
+                    for (key, value) in map.iter() {
+                        let key_symbol = key.as_symbol().map_err(|_| {
+                            ObjdefLoaderError::ObjectDefParseError(
+                                source_name.clone(),
+                                moor_compiler::ObjDefParseError::ConstantNotFound(format!(
+                                    "Constants map key must be string or symbol, got: {key:?}"
+                                )),
+                            )
+                        })?;
+                        context.add_constant(key_symbol, value.clone());
+                    }
+                }
+                Constants::FileContent(content) => {
+                    // Parse the constants file content
+                    let compile_opts = CompileOptions::default();
+                    compile_object_definitions(content, &compile_opts, &mut context).map_err(
+                        |e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e),
+                    )?;
+                }
+            }
+        }
+
+        // Parse the object definition
+        let compile_opts = CompileOptions::default();
+        let compiled_defs =
+            compile_object_definitions(object_definition, &compile_opts, &mut context)
+                .map_err(|e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e))?;
+
+        // Ensure we got exactly one object
+        if compiled_defs.len() != 1 {
+            return Err(ObjdefLoaderError::SingleObjectExpected(
+                source_name,
+                compiled_defs.len(),
+            ));
+        }
+
+        let compiled_def = compiled_defs.into_iter().next().unwrap();
+
+        // Determine the target object ID
+        let target_oid = target_obj.unwrap_or(compiled_def.oid);
+
+        // Check if object exists
+        let existing_obj = self
+            .loader
+            .get_existing_object(&target_oid)
+            .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(source_name.clone(), e))?;
+
+        // If object exists, we need to selectively delete things not in the objdef
+        if existing_obj.is_some() {
+            // Get all existing verbs
+            let existing_verbs = self.loader.get_existing_verbs(&target_oid).map_err(|e| {
+                ObjdefLoaderError::CouldNotDefineVerb(source_name.clone(), target_oid, vec![], e)
+            })?;
+
+            // Build set of verb names that should exist (from objdef)
+            let mut objdef_verb_names = std::collections::HashSet::new();
+            for verb in &compiled_def.verbs {
+                for name in &verb.names {
+                    objdef_verb_names.insert(*name);
+                }
+            }
+
+            // Delete verbs that exist but aren't in the objdef
+            for verb_def in existing_verbs.iter() {
+                let has_matching_name = verb_def
+                    .names()
+                    .iter()
+                    .any(|name| objdef_verb_names.contains(name));
+
+                if !has_matching_name {
+                    self.loader
+                        .remove_verb(&target_oid, verb_def.uuid())
+                        .map_err(|e| {
+                            ObjdefLoaderError::CouldNotDefineVerb(
+                                source_name.clone(),
+                                target_oid,
+                                verb_def.names().to_vec(),
+                                e,
+                            )
+                        })?;
+                }
+            }
+
+            // Get all existing properties
+            let existing_props = self
+                .loader
+                .get_existing_properties(&target_oid)
+                .map_err(|e| {
+                    ObjdefLoaderError::CouldNotDefineProperty(
+                        source_name.clone(),
+                        target_oid,
+                        String::new(),
+                        e,
+                    )
+                })?;
+
+            // Build set of property names that should exist (from objdef)
+            let mut objdef_prop_names = std::collections::HashSet::new();
+            for prop_def in &compiled_def.property_definitions {
+                objdef_prop_names.insert(prop_def.name);
+            }
+
+            // Delete properties defined on this object that aren't in the objdef
+            for prop_def in existing_props.iter() {
+                if prop_def.definer() == target_oid && !objdef_prop_names.contains(&prop_def.name())
+                {
+                    self.loader
+                        .delete_property(&target_oid, prop_def.name())
+                        .map_err(|e| {
+                            ObjdefLoaderError::CouldNotDefineProperty(
+                                source_name.clone(),
+                                target_oid,
+                                (*prop_def.name().as_arc_string()).clone(),
+                                e,
+                            )
+                        })?;
+                }
+            }
+
+            // Update the object name
+            self.loader
+                .set_object_name(&target_oid, compiled_def.name.clone())
+                .map_err(|e| ObjdefLoaderError::CouldNotSetObjectParent(source_name.clone(), e))?;
+        } else {
+            // Object doesn't exist, create it
+            self.loader
+                .create_object(
+                    ObjectKind::Objid(target_oid),
+                    &ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        compiled_def.flags,
+                        &compiled_def.name,
+                    ),
+                )
+                .map_err(|e| {
+                    ObjdefLoaderError::CouldNotCreateObject(source_name.clone(), target_oid, e)
+                })?;
+        }
+
+        // Store the definition for processing
+        self.object_definitions
+            .insert(target_oid, (PathBuf::from(&source_name), compiled_def));
+
+        // Apply all attributes, properties, and verbs using existing conflict-aware methods
+        // Force Clobber mode and validation for reload operations
+        let apply_options = ObjDefLoaderOptions {
+            dry_run: false,
+            conflict_mode: ConflictMode::Clobber,
+            object_kind: None,
+            constants: None,
+            overrides: vec![],
+            validate_parent_changes: true,
+        };
+
+        self.apply_attributes(&apply_options)?;
+        self.define_properties(&apply_options)?;
+        self.set_properties(&apply_options)?;
+        self.define_verbs(&apply_options)?;
+
+        let num_loaded_verbs = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.verbs.len())
+            .sum::<usize>();
+        let num_loaded_property_definitions = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.property_definitions.len())
+            .sum::<usize>();
+        let num_loaded_property_overrides = self
+            .object_definitions
+            .values()
+            .map(|(_, d)| d.property_overrides.len())
+            .sum::<usize>();
+
+        info!(
+            "Reloaded object {} in {} ms",
+            target_oid,
+            start_time.elapsed().as_millis()
+        );
+
+        Ok(ObjDefLoaderResults {
+            commit: true,
+            conflicts: vec![], // No conflicts in reload mode - we deleted everything first
+            loaded_objects: vec![target_oid],
             num_loaded_verbs,
             num_loaded_property_definitions,
             num_loaded_property_overrides,
@@ -1046,7 +1186,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ConflictMode, ObjDefLoaderOptions, ObjectDefinitionLoader};
+    use crate::{ConflictMode, ObjDefLoaderOptions, ObjdefLoaderError, ObjectDefinitionLoader};
     use moor_common::model::{HasUuid, Named, PrepSpec, WorldStateSource};
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
@@ -1223,7 +1363,7 @@ mod tests {
 
         let options = ObjDefLoaderOptions::default();
         let results = parser
-            .load_single_object(spec, CompileOptions::default(), None, options)
+            .load_single_object(spec, CompileOptions::default(), options)
             .unwrap();
         assert_eq!(results.loaded_objects.len(), 1);
         assert!(results.commit);
@@ -1277,11 +1417,11 @@ mod tests {
                 endobject"#;
 
         let options = ObjDefLoaderOptions::default();
-        let result = parser.load_single_object(spec, CompileOptions::default(), None, options);
+        let result = parser.load_single_object(spec, CompileOptions::default(), options);
         assert!(result.is_err());
 
         match result.unwrap_err() {
-            crate::ObjdefLoaderError::SingleObjectExpected(_, count) => {
+            ObjdefLoaderError::SingleObjectExpected(_, count) => {
                 assert_eq!(count, 2);
             }
             _ => panic!("Expected SingleObjectExpected error"),
@@ -1313,7 +1453,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1339,7 +1478,6 @@ mod tests {
             .load_single_object(
                 conflicting_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1393,7 +1531,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1419,7 +1556,6 @@ mod tests {
             .load_single_object(
                 conflicting_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions {
                     conflict_mode: ConflictMode::Skip,
                     ..ObjDefLoaderOptions::default()
@@ -1570,7 +1706,6 @@ mod tests {
             .load_single_object(
                 parents_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap_err(); // This should fail because we're loading 2 objects with load_single_object
@@ -1610,7 +1745,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1641,7 +1775,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1706,7 +1839,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1731,7 +1863,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1796,7 +1927,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1821,7 +1951,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1857,7 +1986,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1889,7 +2017,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1932,7 +2059,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -1961,7 +2087,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2037,7 +2162,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2062,7 +2186,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions {
                     conflict_mode: ConflictMode::Skip,
                     ..ObjDefLoaderOptions::default()
@@ -2138,7 +2261,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2163,7 +2285,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions {
                     conflict_mode: ConflictMode::Skip,
                     ..ObjDefLoaderOptions::default()
@@ -2239,7 +2360,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2264,7 +2384,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions {
                     conflict_mode: ConflictMode::Skip,
                     ..ObjDefLoaderOptions::default()
@@ -2307,7 +2426,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2339,7 +2457,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions {
                     conflict_mode: ConflictMode::Skip,
                     ..ObjDefLoaderOptions::default()
@@ -2390,7 +2507,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2420,7 +2536,6 @@ mod tests {
             .load_single_object(
                 updated_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions {
                     conflict_mode: ConflictMode::Skip,
                     ..ObjDefLoaderOptions::default()
@@ -2498,14 +2613,12 @@ mod tests {
         let result = parser.load_single_object(
             cycle_spec,
             CompileOptions::default(),
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
                 object_kind: None,
                 constants: None,
                 overrides: vec![],
-                removals: vec![],
                 validate_parent_changes: true,
             },
         );
@@ -2513,7 +2626,7 @@ mod tests {
         // Should fail with a cycle detection error
         assert!(result.is_err(), "Loading object with cycle should fail");
         match result.unwrap_err() {
-            crate::ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+            ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
                 // Verify it's a cycle error from WorldStateError
                 assert!(
                     matches!(e, moor_common::model::WorldStateError::RecursiveMove(_, _)),
@@ -2544,7 +2657,6 @@ mod tests {
             .load_single_object(
                 initial_spec,
                 CompileOptions::default(),
-                None,
                 ObjDefLoaderOptions::default(),
             )
             .unwrap();
@@ -2564,14 +2676,12 @@ mod tests {
         let result = parser.load_single_object(
             invalid_parent_spec,
             CompileOptions::default(),
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
                 object_kind: None,
                 constants: None,
                 overrides: vec![],
-                removals: vec![],
                 validate_parent_changes: true,
             },
         );
@@ -2582,7 +2692,7 @@ mod tests {
             "Loading object with invalid parent should fail"
         );
         match result.unwrap_err() {
-            crate::ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+            ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
                 // Verify it's an invalid parent error
                 assert!(
                     matches!(e, moor_common::model::WorldStateError::ObjectNotFound(_)),
@@ -2607,14 +2717,12 @@ mod tests {
         let result = parser.load_single_object(
             nothing_parent_spec,
             CompileOptions::default(),
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
                 object_kind: None,
                 constants: None,
                 overrides: vec![],
-                removals: vec![],
                 validate_parent_changes: true,
             },
         );
@@ -2624,6 +2732,542 @@ mod tests {
             result.is_ok(),
             "Loading object with NOTHING parent should succeed"
         );
+    }
+
+    #[test]
+    fn test_reload_single_object_basic() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create initial object with some verbs and properties
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #100
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: false
+                programmer: false
+                player: false
+
+                property old_prop (owner: #100, flags: "rc") = "old value";
+                property keep_prop (owner: #100, flags: "rc") = "will be removed";
+
+                verb "old_verb" (this none none) owner: #100 flags: "rxd"
+                    return "old";
+                endverb
+
+                verb "keep_verb" (this none none) owner: #100 flags: "rxd"
+                    return "will be removed";
+                endverb
+            endobject"#;
+
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify initial state
+        let ws = db.new_world_state().unwrap();
+        assert!(
+            ws.retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("old_prop"))
+                .is_ok()
+        );
+        assert!(
+            ws.retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("keep_prop"))
+                .is_ok()
+        );
+        assert!(
+            ws.get_verb(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("old_verb"))
+                .is_ok()
+        );
+        assert!(
+            ws.get_verb(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("keep_verb"))
+                .is_ok()
+        );
+
+        // Now reload with different verbs and properties
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let reload_spec = r#"
+            object #100
+                name: "Test Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                wizard: true
+                programmer: false
+                player: false
+
+                property new_prop (owner: #100, flags: "rc") = "new value";
+                property old_prop (owner: #100, flags: "rc") = "updated value";
+
+                verb "new_verb" (this none none) owner: #100 flags: "rxd"
+                    return "new";
+                endverb
+
+                verb "old_verb" (this none none) owner: #100 flags: "rxd"
+                    return "updated";
+                endverb
+            endobject"#;
+
+        let results = parser
+            .reload_single_object(reload_spec, None, None)
+            .unwrap();
+
+        assert_eq!(results.loaded_objects.len(), 1);
+        assert_eq!(results.loaded_objects[0], Obj::mk_id(100));
+        assert_eq!(results.conflicts.len(), 0); // No conflicts in reload mode
+        loader.commit().unwrap();
+
+        // Verify final state
+        let ws = db.new_world_state().unwrap();
+
+        // New property should exist
+        let new_prop = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("new_prop"))
+            .unwrap();
+        assert_eq!(new_prop, v_str("new value"));
+
+        // Old property should be updated
+        let old_prop = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("old_prop"))
+            .unwrap();
+        assert_eq!(old_prop, v_str("updated value"));
+
+        // keep_prop should be GONE
+        assert!(
+            ws.retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("keep_prop"))
+                .is_err()
+        );
+
+        // new_verb should exist
+        assert!(
+            ws.get_verb(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("new_verb"))
+                .is_ok()
+        );
+
+        // old_verb should exist
+        assert!(
+            ws.get_verb(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("old_verb"))
+                .is_ok()
+        );
+
+        // keep_verb should be GONE
+        assert!(
+            ws.get_verb(&SYSTEM_OBJECT, &Obj::mk_id(100), Symbol::mk("keep_verb"))
+                .is_err()
+        );
+
+        // Wizard flag should be updated
+        let flags = ws.flags_of(&Obj::mk_id(100)).unwrap();
+        assert!(flags.contains(moor_common::model::ObjFlag::Wizard));
+    }
+
+    #[test]
+    fn test_reload_with_target_override() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create object #200
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #200
+                name: "Initial Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property old_prop (owner: #200, flags: "rc") = "old";
+            endobject"#;
+
+        parser
+            .load_single_object(
+                initial_spec,
+                CompileOptions::default(),
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Reload object #200 with objdef that says #999, but override to target #200
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let reload_spec = r#"
+            object #999
+                name: "Reloaded Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property new_prop (owner: #999, flags: "rc") = "new";
+            endobject"#;
+
+        let results = parser
+            .reload_single_object(reload_spec, None, Some(Obj::mk_id(200)))
+            .unwrap();
+
+        assert_eq!(results.loaded_objects[0], Obj::mk_id(200)); // Should use target override
+        loader.commit().unwrap();
+
+        // Verify #200 was updated
+        let ws = db.new_world_state().unwrap();
+        let name = ws.name_of(&SYSTEM_OBJECT, &Obj::mk_id(200)).unwrap();
+        assert_eq!(name, "Reloaded Object");
+
+        // old_prop should be gone, new_prop should exist
+        assert!(
+            ws.retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(200), Symbol::mk("old_prop"))
+                .is_err()
+        );
+        assert!(
+            ws.retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(200), Symbol::mk("new_prop"))
+                .is_ok()
+        );
+
+        // #999 should NOT exist
+        assert!(!ws.valid(&Obj::mk_id(999)).unwrap());
+    }
+
+    #[test]
+    fn test_reload_creates_object_if_not_exists() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Reload a non-existent object - should create it
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let reload_spec = r#"
+            object #300
+                name: "New Object"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property test_prop (owner: #300, flags: "rc") = "test";
+            endobject"#;
+
+        let results = parser
+            .reload_single_object(reload_spec, None, None)
+            .unwrap();
+
+        assert_eq!(results.loaded_objects[0], Obj::mk_id(300));
+        loader.commit().unwrap();
+
+        // Verify object was created
+        let ws = db.new_world_state().unwrap();
+        assert!(ws.valid(&Obj::mk_id(300)).unwrap());
+        let name = ws.name_of(&SYSTEM_OBJECT, &Obj::mk_id(300)).unwrap();
+        assert_eq!(name, "New Object");
+    }
+
+    #[test]
+    fn test_reload_preserves_inherited_properties() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create parent with a property
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let parent_spec = r#"
+            object #400
+                name: "Parent"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property inherited_prop (owner: #400, flags: "rc") = "from parent";
+            endobject"#;
+
+        parser
+            .load_single_object(
+                parent_spec,
+                CompileOptions::default(),
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Create child with its own property
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let child_spec = r#"
+            object #401
+                name: "Child"
+                owner: #0
+                parent: #400
+                location: #-1
+                property own_prop (owner: #401, flags: "rc") = "own value";
+            endobject"#;
+
+        parser
+            .load_single_object(
+                child_spec,
+                CompileOptions::default(),
+                ObjDefLoaderOptions::default(),
+            )
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Reload child with different own property
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let reload_spec = r#"
+            object #401
+                name: "Child"
+                owner: #0
+                parent: #400
+                location: #-1
+                property new_own_prop (owner: #401, flags: "rc") = "new own value";
+            endobject"#;
+
+        parser
+            .reload_single_object(reload_spec, None, None)
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Verify inherited property still accessible, old own property gone, new own property exists
+        let ws = db.new_world_state().unwrap();
+
+        // Inherited property should still be accessible
+        let inherited = ws
+            .retrieve_property(
+                &SYSTEM_OBJECT,
+                &Obj::mk_id(401),
+                Symbol::mk("inherited_prop"),
+            )
+            .unwrap();
+        assert_eq!(inherited, v_str("from parent"));
+
+        // Old own property should be gone
+        assert!(
+            ws.retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(401), Symbol::mk("own_prop"))
+                .is_err()
+        );
+
+        // New own property should exist
+        let new_own = ws
+            .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(401), Symbol::mk("new_own_prop"))
+            .unwrap();
+        assert_eq!(new_own, v_str("new own value"));
+    }
+
+    #[test]
+    fn test_reload_reject_parent_cycle() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create #1 with parent #-1 and #2 with parent #1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let initial_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #2
+                name: "Object Two"
+                owner: #0
+                parent: #1
+                location: #-1
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                initial_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Now try to reload #1 with parent #2, creating a cycle: #1 → #2 → #1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let cycle_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #2
+                location: #-1
+            endobject"#;
+
+        let result = parser.reload_single_object(cycle_spec, None, None);
+
+        // Should fail with a cycle detection error
+        assert!(result.is_err(), "Reloading object with cycle should fail");
+        match result.unwrap_err() {
+            ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+                assert!(
+                    matches!(e, moor_common::model::WorldStateError::RecursiveMove(_, _)),
+                    "Expected RecursiveMove error, got {:?}",
+                    e
+                );
+            }
+            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_reload_reject_invalid_parent() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create #1
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let initial_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject"#;
+        parser
+            .reload_single_object(initial_spec, None, None)
+            .unwrap();
+        loader.commit().unwrap();
+
+        // Try to reload #1 with parent #999 which doesn't exist
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let invalid_parent_spec = r#"
+            object #1
+                name: "Object One"
+                owner: #0
+                parent: #999
+                location: #-1
+            endobject"#;
+
+        let result = parser.reload_single_object(invalid_parent_spec, None, None);
+
+        // Should fail with invalid parent error
+        assert!(
+            result.is_err(),
+            "Reloading object with invalid parent should fail"
+        );
+        match result.unwrap_err() {
+            ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+                assert!(
+                    matches!(e, moor_common::model::WorldStateError::ObjectNotFound(_)),
+                    "Expected ObjectNotFound error, got {:?}",
+                    e
+                );
+            }
+            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_reload_reject_descendant_property_conflict() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = test_db(tmpdir.path());
+
+        // Create hierarchy: #10 (no prop "bar"), #20 (defines prop "bar")
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let mock_path = Path::new("test.moo");
+        let parents_spec = r#"
+            object #10
+                name: "Parent Without Bar"
+                owner: #0
+                parent: #-1
+                location: #-1
+            endobject
+            object #20
+                name: "Parent With Bar"
+                owner: #0
+                parent: #-1
+                location: #-1
+                property bar (owner: #20, flags: "rc") = "from parent 20";
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                parents_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        parser.define_properties(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Create #50 with parent #10, and #51 as child of #50 defining property "bar"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let mut context = ObjFileContext::new();
+        let children_spec = r#"
+            object #50
+                name: "Middle Object"
+                owner: #0
+                parent: #10
+                location: #-1
+            endobject
+            object #51
+                name: "Child With Bar"
+                owner: #0
+                parent: #50
+                location: #-1
+                property bar (owner: #51, flags: "rc") = "from child 51";
+            endobject"#;
+        parser
+            .parse_objects(
+                mock_path,
+                &mut context,
+                children_spec,
+                &CompileOptions::default(),
+            )
+            .unwrap();
+        let options = ObjDefLoaderOptions::default();
+        parser.apply_attributes(&options).unwrap();
+        parser.define_properties(&options).unwrap();
+        loader.commit().unwrap();
+
+        // Now try to reload #50 with parent #20
+        // This should fail because #51 (descendant of #50) defines "bar"
+        // and #20 (new parent ancestor) also defines "bar"
+        let mut loader = db.loader_client().unwrap();
+        let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+        let conflict_spec = r#"
+            object #50
+                name: "Middle Object"
+                owner: #0
+                parent: #20
+                location: #-1
+            endobject"#;
+
+        let result = parser.reload_single_object(conflict_spec, None, None);
+
+        // Should fail with property name conflict error
+        assert!(
+            result.is_err(),
+            "Reloading object with descendant property conflict should fail"
+        );
+        match result.unwrap_err() {
+            ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+                assert!(
+                    matches!(
+                        e,
+                        moor_common::model::WorldStateError::ChparentPropertyNameConflict(_, _, _)
+                    ),
+                    "Expected ChparentPropertyNameConflict error, got {:?}",
+                    e
+                );
+            }
+            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+        }
     }
 
     #[test]
@@ -2710,14 +3354,12 @@ mod tests {
         let result = parser.load_single_object(
             conflict_spec,
             CompileOptions::default(),
-            None,
             ObjDefLoaderOptions {
                 dry_run: false,
                 conflict_mode: ConflictMode::Clobber,
                 object_kind: None,
                 constants: None,
                 overrides: vec![],
-                removals: vec![],
                 validate_parent_changes: true,
             },
         );
@@ -2728,7 +3370,7 @@ mod tests {
             "Loading object with descendant property conflict should fail"
         );
         match result.unwrap_err() {
-            crate::ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
+            ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
                 // Verify it's a property name conflict error
                 assert!(
                     matches!(

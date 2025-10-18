@@ -100,6 +100,9 @@ impl LoaderInterface for DbWorldState {
     fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.get_tx_mut().set_object_owner(obj, owner)
     }
+    fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
+        self.get_tx_mut().set_object_name(obj, name)
+    }
     fn add_verb(
         &mut self,
         obj: &Obj,

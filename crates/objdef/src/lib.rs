@@ -25,7 +25,7 @@ use std::{io, path::PathBuf};
 
 pub use dump::{collect_object, collect_object_definitions, dump_object, dump_object_definitions};
 pub use load::{
-    ConflictEntity, ConflictMode, Entity, ObjDefLoaderOptions, ObjDefLoaderResults,
+    ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions, ObjDefLoaderResults,
     ObjectDefinitionLoader,
 };
 

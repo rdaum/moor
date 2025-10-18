@@ -492,6 +492,28 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
+    /// Reload an existing object from objdef text, completely replacing its contents.
+    pub fn reload_object(
+        &self,
+        object_definition: String,
+        constants: Option<moor_objdef::Constants>,
+        target_obj: Option<Obj>,
+    ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::ReloadObject {
+                object_definition,
+                constants,
+                target_obj,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(30)) // Longer timeout for object reloading
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
     /// Get all objects in the database (for tab completion)
     pub fn request_all_objects(&self, player: Obj) -> Result<Vec<Obj>, SchedulerError> {
         let action = WorldStateAction::RequestAllObjects { player };
@@ -641,6 +663,13 @@ pub enum SchedulerClientMsg {
         object_definition: String,
         options: moor_objdef::ObjDefLoaderOptions,
         return_conflicts: bool,
+        reply: oneshot::Sender<Result<moor_objdef::ObjDefLoaderResults, SchedulerError>>,
+    },
+    /// Reload an object from objdef text, completely replacing its contents
+    ReloadObject {
+        object_definition: String,
+        constants: Option<moor_objdef::Constants>,
+        target_obj: Option<Obj>,
         reply: oneshot::Sender<Result<moor_objdef::ObjDefLoaderResults, SchedulerError>>,
     },
     /// Internal message from GC thread when mark phase completes

@@ -653,7 +653,6 @@ mod tests {
             object_kind: None,
             constants: None,
             overrides: vec![],
-            removals: vec![],
             validate_parent_changes: false,
         };
         defloader
@@ -808,7 +807,6 @@ mod tests {
                 object_kind: None,
                 constants: None,
                 overrides: vec![],
-                removals: vec![],
                 validate_parent_changes: false,
             };
             defloader
@@ -1040,7 +1038,6 @@ mod tests {
                 object_kind: None,
                 constants: None,
                 overrides: vec![],
-                removals: vec![],
                 validate_parent_changes: false,
             };
             defloader
