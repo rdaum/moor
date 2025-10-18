@@ -29,6 +29,7 @@ use std::{
 };
 
 #[derive(Clone)]
+#[repr(transparent)]
 pub struct Var(Variant);
 
 impl Debug for Var {

@@ -199,13 +199,14 @@ impl Activation {
         call: Box<VerbCall>,
         current_activation: Option<&Activation>,
         program: ProgramType,
+        arena: *mut crate::vm::environment_arena::VarArena,
     ) -> Self {
         let verb_owner = resolved_verb.owner();
 
         let ProgramType::MooR(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
-        let frame = Box::new(MooStackFrame::new(program));
+        let frame = Box::new(MooStackFrame::new(program, arena));
         let mut frame = Frame::Moo(frame);
         frame.set_global_variable(GlobalName::this, call.this.clone());
         frame.set_global_variable(GlobalName::player, v_obj(call.player));
@@ -300,22 +301,27 @@ impl Activation {
         lambda: &Lambda,
         current_activation: &Activation,
         args: Vec<Var>,
+        arena: *mut crate::vm::environment_arena::VarArena,
     ) -> Result<Self, Error> {
-        // Create new frame with lambda's program
-        let mut frame = Box::new(MooStackFrame::new(lambda.0.body.clone()));
+        // Build environment as Vec first (hybrid approach for lambda initialization)
+        use moor_var::program::names::GlobalName;
+        use std::cmp::max;
+        use strum::EnumCount;
 
-        // Merge captured variables into the fresh environment
-        // The MooStackFrame::new already created a proper global environment
+        let width = max(lambda.0.body.var_names().global_width(), GlobalName::COUNT);
+        let mut temp_env: Vec<Vec<Option<Var>>> = vec![vec![None; width]];
+
+        // Merge captured variables into the environment
         if !lambda.0.captured_env.is_empty() {
             // Ensure the environment has at least as many scopes as the captured environment
-            while frame.environment.len() < lambda.0.captured_env.len() {
-                frame.environment.push(vec![]);
+            while temp_env.len() < lambda.0.captured_env.len() {
+                temp_env.push(vec![]);
             }
 
             // Merge captured variables from each scope
             for (scope_idx, captured_scope) in lambda.0.captured_env.iter().enumerate() {
-                if scope_idx < frame.environment.len() {
-                    let target_scope = &mut frame.environment[scope_idx];
+                if scope_idx < temp_env.len() {
+                    let target_scope = &mut temp_env[scope_idx];
 
                     // Ensure target scope has enough slots
                     if target_scope.len() < captured_scope.len() {
@@ -369,8 +375,8 @@ impl Activation {
                 continue;
             }
             // Ensure we have enough scopes
-            while frame.environment.len() <= scope_depth {
-                frame.environment.push(vec![]);
+            while temp_env.len() <= scope_depth {
+                temp_env.push(vec![]);
             }
 
             // Find the maximum offset needed for this scope
@@ -385,8 +391,8 @@ impl Activation {
                 .unwrap_or(0);
 
             // Ensure the scope has enough space
-            if frame.environment[scope_depth].len() <= max_offset {
-                frame.environment[scope_depth].resize(max_offset + 1, None);
+            if temp_env[scope_depth].len() <= max_offset {
+                temp_env[scope_depth].resize(max_offset + 1, None);
             }
 
             // Create a ScatterArgs for just this scope
@@ -396,19 +402,17 @@ impl Activation {
             };
 
             // Perform parameter binding for this scope
-            lambda_scatter_assign(&scope_scatter, &args, &mut frame.environment[scope_depth])?;
+            lambda_scatter_assign(&scope_scatter, &args, &mut temp_env[scope_depth])?;
         }
 
         // Handle self-reference for recursive lambdas
         if let Some(self_var_name) = lambda.0.self_var {
-            // Extract the information we need without borrowing frame.environment
-            let current_env = frame.environment.clone();
             let var_idx = self_var_name.0 as usize;
 
             // Create a deep copy of the lambda to avoid cycles
             let self_lambda = lambda.for_self_reference();
             // Convert Option<Var> environment to Var environment for lambda creation
-            let converted_env: Vec<Vec<Var>> = current_env
+            let converted_env: Vec<Vec<Var>> = temp_env
                 .iter()
                 .map(|scope| {
                     scope
@@ -425,13 +429,15 @@ impl Activation {
             );
 
             // Now set the self-reference in the environment
-            if let Some(env) = frame.environment.last_mut()
+            if let Some(env) = temp_env.last_mut()
                 && var_idx < env.len()
             {
                 env[var_idx] = Some(lambda_var);
             }
         }
 
+        // Create frame with the built environment
+        let frame = Box::new(MooStackFrame::with_environment(lambda.0.body.clone(), arena, temp_env));
         let mut frame = Frame::Moo(frame);
 
         // Inherit global variables from current activation (this, player, etc.)
@@ -467,7 +473,12 @@ impl Activation {
         })
     }
 
-    pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {
+    pub fn for_eval(
+        permissions: Obj,
+        player: &Obj,
+        program: Program,
+        arena: *mut crate::vm::environment_arena::VarArena,
+    ) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,
@@ -477,7 +488,7 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let frame = Box::new(MooStackFrame::new(program));
+        let frame = Box::new(MooStackFrame::new(program, arena));
         let mut frame = Frame::Moo(frame);
 
         frame.set_global_variable(GlobalName::this, v_obj(NOTHING));

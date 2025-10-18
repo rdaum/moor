@@ -17,6 +17,7 @@ use std::time::{Duration, SystemTime};
 use crate::{
     PhantomUnsync,
     vm::activation::{Activation, Frame},
+    vm::environment_arena::EnvironmentArena,
 };
 use moor_common::tasks::TaskId;
 
@@ -32,7 +33,7 @@ pub struct Caller {
 }
 
 /// Represents the state of VM execution for a given task.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct VMExecState {
     /// The task ID of the task that for current stack of activations.
     pub(crate) task_id: TaskId,
@@ -40,6 +41,9 @@ pub(crate) struct VMExecState {
     /// (For language runtimes that keep their own stack, this is simply the "entry" point
     ///  for the function invocation.)
     pub(crate) stack: Vec<Activation>,
+    /// The arena allocator for all activation frame environments in this task.
+    /// This is shared across all frames to avoid per-frame mmap/munmap overhead.
+    pub(crate) environment_arena: Box<EnvironmentArena<Var>>,
     /// The tick slice for the current/next execution.
     pub(crate) tick_slice: usize,
     /// The total number of ticks that the task is allowed to run.
@@ -58,9 +62,16 @@ pub(crate) struct VMExecState {
 
 impl VMExecState {
     pub fn new(task_id: TaskId, max_ticks: usize) -> Self {
+        // Create the task-wide arena allocator
+        // All frames in this task will share this arena
+        let environment_arena = Box::new(
+            EnvironmentArena::new().expect("Failed to create environment arena for task")
+        );
+
         Self {
             task_id,
             stack: Vec::with_capacity(32),
+            environment_arena,
             tick_count: 0,
             start_time: None,
             max_ticks,
@@ -69,6 +80,11 @@ impl VMExecState {
             pending_raise_error: None,
             unsync: Default::default(),
         }
+    }
+
+    /// Get a mutable pointer to the environment arena for creating frame environments.
+    pub(crate) fn arena_ptr(&mut self) -> *mut EnvironmentArena<Var> {
+        &mut *self.environment_arena as *mut EnvironmentArena<Var>
     }
 
     /// Return the callers stack, in the format expected by the `callers` built-in function.
@@ -170,5 +186,31 @@ impl VMExecState {
             .unwrap();
 
         max_time.checked_sub(elapsed)
+    }
+}
+
+// Manual Clone implementation because we need to create a new arena
+impl Clone for VMExecState {
+    fn clone(&self) -> Self {
+        // Create a new arena for the clone
+        let environment_arena = Box::new(
+            EnvironmentArena::new().expect("Failed to create environment arena for clone")
+        );
+
+        // Clone the stack - this will cause each ArenaEnvironment to create its own owned arena
+        let stack = self.stack.clone();
+
+        Self {
+            task_id: self.task_id,
+            stack,
+            environment_arena,
+            tick_slice: self.tick_slice,
+            max_ticks: self.max_ticks,
+            tick_count: self.tick_count,
+            start_time: self.start_time,
+            maximum_time: self.maximum_time,
+            pending_raise_error: self.pending_raise_error.clone(),
+            unsync: Default::default(),
+        }
     }
 }

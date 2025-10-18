@@ -12,6 +12,7 @@
 //
 
 use crate::vm::FinallyReason;
+use crate::vm::environment_arena::VarEnvironment;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
     Error, Var,
@@ -36,7 +37,7 @@ pub(crate) struct MooStackFrame {
     /// Where is the PC pointing to?
     pub(crate) pc_type: PcType,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: Vec<Vec<Option<Var>>>,
+    pub(crate) environment: VarEnvironment,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
@@ -113,12 +114,41 @@ pub(crate) struct Scope {
 }
 
 impl MooStackFrame {
-    pub(crate) fn new(program: Program) -> Self {
+    /// Create a new MOO stack frame using the shared arena from the task.
+    pub(crate) fn new(program: Program, arena: *mut crate::vm::environment_arena::VarArena) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
-        let mut first_env = Vec::with_capacity(width);
-        first_env.resize(width, None);
-        let mut environment = Vec::with_capacity(16);
-        environment.push(first_env);
+
+        // Create environment using the shared arena
+        let mut environment = VarEnvironment::new_with_arena(arena);
+        environment
+            .push_scope(width)
+            .expect("Failed to push initial scope");
+
+        let valstack = Vec::with_capacity(16);
+        let scope_stack = Vec::with_capacity(8);
+        Self {
+            program,
+            environment,
+            pc: 0,
+            pc_type: PcType::Main,
+            temp: v_none(),
+            valstack,
+            scope_stack,
+            catch_stack: Default::default(),
+            finally_stack: Default::default(),
+            capture_stack: Default::default(),
+        }
+    }
+
+    /// Create a new frame with a pre-built environment (for lambdas)
+    pub(crate) fn with_environment(
+        program: Program,
+        arena: *mut crate::vm::environment_arena::VarArena,
+        environment: Vec<Vec<Option<Var>>>
+    ) -> Self {
+        let environment = VarEnvironment::from_vec(arena, environment)
+            .expect("Failed to create environment from vec");
+
         let valstack = Vec::with_capacity(16);
         let scope_stack = Vec::with_capacity(8);
         Self {
@@ -159,16 +189,14 @@ impl MooStackFrame {
 
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
         let pos = gname as usize;
-        self.environment[0][pos] = Some(value);
+        self.environment
+            .set(0, pos, value)
+            .expect("Failed to set global variable");
     }
 
     pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {
         let pos = gname as usize;
-        if pos < self.environment[0].len() {
-            self.environment[0][pos].as_ref()
-        } else {
-            None
-        }
+        self.environment.get(0, pos)
     }
 
     pub fn set_variable(&mut self, id: &Name, v: Var) {
@@ -183,7 +211,9 @@ impl MooStackFrame {
         );
         let offset = id.0 as usize;
         let scope = id.1 as usize;
-        self.environment[scope][offset] = Some(v);
+        self.environment
+            .set(scope, offset, v)
+            .expect("Failed to set variable");
     }
 
     /// Return the value of a local variable.
@@ -191,17 +221,7 @@ impl MooStackFrame {
         let scope_idx = id.1 as usize;
         let var_idx = id.0 as usize;
 
-        // Check if the scope exists in the environment
-        if scope_idx >= self.environment.len() {
-            return None;
-        }
-
-        // Check if the variable offset exists in the scope
-        if var_idx >= self.environment[scope_idx].len() {
-            return None;
-        }
-
-        self.environment[scope_idx][var_idx].as_ref()
+        self.environment.get(scope_idx, var_idx)
     }
 
     pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
@@ -293,8 +313,9 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        let new_scope = vec![None; scope_width as usize];
-        self.environment.push(new_scope);
+        self.environment
+            .push_scope(scope_width as usize)
+            .expect("Failed to push scope");
     }
 
     /// Enter a scope which does not restrict stack of environment size, purely for catch expressions
@@ -314,7 +335,9 @@ impl MooStackFrame {
     pub fn pop_scope(&mut self) -> Option<Scope> {
         let scope = self.scope_stack.pop()?;
         if scope.environment {
-            self.environment.pop();
+            unsafe {
+                self.environment.pop_scope().expect("Failed to pop scope");
+            }
         }
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
@@ -345,8 +368,9 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        let new_scope = vec![None; environment_width as usize];
-        self.environment.push(new_scope);
+        self.environment
+            .push_scope(environment_width as usize)
+            .expect("Failed to push for-sequence scope");
     }
 
     /// Get the current ForSequence scope for iteration
@@ -384,8 +408,9 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        let new_scope = vec![None; environment_width as usize];
-        self.environment.push(new_scope);
+        self.environment
+            .push_scope(environment_width as usize)
+            .expect("Failed to push for-range scope");
     }
 
     /// Get the current ForRange scope for iteration

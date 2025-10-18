@@ -172,9 +172,11 @@ fn extract_anonymous_refs_from_moo_frame(
     refs: &mut std::collections::HashSet<Obj>,
 ) {
     // 1. Scan all variables in the environment stack
-    for env_level in &frame.environment {
-        for var in env_level.iter().flatten() {
-            extract_anonymous_refs_from_var(var, refs);
+    for scope in frame.environment.iter_scopes() {
+        for var_opt in scope {
+            if let Some(var) = var_opt {
+                extract_anonymous_refs_from_var(var, refs);
+            }
         }
     }
 
@@ -281,6 +283,8 @@ pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
 #[cfg(test)]
 mod tests {
     use crate::vm::VMHostResponse;
+    use crate::vm::activation::{Activation, Frame, BfFrame};
+    use crate::vm::moo_frame::MooStackFrame;
     use std::mem::size_of;
 
     #[test]
@@ -292,5 +296,21 @@ mod tests {
             "VMHostResponse is too big: {}",
             size_of::<VMHostResponse>()
         );
+    }
+
+    #[test]
+    fn test_frame_sizes() {
+        println!("Size of MooStackFrame: {}", size_of::<MooStackFrame>());
+        println!("Size of Box<MooStackFrame>: {}", size_of::<Box<MooStackFrame>>());
+        println!("Size of BfFrame: {}", size_of::<BfFrame>());
+        println!("Size of Frame (with Box): {}", size_of::<Frame>());
+        println!("Size of Activation: {}", size_of::<Activation>());
+
+        // Frame is an enum with Box<MooStackFrame> and BfFrame
+        // If unboxed, it would be max(MooStackFrame, BfFrame) + discriminant
+        let unboxed_size = size_of::<MooStackFrame>().max(size_of::<BfFrame>()) + 8;
+        println!("Estimated size if Frame were unboxed: {}", unboxed_size);
+        println!("Current Frame overhead per activation: {} bytes",
+                 size_of::<Activation>());
     }
 }

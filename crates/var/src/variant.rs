@@ -40,6 +40,26 @@ pub enum Variant {
     Lambda(Box<Lambda>),
 }
 
+impl Drop for Variant {
+    #[inline(always)]
+    fn drop(&mut self) {
+        // Force inlining of the discriminant check and field drops
+        // This should eliminate the 61% function call overhead we see in perf
+        match self {
+            Variant::None | Variant::Bool(_) | Variant::Obj(_) |
+            Variant::Int(_) | Variant::Float(_) | Variant::Sym(_) => {
+                // These types have trivial drops - no work needed
+            }
+            Variant::List(_) | Variant::Str(_) | Variant::Map(_) |
+            Variant::Err(_) | Variant::Flyweight(_) |
+            Variant::Binary(_) | Variant::Lambda(_) => {
+                // Let the compiler generate the appropriate drop code for these
+                // The fields will be dropped automatically when this function returns
+            }
+        }
+    }
+}
+
 impl Hash for Variant {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {

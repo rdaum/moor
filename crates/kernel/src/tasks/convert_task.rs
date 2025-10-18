@@ -661,6 +661,7 @@ pub(crate) fn moo_stack_frame_to_flatbuffer(
     // Convert environment: Vec<Vec<Option<Var>>>
     let fb_environment: Result<Vec<_>, _> = frame
         .environment
+        .to_vec()
         .iter()
         .map(|scope| {
             let vars: Result<Vec<_>, _> = scope
@@ -811,18 +812,23 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
         .collect();
     let capture_stack = capture_stack?;
 
-    Ok(KernelMooStackFrame {
-        program,
-        pc: fb.pc as usize,
-        pc_type,
-        environment,
-        valstack,
-        scope_stack,
-        temp,
-        catch_stack,
-        finally_stack,
-        capture_stack,
-    })
+    // Create frame with environment, then set other fields
+    // For deserialization, create a temporary owned arena that will be owned by the environment
+    let temp_arena = Box::into_raw(Box::new(
+        crate::vm::environment_arena::VarArena::new()
+            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?
+    ));
+    let mut frame = KernelMooStackFrame::with_environment(program, temp_arena, environment);
+    frame.pc = fb.pc as usize;
+    frame.pc_type = pc_type;
+    frame.valstack = valstack;
+    frame.scope_stack = scope_stack;
+    frame.temp = temp;
+    frame.catch_stack = catch_stack;
+    frame.finally_stack = finally_stack;
+    frame.capture_stack = capture_stack;
+
+    Ok(frame)
 }
 
 // ============================================================================
@@ -1051,9 +1057,16 @@ pub(crate) fn vm_exec_state_from_flatbuffer(
 
     // Note: We can't fully reconstruct VMExecState without task_id and other fields
     // Those will need to be set by the caller
+    // Create a new arena for the deserialized state
+    let environment_arena = Box::new(
+        crate::vm::environment_arena::VarArena::new()
+            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?
+    );
+
     Ok(KernelVMExecState {
         task_id: 0, // Will be set by caller
         stack,
+        environment_arena,
         tick_slice: 0,
         max_ticks: 0, // Will be set by caller
         tick_count: fb.tick_count as usize,
