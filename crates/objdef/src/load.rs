@@ -1492,7 +1492,7 @@ mod tests {
         // Verify conflict is for object flags
         match &results.conflicts[0].1 {
             crate::ConflictEntity::ObjectFlags(_) => {}
-            other => panic!("Expected ObjectFlags conflict, got {:?}", other),
+            other => panic!("Expected ObjectFlags conflict, got {other:?}"),
         }
 
         loader.commit().unwrap();
@@ -2630,11 +2630,10 @@ mod tests {
                 // Verify it's a cycle error from WorldStateError
                 assert!(
                     matches!(e, moor_common::model::WorldStateError::RecursiveMove(_, _)),
-                    "Expected RecursiveMove error, got {:?}",
-                    e
+                    "Expected RecursiveMove error, got {e:?}"
                 );
             }
-            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+            other => panic!("Expected CouldNotSetObjectParent error, got {other:?}"),
         }
     }
 
@@ -2696,11 +2695,10 @@ mod tests {
                 // Verify it's an invalid parent error
                 assert!(
                     matches!(e, moor_common::model::WorldStateError::ObjectNotFound(_)),
-                    "Expected ObjectNotFound error, got {:?}",
-                    e
+                    "Expected ObjectNotFound error, got {e:?}"
                 );
             }
-            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+            other => panic!("Expected CouldNotSetObjectParent error, got {other:?}"),
         }
 
         // But NOTHING (#-1) should be allowed
@@ -3109,11 +3107,10 @@ mod tests {
             ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
                 assert!(
                     matches!(e, moor_common::model::WorldStateError::RecursiveMove(_, _)),
-                    "Expected RecursiveMove error, got {:?}",
-                    e
+                    "Expected RecursiveMove error, got {e:?}"
                 );
             }
-            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+            other => panic!("Expected CouldNotSetObjectParent error, got {other:?}"),
         }
     }
 
@@ -3159,11 +3156,10 @@ mod tests {
             ObjdefLoaderError::CouldNotSetObjectParent(_, e) => {
                 assert!(
                     matches!(e, moor_common::model::WorldStateError::ObjectNotFound(_)),
-                    "Expected ObjectNotFound error, got {:?}",
-                    e
+                    "Expected ObjectNotFound error, got {e:?}"
                 );
             }
-            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+            other => panic!("Expected CouldNotSetObjectParent error, got {other:?}"),
         }
     }
 
@@ -3262,11 +3258,10 @@ mod tests {
                         e,
                         moor_common::model::WorldStateError::ChparentPropertyNameConflict(_, _, _)
                     ),
-                    "Expected ChparentPropertyNameConflict error, got {:?}",
-                    e
+                    "Expected ChparentPropertyNameConflict error, got {e:?}"
                 );
             }
-            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+            other => panic!("Expected CouldNotSetObjectParent error, got {other:?}"),
         }
     }
 
@@ -3377,11 +3372,10 @@ mod tests {
                         e,
                         moor_common::model::WorldStateError::ChparentPropertyNameConflict(_, _, _)
                     ),
-                    "Expected ChparentPropertyNameConflict error, got {:?}",
-                    e
+                    "Expected ChparentPropertyNameConflict error, got {e:?}"
                 );
             }
-            other => panic!("Expected CouldNotSetObjectParent error, got {:?}", other),
+            other => panic!("Expected CouldNotSetObjectParent error, got {other:?}"),
         }
     }
 }
