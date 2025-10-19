@@ -114,7 +114,18 @@ pub(crate) struct Scope {
 }
 
 impl MooStackFrame {
+    /// Create a builder for constructing a new MOO stack frame.
+    /// This is the preferred way to create frames as it provides type-safe initialization.
+    pub(crate) fn builder(
+        program: Program,
+        arena: *mut crate::vm::environment_arena::VarArena,
+    ) -> MooStackFrameBuilder {
+        MooStackFrameBuilder::new(program, arena)
+    }
+
     /// Create a new MOO stack frame using the shared arena from the task.
+    /// Consider using `builder()` instead for safer initialization.
+    #[allow(dead_code)]
     pub(crate) fn new(
         program: Program,
         arena: *mut crate::vm::environment_arena::VarArena,
@@ -193,13 +204,6 @@ impl MooStackFrame {
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
         let pos = gname as usize;
         self.environment.set(0, pos, value);
-    }
-
-    /// Initialize a global variable without dropping the old value.
-    /// This is an optimization for initial frame setup where we know the slot contains None.
-    pub fn init_gvar(&mut self, gname: GlobalName, value: Var) {
-        let pos = gname as usize;
-        self.environment.init(0, pos, value);
     }
 
     pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {
@@ -428,5 +432,90 @@ impl MooStackFrame {
             }
         }
         None
+    }
+}
+
+/// Builder for constructing MooStackFrame with safe, ergonomic initialization.
+/// Ensures global variables are initialized during construction, avoiding the window
+/// where slots contain uninitialized None values.
+pub(crate) struct MooStackFrameBuilder {
+    program: Program,
+    environment: VarEnvironment,
+    valstack: Vec<Var>,
+    scope_stack: Vec<Scope>,
+}
+
+impl MooStackFrameBuilder {
+    /// Create a new builder with an allocated scope.
+    pub(crate) fn new(
+        program: Program,
+        arena: *mut crate::vm::environment_arena::VarArena,
+    ) -> Self {
+        let width = max(program.var_names().global_width(), GlobalName::COUNT);
+
+        // Create environment using the shared arena
+        let mut environment = VarEnvironment::new_with_arena(arena);
+        environment
+            .push_scope(width)
+            .expect("Failed to push initial scope");
+
+        Self {
+            program,
+            environment,
+            valstack: Vec::with_capacity(16),
+            scope_stack: Vec::with_capacity(8),
+        }
+    }
+
+    /// Initialize a global variable by moving the value directly into the arena.
+    /// This avoids copying and ensures the slot is initialized exactly once.
+    pub(crate) fn with_global(mut self, gname: GlobalName, value: Var) -> Self {
+        let pos = gname as usize;
+        self.environment.init(0, pos, value);
+        self
+    }
+
+    /// Initialize a global variable by inheriting from an activation or using a fallback.
+    /// The fallback closure is only called if the value isn't found in the source activation.
+    /// This avoids unnecessary clones when inheriting values.
+    pub(crate) fn with_global_or(
+        mut self,
+        gname: GlobalName,
+        from: Option<&crate::vm::activation::Activation>,
+        fallback: impl FnOnce() -> Var,
+    ) -> Self {
+        let pos = gname as usize;
+        let value = from
+            .and_then(|a| a.frame.get_global_variable(gname))
+            .cloned()
+            .unwrap_or_else(fallback);
+        self.environment.init(0, pos, value);
+        self
+    }
+
+    /// Initialize a global variable by inheriting from an activation or using a default value.
+    pub(crate) fn with_global_or_default(
+        self,
+        gname: GlobalName,
+        from: Option<&crate::vm::activation::Activation>,
+        default: Var,
+    ) -> Self {
+        self.with_global_or(gname, from, || default)
+    }
+
+    /// Consume the builder and produce the final MooStackFrame.
+    pub(crate) fn build(self) -> MooStackFrame {
+        MooStackFrame {
+            program: self.program,
+            environment: self.environment,
+            pc: 0,
+            pc_type: PcType::Main,
+            temp: v_none(),
+            valstack: self.valstack,
+            scope_stack: self.scope_stack,
+            catch_stack: Default::default(),
+            finally_stack: Default::default(),
+            capture_stack: Default::default(),
+        }
     }
 }

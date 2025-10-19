@@ -30,7 +30,7 @@ pub struct Name(
 );
 
 /// The set of known variable names that are always set for every verb invocation.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]
 #[repr(usize)]
 #[allow(non_camel_case_types, non_snake_case)]
 pub enum GlobalName {
