@@ -19,7 +19,6 @@
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
-use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_common::{
     model::{CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, VerbArgsSpec, VerbFlag},
     util::BitEnum,
@@ -30,6 +29,7 @@ use moor_kernel::{
     config::{Config, FeaturesConfig},
     tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
 };
+use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int};
 use std::{sync::Arc, time::Instant};
 use tracing::info;
@@ -42,7 +42,7 @@ struct Args {
     #[arg(
         long,
         help = "Number of suspend/resume cycles per task",
-        default_value = "1000"
+        default_value = "100000"
     )]
     cycles: usize,
 }
@@ -212,8 +212,9 @@ async fn main() -> Result<(), eyre::Error> {
 
     let elapsed = start.elapsed();
     let total_cycles = args.concurrency * args.cycles;
-    let total_micros = elapsed.as_micros();
-    let per_cycle_micros = total_micros / total_cycles as u128;
+    let elapsed_secs = elapsed.as_secs_f64();
+    let latency_micros = (elapsed.as_micros() as f64 / args.cycles as f64) as u128;
+    let throughput_per_sec = (total_cycles as f64) / elapsed_secs;
 
     info!("=== BENCHMARK RESULTS ===");
     info!(
@@ -221,11 +222,11 @@ async fn main() -> Result<(), eyre::Error> {
         completed, total_cycles
     );
     info!(
-        "Total wall-clock time: {} ms ({} μs)",
-        elapsed.as_millis(),
-        total_micros
+        "Total wall-clock time: {:.3} seconds",
+        elapsed_secs
     );
-    info!("Average time per cycle: {} μs", per_cycle_micros);
+    info!("Latency per cycle: {} μs", latency_micros);
+    info!("Throughput: {:.0} suspends/sec", throughput_per_sec);
     info!("========================");
 
     // Shutdown scheduler
