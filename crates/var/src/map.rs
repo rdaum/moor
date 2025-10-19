@@ -11,6 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+// Clippy warns about Arc<im::Vector<(Var, Var)>> not being Send/Sync due to circular type dependency,
+// but this is a false positive - Var is Send/Sync and im::Vector is thread-safe.
+#![allow(clippy::arc_with_non_send_sync)]
+
 use crate::{
     Associative, Error,
     error::ErrorCode::{E_RANGE, E_TYPE},

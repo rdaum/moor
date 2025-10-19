@@ -48,16 +48,16 @@ const MAX_ARENAS_PER_THREAD: usize = 8;
 // Thread-local arena pool to avoid mmap/munmap overhead.
 // Each worker thread in the rayon pool maintains its own cache of recycled arenas.
 thread_local! {
-    static ARENA_POOL: RefCell<Vec<Box<EnvironmentArena>>> =
-        RefCell::new(Vec::new());
+    static ARENA_POOL: RefCell<Vec<EnvironmentArena>> =
+        const { RefCell::new(Vec::new()) };
 }
 
 // Helper functions for arena pooling
-fn try_acquire_from_pool() -> Option<Box<EnvironmentArena>> {
+fn try_acquire_from_pool() -> Option<EnvironmentArena> {
     ARENA_POOL.with(|pool| pool.borrow_mut().pop())
 }
 
-fn try_return_to_pool(arena: Box<EnvironmentArena>) -> bool {
+fn try_return_to_pool(arena: EnvironmentArena) -> bool {
     ARENA_POOL.with(|pool| {
         let mut pool = pool.borrow_mut();
         if pool.len() < MAX_ARENAS_PER_THREAD {
@@ -488,9 +488,10 @@ impl Drop for ArenaEnvironment {
                 // Reset the arena to initial state for reuse
                 (*self.arena).reset_to(0);
 
-                let arena_box = Box::from_raw(self.arena);
+                // Convert raw pointer back to Box to regain ownership and move out the arena
+                let arena = *Box::from_raw(self.arena);
                 // Try to recycle - if not recycled, will be dropped
-                try_return_to_pool(arena_box);
+                try_return_to_pool(arena);
             }
         }
     }
@@ -502,15 +503,12 @@ impl Clone for ArenaEnvironment {
         let arena_size = unsafe { (*self.arena).size() };
 
         // Try to get a recycled arena from the thread-local pool
-        let arena_box = try_acquire_from_pool().unwrap_or_else(|| {
-            Box::new(
-                EnvironmentArena::with_size(arena_size)
-                    .expect("Failed to create arena during clone"),
-            )
+        let arena = try_acquire_from_pool().unwrap_or_else(|| {
+            EnvironmentArena::with_size(arena_size).expect("Failed to create arena during clone")
         });
 
         let mut new_env = Self {
-            arena: Box::into_raw(arena_box),
+            arena: Box::into_raw(Box::new(arena)),
             scopes: Vec::with_capacity(16),
             owns_arena: true, // Clone owns its own arena
         };

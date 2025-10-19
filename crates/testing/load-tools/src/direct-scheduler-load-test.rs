@@ -670,20 +670,10 @@ async fn main() -> Result<(), eyre::Error> {
     color_eyre::install().expect("Unable to install color_eyre");
     let args: Args = Args::parse();
 
-    let main_subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_ansi(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_names(true)
-        .with_max_level(if args.debug {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        })
-        .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
+    moor_common::tracing::init_tracing(false).unwrap_or_else(|e| {
+        eprintln!("Unable to configure logging: {e}");
+        std::process::exit(1);
+    });
 
     info!("Starting direct scheduler load test");
 

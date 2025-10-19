@@ -43,6 +43,10 @@ path = "src/direct-scheduler-load-test.rs"
 name = "anonymous-object-load-test"
 path = "src/anonymous-object-load-test.rs"
 
+[[bin]]
+name = "suspend-resume-bench"
+path = "src/suspend-resume-bench.rs"
+
 [dependencies]
 # Internal Dependencies - Direct DB access only
 moor-common = { path = "../../common" }
