@@ -108,7 +108,7 @@ pub(crate) struct Activation {
 
 #[derive(Clone, Debug)]
 pub enum Frame {
-    Moo(Box<MooStackFrame>),
+    Moo(MooStackFrame),
     Bf(BfFrame),
 }
 
@@ -196,7 +196,7 @@ impl Activation {
     pub fn for_call(
         _permissions: Obj,
         resolved_verb: VerbDef,
-        call: Box<VerbCall>,
+        mut call: Box<VerbCall>,
         current_activation: Option<&Activation>,
         program: ProgramType,
         arena: *mut crate::vm::environment_arena::VarArena,
@@ -206,16 +206,22 @@ impl Activation {
         let ProgramType::MooR(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
-        let frame = Box::new(MooStackFrame::new(program, arena));
-        let mut frame = Frame::Moo(frame);
-        frame.set_global_variable(GlobalName::this, call.this.clone());
+
+        // Move values out of call to avoid double-cloning
+        // Use static empty values to avoid allocating replacements
+        let this = std::mem::replace(&mut call.this, moor_var::v_none());
+        let args = std::mem::replace(&mut call.args, List::mk_list(&[]));
+
+        let moo_frame = MooStackFrame::new(program, arena);
+        let mut frame = Frame::Moo(moo_frame);
+        frame.set_global_variable(GlobalName::this, this.clone());
         frame.set_global_variable(GlobalName::player, v_obj(call.player));
         frame.set_global_variable(GlobalName::caller, call.caller.clone());
         frame.set_global_variable(
             GlobalName::verb,
             v_arc_string(call.verb_name.as_arc_string()),
         );
-        frame.set_global_variable(GlobalName::args, call.args.clone().into());
+        frame.set_global_variable(GlobalName::args, args.clone().into());
 
         // Inherit parsing variables from the current activation, if any
         // This maintains LambdaMOO-compatible behavior where parsing variables persist across verb calls
@@ -286,11 +292,11 @@ impl Activation {
 
         Self {
             frame,
-            this: call.this.clone(),
+            this,
             player: call.player,
             verbdef: resolved_verb,
             verb_name: call.verb_name,
-            args: call.args.clone(),
+            args,
             permissions: verb_owner,
         }
     }
@@ -437,8 +443,8 @@ impl Activation {
         }
 
         // Create frame with the built environment
-        let frame = Box::new(MooStackFrame::with_environment(lambda.0.body.clone(), arena, temp_env));
-        let mut frame = Frame::Moo(frame);
+        let moo_frame = MooStackFrame::with_environment(lambda.0.body.clone(), arena, temp_env);
+        let mut frame = Frame::Moo(moo_frame);
 
         // Inherit global variables from current activation (this, player, etc.)
         frame.set_global_variable(GlobalName::this, current_activation.this.clone());
@@ -488,8 +494,8 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let frame = Box::new(MooStackFrame::new(program, arena));
-        let mut frame = Frame::Moo(frame);
+        let moo_frame = MooStackFrame::new(program, arena);
+        let mut frame = Frame::Moo(moo_frame);
 
         frame.set_global_variable(GlobalName::this, v_obj(NOTHING));
         frame.set_global_variable(GlobalName::player, v_obj(*player));

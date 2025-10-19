@@ -925,7 +925,7 @@ pub(crate) fn frame_from_flatbuffer(fb: &fb::Frame) -> Result<KernelFrame, TaskC
     match &fb.frame {
         FrameUnion::MooFrame(mf) => {
             let moo_frame = moo_stack_frame_from_flatbuffer(&mf.frame)?;
-            Ok(KernelFrame::Moo(Box::new(moo_frame)))
+            Ok(KernelFrame::Moo(moo_frame))
         }
         FrameUnion::BfFrame(bf) => {
             let bf_frame = bf_frame_from_flatbuffer(bf)?;

@@ -17,10 +17,10 @@ use crate::{
     var::Var,
     variant::Variant,
 };
-use std::{cmp::Ordering, hash::Hash};
+use std::{cmp::Ordering, hash::Hash, sync::Arc};
 
 #[derive(Clone)]
-pub struct Map(Box<im::Vector<(Var, Var)>>);
+pub struct Map(Arc<im::Vector<(Var, Var)>>);
 
 impl Map {
     // Construct from an Iterator of paris
@@ -41,7 +41,7 @@ impl Map {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect::<Vec<_>>(),
         );
-        let m = Map(Box::new(l));
+        let m = Map(Arc::new(l));
         Var::from_variant(Variant::Map(m))
     }
 
@@ -201,7 +201,7 @@ impl Associative for Map {
         });
         match position {
             Ok(pos) => {
-                let mut new = self.0.as_ref().clone();
+                let mut new = (*self.0).clone();
                 new.remove(pos);
                 (Self::build(new.iter()), Some(self.0[pos].1.clone()))
             }

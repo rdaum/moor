@@ -819,17 +819,14 @@ pub fn v_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Va
 }
 
 pub fn v_empty_list() -> Var {
-    // TODO: lazy static
     v_list(&[])
 }
 
 pub fn v_empty_str() -> Var {
-    // TODO: lazy static
     v_str("")
 }
 
 pub fn v_empty_map() -> Var {
-    // TODO: lazy static
     v_map(&[])
 }
 

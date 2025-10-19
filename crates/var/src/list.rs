@@ -23,20 +23,21 @@ use std::{
     fmt::{Debug, Formatter},
     hash::Hash,
     ops::Index,
+    sync::Arc,
 };
 
 #[derive(Clone)]
-pub struct List(Box<im::Vector<Var>>);
+pub struct List(Arc<im::Vector<Var>>);
 
 impl List {
     pub fn build(values: &[Var]) -> Var {
         let l = im::Vector::from(values.to_vec());
-        Var::from_variant(Variant::List(List(Box::new(l))))
+        Var::from_variant(Variant::List(List(Arc::new(l))))
     }
 
     pub fn mk_list(values: &[Var]) -> List {
         let l = im::Vector::from(values.to_vec());
-        List(Box::new(l))
+        List(Arc::new(l))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -47,9 +48,9 @@ impl List {
     pub fn set_remove(&self, item: &Var) -> Result<Var, Error> {
         let idx = self.0.iter().position(|v| *v == *item);
         let result = if let Some(idx) = idx {
-            let mut new = self.0.clone();
+            let mut new = (*self.0).clone();
             new.remove(idx);
-            List(new)
+            List(Arc::new(new))
         } else {
             self.clone()
         };
@@ -62,18 +63,18 @@ impl List {
         if self.iter().any(|v| v == *item) {
             return Ok(Var::from_variant(Variant::List(self.clone())));
         }
-        let mut l = self.0.clone();
+        let mut l = (*self.0).clone();
         l.push_back(item.clone());
-        Ok(Var::from_variant(Variant::List(List(l))))
+        Ok(Var::from_variant(Variant::List(List(Arc::new(l)))))
     }
 
     pub fn pop_front(&self) -> Result<(Var, Var), Error> {
         if self.is_empty() {
             return Err(E_RANGE.msg("attempt to pop from empty list"));
         }
-        let mut l = self.0.clone();
+        let mut l = (*self.0).clone();
         let first = l.pop_front().unwrap();
-        Ok((first, Var::from_variant(Variant::List(List(l)))))
+        Ok((first, Var::from_variant(Variant::List(List(Arc::new(l))))))
     }
 }
 
@@ -144,20 +145,20 @@ impl Sequence for List {
             }));
         }
         let new = self.0.update(index, value.clone());
-        Ok(Var::from_variant(Variant::List(List(Box::new(new)))))
+        Ok(Var::from_variant(Variant::List(List(Arc::new(new)))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
-        let mut new = self.0.clone();
+        let mut new = (*self.0).clone();
         new.push_back(value.clone());
-        Ok(Var::from_variant(Variant::List(List(new))))
+        Ok(Var::from_variant(Variant::List(List(Arc::new(new)))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
         let index = min(index, self.len());
-        let mut result = self.0.clone();
+        let mut result = (*self.0).clone();
         result.insert(index, value.clone());
-        Ok(Var::from_variant(Variant::List(List(result))))
+        Ok(Var::from_variant(Variant::List(List(Arc::new(result)))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -243,9 +244,9 @@ impl Sequence for List {
             _ => return Err(E_TYPE.msg("attempt to append non-list")),
         };
 
-        let mut result = self.0.clone();
+        let mut result = (*self.0).clone();
         result.append(other.0.as_ref().clone());
-        Ok(Var::from_variant(Variant::List(List(result))))
+        Ok(Var::from_variant(Variant::List(List(Arc::new(result)))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -259,9 +260,9 @@ impl Sequence for List {
             }));
         }
 
-        let mut new = self.0.clone();
+        let mut new = (*self.0).clone();
         new.remove(index);
-        Ok(Var::from_variant(Variant::List(List(new))))
+        Ok(Var::from_variant(Variant::List(List(Arc::new(new)))))
     }
 }
 
@@ -336,14 +337,14 @@ impl Hash for List {
 impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
         let l: im::Vector<Var> = im::Vector::from_iter(iter);
-        Var::from_variant(Variant::List(List(Box::new(l))))
+        Var::from_variant(Variant::List(List(Arc::new(l))))
     }
 }
 
 impl std::iter::FromIterator<Var> for List {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
         let l: im::Vector<Var> = im::Vector::from_iter(iter);
-        List(Box::new(l))
+        List(Arc::new(l))
     }
 }
 
@@ -769,5 +770,38 @@ mod tests {
             )
             .unwrap();
         assert_eq!(r, v_list(&[v_str("?"), v_str("."), v_str("@abort")]));
+    }
+
+    #[test]
+    fn test_im_vector_size() {
+        use std::mem::size_of;
+        use std::sync::Arc;
+        use crate::List;
+
+        // What's the actual size of im::Vector?
+        println!("Size of im::Vector<Var>: {}", size_of::<im::Vector<Var>>());
+        println!("Size of List (Box<im::Vector<Var>>): {}", size_of::<List>());
+        println!("Size of Var: {}", size_of::<Var>());
+        println!();
+
+        // What if we used Arc instead of Box?
+        println!("Arc vs Box comparison:");
+        println!("  Box<im::Vector<Var>>: {}", size_of::<Box<im::Vector<Var>>>());
+        println!("  Arc<im::Vector<Var>>: {}", size_of::<Arc<im::Vector<Var>>>());
+        println!();
+
+        // Clone cost comparison:
+        println!("Clone cost:");
+        println!("  Box::clone() = malloc(64) + memcpy(64) + im::Vector::clone()");
+        println!("  Arc::clone() = atomic refcount increment (nearly free)");
+        println!();
+
+        // What's inside im::Vector anyway?
+        // From im crate source: Vector contains an Arc to the tree root
+        // So im::Vector is already using Arc internally for structural sharing
+        println!("Structure:");
+        println!("  im::Vector internally uses Arc for tree nodes");
+        println!("  Box<im::Vector>: heap allocation on clone, then Arc bump inside");
+        println!("  Arc<im::Vector>: just Arc bump, no malloc!");
     }
 }

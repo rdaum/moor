@@ -173,10 +173,8 @@ fn extract_anonymous_refs_from_moo_frame(
 ) {
     // 1. Scan all variables in the environment stack
     for scope in frame.environment.iter_scopes() {
-        for var_opt in scope {
-            if let Some(var) = var_opt {
-                extract_anonymous_refs_from_var(var, refs);
-            }
+        for var in scope.iter().flatten() {
+            extract_anonymous_refs_from_var(var, refs);
         }
     }
 
@@ -301,16 +299,42 @@ mod tests {
     #[test]
     fn test_frame_sizes() {
         println!("Size of MooStackFrame: {}", size_of::<MooStackFrame>());
-        println!("Size of Box<MooStackFrame>: {}", size_of::<Box<MooStackFrame>>());
         println!("Size of BfFrame: {}", size_of::<BfFrame>());
-        println!("Size of Frame (with Box): {}", size_of::<Frame>());
+        println!("Size of Frame (unboxed): {}", size_of::<Frame>());
         println!("Size of Activation: {}", size_of::<Activation>());
 
-        // Frame is an enum with Box<MooStackFrame> and BfFrame
-        // If unboxed, it would be max(MooStackFrame, BfFrame) + discriminant
-        let unboxed_size = size_of::<MooStackFrame>().max(size_of::<BfFrame>()) + 8;
-        println!("Estimated size if Frame were unboxed: {}", unboxed_size);
-        println!("Current Frame overhead per activation: {} bytes",
-                 size_of::<Activation>());
+        // Frame is an enum with MooStackFrame and BfFrame (unboxed)
+        // Size should be max(MooStackFrame, BfFrame) + discriminant
+        let expected_size = size_of::<MooStackFrame>().max(size_of::<BfFrame>()) + 8;
+        println!("Expected Frame size: {expected_size}");
+        println!("Total activation size: {} bytes", size_of::<Activation>());
+    }
+
+    #[test]
+    fn test_list_box_overhead() {
+        use moor_var::{List, Var};
+
+        // List is defined as: List(Box<im::Vector<Var>>)
+        println!("Size of List (just the Box pointer): {}", size_of::<List>());
+        println!("Size of Var: {}", size_of::<Var>());
+        println!("Size of Box pointer: {}", size_of::<Box<()>>());
+
+        // Create a list and clone it
+        let list1 = List::mk_list(&[Var::mk_integer(1), Var::mk_integer(2), Var::mk_integer(3)]);
+        let _list2 = list1.clone();
+
+        // When we clone List(Box<im::Vector<Var>>):
+        // Box::clone() does:
+        //   1. Allocates new heap memory for Box wrapper (malloc)
+        //   2. Calls im::Vector::clone() on the interior
+        //   3. im::Vector::clone() bumps Arc refcount (cheap!)
+        //
+        // The Box wrapper adds malloc overhead to every List::clone()
+        // But im::Vector::clone() itself is still cheap (just Arc refcount)
+
+        println!("\nCloning behavior:");
+        println!("- Box::clone() allocates heap memory (malloc overhead)");
+        println!("- im::Vector::clone() bumps Arc refcount (nearly free)");
+        println!("\nSo List::clone has malloc overhead from Box, but structural sharing from im::Vector");
     }
 }
