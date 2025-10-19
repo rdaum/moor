@@ -58,8 +58,7 @@ fn workload_thread(
     for iteration in 0..num_iterations {
         if iteration > 0 && iteration % 100 == 0 {
             println!(
-                "Thread {} progress: {}/{} iterations, {} skipped",
-                process_id, iteration, num_iterations, skipped_ops
+                "Thread {process_id} progress: {iteration}/{num_iterations} iterations, {skipped_ops} skipped"
             );
         }
 
@@ -231,8 +230,7 @@ fn workload_thread(
 
     if skipped_ops > 0 {
         eprintln!(
-            "Thread {} skipped {} operations due to retry limit",
-            process_id, skipped_ops
+            "Thread {process_id} skipped {skipped_ops} operations due to retry limit"
         );
     }
 

@@ -85,7 +85,7 @@ fn setup_database(db: &TxDB, num_props: usize) -> Result<(Obj, Vec<Symbol>), eyr
     // Create properties for list-append workload
     let mut prop_symbols = vec![];
     for i in 0..num_props {
-        let prop_name = format!("prop_{}", i);
+        let prop_name = format!("prop_{i}");
         let prop_sym = Symbol::mk(&prop_name);
         loader.define_property(
             &obj,
@@ -122,8 +122,7 @@ fn workload_thread(
         // Print progress every 100 iterations
         if iteration > 0 && iteration % 100 == 0 {
             println!(
-                "Thread {} progress: {}/{} iterations, {} total retries, {} skipped",
-                process_id, iteration, num_iterations, total_retries, skipped_ops
+                "Thread {process_id} progress: {iteration}/{num_iterations} iterations, {total_retries} total retries, {skipped_ops} skipped"
             );
         }
 
@@ -305,12 +304,12 @@ fn print_performance_metrics(workload_results: &[(Instant, WorkItem)], total_dur
     println!("Performance Metrics");
     println!("════════════════════════════════════════════════════════════");
     println!("\nOverall:");
-    println!("  Total operations:     {}", total_ops);
+    println!("  Total operations:     {total_ops}");
     println!(
         "  Total duration:       {:.2}s",
         total_duration.as_secs_f64()
     );
-    println!("  Throughput:           {:.2} ops/sec", throughput);
+    println!("  Throughput:           {throughput:.2} ops/sec");
 
     if !read_durations.is_empty() {
         let read_mean = read_durations.iter().sum::<Duration>().as_micros() as f64

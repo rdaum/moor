@@ -58,8 +58,7 @@ fn workload_thread(
     for iteration in 0..num_iterations {
         if iteration > 0 && iteration % 100 == 0 {
             println!(
-                "Thread {} progress: {}/{} iterations, {} skipped",
-                process_id, iteration, num_iterations, skipped_ops
+                "Thread {process_id} progress: {iteration}/{num_iterations} iterations, {skipped_ops} skipped"
             );
         }
 
@@ -155,8 +154,7 @@ fn workload_thread(
 
     if skipped_ops > 0 {
         eprintln!(
-            "Thread {} skipped {} operations due to retry limit",
-            process_id, skipped_ops
+            "Thread {process_id} skipped {skipped_ops} operations due to retry limit"
         );
     }
 
@@ -231,12 +229,12 @@ fn print_performance_metrics(events: &[EdnEvent], total_duration: Duration) {
     println!("Performance Metrics");
     println!("════════════════════════════════════════════════════════════");
     println!("\nOverall:");
-    println!("  Total operations:     {}", total_ops);
+    println!("  Total operations:     {total_ops}");
     println!(
         "  Total duration:       {:.2}s",
         total_duration.as_secs_f64()
     );
-    println!("  Throughput:           {:.2} ops/sec", throughput);
+    println!("  Throughput:           {throughput:.2} ops/sec");
 
     if !read_durations.is_empty() {
         let read_mean = read_durations.iter().sum::<Duration>().as_micros() as f64

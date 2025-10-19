@@ -742,8 +742,8 @@ mod tests {
         loop {
             match env.push_scope(100) {
                 Ok(()) => count += 1,
+                Err(ArenaError::Exhausted { .. }) => break,
                 Err(e) => panic!("Unexpected error: {e}"),
-                Err(e) => panic!("Unexpected error: {}", e),
             }
         }
 

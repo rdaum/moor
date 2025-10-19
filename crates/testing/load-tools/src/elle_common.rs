@@ -41,7 +41,7 @@ where
     // Create properties
     let mut prop_symbols = vec![];
     for i in 0..num_props {
-        let prop_name = format!("{}_{}", prop_prefix, i);
+        let prop_name = format!("{prop_prefix}_{i}");
         let prop_sym = Symbol::mk(&prop_name);
         let init_value = init_value_fn(i);
         loader.define_property(
@@ -173,7 +173,7 @@ where
         + 'static,
     R: Send + 'static,
 {
-    println!("Starting {} concurrent workloads", num_workloads);
+    println!("Starting {num_workloads} concurrent workloads");
 
     let mut handles = vec![];
     for process_id in 0..num_workloads {
@@ -193,10 +193,7 @@ where
         all_results.extend(results);
         completed += 1;
         if completed % 5 == 0 {
-            println!(
-                "Collected results from {}/{} threads",
-                completed, num_workloads
-            );
+            println!("Collected results from {completed}/{num_workloads} threads");
         }
     }
 
