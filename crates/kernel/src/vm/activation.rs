@@ -12,6 +12,7 @@
 //
 
 use lazy_static::lazy_static;
+use moor_compiler::BUILTINS;
 use uuid::Uuid;
 
 use moor_common::{
@@ -174,10 +175,16 @@ impl Frame {
     pub fn return_value(&self) -> Var {
         match self {
             Frame::Moo(frame) => frame.peek_top().clone(),
-            Frame::Bf(bf_frame) => bf_frame
-                .return_value
-                .clone()
-                .expect("No return value set for built-in function"),
+            Frame::Bf(bf_frame) => {
+                let Some(return_value) = bf_frame.return_value.as_ref() else {
+                    panic!(
+                        "missing return value for frame for built-in function '{}/{}'",
+                        BUILTINS.name_of(bf_frame.bf_id).unwrap(),
+                        bf_frame.bf_id.0
+                    )
+                };
+                return_value.clone()
+            }
         }
     }
 }
