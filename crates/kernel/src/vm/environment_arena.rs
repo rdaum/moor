@@ -403,6 +403,29 @@ impl ArenaEnvironment {
         }
     }
 
+    /// Initialize a variable slot without dropping the old value.
+    /// This is an optimization for initial frame setup where we know the slot contains None.
+    ///
+    /// SAFETY: Caller must ensure the slot at (scope_idx, var_idx) contains None
+    /// and has not been initialized yet. Using this on an already-initialized slot
+    /// will leak the old value.
+    pub fn init(&mut self, scope_idx: usize, var_idx: usize, value: moor_var::Var) {
+        debug_assert!(scope_idx < self.scopes.len(), "scope index out of bounds");
+        debug_assert!(
+            var_idx < self.scopes[scope_idx].width,
+            "var index out of bounds"
+        );
+
+        let scope = &self.scopes[scope_idx];
+
+        // SAFETY: Caller guarantees this slot is uninitialized (contains None from alloc_scope)
+        // and that indices are valid. We use ptr::write to avoid dropping the None value.
+        unsafe {
+            let var_ptr = scope.ptr.as_ptr().add(var_idx);
+            std::ptr::write(var_ptr, Some(value));
+        }
+    }
+
     /// Get the number of scopes.
     #[allow(dead_code)]
     pub fn len(&self) -> usize {

@@ -816,7 +816,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
     // For deserialization, create a temporary owned arena that will be owned by the environment
     let temp_arena = Box::into_raw(Box::new(
         crate::vm::environment_arena::VarArena::new()
-            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?
+            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?,
     ));
     let mut frame = KernelMooStackFrame::with_environment(program, temp_arena, environment);
     frame.pc = fb.pc as usize;
@@ -1060,7 +1060,7 @@ pub(crate) fn vm_exec_state_from_flatbuffer(
     // Create a new arena for the deserialized state
     let environment_arena = Box::new(
         crate::vm::environment_arena::VarArena::new()
-            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?
+            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?,
     );
 
     Ok(KernelVMExecState {

@@ -281,7 +281,7 @@ pub(crate) fn extract_anonymous_refs_from_vm_exec_state(
 #[cfg(test)]
 mod tests {
     use crate::vm::VMHostResponse;
-    use crate::vm::activation::{Activation, Frame, BfFrame};
+    use crate::vm::activation::{Activation, BfFrame, Frame};
     use crate::vm::moo_frame::MooStackFrame;
     use std::mem::size_of;
 
@@ -335,7 +335,9 @@ mod tests {
         println!("\nCloning behavior:");
         println!("- Box::clone() allocates heap memory (malloc overhead)");
         println!("- im::Vector::clone() bumps Arc refcount (nearly free)");
-        println!("\nSo List::clone has malloc overhead from Box, but structural sharing from im::Vector");
+        println!(
+            "\nSo List::clone has malloc overhead from Box, but structural sharing from im::Vector"
+        );
     }
 
     #[test]

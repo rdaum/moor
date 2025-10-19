@@ -142,6 +142,17 @@ impl Frame {
         }
     }
 
+    /// Initialize a global variable without dropping the old value.
+    /// This is an optimization for initial frame setup where we know the slot contains None.
+    pub fn init_global_variable(&mut self, gname: GlobalName, value: Var) {
+        match self {
+            Frame::Moo(frame) => frame.init_gvar(gname, value),
+            Frame::Bf(_) => {
+                panic!("init_global_variable called for a built-in function frame")
+            }
+        }
+    }
+
     pub fn get_global_variable(&self, gname: GlobalName) -> Option<&Var> {
         match self {
             Frame::Moo(frame) => frame.get_gvar(gname),
@@ -214,14 +225,14 @@ impl Activation {
 
         let moo_frame = MooStackFrame::new(program, arena);
         let mut frame = Frame::Moo(moo_frame);
-        frame.set_global_variable(GlobalName::this, this.clone());
-        frame.set_global_variable(GlobalName::player, v_obj(call.player));
-        frame.set_global_variable(GlobalName::caller, caller);
-        frame.set_global_variable(
+        frame.init_global_variable(GlobalName::this, this.clone());
+        frame.init_global_variable(GlobalName::player, v_obj(call.player));
+        frame.init_global_variable(GlobalName::caller, caller);
+        frame.init_global_variable(
             GlobalName::verb,
             v_arc_string(call.verb_name.as_arc_string()),
         );
-        frame.set_global_variable(GlobalName::args, args.clone().into());
+        frame.init_global_variable(GlobalName::args, args.clone().into());
 
         // Inherit parsing variables from the current activation, if any
         // This maintains LambdaMOO-compatible behavior where parsing variables persist across verb calls
@@ -231,63 +242,63 @@ impl Activation {
                 .frame
                 .get_global_variable(GlobalName::argstr)
             {
-                frame.set_global_variable(GlobalName::argstr, argstr.clone());
+                frame.init_global_variable(GlobalName::argstr, argstr.clone());
             } else {
-                frame.set_global_variable(GlobalName::argstr, v_string(call.argstr));
+                frame.init_global_variable(GlobalName::argstr, v_string(call.argstr));
             }
 
             if let Some(dobj) = current_activation
                 .frame
                 .get_global_variable(GlobalName::dobj)
             {
-                frame.set_global_variable(GlobalName::dobj, dobj.clone());
+                frame.init_global_variable(GlobalName::dobj, dobj.clone());
             } else {
-                frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
+                frame.init_global_variable(GlobalName::dobj, v_obj(NOTHING));
             }
 
             if let Some(dobjstr) = current_activation
                 .frame
                 .get_global_variable(GlobalName::dobjstr)
             {
-                frame.set_global_variable(GlobalName::dobjstr, dobjstr.clone());
+                frame.init_global_variable(GlobalName::dobjstr, dobjstr.clone());
             } else {
-                frame.set_global_variable(GlobalName::dobjstr, v_str(""));
+                frame.init_global_variable(GlobalName::dobjstr, v_str(""));
             }
 
             if let Some(prepstr) = current_activation
                 .frame
                 .get_global_variable(GlobalName::prepstr)
             {
-                frame.set_global_variable(GlobalName::prepstr, prepstr.clone());
+                frame.init_global_variable(GlobalName::prepstr, prepstr.clone());
             } else {
-                frame.set_global_variable(GlobalName::prepstr, v_str(""));
+                frame.init_global_variable(GlobalName::prepstr, v_str(""));
             }
 
             if let Some(iobj) = current_activation
                 .frame
                 .get_global_variable(GlobalName::iobj)
             {
-                frame.set_global_variable(GlobalName::iobj, iobj.clone());
+                frame.init_global_variable(GlobalName::iobj, iobj.clone());
             } else {
-                frame.set_global_variable(GlobalName::iobj, v_obj(NOTHING));
+                frame.init_global_variable(GlobalName::iobj, v_obj(NOTHING));
             }
 
             if let Some(iobjstr) = current_activation
                 .frame
                 .get_global_variable(GlobalName::iobjstr)
             {
-                frame.set_global_variable(GlobalName::iobjstr, iobjstr.clone());
+                frame.init_global_variable(GlobalName::iobjstr, iobjstr.clone());
             } else {
-                frame.set_global_variable(GlobalName::iobjstr, v_str(""));
+                frame.init_global_variable(GlobalName::iobjstr, v_str(""));
             }
         } else {
             // No current activation, use defaults (this happens for initial command activation)
-            frame.set_global_variable(GlobalName::argstr, v_string(call.argstr));
-            frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
-            frame.set_global_variable(GlobalName::dobjstr, v_str(""));
-            frame.set_global_variable(GlobalName::prepstr, v_str(""));
-            frame.set_global_variable(GlobalName::iobj, v_obj(NOTHING));
-            frame.set_global_variable(GlobalName::iobjstr, v_str(""));
+            frame.init_global_variable(GlobalName::argstr, v_string(call.argstr));
+            frame.init_global_variable(GlobalName::dobj, v_obj(NOTHING));
+            frame.init_global_variable(GlobalName::dobjstr, v_str(""));
+            frame.init_global_variable(GlobalName::prepstr, v_str(""));
+            frame.init_global_variable(GlobalName::iobj, v_obj(NOTHING));
+            frame.init_global_variable(GlobalName::iobjstr, v_str(""));
         }
 
         Self {

@@ -115,7 +115,10 @@ pub(crate) struct Scope {
 
 impl MooStackFrame {
     /// Create a new MOO stack frame using the shared arena from the task.
-    pub(crate) fn new(program: Program, arena: *mut crate::vm::environment_arena::VarArena) -> Self {
+    pub(crate) fn new(
+        program: Program,
+        arena: *mut crate::vm::environment_arena::VarArena,
+    ) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
         // Create environment using the shared arena
@@ -144,7 +147,7 @@ impl MooStackFrame {
     pub(crate) fn with_environment(
         program: Program,
         arena: *mut crate::vm::environment_arena::VarArena,
-        environment: Vec<Vec<Option<Var>>>
+        environment: Vec<Vec<Option<Var>>>,
     ) -> Self {
         let environment = VarEnvironment::from_vec(arena, environment)
             .expect("Failed to create environment from vec");
@@ -190,6 +193,13 @@ impl MooStackFrame {
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
         let pos = gname as usize;
         self.environment.set(0, pos, value);
+    }
+
+    /// Initialize a global variable without dropping the old value.
+    /// This is an optimization for initial frame setup where we know the slot contains None.
+    pub fn init_gvar(&mut self, gname: GlobalName, value: Var) {
+        let pos = gname as usize;
+        self.environment.init(0, pos, value);
     }
 
     pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {

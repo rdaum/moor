@@ -64,9 +64,8 @@ impl VMExecState {
     pub fn new(task_id: TaskId, max_ticks: usize) -> Self {
         // Create the task-wide arena allocator
         // All frames in this task will share this arena
-        let environment_arena = Box::new(
-            EnvironmentArena::new().expect("Failed to create environment arena for task")
-        );
+        let environment_arena =
+            Box::new(EnvironmentArena::new().expect("Failed to create environment arena for task"));
 
         Self {
             task_id,
@@ -194,7 +193,7 @@ impl Clone for VMExecState {
     fn clone(&self) -> Self {
         // Create a new arena for the clone
         let environment_arena = Box::new(
-            EnvironmentArena::new().expect("Failed to create environment arena for clone")
+            EnvironmentArena::new().expect("Failed to create environment arena for clone"),
         );
 
         // Clone the stack - this will cause each ArenaEnvironment to create its own owned arena

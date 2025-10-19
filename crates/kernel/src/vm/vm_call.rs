@@ -412,7 +412,8 @@ impl VMExecState {
         // Get arena first before borrowing self immutably
         let arena = self.arena_ptr();
         let current_activation = self.top();
-        let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect(), arena)?;
+        let a =
+            Activation::for_lambda_call(&lambda, current_activation, args.iter().collect(), arena)?;
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO lambda

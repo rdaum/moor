@@ -175,13 +175,8 @@ impl VmHost {
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
-        self.vm_exec_state.exec_command_request(
-            *permissions,
-            verb.1,
-            verb_call,
-            &command,
-            verb.0,
-        );
+        self.vm_exec_state
+            .exec_command_request(*permissions, verb.1, verb_call, &command, verb.0);
         self.running = true;
     }
 
@@ -193,13 +188,7 @@ impl VmHost {
         verb_info: (ProgramType, VerbDef),
         verb_call: VerbCall,
     ) {
-        self.start_execution(
-            task_id,
-            *perms,
-            verb_info.1,
-            verb_call,
-            verb_info.0,
-        )
+        self.start_execution(task_id, *perms, verb_info.1, verb_call, verb_info.0)
     }
 
     /// Start execution of a fork request in the hosted VM.

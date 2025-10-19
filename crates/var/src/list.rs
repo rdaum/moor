@@ -774,9 +774,9 @@ mod tests {
 
     #[test]
     fn test_im_vector_size() {
+        use crate::List;
         use std::mem::size_of;
         use std::sync::Arc;
-        use crate::List;
 
         // What's the actual size of im::Vector?
         println!("Size of im::Vector<Var>: {}", size_of::<im::Vector<Var>>());
@@ -786,8 +786,14 @@ mod tests {
 
         // What if we used Arc instead of Box?
         println!("Arc vs Box comparison:");
-        println!("  Box<im::Vector<Var>>: {}", size_of::<Box<im::Vector<Var>>>());
-        println!("  Arc<im::Vector<Var>>: {}", size_of::<Arc<im::Vector<Var>>>());
+        println!(
+            "  Box<im::Vector<Var>>: {}",
+            size_of::<Box<im::Vector<Var>>>()
+        );
+        println!(
+            "  Arc<im::Vector<Var>>: {}",
+            size_of::<Arc<im::Vector<Var>>>()
+        );
         println!();
 
         // Clone cost comparison:
