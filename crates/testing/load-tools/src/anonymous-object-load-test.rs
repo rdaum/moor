@@ -20,11 +20,11 @@
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
+use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_common::{
     model::{
         CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
     },
-    tasks::{NarrativeEvent, Session, SessionError, SessionFactory, SystemControl},
     util::BitEnum,
 };
 use moor_compiler::compile;
@@ -34,7 +34,7 @@ use moor_kernel::{
     config::{Config, FeaturesConfig, RuntimeConfig},
     tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
 };
-use moor_var::{Error, List, NOTHING, Obj, Symbol, Var, program::ProgramType, v_int, v_obj};
+use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_obj};
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -103,139 +103,6 @@ for i in [1..num_objects + 1]
 endfor
 return num_objects;
 "#;
-
-/// Simple session implementation for direct scheduler testing
-struct DirectSession {
-    player: Obj,
-}
-
-impl DirectSession {
-    fn new(player: Obj) -> Self {
-        Self { player }
-    }
-}
-
-impl Session for DirectSession {
-    fn commit(&self) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn rollback(&self) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
-        Ok(Arc::new(DirectSession::new(self.player)))
-    }
-
-    fn request_input(
-        &self,
-        _player: Obj,
-        _input_request_id: uuid::Uuid,
-    ) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn send_event(&self, _player: Obj, _event: Box<NarrativeEvent>) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn send_system_msg(&self, _player: Obj, _msg: &str) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn notify_shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn connection_name(&self, _player: Obj) -> Result<String, SessionError> {
-        Ok("test-connection".to_string())
-    }
-
-    fn disconnect(&self, _player: Obj) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
-        Ok(vec![])
-    }
-
-    fn connected_seconds(&self, _player: Obj) -> Result<f64, SessionError> {
-        Ok(0.0)
-    }
-
-    fn idle_seconds(&self, _player: Obj) -> Result<f64, SessionError> {
-        Ok(0.0)
-    }
-
-    fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
-        Ok(vec![])
-    }
-
-    fn connection_details(
-        &self,
-        _player: Option<Obj>,
-    ) -> Result<Vec<moor_common::tasks::ConnectionDetails>, SessionError> {
-        Ok(vec![])
-    }
-
-    fn connection_attributes(&self, _player: Obj) -> Result<Var, SessionError> {
-        use moor_var::v_list;
-        Ok(v_list(&[]))
-    }
-
-    fn set_connection_attribute(
-        &self,
-        _connection_obj: Obj,
-        _key: Symbol,
-        _value: Var,
-    ) -> Result<(), SessionError> {
-        Ok(())
-    }
-}
-
-/// Simple session factory for direct scheduler testing
-struct DirectSessionFactory {}
-
-impl SessionFactory for DirectSessionFactory {
-    fn mk_background_session(
-        self: Arc<Self>,
-        player: &Obj,
-    ) -> Result<Arc<dyn Session>, SessionError> {
-        Ok(Arc::new(DirectSession::new(*player)))
-    }
-}
-
-/// No-op system control for direct scheduler testing
-struct NoopSystemControl {}
-
-impl SystemControl for NoopSystemControl {
-    fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
-        Ok(vec![])
-    }
-
-    fn listen(
-        &self,
-        _handler_object: Obj,
-        _host_type: &str,
-        _port: u16,
-        _print_messages: bool,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn unlisten(&self, _port: u16, _host_type: &str) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {
-        Ok(())
-    }
-}
 
 fn setup_test_database(database: &TxDB) -> Result<Obj, eyre::Error> {
     let mut loader = database.loader_client()?;
