@@ -43,7 +43,7 @@ pub(crate) struct VMExecState {
     pub(crate) stack: Vec<Activation>,
     /// The arena allocator for all activation frame environments in this task.
     /// This is shared across all frames to avoid per-frame mmap/munmap overhead.
-    pub(crate) environment_arena: Box<EnvironmentArena<Var>>,
+    pub(crate) environment_arena: Box<EnvironmentArena>,
     /// The tick slice for the current/next execution.
     pub(crate) tick_slice: usize,
     /// The total number of ticks that the task is allowed to run.
@@ -83,8 +83,8 @@ impl VMExecState {
     }
 
     /// Get a mutable pointer to the environment arena for creating frame environments.
-    pub(crate) fn arena_ptr(&mut self) -> *mut EnvironmentArena<Var> {
-        &mut *self.environment_arena as *mut EnvironmentArena<Var>
+    pub(crate) fn arena_ptr(&mut self) -> *mut EnvironmentArena {
+        &mut *self.environment_arena as *mut EnvironmentArena
     }
 
     /// Return the callers stack, in the format expected by the `callers` built-in function.

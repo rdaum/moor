@@ -337,4 +337,12 @@ mod tests {
         println!("- im::Vector::clone() bumps Arc refcount (nearly free)");
         println!("\nSo List::clone has malloc overhead from Box, but structural sharing from im::Vector");
     }
+
+    #[test]
+    fn test_verbcall_size() {
+        use crate::vm::VerbCall;
+
+        println!("Size of VerbCall: {}", size_of::<VerbCall>());
+        println!("Size of Box<VerbCall>: {}", size_of::<Box<VerbCall>>());
+    }
 }

@@ -189,9 +189,7 @@ impl MooStackFrame {
 
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
         let pos = gname as usize;
-        self.environment
-            .set(0, pos, value)
-            .expect("Failed to set global variable");
+        self.environment.set(0, pos, value);
     }
 
     pub fn get_gvar(&self, gname: GlobalName) -> Option<&Var> {
@@ -211,9 +209,7 @@ impl MooStackFrame {
         );
         let offset = id.0 as usize;
         let scope = id.1 as usize;
-        self.environment
-            .set(scope, offset, v)
-            .expect("Failed to set variable");
+        self.environment.set(scope, offset, v);
     }
 
     /// Return the value of a local variable.

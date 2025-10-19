@@ -178,7 +178,7 @@ impl VmHost {
         self.vm_exec_state.exec_command_request(
             *permissions,
             verb.1,
-            Box::new(verb_call),
+            verb_call,
             &command,
             verb.0,
         );
@@ -197,7 +197,7 @@ impl VmHost {
             task_id,
             *perms,
             verb_info.1,
-            Box::new(verb_call),
+            verb_call,
             verb_info.0,
         )
     }
@@ -218,7 +218,7 @@ impl VmHost {
         task_id: TaskId,
         permissions: Obj,
         resolved_verb: VerbDef,
-        call: Box<VerbCall>,
+        call: VerbCall,
         program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());

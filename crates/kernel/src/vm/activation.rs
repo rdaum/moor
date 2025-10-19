@@ -191,12 +191,11 @@ impl Activation {
     }
 
     #[allow(irrefutable_let_patterns)] // We know this
-    #[allow(clippy::boxed_local)] // It gets called w/ a Box so shut up, I have no choice, clippy
     // is a Moo frame. We're just making room
     pub fn for_call(
         _permissions: Obj,
         resolved_verb: VerbDef,
-        mut call: Box<VerbCall>,
+        call: VerbCall,
         current_activation: Option<&Activation>,
         program: ProgramType,
         arena: *mut crate::vm::environment_arena::VarArena,
@@ -207,16 +206,17 @@ impl Activation {
             unimplemented!("Only MOO programs are supported")
         };
 
-        // Move values out of call to avoid double-cloning
-        // Use static empty values to avoid allocating replacements
-        let this = std::mem::replace(&mut call.this, moor_var::v_none());
-        let args = std::mem::replace(&mut call.args, List::mk_list(&[]));
+        // Move fields directly out of call (we own it, no cloning needed!)
+        // We'll clone only when we need the value in both the frame AND the Activation struct
+        let this = call.this;
+        let args = call.args;
+        let caller = call.caller;
 
         let moo_frame = MooStackFrame::new(program, arena);
         let mut frame = Frame::Moo(moo_frame);
         frame.set_global_variable(GlobalName::this, this.clone());
         frame.set_global_variable(GlobalName::player, v_obj(call.player));
-        frame.set_global_variable(GlobalName::caller, call.caller.clone());
+        frame.set_global_variable(GlobalName::caller, caller);
         frame.set_global_variable(
             GlobalName::verb,
             v_arc_string(call.verb_name.as_arc_string()),
@@ -233,7 +233,7 @@ impl Activation {
             {
                 frame.set_global_variable(GlobalName::argstr, argstr.clone());
             } else {
-                frame.set_global_variable(GlobalName::argstr, v_string(call.argstr.clone()));
+                frame.set_global_variable(GlobalName::argstr, v_string(call.argstr));
             }
 
             if let Some(dobj) = current_activation
@@ -282,7 +282,7 @@ impl Activation {
             }
         } else {
             // No current activation, use defaults (this happens for initial command activation)
-            frame.set_global_variable(GlobalName::argstr, v_string(call.argstr.clone()));
+            frame.set_global_variable(GlobalName::argstr, v_string(call.argstr));
             frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
             frame.set_global_variable(GlobalName::dobjstr, v_str(""));
             frame.set_global_variable(GlobalName::prepstr, v_str(""));

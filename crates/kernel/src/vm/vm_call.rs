@@ -64,7 +64,7 @@ pub struct VerbExecutionRequest {
     /// The resolved verb.
     pub resolved_verb: VerbDef,
     /// The call parameters that were used to resolve the verb.
-    pub call: Box<VerbCall>,
+    pub call: VerbCall,
     /// The decoded MOO Binary that contains the verb to be executed.
     pub program: ProgramType,
 }
@@ -158,7 +158,7 @@ impl VMExecState {
         verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
-        let call = Box::new(VerbCall {
+        let call = VerbCall {
             verb_name,
             location: v_obj(location),
             this,
@@ -168,7 +168,7 @@ impl VMExecState {
             // unless we're a builtin, in which case we're #-1.
             argstr: "".to_string(),
             caller: self.caller(),
-        });
+        };
 
         let self_valid = with_current_transaction_mut(|world_state| world_state.valid(&location))
             .expect("Error checking object validity");
@@ -266,7 +266,7 @@ impl VMExecState {
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions: *permissions,
             resolved_verb,
-            call: Box::new(call),
+            call,
             program,
         }))
     }
@@ -277,7 +277,7 @@ impl VMExecState {
         &mut self,
         permissions: Obj,
         resolved_verb: VerbDef,
-        call: Box<VerbCall>,
+        call: VerbCall,
         command: &ParsedCommand,
         program: ProgramType,
     ) {
@@ -338,7 +338,7 @@ impl VMExecState {
         &mut self,
         permissions: Obj,
         resolved_verb: VerbDef,
-        call: Box<VerbCall>,
+        call: VerbCall,
         program: ProgramType,
     ) {
         // Get arena first before borrowing self immutably
@@ -518,7 +518,7 @@ impl VMExecState {
                 permissions: self.top().permissions,
                 resolved_verb,
                 program,
-                call: Box::new(call),
+                call,
             },
         )))
     }

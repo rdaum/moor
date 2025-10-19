@@ -89,7 +89,7 @@ fn create_object_with_initialize(
         permissions: bf_args.task_perms_who(),
         resolved_verb,
         program,
-        call: Box::new(VerbCall {
+        call: VerbCall {
             verb_name: *INITIALIZE_SYM,
             location: v_obj(new_obj),
             this: v_obj(new_obj),
@@ -97,7 +97,7 @@ fn create_object_with_initialize(
             args: initialize_args,
             argstr: "".to_string(),
             caller: bf_args.exec_state.top().this.clone(),
-        }),
+        },
     };
     Ok(VmInstr(DispatchVerb(Box::new(ve))))
 }
@@ -696,7 +696,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             program,
-                            call: Box::new(VerbCall {
+                            call: VerbCall {
                                 verb_name: *RECYCLE_SYM,
                                 location: v_obj(obj),
                                 this: v_obj(obj),
@@ -704,7 +704,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            }),
+                            },
                         }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -767,7 +767,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         permissions: bf_args.task_perms_who(),
                         resolved_verb,
                         program,
-                        call: Box::new(VerbCall {
+                        call: VerbCall {
                             verb_name: *EXITFUNC_SYM,
                             location: v_obj(head_obj),
                             this: v_obj(head_obj),
@@ -775,7 +775,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             args: List::mk_list(&[v_obj(obj)]),
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this.clone(),
-                        }),
+                        },
                     }))));
                 }
             }
@@ -877,7 +877,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             program,
-                            call: Box::new(VerbCall {
+                            call: VerbCall {
                                 verb_name: *ACCEPT_SYM,
                                 location: v_obj(whereto),
                                 this: v_obj(whereto),
@@ -885,7 +885,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            }),
+                            },
                         }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -954,7 +954,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             program,
-                            call: Box::new(VerbCall {
+                            call: VerbCall {
                                 verb_name: *EXITFUNC_SYM,
                                 location: v_obj(original_location),
                                 this: v_obj(original_location),
@@ -962,7 +962,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            }),
+                            },
                         }));
                         return Ok(VmInstr(continuation));
                     }
@@ -1002,7 +1002,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             program,
-                            call: Box::new(VerbCall {
+                            call: VerbCall {
                                 verb_name: *ENTERFUNC_SYM,
                                 location: v_obj(whereto),
                                 this: v_obj(whereto),
@@ -1010,7 +1010,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            }),
+                            },
                         }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {

@@ -14,25 +14,20 @@
 //! Arena allocator for MOO activation frame environment storage.
 //! Provides fast, thread-local allocation without global allocator contention.
 
-use std::marker::PhantomData;
+use std::cell::RefCell;
+use std::mem::{align_of, size_of};
 use std::ptr::NonNull;
 use thiserror::Error;
 
-// Type alias for the concrete Var arena used in production
-pub type VarArena = EnvironmentArena<moor_var::Var>;
-pub type VarEnvironment = ArenaEnvironment<moor_var::Var>;
+// Concrete types for Var - this module is specialized for moor_var::Var
+pub type VarArena = EnvironmentArena;
+pub type VarEnvironment = ArenaEnvironment;
 
 /// Errors that can occur during arena operations.
 #[derive(Debug, Error, Clone)]
 pub enum ArenaError {
     #[error("Arena exhausted: requested {requested} bytes, but only {available} bytes remaining")]
     Exhausted { requested: usize, available: usize },
-
-    #[error("Scope index {scope} out of bounds (have {available} scopes)")]
-    ScopeOutOfBounds { scope: usize, available: usize },
-
-    #[error("Variable index {var} out of bounds in scope {scope} (width: {width})")]
-    VarOutOfBounds { scope: usize, var: usize, width: usize },
 
     #[error("Cannot pop scope: scope stack is empty")]
     EmptyScopeStack,
@@ -45,22 +40,50 @@ const PAGE_SIZE: usize = 4096;
 /// This should be enough for ~32 deep call stacks with reasonable variable counts
 const DEFAULT_ARENA_SIZE: usize = 512 * 1024;
 
+/// Maximum number of arenas to cache per thread.
+/// With rayon's default thread pool size (~num_cpus), this bounds total memory.
+/// Example: 8 CPUs * 8 arenas * 512KB = 32MB worst case
+const MAX_ARENAS_PER_THREAD: usize = 8;
+
+// Thread-local arena pool to avoid mmap/munmap overhead.
+// Each worker thread in the rayon pool maintains its own cache of recycled arenas.
+thread_local! {
+    static ARENA_POOL: RefCell<Vec<Box<EnvironmentArena>>> =
+        RefCell::new(Vec::new());
+}
+
+// Helper functions for arena pooling
+fn try_acquire_from_pool() -> Option<Box<EnvironmentArena>> {
+    ARENA_POOL.with(|pool| pool.borrow_mut().pop())
+}
+
+fn try_return_to_pool(arena: Box<EnvironmentArena>) -> bool {
+    ARENA_POOL.with(|pool| {
+        let mut pool = pool.borrow_mut();
+        if pool.len() < MAX_ARENAS_PER_THREAD {
+            pool.push(arena);
+            true
+        } else {
+            false
+        }
+    })
+}
+
 /// Arena allocator for environment variable storage.
 /// Uses mmap to allocate a large region and bump-allocates within it.
 /// This avoids heap allocation overhead and global allocator contention.
+/// Specialized for moor_var::Var.
 #[derive(Debug)]
-pub struct EnvironmentArena<T> {
+pub struct EnvironmentArena {
     /// Pointer to the mmap'd memory region
     memory: NonNull<u8>,
     /// Total size of the arena in bytes
     size: usize,
     /// Current allocation offset within the arena
     current_offset: usize,
-    /// Phantom data to track the type we're allocating
-    _phantom: PhantomData<T>,
 }
 
-impl<T> EnvironmentArena<T> {
+impl EnvironmentArena {
     /// Create a new environment arena with the default size.
     pub fn new() -> Result<Self, std::io::Error> {
         Self::with_size(DEFAULT_ARENA_SIZE)
@@ -95,19 +118,18 @@ impl<T> EnvironmentArena<T> {
             memory,
             size,
             current_offset: 0,
-            _phantom: PhantomData,
         })
     }
 
     /// Allocate space for a scope with the given number of items.
     /// Returns a pointer to the allocated space and the offset where it was allocated.
     /// Returns None if there's not enough space remaining in the arena.
-    pub fn alloc_scope(&mut self, count: usize) -> Option<(NonNull<Option<T>>, usize)> {
+    pub fn alloc_scope(&mut self, count: usize) -> Option<(NonNull<Option<moor_var::Var>>, usize)> {
         // Calculate required size in bytes
-        let required_size = count * std::mem::size_of::<Option<T>>();
+        let required_size = count * size_of::<Option<moor_var::Var>>();
 
-        // Align to Option<T> alignment
-        let align = std::mem::align_of::<Option<T>>();
+        // Align to Option<moor_var::Var> alignment
+        let align = align_of::<Option<moor_var::Var>>();
         let offset = (self.current_offset + align - 1) & !(align - 1);
 
         // Check if we have enough space
@@ -119,7 +141,7 @@ impl<T> EnvironmentArena<T> {
         // SAFETY: We've verified the offset is within bounds
         let ptr = unsafe {
             let base = self.memory.as_ptr();
-            NonNull::new_unchecked(base.add(offset) as *mut Option<T>)
+            NonNull::new_unchecked(base.add(offset) as *mut Option<moor_var::Var>)
         };
 
         // Initialize the memory to None
@@ -143,7 +165,10 @@ impl<T> EnvironmentArena<T> {
     /// - No references to memory after this offset exist
     /// - Drop has been called on all Var values in the freed region
     pub unsafe fn reset_to(&mut self, offset: usize) {
-        debug_assert!(offset <= self.current_offset, "Cannot reset to future offset");
+        debug_assert!(
+            offset <= self.current_offset,
+            "Cannot reset to future offset"
+        );
 
         // Optional: advise the kernel we don't need these pages anymore
         // This can help with memory pressure but adds syscall overhead
@@ -181,7 +206,7 @@ impl<T> EnvironmentArena<T> {
     }
 }
 
-impl<T> Drop for EnvironmentArena<T> {
+impl Drop for EnvironmentArena {
     fn drop(&mut self) {
         // SAFETY: We own this memory and allocated it with mmap
         unsafe {
@@ -192,13 +217,13 @@ impl<T> Drop for EnvironmentArena<T> {
 
 // SAFETY: EnvironmentArena can be sent between threads.
 // It's only accessed by one thread at a time (the task's execution thread).
-unsafe impl<T: Send> Send for EnvironmentArena<T> {}
+unsafe impl Send for EnvironmentArena {}
 
 /// Metadata for a single scope in the arena.
 #[derive(Debug, Clone)]
-struct ScopeInfo<T> {
+struct ScopeInfo {
     /// Pointer to the scope's variable storage in the arena
-    ptr: NonNull<Option<T>>,
+    ptr: NonNull<Option<moor_var::Var>>,
     /// Number of variables in this scope
     width: usize,
     /// Offset in the arena where this scope starts (for reset_to)
@@ -206,27 +231,27 @@ struct ScopeInfo<T> {
 }
 
 /// Environment storage backed by an arena allocator.
-/// This replaces Vec<Vec<Option<T>>> to avoid heap allocation overhead.
-pub struct ArenaEnvironment<T> {
+/// This replaces Vec<Vec<Option<moor_var::Var>>> to avoid heap allocation overhead.
+pub struct ArenaEnvironment {
     /// Pointer to the shared arena that backs this environment.
     /// The arena is owned by VMExecState and shared across all frames in a task.
     /// SAFETY: This pointer is valid for the lifetime of the task.
-    arena: *mut EnvironmentArena<T>,
+    arena: *mut EnvironmentArena,
     /// Metadata for each scope (just pointers and sizes, not the actual data)
-    scopes: Vec<ScopeInfo<T>>,
+    scopes: Vec<ScopeInfo>,
     /// Whether this ArenaEnvironment owns the arena and should drop it.
     /// True for clones and test cases, false for shared arena from VMExecState.
     owns_arena: bool,
 }
 
-impl<T> ArenaEnvironment<T> {
+impl ArenaEnvironment {
     /// Create a new arena environment that uses the given arena.
     /// The arena must outlive this ArenaEnvironment.
     ///
     /// SAFETY: The caller must ensure that:
     /// - The arena pointer is valid for the lifetime of this ArenaEnvironment
     /// - The arena is not freed while this ArenaEnvironment exists
-    pub fn new_with_arena(arena: *mut EnvironmentArena<T>) -> Self {
+    pub fn new_with_arena(arena: *mut EnvironmentArena) -> Self {
         Self {
             arena,
             scopes: Vec::with_capacity(16),
@@ -256,24 +281,24 @@ impl<T> ArenaEnvironment<T> {
         })
     }
 
-    /// Create an arena environment from an existing Vec<Vec<Option<T>>>.
+    /// Create an arena environment from an existing Vec<Vec<Option<moor_var::Var>>>.
     /// This is used for lambda activations where the environment is built dynamically.
     pub fn from_vec(
-        arena: *mut EnvironmentArena<T>,
-        env: Vec<Vec<Option<T>>>,
+        arena: *mut EnvironmentArena,
+        env: Vec<Vec<Option<moor_var::Var>>>,
     ) -> Result<Self, ArenaError> {
         let mut arena_env = Self::new_with_arena(arena);
 
         // Push each scope and copy its contents
         for scope in env {
             let width = scope.len();
-            arena_env.push_scope(width)
+            arena_env
+                .push_scope(width)
                 .expect("Failed to push scope during from_vec");
 
             for (var_idx, var_opt) in scope.into_iter().enumerate() {
                 if let Some(var) = var_opt {
-                    arena_env.set(arena_env.scopes.len() - 1, var_idx, var)
-                        .expect("Failed to set value during from_vec");
+                    arena_env.set(arena_env.scopes.len() - 1, var_idx, var);
                 }
             }
         }
@@ -285,7 +310,7 @@ impl<T> ArenaEnvironment<T> {
     pub fn push_scope(&mut self, width: usize) -> Result<(), ArenaError> {
         // SAFETY: arena pointer is guaranteed valid by VMExecState lifetime
         let (ptr, offset) = unsafe { (*self.arena).alloc_scope(width) }.ok_or_else(|| {
-            let required_size = width * std::mem::size_of::<Option<T>>();
+            let required_size = width * size_of::<Option<moor_var::Var>>();
             ArenaError::Exhausted {
                 requested: required_size,
                 available: unsafe { (*self.arena).remaining() },
@@ -324,7 +349,8 @@ impl<T> ArenaEnvironment<T> {
     }
 
     /// Get a reference to an item in a specific scope.
-    pub fn get(&self, scope_idx: usize, var_idx: usize) -> Option<&T> {
+    /// Returns None if the scope or variable index is out of bounds.
+    pub fn get(&self, scope_idx: usize, var_idx: usize) -> Option<&moor_var::Var> {
         let scope = self.scopes.get(scope_idx)?;
 
         if var_idx >= scope.width {
@@ -339,7 +365,13 @@ impl<T> ArenaEnvironment<T> {
     }
 
     /// Get a mutable reference to an item in a specific scope.
-    pub fn get_mut(&mut self, scope_idx: usize, var_idx: usize) -> Option<&mut Option<T>> {
+    /// Returns None if the scope or variable index is out of bounds.
+    #[allow(dead_code)]
+    pub fn get_mut(
+        &mut self,
+        scope_idx: usize,
+        var_idx: usize,
+    ) -> Option<&mut Option<moor_var::Var>> {
         let scope = self.scopes.get(scope_idx)?;
 
         if var_idx >= scope.width {
@@ -354,56 +386,52 @@ impl<T> ArenaEnvironment<T> {
     }
 
     /// Set an item in a specific scope.
-    pub fn set(&mut self, scope_idx: usize, var_idx: usize, value: T) -> Result<(), ArenaError> {
-        // Check bounds first before borrowing mutably
-        let scope = self.scopes.get(scope_idx).ok_or(ArenaError::ScopeOutOfBounds {
-            scope: scope_idx,
-            available: self.scopes.len(),
-        })?;
+    /// SAFETY: Caller must ensure scope_idx and var_idx are valid.
+    pub fn set(&mut self, scope_idx: usize, var_idx: usize, value: moor_var::Var) {
+        debug_assert!(scope_idx < self.scopes.len(), "scope index out of bounds");
+        debug_assert!(
+            var_idx < self.scopes[scope_idx].width,
+            "var index out of bounds"
+        );
 
-        if var_idx >= scope.width {
-            return Err(ArenaError::VarOutOfBounds {
-                scope: scope_idx,
-                var: var_idx,
-                width: scope.width,
-            });
+        let scope = &self.scopes[scope_idx];
+
+        // SAFETY: Caller guarantees indices are valid
+        unsafe {
+            let var_ptr = scope.ptr.as_ptr().add(var_idx);
+            *var_ptr = Some(value);
         }
-
-        // Now we can safely mutate
-        let slot = self.get_mut(scope_idx, var_idx).unwrap();
-        *slot = Some(value);
-        Ok(())
     }
 
     /// Get the number of scopes.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.scopes.len()
     }
 
     /// Check if there are no scopes.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.scopes.is_empty()
     }
 
     /// Get the width of a specific scope.
+    #[allow(dead_code)]
     pub fn scope_width(&self, scope_idx: usize) -> Option<usize> {
         self.scopes.get(scope_idx).map(|s| s.width)
     }
 
-    /// Iterate over all scopes, returning slices of Option<T> for each scope.
+    /// Iterate over all scopes, returning slices of Option<moor_var::Var> for each scope.
     /// Used for scanning variables during GC and other purposes.
-    pub fn iter_scopes(&self) -> impl Iterator<Item = &[Option<T>]> + '_ {
+    pub fn iter_scopes(&self) -> impl Iterator<Item = &[Option<moor_var::Var>]> + '_ {
         self.scopes.iter().map(|scope| {
             // SAFETY: The scope pointer is valid and points to `scope.width` elements
             unsafe { std::slice::from_raw_parts(scope.ptr.as_ptr(), scope.width) }
         })
     }
 
-    /// Convert the environment to Vec<Vec<Option<T>>> for serialization or other purposes.
-    pub fn to_vec(&self) -> Vec<Vec<Option<T>>>
-    where
-        T: Clone,
-    {
+    /// Convert the environment to Vec<Vec<Option<moor_var::Var>>> for serialization or other purposes.
+    pub fn to_vec(&self) -> Vec<Vec<Option<moor_var::Var>>> {
         let mut result = Vec::with_capacity(self.scopes.len());
 
         for scope in &self.scopes {
@@ -421,7 +449,7 @@ impl<T> ArenaEnvironment<T> {
     }
 }
 
-impl<T> Drop for ArenaEnvironment<T> {
+impl Drop for ArenaEnvironment {
     fn drop(&mut self) {
         // Pop all scopes to ensure values are properly dropped
         while !self.scopes.is_empty() {
@@ -431,26 +459,35 @@ impl<T> Drop for ArenaEnvironment<T> {
             }
         }
 
-        // Only drop the arena if we own it
+        // Only recycle or drop the arena if we own it
         if self.owns_arena {
             unsafe {
-                let _arena = Box::from_raw(self.arena);
-                // Arena will be dropped here
+                // Reset the arena to initial state for reuse
+                (*self.arena).reset_to(0);
+
+                let arena_box = Box::from_raw(self.arena);
+                // Try to recycle - if not recycled, will be dropped
+                try_return_to_pool(arena_box);
             }
         }
     }
 }
 
-impl<T: Clone> Clone for ArenaEnvironment<T> {
+impl Clone for ArenaEnvironment {
     fn clone(&self) -> Self {
-        // Create a new owned arena with the same size
         // SAFETY: arena pointer is guaranteed valid by VMExecState lifetime
         let arena_size = unsafe { (*self.arena).size() };
-        let mut new_env = Self {
-            arena: Box::into_raw(Box::new(
+
+        // Try to get a recycled arena from the thread-local pool
+        let arena_box = try_acquire_from_pool().unwrap_or_else(|| {
+            Box::new(
                 EnvironmentArena::with_size(arena_size)
-                    .expect("Failed to create arena during clone")
-            )),
+                    .expect("Failed to create arena during clone"),
+            )
+        });
+
+        let mut new_env = Self {
+            arena: Box::into_raw(arena_box),
             scopes: Vec::with_capacity(16),
             owns_arena: true, // Clone owns its own arena
         };
@@ -458,7 +495,8 @@ impl<T: Clone> Clone for ArenaEnvironment<T> {
         // Clone each scope and its contents
         for scope in &self.scopes {
             // Push a new scope with the same width
-            new_env.push_scope(scope.width)
+            new_env
+                .push_scope(scope.width)
                 .expect("Failed to push scope during clone");
 
             // Copy all the variables from the old scope to the new scope
@@ -466,8 +504,7 @@ impl<T: Clone> Clone for ArenaEnvironment<T> {
                 for i in 0..scope.width {
                     let old_ptr = scope.ptr.as_ptr().add(i);
                     if let Some(value) = &*old_ptr {
-                        new_env.set(new_env.scopes.len() - 1, i, value.clone())
-                            .expect("Failed to set value during clone");
+                        new_env.set(new_env.scopes.len() - 1, i, value.clone());
                     }
                 }
             }
@@ -477,22 +514,24 @@ impl<T: Clone> Clone for ArenaEnvironment<T> {
     }
 }
 
-impl<T> std::fmt::Debug for ArenaEnvironment<T> {
+impl std::fmt::Debug for ArenaEnvironment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // SAFETY: arena pointer is guaranteed valid by VMExecState lifetime
-        let (arena_size, arena_used) = unsafe {
-            ((*self.arena).size(), (*self.arena).current_offset())
-        };
+        let (arena_size, arena_used) =
+            unsafe { ((*self.arena).size(), (*self.arena).current_offset()) };
         f.debug_struct("ArenaEnvironment")
             .field("num_scopes", &self.scopes.len())
-            .field("scope_widths", &self.scopes.iter().map(|s| s.width).collect::<Vec<_>>())
+            .field(
+                "scope_widths",
+                &self.scopes.iter().map(|s| s.width).collect::<Vec<_>>(),
+            )
             .field("arena_size", &arena_size)
             .field("arena_used", &arena_used)
             .finish()
     }
 }
 
-impl<T: PartialEq + Clone> PartialEq for ArenaEnvironment<T> {
+impl PartialEq for ArenaEnvironment {
     fn eq(&self, other: &Self) -> bool {
         // Compare by converting to Vec - this is the simplest approach
         self.to_vec() == other.to_vec()
@@ -500,34 +539,16 @@ impl<T: PartialEq + Clone> PartialEq for ArenaEnvironment<T> {
 }
 
 // SAFETY: ArenaEnvironment can be sent between threads as long as the arena can be.
-unsafe impl<T: Send> Send for ArenaEnvironment<T> {}
+unsafe impl Send for ArenaEnvironment {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use moor_var::{Var, v_int};
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    /// Test type that counts how many times Drop is called
-    #[derive(Clone)]
-    struct DropCounter(Arc<AtomicUsize>);
-
-    impl DropCounter {
-        fn new(counter: Arc<AtomicUsize>) -> Self {
-            Self(counter)
-        }
-    }
-
-    impl Drop for DropCounter {
-        fn drop(&mut self) {
-            self.0.fetch_add(1, Ordering::SeqCst);
-        }
-    }
 
     #[test]
     fn test_arena_creation() {
-        let arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+        let arena = EnvironmentArena::new().expect("Failed to create arena");
         assert_eq!(arena.current_offset(), 0);
         assert_eq!(arena.size(), DEFAULT_ARENA_SIZE);
         assert_eq!(arena.remaining(), DEFAULT_ARENA_SIZE);
@@ -536,21 +557,21 @@ mod tests {
     #[test]
     fn test_arena_custom_size() {
         let size = 8192;
-        let arena = EnvironmentArena::<Var>::with_size(size).expect("Failed to create arena");
+        let arena = EnvironmentArena::with_size(size).expect("Failed to create arena");
         assert_eq!(arena.size(), size);
     }
 
     #[test]
     fn test_arena_size_alignment() {
         // Request a size that's not page-aligned
-        let arena = EnvironmentArena::<Var>::with_size(5000).expect("Failed to create arena");
+        let arena = EnvironmentArena::with_size(5000).expect("Failed to create arena");
         // Should be rounded up to next page boundary
         assert_eq!(arena.size(), 8192);
     }
 
     #[test]
     fn test_alloc_scope() {
-        let mut arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+        let mut arena = EnvironmentArena::new().expect("Failed to create arena");
 
         // Allocate space for 10 variables
         let result = arena.alloc_scope(10);
@@ -571,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_multiple_allocs() {
-        let mut arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+        let mut arena = EnvironmentArena::new().expect("Failed to create arena");
 
         // Allocate several scopes
         let (_, offset1) = arena.alloc_scope(5).unwrap();
@@ -585,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_vars() {
-        let mut arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+        let mut arena = EnvironmentArena::new().expect("Failed to create arena");
 
         let (ptr, _) = arena.alloc_scope(5).unwrap();
 
@@ -610,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_reset_to() {
-        let mut arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+        let mut arena = EnvironmentArena::new().expect("Failed to create arena");
 
         let (_, offset1) = arena.alloc_scope(10).unwrap();
         let _ = arena.alloc_scope(10).unwrap();
@@ -634,7 +655,7 @@ mod tests {
     #[test]
     fn test_arena_exhaustion() {
         // Create a small arena
-        let mut arena = EnvironmentArena::<Var>::with_size(PAGE_SIZE).expect("Failed to create arena");
+        let mut arena = EnvironmentArena::with_size(PAGE_SIZE).expect("Failed to create arena");
 
         // Allocate until we run out of space
         let mut allocations = 0;
@@ -646,27 +667,27 @@ mod tests {
         }
 
         assert!(allocations > 0);
-        assert!(arena.remaining() < 100 * std::mem::size_of::<Option<Var>>());
+        assert!(arena.remaining() < 100 * size_of::<Option<Var>>());
     }
 
     #[test]
     fn test_arena_alignment() {
-        let mut arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+        let mut arena = EnvironmentArena::new().expect("Failed to create arena");
 
         // Allocate an odd number of bytes to test alignment
         let (ptr1, _) = arena.alloc_scope(1).unwrap();
         let (ptr2, _) = arena.alloc_scope(1).unwrap();
 
         // Both pointers should be properly aligned
-        assert_eq!(ptr1.as_ptr() as usize % std::mem::align_of::<Option<Var>>(), 0);
-        assert_eq!(ptr2.as_ptr() as usize % std::mem::align_of::<Option<Var>>(), 0);
+        assert_eq!(ptr1.as_ptr() as usize % align_of::<Option<Var>>(), 0);
+        assert_eq!(ptr2.as_ptr() as usize % align_of::<Option<Var>>(), 0);
     }
 
     #[test]
     fn test_drop_cleanup() {
         // Create and drop an arena
         {
-            let _arena = EnvironmentArena::<Var>::new().expect("Failed to create arena");
+            let _arena = EnvironmentArena::new().expect("Failed to create arena");
             // Arena should be dropped here
         }
         // If we get here without crashing, munmap succeeded
@@ -676,7 +697,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_creation() {
-        let env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         assert_eq!(env.len(), 0);
         assert!(env.is_empty());
@@ -684,7 +705,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_push_scope() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(10).expect("Failed to push scope");
         assert_eq!(env.len(), 1);
@@ -693,7 +714,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_push_scope_exhaustion() {
-        let mut env = ArenaEnvironment::<Var>::new(PAGE_SIZE).expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new(PAGE_SIZE).expect("Failed to create arena");
 
         // Try to allocate until we get an exhaustion error
         let mut count = 0;
@@ -710,7 +731,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_multiple_scopes() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(5).expect("Failed to push scope");
         env.push_scope(10).expect("Failed to push scope");
@@ -724,7 +745,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_get_set() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(5).expect("Failed to push scope");
 
@@ -732,8 +753,8 @@ mod tests {
         assert_eq!(env.get(0, 0), None);
 
         // Set some values
-        env.set(0, 0, v_int(42)).expect("Failed to set");
-        env.set(0, 2, v_int(100)).expect("Failed to set");
+        env.set(0, 0, v_int(42));
+        env.set(0, 2, v_int(100));
 
         // Read them back
         assert_eq!(env.get(0, 0), Some(&v_int(42)));
@@ -743,15 +764,15 @@ mod tests {
 
     #[test]
     fn test_arena_env_multiple_scope_access() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(3).expect("Failed to push scope");
         env.push_scope(3).expect("Failed to push scope");
 
-        env.set(0, 0, v_int(1)).expect("Failed to set");
-        env.set(0, 1, v_int(2)).expect("Failed to set");
-        env.set(1, 0, v_int(10)).expect("Failed to set");
-        env.set(1, 2, v_int(12)).expect("Failed to set");
+        env.set(0, 0, v_int(1));
+        env.set(0, 1, v_int(2));
+        env.set(1, 0, v_int(10));
+        env.set(1, 2, v_int(12));
 
         assert_eq!(env.get(0, 0), Some(&v_int(1)));
         assert_eq!(env.get(0, 1), Some(&v_int(2)));
@@ -761,7 +782,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_pop_scope() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(5).expect("Failed to push scope");
         env.push_scope(3).expect("Failed to push scope");
@@ -780,7 +801,7 @@ mod tests {
 
     #[test]
     fn test_arena_env_bounds_checking() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(5).expect("Failed to push scope");
 
@@ -788,35 +809,28 @@ mod tests {
         assert_eq!(env.get(0, 10), None);
         assert_eq!(env.get(1, 0), None);
 
-        // Out of bounds access should return appropriate errors for set
-        match env.set(0, 10, v_int(42)) {
-            Err(ArenaError::VarOutOfBounds { scope: 0, var: 10, width: 5 }) => {},
-            other => panic!("Expected VarOutOfBounds error, got {:?}", other),
-        }
-
-        match env.set(1, 0, v_int(42)) {
-            Err(ArenaError::ScopeOutOfBounds { scope: 1, available: 1 }) => {},
-            other => panic!("Expected ScopeOutOfBounds error, got {:?}", other),
-        }
+        // Out of bounds access for set is UB - debug builds will catch it with debug_assert
+        // In release builds, the compiler trusts us. These tests are removed since we
+        // can't test UB safely.
     }
 
     #[test]
     fn test_arena_env_pop_empty_stack() {
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         // Popping from empty stack should return error
         match unsafe { env.pop_scope() } {
-            Err(ArenaError::EmptyScopeStack) => {},
-            other => panic!("Expected EmptyScopeStack error, got {:?}", other),
+            Err(ArenaError::EmptyScopeStack) => {}
+            other => panic!("Expected EmptyScopeStack error, got {other:?}"),
         }
     }
 
     #[test]
     fn test_arena_env_drop() {
         {
-            let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+            let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
             env.push_scope(10).expect("Failed to push scope");
-            env.set(0, 0, v_int(42)).expect("Failed to set");
+            env.set(0, 0, v_int(42));
             // env should be dropped here, cleaning up all scopes
         }
         // If we get here without crashing, drop succeeded
@@ -824,16 +838,16 @@ mod tests {
 
     #[test]
     fn test_arena_env_with_heap_allocated_vars() {
-        use moor_var::{v_str, v_list, v_string};
+        use moor_var::{v_list, v_str, v_string};
 
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(5).expect("Failed to push scope");
 
         // Store heap-allocated Vars that have Drop implementations
-        env.set(0, 0, v_string("hello world".to_string())).expect("Failed to set");
-        env.set(0, 1, v_str("test")).expect("Failed to set");
-        env.set(0, 2, v_list(&[v_int(1), v_int(2), v_int(3)])).expect("Failed to set");
+        env.set(0, 0, v_string("hello world".to_string()));
+        env.set(0, 1, v_str("test"));
+        env.set(0, 2, v_list(&[v_int(1), v_int(2), v_int(3)]));
 
         // Read them back to verify they're stored correctly
         let s0 = env.get(0, 0).expect("Should have value");
@@ -862,16 +876,16 @@ mod tests {
     fn test_arena_env_pop_drops_values() {
         use moor_var::v_string;
 
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         // Create multiple scopes with heap-allocated values
         env.push_scope(3).expect("Failed to push scope");
         env.push_scope(3).expect("Failed to push scope");
 
-        env.set(0, 0, v_string("scope 0 var 0".to_string())).expect("Failed to set");
-        env.set(0, 1, v_string("scope 0 var 1".to_string())).expect("Failed to set");
-        env.set(1, 0, v_string("scope 1 var 0".to_string())).expect("Failed to set");
-        env.set(1, 1, v_string("scope 1 var 1".to_string())).expect("Failed to set");
+        env.set(0, 0, v_string("scope 0 var 0".to_string()));
+        env.set(0, 1, v_string("scope 0 var 1".to_string()));
+        env.set(1, 0, v_string("scope 1 var 0".to_string()));
+        env.set(1, 1, v_string("scope 1 var 1".to_string()));
 
         // Pop inner scope - should drop scope 1's values
         unsafe {
@@ -896,7 +910,7 @@ mod tests {
         use moor_var::v_string;
 
         {
-            let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+            let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
             // Create multiple scopes without popping them
             env.push_scope(3).expect("Failed to push scope");
@@ -906,8 +920,7 @@ mod tests {
             // Fill with heap-allocated values
             for scope in 0..3 {
                 for var in 0..3 {
-                    env.set(scope, var, v_string(format!("s{}v{}", scope, var)))
-                        .expect("Failed to set");
+                    env.set(scope, var, v_string(format!("s{scope}v{var}")));
                 }
             }
 
@@ -921,15 +934,15 @@ mod tests {
     fn test_arena_env_overwrite_drops_old_value() {
         use moor_var::v_string;
 
-        let mut env = ArenaEnvironment::<Var>::new_default().expect("Failed to create arena");
+        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
 
         env.push_scope(3).expect("Failed to push scope");
 
         // Set a value
-        env.set(0, 0, v_string("first value".to_string())).expect("Failed to set");
+        env.set(0, 0, v_string("first value".to_string()));
 
         // Overwrite it - the old value should be dropped
-        env.set(0, 0, v_string("second value".to_string())).expect("Failed to set");
+        env.set(0, 0, v_string("second value".to_string()));
 
         // Verify the new value is there
         let v = env.get(0, 0).expect("Should have value");
@@ -944,138 +957,5 @@ mod tests {
         unsafe {
             env.pop_scope().expect("Failed to pop scope");
         }
-    }
-
-    // DropCounter tests - verify exact drop counts
-
-    #[test]
-    fn test_drop_counter_single_scope() {
-        let drop_count = Arc::new(AtomicUsize::new(0));
-        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
-
-        env.push_scope(3).expect("Failed to push scope");
-
-        // Store 3 DropCounters
-        env.set(0, 0, DropCounter::new(drop_count.clone())).expect("Failed to set");
-        env.set(0, 1, DropCounter::new(drop_count.clone())).expect("Failed to set");
-        env.set(0, 2, DropCounter::new(drop_count.clone())).expect("Failed to set");
-
-        // No drops yet
-        assert_eq!(drop_count.load(Ordering::SeqCst), 0);
-
-        // Pop scope - should drop all 3
-        unsafe {
-            env.pop_scope().expect("Failed to pop scope");
-        }
-
-        assert_eq!(drop_count.load(Ordering::SeqCst), 3);
-    }
-
-    #[test]
-    fn test_drop_counter_multiple_scopes() {
-        let drop_count = Arc::new(AtomicUsize::new(0));
-        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
-
-        // Create 3 scopes with 2 items each = 6 total
-        env.push_scope(2).expect("Failed to push scope");
-        env.push_scope(2).expect("Failed to push scope");
-        env.push_scope(2).expect("Failed to push scope");
-
-        for scope in 0..3 {
-            for var in 0..2 {
-                env.set(scope, var, DropCounter::new(drop_count.clone()))
-                    .expect("Failed to set");
-            }
-        }
-
-        assert_eq!(drop_count.load(Ordering::SeqCst), 0);
-
-        // Pop innermost scope - should drop 2
-        unsafe {
-            env.pop_scope().expect("Failed to pop scope");
-        }
-        assert_eq!(drop_count.load(Ordering::SeqCst), 2);
-
-        // Pop next scope - should drop 2 more (total 4)
-        unsafe {
-            env.pop_scope().expect("Failed to pop scope");
-        }
-        assert_eq!(drop_count.load(Ordering::SeqCst), 4);
-
-        // Pop last scope - should drop final 2 (total 6)
-        unsafe {
-            env.pop_scope().expect("Failed to pop scope");
-        }
-        assert_eq!(drop_count.load(Ordering::SeqCst), 6);
-    }
-
-    #[test]
-    fn test_drop_counter_final_drop() {
-        let drop_count = Arc::new(AtomicUsize::new(0));
-
-        {
-            let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
-
-            // Create scopes without popping
-            env.push_scope(3).expect("Failed to push scope");
-            env.push_scope(2).expect("Failed to push scope");
-
-            // 5 total items
-            env.set(0, 0, DropCounter::new(drop_count.clone())).expect("Failed to set");
-            env.set(0, 1, DropCounter::new(drop_count.clone())).expect("Failed to set");
-            env.set(0, 2, DropCounter::new(drop_count.clone())).expect("Failed to set");
-            env.set(1, 0, DropCounter::new(drop_count.clone())).expect("Failed to set");
-            env.set(1, 1, DropCounter::new(drop_count.clone())).expect("Failed to set");
-
-            assert_eq!(drop_count.load(Ordering::SeqCst), 0);
-            // env drops here
-        }
-
-        // All 5 should have been dropped by ArenaEnvironment::drop
-        assert_eq!(drop_count.load(Ordering::SeqCst), 5);
-    }
-
-    #[test]
-    fn test_drop_counter_overwrite() {
-        let drop_count = Arc::new(AtomicUsize::new(0));
-        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
-
-        env.push_scope(1).expect("Failed to push scope");
-
-        // Set a value
-        env.set(0, 0, DropCounter::new(drop_count.clone())).expect("Failed to set");
-        assert_eq!(drop_count.load(Ordering::SeqCst), 0);
-
-        // Overwrite - old value should be dropped
-        env.set(0, 0, DropCounter::new(drop_count.clone())).expect("Failed to set");
-        assert_eq!(drop_count.load(Ordering::SeqCst), 1);
-
-        // Clean up - should drop the remaining value
-        unsafe {
-            env.pop_scope().expect("Failed to pop scope");
-        }
-        assert_eq!(drop_count.load(Ordering::SeqCst), 2);
-    }
-
-    #[test]
-    fn test_drop_counter_sparse_scope() {
-        let drop_count = Arc::new(AtomicUsize::new(0));
-        let mut env = ArenaEnvironment::new_default().expect("Failed to create arena");
-
-        env.push_scope(10).expect("Failed to push scope");
-
-        // Only set some values (indices 0, 3, 7)
-        env.set(0, 0, DropCounter::new(drop_count.clone())).expect("Failed to set");
-        env.set(0, 3, DropCounter::new(drop_count.clone())).expect("Failed to set");
-        env.set(0, 7, DropCounter::new(drop_count.clone())).expect("Failed to set");
-
-        assert_eq!(drop_count.load(Ordering::SeqCst), 0);
-
-        // Pop should only drop the 3 set values, not crash on the Nones
-        unsafe {
-            env.pop_scope().expect("Failed to pop scope");
-        }
-
-        assert_eq!(drop_count.load(Ordering::SeqCst), 3);
     }
 }
