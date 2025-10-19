@@ -15,7 +15,7 @@ use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction_mut,
     vm::{
-        Fork, VerbCall,
+        Fork,
         activation::{Activation, Frame},
         builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters},
         exec_state::VMExecState,
@@ -63,8 +63,18 @@ pub struct VerbExecutionRequest {
     pub permissions: Obj,
     /// The resolved verb.
     pub resolved_verb: VerbDef,
-    /// The call parameters that were used to resolve the verb.
-    pub call: VerbCall,
+    /// Verb name
+    pub verb_name: Symbol,
+    /// This object
+    pub this: Var,
+    /// Player
+    pub player: Obj,
+    /// Arguments
+    pub args: List,
+    /// Caller
+    pub caller: Var,
+    /// Argument string
+    pub argstr: String,
     /// The decoded MOO Binary that contains the verb to be executed.
     pub program: ProgramType,
 }
@@ -158,17 +168,8 @@ impl VMExecState {
         verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
-        let call = VerbCall {
-            verb_name,
-            location: v_obj(location),
-            this,
-            player: self.top().player,
-            args,
-            // caller her is current-activation 'this', not activation caller() ...
-            // unless we're a builtin, in which case we're #-1.
-            argstr: "".to_string(),
-            caller: self.caller(),
-        };
+        let player = self.top().player;
+        let caller = self.caller();
 
         let self_valid = with_current_transaction_mut(|world_state| world_state.valid(&location))
             .expect("Error checking object validity");
@@ -209,7 +210,17 @@ impl VMExecState {
 
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
-        self.exec_call_request(permissions, resolved_verb, call, program);
+        self.exec_call_request(
+            permissions,
+            resolved_verb,
+            verb_name,
+            this,
+            player,
+            args,
+            caller,
+            "".to_string(),
+            program,
+        );
         ExecutionResult::More
     }
 
@@ -253,37 +264,54 @@ impl VMExecState {
         };
 
         let caller = self.caller();
-        let call = VerbCall {
-            verb_name: verb,
-            location: v_obj(parent),
-            this: self.top().this.clone(),
-            player: self.top().player,
-            args: args.iter().collect(),
-            argstr: "".to_string(),
-            caller,
-        };
+        let this = self.top().this.clone();
+        let player = self.top().player;
+        let args_list = args.iter().collect();
 
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions: *permissions,
             resolved_verb,
-            call,
+            verb_name: verb,
+            this,
+            player,
+            args: args_list,
+            caller,
+            argstr: "".to_string(),
             program,
         }))
     }
 
     /// Entry point from scheduler for beginning the dispatch of an initial command verb execution.
     /// This sets up the initial activation with parsing variables from the parsed command.
+    #[allow(clippy::too_many_arguments)]
     pub fn exec_command_request(
         &mut self,
         permissions: Obj,
         resolved_verb: VerbDef,
-        call: VerbCall,
+        verb_name: Symbol,
+        this: Var,
+        player: Obj,
+        args: List,
+        caller: Var,
+        argstr: String,
         command: &ParsedCommand,
         program: ProgramType,
     ) {
         // Initial command activation - no parent to inherit from
         let arena = self.arena_ptr();
-        let mut a = Activation::for_call(permissions, resolved_verb, call, None, program, arena);
+        let mut a = Activation::for_call(
+            permissions,
+            resolved_verb,
+            verb_name,
+            this,
+            player,
+            args,
+            caller,
+            argstr,
+            None,
+            program,
+            arena,
+        );
 
         // Set parsing variables from the parsed command
         a.frame
@@ -334,11 +362,17 @@ impl VMExecState {
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (verb-to-verb call) in this VM.
     /// Actually creates the activation record and puts it on the stack.
+    #[allow(clippy::too_many_arguments)]
     pub fn exec_call_request(
         &mut self,
         permissions: Obj,
         resolved_verb: VerbDef,
-        call: VerbCall,
+        verb_name: Symbol,
+        this: Var,
+        player: Obj,
+        args: List,
+        caller: Var,
+        argstr: String,
         program: ProgramType,
     ) {
         // Get arena first before borrowing self immutably
@@ -349,7 +383,12 @@ impl VMExecState {
         let a = Activation::for_call(
             permissions,
             resolved_verb,
-            call,
+            verb_name,
+            this,
+            player,
+            args,
+            caller,
+            argstr,
             current_activation,
             program,
             arena,
@@ -504,22 +543,21 @@ impl VMExecState {
         })
         .ok()?;
 
-        let call = VerbCall {
-            verb_name: bf_override_name,
-            location: v_obj(resolved_verb.location()),
-            this: v_obj(SYSTEM_OBJECT),
-            player: self.top().player,
-            args: args.iter().collect(),
-            argstr: "".to_string(),
-            caller: self.caller(),
-        };
+        let player = self.top().player;
+        let caller = self.caller();
+        let args_list = args.iter().collect();
 
         Some(ExecutionResult::DispatchVerb(Box::new(
             VerbExecutionRequest {
                 permissions: self.top().permissions,
                 resolved_verb,
+                verb_name: bf_override_name,
+                this: v_obj(SYSTEM_OBJECT),
+                player,
+                args: args_list,
+                caller,
+                argstr: "".to_string(),
                 program,
-                call,
             },
         )))
     }

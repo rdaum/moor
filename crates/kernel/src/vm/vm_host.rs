@@ -35,7 +35,7 @@ use crate::{
     vm::{
         FinallyReason, Fork, TaskSuspend, VMHostResponse,
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
-        VerbCall, VerbExecutionRequest,
+        VerbExecutionRequest,
         activation::Frame,
         builtins::BuiltinRegistry,
         exec_state::VMExecState,
@@ -163,32 +163,71 @@ impl VmHost {
 
 impl VmHost {
     /// Setup for executing a method initiated from a command.
+    #[allow(clippy::too_many_arguments)]
     pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
-        verb: (ProgramType, VerbDef),
-        verb_call: VerbCall,
+        resolved_verb: VerbDef,
+        verb_name: Symbol,
+        this: Var,
+        player: Obj,
+        args: List,
+        caller: Var,
+        argstr: String,
         command: ParsedCommand,
-        permissions: &Obj,
+        permissions: Obj,
+        program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
-        self.vm_exec_state
-            .exec_command_request(*permissions, verb.1, verb_call, &command, verb.0);
+        self.vm_exec_state.exec_command_request(
+            permissions,
+            resolved_verb,
+            verb_name,
+            this,
+            player,
+            args,
+            caller,
+            argstr,
+            &command,
+            program,
+        );
         self.running = true;
     }
 
     /// Setup for executing a method call in this VM.
+    #[allow(clippy::too_many_arguments)]
     pub fn start_call_method_verb(
         &mut self,
         task_id: TaskId,
-        perms: &Obj,
-        verb_info: (ProgramType, VerbDef),
-        verb_call: VerbCall,
+        perms: Obj,
+        resolved_verb: VerbDef,
+        verb_name: Symbol,
+        this: Var,
+        player: Obj,
+        args: List,
+        caller: Var,
+        argstr: String,
+        program: ProgramType,
     ) {
-        self.start_execution(task_id, *perms, verb_info.1, verb_call, verb_info.0)
+        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.maximum_time = Some(self.max_time);
+        self.vm_exec_state.tick_count = 0;
+        self.vm_exec_state.task_id = task_id;
+        self.vm_exec_state.exec_call_request(
+            perms,
+            resolved_verb,
+            verb_name,
+            this,
+            player,
+            args,
+            caller,
+            argstr,
+            program,
+        );
+        self.running = true;
     }
 
     /// Start execution of a fork request in the hosted VM.
@@ -199,24 +238,6 @@ impl VmHost {
         self.vm_exec_state.task_id = task_id;
         self.vm_exec_state.exec_fork_vector(fork_request.clone());
         self.running = !suspended;
-    }
-
-    /// Start execution of a verb request.
-    pub fn start_execution(
-        &mut self,
-        task_id: TaskId,
-        permissions: Obj,
-        resolved_verb: VerbDef,
-        call: VerbCall,
-        program: ProgramType,
-    ) {
-        self.vm_exec_state.start_time = Some(SystemTime::now());
-        self.vm_exec_state.maximum_time = Some(self.max_time);
-        self.vm_exec_state.tick_count = 0;
-        self.vm_exec_state.task_id = task_id;
-        self.vm_exec_state
-            .exec_call_request(permissions, resolved_verb, call, program);
-        self.running = true;
     }
 
     /// Start execution of an eval request.
@@ -321,7 +342,12 @@ impl VmHost {
                     self.vm_exec_state.exec_call_request(
                         exec_request.permissions,
                         exec_request.resolved_verb,
-                        exec_request.call,
+                        exec_request.verb_name,
+                        exec_request.this,
+                        exec_request.player,
+                        exec_request.args,
+                        exec_request.caller,
+                        exec_request.argstr,
                         exec_request.program,
                     );
                     return ContinueOk;

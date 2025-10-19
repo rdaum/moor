@@ -16,7 +16,7 @@ use std::time::Duration;
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
-use moor_var::{List, Obj, Symbol, Var, program::names::Name};
+use moor_var::{Obj, Symbol, Var, program::names::Name};
 
 use crate::vm::{
     activation::{Activation, Frame},
@@ -98,18 +98,6 @@ pub enum TaskSuspend {
     /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
     /// the work is done.
     WorkerRequest(Symbol, Vec<Var>, Option<Duration>),
-}
-
-/// The minimum set of information needed to make a *resolution* call for a verb.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VerbCall {
-    pub verb_name: Symbol,
-    pub location: Var,
-    pub this: Var,
-    pub player: Obj,
-    pub args: List,
-    pub argstr: String,
-    pub caller: Var,
 }
 
 /// Extract anonymous object references from a variable
@@ -338,13 +326,5 @@ mod tests {
         println!(
             "\nSo List::clone has malloc overhead from Box, but structural sharing from im::Vector"
         );
-    }
-
-    #[test]
-    fn test_verbcall_size() {
-        use crate::vm::VerbCall;
-
-        println!("Size of VerbCall: {}", size_of::<VerbCall>());
-        println!("Size of Box<VerbCall>: {}", size_of::<Box<VerbCall>>());
     }
 }

@@ -30,7 +30,7 @@ use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::{
     config::FeaturesConfig,
     testing::vm_test_utils::setup_task_context,
-    vm::{VMHostResponse, VerbCall, builtins::BuiltinRegistry, vm_host::VmHost},
+    vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
 use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, program::ProgramType, v_obj};
 
@@ -64,17 +64,15 @@ pub fn prepare_call_verb(
         .unwrap();
     vm_host.start_call_method_verb(
         0,
-        &SYSTEM_OBJECT,
-        (program, verbdef),
-        VerbCall {
-            verb_name,
-            location: v_obj(SYSTEM_OBJECT),
-            this: v_obj(SYSTEM_OBJECT),
-            player: SYSTEM_OBJECT,
-            args,
-            argstr: "".to_string(),
-            caller: v_obj(SYSTEM_OBJECT),
-        },
+        SYSTEM_OBJECT,
+        verbdef,
+        verb_name,
+        v_obj(SYSTEM_OBJECT),
+        SYSTEM_OBJECT,
+        args,
+        v_obj(SYSTEM_OBJECT),
+        "".to_string(),
+        program,
     );
     vm_host
 }

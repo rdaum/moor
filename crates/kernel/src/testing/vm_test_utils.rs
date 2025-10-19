@@ -23,7 +23,7 @@ use crate::{
     config::FeaturesConfig,
     task_context::TaskGuard,
     tasks::task_scheduler_client::TaskSchedulerClient,
-    vm::{VMHostResponse, VerbCall, builtins::BuiltinRegistry, vm_host::VmHost},
+    vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
 
 use moor_common::tasks::{Exception, Session};
@@ -177,17 +177,15 @@ pub fn call_verb(
     execute(world_state, session, builtins, |vm_host| {
         vm_host.start_call_method_verb(
             0,
-            &SYSTEM_OBJECT,
-            (program, verbdef),
-            VerbCall {
-                verb_name,
-                location: v_obj(SYSTEM_OBJECT),
-                this: v_obj(SYSTEM_OBJECT),
-                player: SYSTEM_OBJECT,
-                args,
-                argstr: "".to_string(),
-                caller: v_obj(SYSTEM_OBJECT),
-            },
+            SYSTEM_OBJECT,
+            verbdef,
+            verb_name,
+            v_obj(SYSTEM_OBJECT),
+            SYSTEM_OBJECT,
+            args,
+            v_obj(SYSTEM_OBJECT),
+            "".to_string(),
+            program,
         );
     })
 }

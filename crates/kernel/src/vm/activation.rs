@@ -24,7 +24,7 @@ use moor_var::{
     v_list, v_obj, v_str, v_string,
 };
 
-use crate::vm::{VerbCall, moo_frame::MooStackFrame, scatter_assign::scatter_assign};
+use crate::vm::{moo_frame::MooStackFrame, scatter_assign::scatter_assign};
 use moor_var::program::{
     ProgramType,
     names::{GlobalName, Name},
@@ -201,12 +201,17 @@ impl Activation {
         matches!(self.frame, Frame::Bf(_))
     }
 
-    #[allow(irrefutable_let_patterns)] // We know this
-    // is a Moo frame. We're just making room
+    #[allow(irrefutable_let_patterns)] // We know this is a Moo frame
+    #[allow(clippy::too_many_arguments)]
     pub fn for_call(
         _permissions: Obj,
         resolved_verb: VerbDef,
-        call: VerbCall,
+        verb_name: Symbol,
+        this: Var,
+        player: Obj,
+        args: List,
+        caller: Var,
+        argstr: String,
         current_activation: Option<&Activation>,
         program: ProgramType,
         arena: *mut crate::vm::environment_arena::VarArena,
@@ -217,34 +222,25 @@ impl Activation {
             unimplemented!("Only MOO programs are supported")
         };
 
-        // Move fields directly out of call (we own it, no cloning needed!)
-        // We'll clone only when we need the value in both the frame AND the Activation struct
-        let this = call.this;
-        let args = call.args;
-        let caller = call.caller;
-
         let moo_frame = MooStackFrame::new(program, arena);
         let mut frame = Frame::Moo(moo_frame);
         frame.init_global_variable(GlobalName::this, this.clone());
-        frame.init_global_variable(GlobalName::player, v_obj(call.player));
+        frame.init_global_variable(GlobalName::player, v_obj(player));
         frame.init_global_variable(GlobalName::caller, caller);
-        frame.init_global_variable(
-            GlobalName::verb,
-            v_arc_string(call.verb_name.as_arc_string()),
-        );
+        frame.init_global_variable(GlobalName::verb, v_arc_string(verb_name.as_arc_string()));
         frame.init_global_variable(GlobalName::args, args.clone().into());
 
         // Inherit parsing variables from the current activation, if any
         // This maintains LambdaMOO-compatible behavior where parsing variables persist across verb calls
         if let Some(current_activation) = current_activation {
             // Copy parsing variables from the calling activation
-            if let Some(argstr) = current_activation
+            if let Some(argstr_var) = current_activation
                 .frame
                 .get_global_variable(GlobalName::argstr)
             {
-                frame.init_global_variable(GlobalName::argstr, argstr.clone());
+                frame.init_global_variable(GlobalName::argstr, argstr_var.clone());
             } else {
-                frame.init_global_variable(GlobalName::argstr, v_string(call.argstr));
+                frame.init_global_variable(GlobalName::argstr, v_string(argstr.clone()));
             }
 
             if let Some(dobj) = current_activation
@@ -293,7 +289,7 @@ impl Activation {
             }
         } else {
             // No current activation, use defaults (this happens for initial command activation)
-            frame.init_global_variable(GlobalName::argstr, v_string(call.argstr));
+            frame.init_global_variable(GlobalName::argstr, v_string(argstr));
             frame.init_global_variable(GlobalName::dobj, v_obj(NOTHING));
             frame.init_global_variable(GlobalName::dobjstr, v_str(""));
             frame.init_global_variable(GlobalName::prepstr, v_str(""));
@@ -304,9 +300,9 @@ impl Activation {
         Self {
             frame,
             this,
-            player: call.player,
+            player,
             verbdef: resolved_verb,
-            verb_name: call.verb_name,
+            verb_name,
             args,
             permissions: verb_owner,
         }

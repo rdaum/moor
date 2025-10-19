@@ -62,7 +62,7 @@ use crate::{
         task_scheduler_client::{TaskControlMsg, TaskSchedulerClient},
     },
     vm::{
-        TaskSuspend, VMHostResponse, VerbCall, builtins::BuiltinRegistry, exec_state::VMExecState,
+        TaskSuspend, VMHostResponse, builtins::BuiltinRegistry, exec_state::VMExecState,
         vm_host::VmHost,
     },
 };
@@ -536,22 +536,18 @@ impl Task {
                             formatted.clone().into(),
                         ]);
 
-                        let verb_call = VerbCall {
-                            verb_name: *HANDLE_UNCAUGHT_ERROR_SYM,
-                            location: v_obj(SYSTEM_OBJECT),
-                            this: v_obj(SYSTEM_OBJECT),
-                            player: self.player,
-                            args,
-                            argstr: String::new(),
-                            caller: v_obj(self.player),
-                        };
-
                         // Start the handler verb
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            &self.perms,
-                            (program, verbdef),
-                            verb_call,
+                            self.perms,
+                            verbdef,
+                            *HANDLE_UNCAUGHT_ERROR_SYM,
+                            v_obj(SYSTEM_OBJECT),
+                            self.player,
+                            args,
+                            v_obj(self.player),
+                            String::new(),
+                            program,
                         );
 
                         // Continue execution in the handler
@@ -646,22 +642,18 @@ impl Task {
                         let args =
                             List::from_iter(vec![resource, traceback.into(), formatted.into()]);
 
-                        let verb_call = VerbCall {
-                            verb_name: *HANDLE_TASK_TIMEOUT_SYM,
-                            location: v_obj(SYSTEM_OBJECT),
-                            this: v_obj(SYSTEM_OBJECT),
-                            player: self.player,
-                            args,
-                            argstr: String::new(),
-                            caller: v_obj(self.player),
-                        };
-
                         // Start the handler verb
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            &self.perms,
-                            (program, verbdef),
-                            verb_call,
+                            self.perms,
+                            verbdef,
+                            *HANDLE_TASK_TIMEOUT_SYM,
+                            v_obj(SYSTEM_OBJECT),
+                            self.player,
+                            args,
+                            v_obj(self.player),
+                            String::new(),
+                            program,
                         );
 
                         // Continue execution in the handler
@@ -730,64 +722,58 @@ impl Task {
                 args,
                 argstr,
             } => {
-                let verb_call = VerbCall {
-                    verb_name: *verb,
-                    location: vloc.clone(),
-                    this: vloc.clone(),
-                    player: *player,
-                    args: args.clone(),
-                    argstr: argstr.clone(),
-                    caller: v_obj(NOTHING),
-                };
+                let verb_name = *verb;
+                let this = vloc.clone();
+                let player = *player;
+                let args_val = args.clone();
+                let argstr_val = argstr.clone();
+                let caller = v_obj(NOTHING);
+
                 // Find the callable verb ...
                 // Obj or flyweight?
-                let object_location = match &verb_call.this.variant() {
+                let object_location = match &this.variant() {
                     Variant::Flyweight(f) => *f.delegate(),
                     Variant::Obj(o) => *o,
                     _ => {
                         control_sender
                             .send((
                                 self.task_id,
-                                TaskControlMsg::TaskVerbNotFound(
-                                    verb_call.this,
-                                    verb_call.verb_name,
-                                ),
+                                TaskControlMsg::TaskVerbNotFound(this, verb_name),
                             ))
                             .expect("Could not send start response");
                         return false;
                     }
                 };
                 match with_current_transaction(|world_state| {
-                    world_state.find_method_verb_on(
-                        &self.perms,
-                        &object_location,
-                        verb_call.verb_name,
-                    )
+                    world_state.find_method_verb_on(&self.perms, &object_location, verb_name)
                 }) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         control_sender
                             .send((
                                 self.task_id,
-                                TaskControlMsg::TaskVerbNotFound(
-                                    verb_call.this,
-                                    verb_call.verb_name,
-                                ),
+                                TaskControlMsg::TaskVerbNotFound(this, verb_name),
                             ))
                             .expect("Could not send start response");
                         return false;
                     }
                     Err(e) => {
-                        error!(task_id = ?self.task_id, this = ?verb_call.this,
-                               verb = ?verb_call.verb_name,
+                        error!(task_id = ?self.task_id, this = ?this,
+                               verb = ?verb_name,
                                "World state error while resolving verb: {:?}", e);
                         panic!("Could not resolve verb: {e:?}");
                     }
                     Ok((program, verbdef)) => {
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            &self.perms,
-                            (program, verbdef),
-                            verb_call,
+                            self.perms,
+                            verbdef,
+                            verb_name,
+                            this,
+                            player,
+                            args_val,
+                            caller,
+                            argstr_val,
+                            program,
                         );
                     }
                 }
@@ -845,20 +831,17 @@ impl Task {
             Ok((program, verbdef)) => {
                 let arguments = parse_into_words(command);
                 let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
-                let verb_call = VerbCall {
-                    verb_name: *DO_COMMAND_SYM,
-                    location: v_obj(*handler_object),
-                    this: v_obj(*handler_object),
-                    player: *player,
-                    args,
-                    argstr: command.to_string(),
-                    caller: v_obj(*handler_object),
-                };
                 self.vm_host.start_call_method_verb(
                     self.task_id,
-                    &self.perms,
-                    (program, verbdef),
-                    verb_call,
+                    self.perms,
+                    verbdef,
+                    *DO_COMMAND_SYM,
+                    v_obj(*handler_object),
+                    *player,
+                    args,
+                    v_obj(*handler_object),
+                    command.to_string(),
+                    program,
                 );
                 self.task_start = TaskStart::StartDoCommand {
                     handler_object: *handler_object,
@@ -937,22 +920,19 @@ impl Task {
                 ((program, verbdef), player_location)
             }
         };
-        let verb_call = VerbCall {
-            verb_name: parsed_command.verb,
-            location: v_obj(target),
-            this: v_obj(target),
-            player: *player,
-            args: List::mk_list(&parsed_command.args),
-            argstr: parsed_command.argstr.clone(),
-            caller: v_obj(*player),
-        };
         let verb_owner = verbdef.owner();
         self.vm_host.start_call_command_verb(
             self.task_id,
-            (program, verbdef),
-            verb_call,
+            verbdef,
+            parsed_command.verb,
+            v_obj(target),
+            *player,
+            List::mk_list(&parsed_command.args),
+            v_obj(*player),
+            parsed_command.argstr.clone(),
             parsed_command,
-            &verb_owner,
+            verb_owner,
+            program,
         );
         Ok(())
     }
