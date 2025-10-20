@@ -20,7 +20,6 @@
 use clap::Parser;
 use clap_derive::Parser;
 use futures::{StreamExt, stream::FuturesUnordered};
-use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_common::{
     model::{
         CommitResult, ObjAttrs, ObjFlag, ObjectKind, ObjectRef, PropFlag, VerbArgsSpec, VerbFlag,
@@ -34,6 +33,7 @@ use moor_kernel::{
     config::{Config, FeaturesConfig, RuntimeConfig},
     tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
 };
+use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_obj};
 use std::{
     path::PathBuf,

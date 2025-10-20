@@ -33,16 +33,18 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Strings
 
-| Name                                | Complete | Notes                                                                                                |
-|-------------------------------------|----------|------------------------------------------------------------------------------------------------------|
-| [`tostr`](strings.md#tostr)         | &check;  |                                                                                                      |
-| [`toliteral`](strings.md#toliteral) | &check;  |                                                                                                      |
-| [`crypt`](crypto.md#crypt)          | &check;  | Pretty damned insecure, only here to support existing core password functions.                       |
-| [`index`](strings.md#index)         | &check;  |                                                                                                      |
-| [`rindex`](strings.md#rindex)       | &check;  |                                                                                                      |
-| [`strcmp`](strings.md#strcmp)       | &check;  |                                                                                                      |
-| [`strsub`](strings.md#strsub)       | &check;  |                                                                                                      |
-| [`salt`](crypto.md#salt)            | &check;  | Generate a random crypto-secure salt for password. Not compatible with toast's function of same name |
+| Name                                            | Complete | Notes                                                                                                |
+|-------------------------------------------------|----------|------------------------------------------------------------------------------------------------------|
+| [`tostr`](strings.md#tostr)                     | &check;  |                                                                                                      |
+| [`toliteral`](strings.md#toliteral)             | &check;  |                                                                                                      |
+| [`crypt`](crypto.md#crypt)                      | &check;  | Pretty damned insecure, only here to support existing core password functions.                       |
+| [`index`](strings.md#index)                     | &check;  |                                                                                                      |
+| [`rindex`](strings.md#rindex)                   | &check;  |                                                                                                      |
+| [`strcmp`](strings.md#strcmp)                   | &check;  |                                                                                                      |
+| [`strsub`](strings.md#strsub)                   | &check;  |                                                                                                      |
+| [`salt`](crypto.md#salt)                        | &check;  | Generate a random crypto-secure salt for password. Not compatible with toast's function of same name |
+| [`binary_to_str`](strings.md#binary_to_str)     | &check;  |                                                                                                      |
+| [`binary_from_str`](strings.md#binary_from_str) | &check;  |                                                                                                      |
 
 ### Numbers
 
@@ -194,7 +196,7 @@ outbound connections.
 
 | Name                                                           | Complete | Notes                                                                                                                                         |
 |----------------------------------------------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| [`set_connection_option`](server.md#set_connection_option)     | &check;  | Supports binary, hold-input, disable-oob, client-echo, flush-command options. See [networking](../networking.md) for details.                |
+| [`set_connection_option`](server.md#set_connection_option)     | &check;  | Supports binary, hold-input, disable-oob, client-echo, flush-command options. See [networking](../networking.md) for details.                 |
 | [`connection_option`](server.md#connection_option)             | &check;  | Works only for connections, not player objects, since moor has multiple connections per player. `connections(player)` returns all connections |
 | [`connection_options`](server.md#connection_options)           | &check;  | Works only for connections, not player objects, since moor has multiple connections per player. `connections(player)` returns all connections |
 | [`open_network_connection`](server.md#open_network_connection) |          | Not planned - use worker system instead                                                                                                       |
@@ -242,10 +244,10 @@ Functions not part of the original LambdaMOO, but added in moor
 
 ### Import/Export of Objects
 
-| Name                                                                      | Description                                                                                        | Notes
-|---------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|-------------------|
-| [`load_object`](../../the-system/object-packaging.md#load_object)         | Load an object from objdef format with optional conflict detection and resolution options.         | Wiz only          |
-| [`dump_object`](../../the-system/object-packaging.md#dump_object)         | Takes an object and returns a list of strings representing the object definition in objdef format. | Wiz or owner only |
+| Name                                                              | Description                                                                                        | Notes             
+|-------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|-------------------|
+| [`load_object`](../../the-system/object-packaging.md#load_object) | Load an object from objdef format with optional conflict detection and resolution options.         | Wiz only          |
+| [`dump_object`](../../the-system/object-packaging.md#dump_object) | Takes an object and returns a list of strings representing the object definition in objdef format. | Wiz or owner only |
 
 ### Flyweights & Symbols (new types)
 

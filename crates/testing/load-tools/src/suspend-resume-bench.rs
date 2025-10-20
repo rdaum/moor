@@ -221,10 +221,7 @@ async fn main() -> Result<(), eyre::Error> {
         "Completed {} tasks ({} total cycles)",
         completed, total_cycles
     );
-    info!(
-        "Total wall-clock time: {:.3} seconds",
-        elapsed_secs
-    );
+    info!("Total wall-clock time: {:.3} seconds", elapsed_secs);
     info!("Latency per cycle: {} μs", latency_micros);
     info!("Throughput: {:.0} suspends/sec", throughput_per_sec);
     info!("========================");

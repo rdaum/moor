@@ -977,10 +977,7 @@ pub fn op_bench_with_factory<T: BenchContext>(
         println!("   Note: Performance counters not available on this platform");
     }
 
-    let mut table = TableFormatter::new(
-        vec![],
-        vec![23, 23, 23],
-    );
+    let mut table = TableFormatter::new(vec![], vec![23, 23, 23]);
 
     table.add_row(vec![
         &format!("Ops: {}", results.iterations),

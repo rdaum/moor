@@ -139,3 +139,34 @@ URL-safe version.
 encode_base64(b"AAEC")      ⇒    "AAEC"
 ```
 
+### `binary_to_str`
+
+`str binary_to_str(binary data [, bool allow_lossy])`
+
+Converts binary data to a string.
+
+By default (`allow_lossy` is false or not provided), the binary data must be valid UTF-8. If the data contains invalid UTF-8 sequences, `E_INVARG` is raised.
+
+If `allow_lossy` is true, invalid UTF-8 sequences are replaced with the Unicode replacement character (U+FFFD, displayed as '?'), allowing the conversion to succeed.
+
+```
+binary_to_str(b"Hello")                    ⇒    "Hello"
+binary_to_str(b"\xF0\x9F\xA6\x80")         ⇒    "🦀"
+binary_to_str(b"\xFF\xFE\xFD", 0)          ⇒    E_INVARG
+binary_to_str(b"\xFF\xFE\xFD", 1)          ⇒    "???"
+```
+
+### `binary_from_str`
+
+`binary binary_from_str(str text)`
+
+Converts a string to binary data.
+
+This function encodes the string as UTF-8 bytes. All valid strings can be converted.
+
+```
+binary_from_str("Hello")        ⇒    b"Hello"
+binary_from_str("🦀")           ⇒    b"\xF0\x9F\xA6\x80"
+binary_from_str("")             ⇒    b""
+```
+

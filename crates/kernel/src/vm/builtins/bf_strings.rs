@@ -19,7 +19,7 @@ use argon2::{
 use base64::{Engine, engine::general_purpose};
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_int, v_str, v_string};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_str, v_string};
 use rand::{Rng, distributions::Alphanumeric, thread_rng};
 use tracing::warn;
 
@@ -454,6 +454,56 @@ fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `str binary_to_str(binary data [, bool allow_lossy])`
+/// Converts binary data to a string.
+/// If allow_lossy is false (default), returns E_INVARG on invalid UTF-8.
+/// If allow_lossy is true, uses replacement character for invalid sequences.
+fn bf_binary_to_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(binary) = bf_args.args[0].as_binary() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let allow_lossy = if bf_args.args.len() == 2 {
+        bf_args.args[1].is_true()
+    } else {
+        false
+    };
+
+    let result = if allow_lossy {
+        String::from_utf8_lossy(binary.as_bytes()).to_string()
+    } else {
+        match String::from_utf8(binary.as_bytes().to_vec()) {
+            Ok(s) => s,
+            Err(e) => {
+                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                    format!("Cannot convert to string: {}", e.to_string())
+                })));
+            }
+        }
+    };
+
+    Ok(Ret(v_string(result)))
+}
+
+/// MOO: `binary binary_from_str(str text)`
+/// Converts a string to binary data.
+fn bf_binary_from_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let binary_data = text.as_bytes().to_vec();
+    Ok(Ret(v_binary(binary_data)))
+}
+
 pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("strsub")] = Box::new(bf_strsub);
     builtins[offset_for_builtin("index")] = Box::new(bf_index);
@@ -468,6 +518,8 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
     builtins[offset_for_builtin("encode_base64")] = Box::new(bf_encode_base64);
     builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);
+    builtins[offset_for_builtin("binary_to_str")] = Box::new(bf_binary_to_str);
+    builtins[offset_for_builtin("binary_from_str")] = Box::new(bf_binary_from_str);
 }
 
 #[cfg(test)]

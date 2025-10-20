@@ -7,14 +7,14 @@ use moor_common::{
     tasks::{AbortLimitReason, NoopClientSession, Session},
     util::BitEnum,
 };
-use moor_compiler::{compile, CompileOptions};
+use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::{
     config::FeaturesConfig,
     testing::vm_test_utils::setup_task_context,
-    vm::{builtins::BuiltinRegistry, vm_host::VmHost, VMHostResponse},
+    vm::{VMHostResponse, builtins::BuiltinRegistry, vm_host::VmHost},
 };
-use moor_var::{v_obj, List, Symbol, NOTHING, SYSTEM_OBJECT};
+use moor_var::{List, NOTHING, SYSTEM_OBJECT, Symbol, v_obj};
 use std::{sync::Arc, time::Duration};
 
 const MAX_TICKS: usize = 100_000_000;
@@ -187,12 +187,12 @@ fn dispatch_comparison(ctx: &mut DispatchContext, _chunk_size: usize, _chunk_num
 }
 
 pub fn main() {
-    use moor_bench_utils::{op_bench_with_factory, generate_session_summary};
+    use moor_bench_utils::{generate_session_summary, op_bench_with_factory};
     use std::env;
 
     #[cfg(target_os = "linux")]
     {
-        use moor_bench_utils::perf_event::{events::Hardware, Builder};
+        use moor_bench_utils::perf_event::{Builder, events::Hardware};
         if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
             eprintln!(
                 "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
@@ -222,9 +222,7 @@ pub fn main() {
     op_bench_with_factory(
         "dispatch_constant_discard",
         "dispatch",
-        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| {
-            dispatch_constant_discard(ctx, 1, 0)
-        },
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_constant_discard(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1; endwhile"),
     );
 
@@ -232,9 +230,7 @@ pub fn main() {
     op_bench_with_factory(
         "dispatch_push_pop",
         "dispatch",
-        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| {
-            dispatch_push_pop(ctx, 1, 0)
-        },
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_push_pop(ctx, 1, 0),
         &|| DispatchContext::with_program("i=0; while(1) i; endwhile"),
     );
 
@@ -242,9 +238,7 @@ pub fn main() {
     op_bench_with_factory(
         "dispatch_simple_add",
         "dispatch",
-        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| {
-            dispatch_simple_add(ctx, 1, 0)
-        },
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_simple_add(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1 + 1; endwhile"),
     );
 
@@ -252,9 +246,7 @@ pub fn main() {
     op_bench_with_factory(
         "dispatch_comparison",
         "dispatch",
-        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| {
-            dispatch_comparison(ctx, 1, 0)
-        },
+        |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_comparison(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1 == 1; endwhile"),
     );
 

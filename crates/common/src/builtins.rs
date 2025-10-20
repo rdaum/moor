@@ -625,6 +625,8 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("is_uuobjid", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin("objects", Q(0), Q(0), vec![], true),
         mk_builtin("flush_caches", Q(0), Q(0), vec![], true),
+        mk_builtin("binary_to_str", Q(1), Q(2), vec![Any, Any], true),
+        mk_builtin("binary_from_str", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
     ]
 }
 

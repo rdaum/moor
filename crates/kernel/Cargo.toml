@@ -21,8 +21,8 @@ moor-db = { path = "../db" }
 tempfile.workspace = true
 
 criterion.workspace = true
-moor-bench-utils = { path = "../testing/bench-utils" }
 eyre.workspace = true
+moor-bench-utils = { path = "../testing/bench-utils" }
 pretty_assertions.workspace = true
 similar.workspace = true
 similar-asserts.workspace = true

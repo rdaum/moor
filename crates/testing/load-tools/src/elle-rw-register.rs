@@ -153,9 +153,7 @@ fn workload_thread(
     }
 
     if skipped_ops > 0 {
-        eprintln!(
-            "Thread {process_id} skipped {skipped_ops} operations due to retry limit"
-        );
+        eprintln!("Thread {process_id} skipped {skipped_ops} operations due to retry limit");
     }
 
     println!(
