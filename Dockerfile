@@ -2,7 +2,7 @@
 # TARGETARCH is automatically set by Docker BuildKit to the builder's native architecture
 # TARGET_ARCH defaults to native, but can be overridden for cross-compilation: --build-arg TARGET_ARCH=arm64
 ARG TARGETARCH
-ARG TARGET_ARCH=${TARGETARCH}
+ARG TARGET_ARCH=${TARGETARCH:-amd64}
 
 # Multi-stage build: Frontend build stage
 FROM node:20-bookworm AS frontend-build
@@ -50,7 +50,6 @@ COPY ./crates ./crates
 COPY ./tools ./tools
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
-COPY ./.cargo ./.cargo
 
 # We bring this over so we can get the git hash via shadow-rs. A bit bloated, but oh well.
 COPY ./.git ./.git
