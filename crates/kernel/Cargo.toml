@@ -21,6 +21,7 @@ moor-db = { path = "../db" }
 tempfile.workspace = true
 
 criterion.workspace = true
+moor-bench-utils = { path = "../testing/bench-utils" }
 eyre.workspace = true
 pretty_assertions.workspace = true
 similar.workspace = true
@@ -46,6 +47,10 @@ path = "testsuite/moot_suite.rs"
 
 [[bench]]
 name = "vm_benches"
+harness = false
+
+[[bench]]
+name = "vm_micro_benches"
 harness = false
 
 [dependencies]

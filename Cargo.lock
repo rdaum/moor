@@ -3057,6 +3057,7 @@ dependencies = [
  "libc",
  "md-5 0.10.6",
  "minstant",
+ "moor-bench-utils",
  "moor-common",
  "moor-compiler",
  "moor-db",

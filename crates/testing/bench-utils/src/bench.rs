@@ -77,9 +77,13 @@ pub struct BenchmarkConfig {
 #[cfg(target_os = "linux")]
 pub struct PerfCounters {
     pub instructions_counter: perf_event::Counter,
+    pub cycles_counter: perf_event::Counter,
     pub branch_counter: perf_event::Counter,
     pub branch_misses: perf_event::Counter,
     pub cache_misses: perf_event::Counter,
+    pub l1i_misses: perf_event::Counter,
+    pub stalled_frontend: perf_event::Counter,
+    pub stalled_backend: perf_event::Counter,
     pub start_time: Option<minstant::Instant>,
 }
 
@@ -95,9 +99,13 @@ impl PerfCounters {
     pub fn new() -> Self {
         PerfCounters {
             instructions_counter: Builder::new(Hardware::INSTRUCTIONS).build().unwrap(),
+            cycles_counter: Builder::new(Hardware::CPU_CYCLES).build().unwrap(),
             branch_counter: Builder::new(Hardware::BRANCH_INSTRUCTIONS).build().unwrap(),
             branch_misses: Builder::new(Hardware::BRANCH_MISSES).build().unwrap(),
             cache_misses: Builder::new(Hardware::CACHE_MISSES).build().unwrap(),
+            l1i_misses: Builder::new(Hardware::CACHE_MISSES).build().unwrap(), // Use generic as fallback
+            stalled_frontend: Builder::new(Hardware::CACHE_MISSES).build().unwrap(), // Use generic as fallback
+            stalled_backend: Builder::new(Hardware::CACHE_MISSES).build().unwrap(), // Use generic as fallback
             start_time: None,
         }
     }
@@ -105,29 +113,45 @@ impl PerfCounters {
     pub fn start(&mut self) {
         self.start_time = Some(minstant::Instant::now());
         self.instructions_counter.enable().unwrap();
+        self.cycles_counter.enable().unwrap();
         self.branch_counter.enable().unwrap();
         self.branch_misses.enable().unwrap();
         self.cache_misses.enable().unwrap();
+        self.l1i_misses.enable().unwrap();
+        self.stalled_frontend.enable().unwrap();
+        self.stalled_backend.enable().unwrap();
     }
 
-    pub fn stop(&mut self) -> (Duration, u64, u64, u64, u64) {
+    pub fn stop(&mut self) -> (Duration, u64, u64, u64, u64, u64, u64, u64, u64) {
         self.instructions_counter.disable().unwrap();
+        self.cycles_counter.disable().unwrap();
         self.branch_counter.disable().unwrap();
         self.branch_misses.disable().unwrap();
         self.cache_misses.disable().unwrap();
+        self.l1i_misses.disable().unwrap();
+        self.stalled_frontend.disable().unwrap();
+        self.stalled_backend.disable().unwrap();
 
         let duration = self.start_time.unwrap().elapsed();
         let instructions = self.instructions_counter.read().unwrap();
+        let cycles = self.cycles_counter.read().unwrap();
         let branches = self.branch_counter.read().unwrap();
         let branch_misses = self.branch_misses.read().unwrap();
         let cache_misses = self.cache_misses.read().unwrap();
+        let l1i_misses = self.l1i_misses.read().unwrap();
+        let stalled_frontend = self.stalled_frontend.read().unwrap();
+        let stalled_backend = self.stalled_backend.read().unwrap();
 
         (
             duration,
             instructions,
+            cycles,
             branches,
             branch_misses,
             cache_misses,
+            l1i_misses,
+            stalled_frontend,
+            stalled_backend,
         )
     }
 }
@@ -142,6 +166,13 @@ pub trait BenchContext {
     fn chunk_size() -> Option<usize> {
         None
     }
+
+    /// Optional: specify how many actual operations each chunk represents
+    /// Used for calculating correct throughput metrics
+    /// If None, assumes chunk_size == operations
+    fn operations_per_chunk() -> Option<u64> {
+        None
+    }
 }
 
 /// Simple context for benchmarks that don't need preparation
@@ -149,6 +180,240 @@ pub struct NoContext;
 impl BenchContext for NoContext {
     fn prepare(_num_chunks: usize) -> Self {
         NoContext
+    }
+}
+
+/// Warm-up with custom factory function (Linux version)
+#[cfg(target_os = "linux")]
+fn warm_up_and_calibrate_with_factory<T: BenchContext>(
+    f: &BenchFunction<T>,
+    factory: &dyn Fn() -> T,
+) -> BenchmarkConfig {
+    print!("🔥 Warming up");
+    io::stdout().flush().unwrap();
+
+    if let Some(preferred_chunk_size) = T::chunk_size() {
+        println!(" ✅");
+        println!("   Using preferred chunk size: {preferred_chunk_size} ops");
+
+        let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+        let mut warm_up_count = 0;
+        let mut last_dot_time = minstant::Instant::now();
+        while minstant::Instant::now() < warm_up_end {
+            let mut prepared = factory();
+            black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
+            warm_up_count += 1;
+
+            if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
+            {
+                print!(".");
+                io::stdout().flush().unwrap();
+                last_dot_time = minstant::Instant::now();
+            }
+        }
+
+        return BenchmarkConfig {
+            chunk_size: preferred_chunk_size,
+            target_samples: MIN_SAMPLES,
+            estimated_ops_per_ms: 0.0,
+        };
+    }
+
+    let mut chunk_size = MIN_CHUNK_SIZE;
+    let mut best_chunk_size = chunk_size;
+    let mut ops_per_ms = 0.0;
+
+    for i in 0..10 {
+        let mut prepared = factory();
+        let started = minstant::Instant::now();
+        black_box(|| f(&mut prepared, chunk_size, 0))();
+        let duration = started.elapsed();
+
+        let duration_ms = duration.as_millis() as f64;
+
+        if duration_ms >= 1.0 {
+            ops_per_ms = chunk_size as f64 / duration_ms;
+
+            if duration_ms >= TARGET_CHUNK_DURATION_MS as f64 * 0.7
+                && duration_ms <= TARGET_CHUNK_DURATION_MS as f64 * 1.5
+            {
+                best_chunk_size = chunk_size;
+                break;
+            }
+
+            let target_ms = TARGET_CHUNK_DURATION_MS as f64;
+            let scaling_factor = target_ms / duration_ms;
+            let new_chunk_size = ((chunk_size as f64) * scaling_factor) as usize;
+            chunk_size = new_chunk_size.clamp(MIN_CHUNK_SIZE, MAX_CHUNK_SIZE);
+            best_chunk_size = chunk_size;
+        } else {
+            chunk_size = (chunk_size * 5).min(MAX_CHUNK_SIZE);
+            best_chunk_size = chunk_size;
+        }
+
+        if i % 2 == 0 {
+            print!(".");
+            io::stdout().flush().unwrap();
+        }
+    }
+
+    let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+    let mut warm_up_count = 0;
+    let mut last_dot_time = minstant::Instant::now();
+    while minstant::Instant::now() < warm_up_end {
+        let mut prepared = factory();
+        black_box(|| f(&mut prepared, best_chunk_size, warm_up_count))();
+        warm_up_count += 1;
+
+        if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
+            print!(".");
+            io::stdout().flush().unwrap();
+            last_dot_time = minstant::Instant::now();
+        }
+    }
+
+    let estimated_chunk_duration_ms = if ops_per_ms > 0.0 {
+        best_chunk_size as f64 / ops_per_ms
+    } else {
+        TARGET_CHUNK_DURATION_MS as f64
+    };
+    let target_samples = ((MIN_BENCHMARK_DURATION_MS as f64 / estimated_chunk_duration_ms)
+        as usize)
+        .clamp(MIN_SAMPLES, MAX_SAMPLES);
+
+    println!(" ✅");
+    println!("   Optimal chunk size: {best_chunk_size} ops");
+    if ops_per_ms > 0.0 {
+        println!(
+            "   Estimated performance: {:.1} Mops/s",
+            ops_per_ms / 1000.0
+        );
+    } else {
+        println!("   Estimated performance: Very fast (>1000 Mops/s)");
+    }
+    println!("   Target samples: {target_samples}");
+
+    BenchmarkConfig {
+        chunk_size: best_chunk_size,
+        target_samples,
+        estimated_ops_per_ms: ops_per_ms,
+    }
+}
+
+/// Warm-up with custom factory function (non-Linux version)
+#[cfg(not(target_os = "linux"))]
+fn warm_up_and_calibrate_with_factory<T: BenchContext>(
+    f: &BenchFunction<T>,
+    factory: &dyn Fn() -> T,
+) -> BenchmarkConfig {
+    print!("🔥 Warming up");
+    io::stdout().flush().unwrap();
+
+    if let Some(preferred_chunk_size) = T::chunk_size() {
+        println!(" ✅");
+        println!("   Using preferred chunk size: {preferred_chunk_size} ops");
+
+        let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+        let mut warm_up_count = 0;
+        let mut last_dot_time = minstant::Instant::now();
+        while minstant::Instant::now() < warm_up_end {
+            let mut prepared = factory();
+            black_box(|| f(&mut prepared, preferred_chunk_size, warm_up_count))();
+            warm_up_count += 1;
+
+            if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100)
+            {
+                print!(".");
+                io::stdout().flush().unwrap();
+                last_dot_time = minstant::Instant::now();
+            }
+        }
+
+        return BenchmarkConfig {
+            chunk_size: preferred_chunk_size,
+            target_samples: MIN_SAMPLES,
+            estimated_ops_per_ms: 0.0,
+        };
+    }
+
+    let mut chunk_size = MIN_CHUNK_SIZE;
+    let mut best_chunk_size = chunk_size;
+    let mut ops_per_ms = 0.0;
+
+    for i in 0..10 {
+        let mut prepared = factory();
+        let started = minstant::Instant::now();
+        black_box(|| f(&mut prepared, chunk_size, 0))();
+        let duration = started.elapsed();
+
+        let duration_ms = duration.as_millis() as f64;
+
+        if duration_ms >= 1.0 {
+            ops_per_ms = chunk_size as f64 / duration_ms;
+
+            if duration_ms >= TARGET_CHUNK_DURATION_MS as f64 * 0.7
+                && duration_ms <= TARGET_CHUNK_DURATION_MS as f64 * 1.5
+            {
+                best_chunk_size = chunk_size;
+                break;
+            }
+
+            let target_ms = TARGET_CHUNK_DURATION_MS as f64;
+            let scaling_factor = target_ms / duration_ms;
+            let new_chunk_size = ((chunk_size as f64) * scaling_factor) as usize;
+            chunk_size = new_chunk_size.clamp(MIN_CHUNK_SIZE, MAX_CHUNK_SIZE);
+            best_chunk_size = chunk_size;
+        } else {
+            chunk_size = (chunk_size * 5).min(MAX_CHUNK_SIZE);
+            best_chunk_size = chunk_size;
+        }
+
+        if i % 2 == 0 {
+            print!(".");
+            io::stdout().flush().unwrap();
+        }
+    }
+
+    let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
+    let mut warm_up_count = 0;
+    let mut last_dot_time = minstant::Instant::now();
+    while minstant::Instant::now() < warm_up_end {
+        let mut prepared = factory();
+        black_box(|| f(&mut prepared, best_chunk_size, warm_up_count))();
+        warm_up_count += 1;
+
+        if minstant::Instant::now().duration_since(last_dot_time) >= Duration::from_millis(100) {
+            print!(".");
+            io::stdout().flush().unwrap();
+            last_dot_time = minstant::Instant::now();
+        }
+    }
+
+    let estimated_chunk_duration_ms = if ops_per_ms > 0.0 {
+        best_chunk_size as f64 / ops_per_ms
+    } else {
+        TARGET_CHUNK_DURATION_MS as f64
+    };
+    let target_samples = ((MIN_BENCHMARK_DURATION_MS as f64 / estimated_chunk_duration_ms)
+        as usize)
+        .clamp(MIN_SAMPLES, MAX_SAMPLES);
+
+    println!(" ✅");
+    println!("   Optimal chunk size: {best_chunk_size} ops");
+    if ops_per_ms > 0.0 {
+        println!(
+            "   Estimated performance: {:.1} Mops/s",
+            ops_per_ms / 1000.0
+        );
+    } else {
+        println!("   Estimated performance: Very fast (>1000 Mops/s)");
+    }
+    println!("   Target samples: {target_samples}");
+
+    BenchmarkConfig {
+        chunk_size: best_chunk_size,
+        target_samples,
+        estimated_ops_per_ms: ops_per_ms,
     }
 }
 
@@ -396,6 +661,100 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     }
 }
 
+/// Execute a single benchmark sample with custom factory (Linux with perf counters)
+#[cfg(target_os = "linux")]
+fn execute_sample_with_factory<T: BenchContext>(
+    f: &BenchFunction<T>,
+    chunk_size: usize,
+    chunk_num: usize,
+    factory: &dyn Fn() -> T,
+) -> Results {
+    let mut prepared = factory();
+
+    let counters = (|| -> Result<_, Box<dyn std::error::Error>> {
+        let instructions_counter = Builder::new(Hardware::INSTRUCTIONS).build()?;
+        let branch_counter = Builder::new(Hardware::BRANCH_INSTRUCTIONS).build()?;
+        let branch_misses = Builder::new(Hardware::BRANCH_MISSES).build()?;
+        let cache_misses = Builder::new(Hardware::CACHE_MISSES).build()?;
+        Ok((
+            instructions_counter,
+            branch_counter,
+            branch_misses,
+            cache_misses,
+        ))
+    })();
+
+    match counters {
+        Ok((mut instructions_counter, mut branch_counter, mut branch_misses, mut cache_misses)) => {
+            instructions_counter.enable().unwrap();
+            branch_counter.enable().unwrap();
+            branch_misses.enable().unwrap();
+            cache_misses.enable().unwrap();
+
+            let start_time = minstant::Instant::now();
+            black_box(|| f(&mut prepared, chunk_size, chunk_num))();
+            let duration = start_time.elapsed();
+
+            instructions_counter.disable().unwrap();
+            branch_counter.disable().unwrap();
+            branch_misses.disable().unwrap();
+            cache_misses.disable().unwrap();
+
+            let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
+            Results {
+                instructions: instructions_counter.read().unwrap(),
+                branches: branch_counter.read().unwrap(),
+                branch_misses: branch_misses.read().unwrap(),
+                cache_misses: cache_misses.read().unwrap(),
+                duration,
+                iterations: ops,
+                chunks_executed: 1,
+            }
+        }
+        Err(_) => {
+            let start_time = minstant::Instant::now();
+            black_box(|| f(&mut prepared, chunk_size, chunk_num))();
+            let duration = start_time.elapsed();
+
+            let ops = T::operations_per_chunk().unwrap_or(chunk_size as u64);
+            Results {
+                instructions: 0,
+                branches: 0,
+                branch_misses: 0,
+                cache_misses: 0,
+                duration,
+                iterations: ops,
+                chunks_executed: 1,
+            }
+        }
+    }
+}
+
+/// Execute a single benchmark sample with custom factory (non-Linux)
+#[cfg(not(target_os = "linux"))]
+fn execute_sample_with_factory<T: BenchContext>(
+    f: &BenchFunction<T>,
+    chunk_size: usize,
+    chunk_num: usize,
+    factory: &dyn Fn() -> T,
+) -> Results {
+    let mut prepared = factory();
+
+    let start_time = minstant::Instant::now();
+    black_box(|| f(&mut prepared, chunk_size, chunk_num))();
+    let duration = start_time.elapsed();
+
+    Results {
+        instructions: 0,
+        branches: 0,
+        branch_misses: 0,
+        cache_misses: 0,
+        duration,
+        iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
+        chunks_executed: 1,
+    }
+}
+
 /// Execute a single benchmark sample with performance counters (if available)
 #[cfg(target_os = "linux")]
 fn execute_sample<T: BenchContext>(
@@ -442,7 +801,7 @@ fn execute_sample<T: BenchContext>(
                 branch_misses: branch_misses.read().unwrap(),
                 cache_misses: cache_misses.read().unwrap(),
                 duration,
-                iterations: chunk_size as u64,
+                iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
                 chunks_executed: 1,
             }
         }
@@ -458,7 +817,7 @@ fn execute_sample<T: BenchContext>(
                 branch_misses: 0,
                 cache_misses: 0,
                 duration,
-                iterations: chunk_size as u64,
+                iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
                 chunks_executed: 1,
             }
         }
@@ -484,7 +843,7 @@ fn execute_sample<T: BenchContext>(
         branch_misses: 0,
         cache_misses: 0,
         duration,
-        iterations: chunk_size as u64,
+        iterations: T::operations_per_chunk().unwrap_or(chunk_size as u64),
         chunks_executed: 1,
     }
 }
@@ -526,6 +885,153 @@ fn update_progress_bar(current: usize, total: usize, current_throughput: f64) {
     print!("] {percentage}% ({current}/{total}) {throughput_display}");
 
     io::stdout().flush().unwrap();
+}
+
+/// Benchmark with a custom context factory function
+/// Useful for benchmarks where context creation depends on runtime parameters
+/// (e.g., VM dispatch tests with different programs)
+pub fn op_bench_with_factory<T: BenchContext>(
+    name: &str,
+    group: &str,
+    f: BenchFunction<T>,
+    factory: &dyn Fn() -> T,
+) {
+    println!("\n🚀 Benchmarking: {name}");
+
+    // Warm-up and calibration phase (using factory instead of T::prepare)
+    let config = warm_up_and_calibrate_with_factory(&f, factory);
+
+    // Main benchmark phase
+    println!("⚡ Running {} samples...", config.target_samples);
+
+    let mut all_results: Vec<Results> = Vec::new();
+    let mut summed_results = Results::default();
+    let mut running_throughput = if config.estimated_ops_per_ms > 0.0 {
+        config.estimated_ops_per_ms / 1000.0
+    } else {
+        0.0
+    };
+
+    for sample in 0..config.target_samples {
+        let sample_result = execute_sample_with_factory(&f, config.chunk_size, sample, factory);
+
+        let duration_ms = sample_result.duration.as_millis() as f64;
+        if duration_ms > 0.0 {
+            let sample_throughput_mops = (sample_result.iterations as f64 / duration_ms) / 1000.0;
+            running_throughput = running_throughput * 0.9 + sample_throughput_mops * 0.1;
+        }
+
+        summed_results.add(&sample_result);
+        all_results.push(sample_result);
+
+        if sample % 2 == 0 || sample == config.target_samples - 1 {
+            update_progress_bar(sample + 1, config.target_samples, running_throughput);
+        }
+    }
+
+    println!();
+
+    // Calculate statistics (same as op_bench)
+    let mut results = summed_results.clone();
+    results.divide(config.target_samples as u64);
+
+    let ops_per_sec = results.iterations as f64 / results.duration.as_secs_f64();
+    let ns_per_op = results.duration.as_nanos() as f64 / results.iterations as f64;
+    let instructions_per_op = results.instructions as f64 / results.iterations as f64;
+    let branches_per_op = results.branches as f64 / results.iterations as f64;
+    let branch_miss_rate = if results.branches > 0 {
+        (results.branch_misses as f64 / results.branches as f64) * 100.0
+    } else {
+        0.0
+    };
+    let cache_miss_rate_per_op = results.cache_misses as f64 / results.iterations as f64;
+
+    let sample_throughputs: Vec<f64> = all_results
+        .iter()
+        .map(|r| r.iterations as f64 / r.duration.as_secs_f64())
+        .collect();
+
+    let mean_throughput = sample_throughputs.iter().sum::<f64>() / sample_throughputs.len() as f64;
+    let variance: f64 = sample_throughputs
+        .iter()
+        .map(|&throughput| (throughput - mean_throughput).powi(2))
+        .sum::<f64>()
+        / sample_throughputs.len() as f64;
+    let std_dev = variance.sqrt();
+    let cv_percent = if mean_throughput > 0.0 {
+        (std_dev / mean_throughput) * 100.0
+    } else {
+        0.0
+    };
+
+    println!("\n📈 Results for {name}:");
+
+    let has_perf_counters = results.instructions > 0 || results.branches > 0;
+
+    if !has_perf_counters {
+        #[cfg(target_os = "linux")]
+        println!(
+            "   Note: Performance counters not available (insufficient permissions or kernel support)"
+        );
+        #[cfg(not(target_os = "linux"))]
+        println!("   Note: Performance counters not available on this platform");
+    }
+
+    let mut table = TableFormatter::new(
+        vec![],
+        vec![23, 23, 23],
+    );
+
+    table.add_row(vec![
+        &format!("Ops: {}", results.iterations),
+        &format!("Samples: {}", config.target_samples),
+        &format!("CV: {cv_percent:.2}%"),
+    ]);
+
+    table.add_row(vec![
+        &format!("{:.2} Mops/s", ops_per_sec / 1_000_000.0),
+        &format!("{ns_per_op:.2} ns/op"),
+        &format!("{:.3}s total", summed_results.duration.as_secs_f64()),
+    ]);
+
+    if has_perf_counters {
+        table.add_row(vec![
+            &format!("{instructions_per_op:.1} inst/op"),
+            &format!("{branches_per_op:.1} br/op"),
+            &format!("{branch_miss_rate:.4}% miss"),
+        ]);
+
+        table.add_row(vec![
+            &format!("{cache_miss_rate_per_op:.4} miss/op"),
+            &format!("{:.1}M branches", results.branches as f64 / 1_000_000.0),
+            &format!("{} chunks", results.chunks_executed),
+        ]);
+    } else {
+        table.add_row(vec![
+            &format!("{} chunks", results.chunks_executed),
+            "perf counters",
+            "unavailable",
+        ]);
+    }
+
+    table.print();
+
+    let benchmark_result = BenchmarkResult {
+        name: name.to_string(),
+        group: group.to_string(),
+        benchmark_type: "standard".to_string(),
+        mops_per_sec: ops_per_sec / 1_000_000.0,
+        ns_per_op,
+        instructions_per_op,
+        branches_per_op,
+        branch_miss_rate,
+        cache_miss_rate: cache_miss_rate_per_op,
+        cv_percent,
+        samples: config.target_samples,
+        operations: results.iterations,
+        total_duration_sec: summed_results.duration.as_secs_f64(),
+    };
+    add_session_result(benchmark_result);
 }
 
 pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {

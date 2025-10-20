@@ -257,5 +257,44 @@ fn opcode_throughput(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, opcode_throughput);
+fn dispatch_micro_benchmarks(c: &mut Criterion) {
+    let db = create_db();
+
+    let mut group = c.benchmark_group("dispatch_micro");
+    group.sample_size(20);
+
+    let num_ticks = 100000000;
+    group.throughput(criterion::Throughput::Elements(num_ticks as u64));
+
+    // Tightest possible loop: just discard constants
+    // This measures pure dispatch overhead with minimal instruction work
+    group.bench_function("dispatch_constant_discard", |b| {
+        b.iter_custom(|iters| do_program(db.clone(), "while(1) 1; endwhile", num_ticks, iters).0);
+    });
+
+    // Push/Pop only - measures stack operations dispatch
+    group.bench_function("dispatch_push_pop", |b| {
+        b.iter_custom(|iters| {
+            do_program(db.clone(), "i=0; while(1) i; endwhile", num_ticks, iters).0
+        });
+    });
+
+    // Simple arithmetic - measures dispatch + one operation
+    group.bench_function("dispatch_simple_add", |b| {
+        b.iter_custom(|iters| {
+            do_program(db.clone(), "while(1) 1 + 1; endwhile", num_ticks, iters).0
+        });
+    });
+
+    // Comparison only
+    group.bench_function("dispatch_comparison", |b| {
+        b.iter_custom(|iters| {
+            do_program(db.clone(), "while(1) 1 == 1; endwhile", num_ticks, iters).0
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, opcode_throughput, dispatch_micro_benchmarks);
 criterion_main!(benches);
