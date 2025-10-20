@@ -26,8 +26,8 @@ pub mod session;
 pub mod table;
 
 pub use bench::{
-    BenchContext, BenchmarkDef, NoContext, op_bench, op_bench_with_factory, run_benchmark,
-    run_benchmark_group,
+    BenchContext, BenchmarkDef, NoContext, op_bench, op_bench_with_factory,
+    op_bench_with_factory_filtered, run_benchmark, run_benchmark_group,
 };
 pub use table::TableFormatter;
 

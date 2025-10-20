@@ -896,6 +896,26 @@ pub fn op_bench_with_factory<T: BenchContext>(
     f: BenchFunction<T>,
     factory: &dyn Fn() -> T,
 ) {
+    op_bench_with_factory_filtered(name, group, f, factory, None);
+}
+
+pub fn op_bench_with_factory_filtered<T: BenchContext>(
+    name: &str,
+    group: &str,
+    f: BenchFunction<T>,
+    factory: &dyn Fn() -> T,
+    filter: Option<&str>,
+) {
+    // Check if this benchmark should run based on filter
+    let should_run = match filter {
+        None => true,
+        Some(f) => f == "all" || name.contains(f) || group.contains(f) || f == group,
+    };
+
+    if !should_run {
+        return;
+    }
+
     println!("\n🚀 Benchmarking: {name}");
 
     // Warm-up and calibration phase (using factory instead of T::prepare)
@@ -944,6 +964,7 @@ pub fn op_bench_with_factory<T: BenchContext>(
     } else {
         0.0
     };
+    let branch_misses_per_op = results.branch_misses as f64 / results.iterations as f64;
     let cache_miss_rate_per_op = results.cache_misses as f64 / results.iterations as f64;
 
     let sample_throughputs: Vec<f64> = all_results
@@ -999,9 +1020,9 @@ pub fn op_bench_with_factory<T: BenchContext>(
         ]);
 
         table.add_row(vec![
-            &format!("{cache_miss_rate_per_op:.4} miss/op"),
+            &format!("{branch_misses_per_op:.4} br.miss/op"),
+            &format!("{cache_miss_rate_per_op:.4} cache.miss/op"),
             &format!("{:.1}M branches", results.branches as f64 / 1_000_000.0),
-            &format!("{} chunks", results.chunks_executed),
         ]);
     } else {
         table.add_row(vec![
@@ -1022,6 +1043,7 @@ pub fn op_bench_with_factory<T: BenchContext>(
         instructions_per_op,
         branches_per_op,
         branch_miss_rate,
+        branch_misses_per_op,
         cache_miss_rate: cache_miss_rate_per_op,
         cv_percent,
         samples: config.target_samples,
@@ -1084,6 +1106,7 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
     } else {
         0.0
     };
+    let branch_misses_per_op = results.branch_misses as f64 / results.iterations as f64;
     let cache_miss_rate_per_op = results.cache_misses as f64 / results.iterations as f64;
 
     // Calculate variance for throughput using consistent units
@@ -1145,9 +1168,9 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
         ]);
 
         table.add_row(vec![
-            &format!("{cache_miss_rate_per_op:.4} miss/op"),
+            &format!("{branch_misses_per_op:.4} br.miss/op"),
+            &format!("{cache_miss_rate_per_op:.4} cache.miss/op"),
             &format!("{:.1}M branches", results.branches as f64 / 1_000_000.0),
-            &format!("{} chunks", results.chunks_executed),
         ]);
     } else {
         table.add_row(vec![
@@ -1169,6 +1192,7 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
         instructions_per_op,
         branches_per_op,
         branch_miss_rate,
+        branch_misses_per_op,
         cache_miss_rate: cache_miss_rate_per_op,
         cv_percent,
         samples: config.target_samples,

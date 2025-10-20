@@ -31,7 +31,8 @@ pub struct BenchmarkResult {
     pub ns_per_op: f64,
     pub instructions_per_op: f64,
     pub branches_per_op: f64,
-    pub branch_miss_rate: f64,
+    pub branch_miss_rate: f64,     // percentage of branches mispredicted
+    pub branch_misses_per_op: f64, // branch misses per operation
     pub cache_miss_rate: f64,
     pub cv_percent: f64,
     pub samples: usize,

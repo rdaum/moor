@@ -187,7 +187,7 @@ fn dispatch_comparison(ctx: &mut DispatchContext, _chunk_size: usize, _chunk_num
 }
 
 pub fn main() {
-    use moor_bench_utils::{generate_session_summary, op_bench_with_factory};
+    use moor_bench_utils::{generate_session_summary, op_bench_with_factory_filtered};
     use std::env;
 
     #[cfg(target_os = "linux")]
@@ -219,35 +219,39 @@ pub fn main() {
     }
 
     // Benchmark 1: dispatch_constant_discard
-    op_bench_with_factory(
+    op_bench_with_factory_filtered(
         "dispatch_constant_discard",
         "dispatch",
         |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_constant_discard(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1; endwhile"),
+        filter,
     );
 
     // Benchmark 2: dispatch_push_pop
-    op_bench_with_factory(
+    op_bench_with_factory_filtered(
         "dispatch_push_pop",
         "dispatch",
         |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_push_pop(ctx, 1, 0),
         &|| DispatchContext::with_program("i=0; while(1) i; endwhile"),
+        filter,
     );
 
     // Benchmark 3: dispatch_simple_add
-    op_bench_with_factory(
+    op_bench_with_factory_filtered(
         "dispatch_simple_add",
         "dispatch",
         |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_simple_add(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1 + 1; endwhile"),
+        filter,
     );
 
     // Benchmark 4: dispatch_comparison
-    op_bench_with_factory(
+    op_bench_with_factory_filtered(
         "dispatch_comparison",
         "dispatch",
         |ctx: &mut DispatchContext, _chunk_size, _chunk_num| dispatch_comparison(ctx, 1, 0),
         &|| DispatchContext::with_program("while(1) 1 == 1; endwhile"),
+        filter,
     );
 
     if filter.is_some() {
