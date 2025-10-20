@@ -232,9 +232,18 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// MOO: `str binary_hash(binary data)`
-/// Binary hash function - currently not implemented.
-fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    Err(BfErr::Code(E_INVARG))
+/// Returns MD5 hash of the given binary data in uppercase hexadecimal format.
+fn bf_binary_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Variant::Binary(b) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_INVARG));
+    };
+    let hash_digest = md5::Md5::digest(b.as_bytes());
+    Ok(Ret(v_str(
+        format!("{hash_digest:x}").to_uppercase().as_str(),
+    )))
 }
 
 /// MOO: `str argon2(str password, str salt [, int iterations] [, int memory] [, int parallelism])`
@@ -442,9 +451,7 @@ fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     if binary_output {
-        Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
-            "Binary support not implemented yet.".to_string()
-        })))
+        Ok(Ret(v_binary(result_bytes)))
     } else {
         let hex_string = result_bytes
             .iter()
@@ -479,9 +486,9 @@ fn bf_binary_to_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         match String::from_utf8(binary.as_bytes().to_vec()) {
             Ok(s) => s,
             Err(e) => {
-                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
-                    format!("Cannot convert to string: {}", e.to_string())
-                })));
+                return Err(BfErr::ErrValue(
+                    E_INVARG.with_msg(|| format!("Cannot convert to string: {}", e)),
+                ));
             }
         }
     };

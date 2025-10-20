@@ -133,7 +133,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`value_bytes`](values.md#value_bytes)      | &check;  |                                                                                    |
 | [`value_hash`](values.md#value_hash)        |          |                                                                                    |
 | [`string_hash`](values.md#string_hash)      | &check;  |                                                                                    |
-| [`binary_hash`](values.md#binary_hash)      |          |                                                                                    |
+| [`binary_hash`](values.md#binary_hash)      | &check;  |                                                                                    |
 | [`decode_binary`](strings.md#decode_binary) |          | Binary encoding will likely work differently in moor. See README.md for more info. |
 | [`encode_binary`](strings.md#encode_binary) |          |                                                                                    |
 | [`object_bytes`](values.md#object_bytes)    | &check;  |                                                                                    |
