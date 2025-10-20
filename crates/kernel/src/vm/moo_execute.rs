@@ -250,6 +250,7 @@ pub fn moo_frame_execute(
                 let Some(ScopeType::ForSequence {
                     sequence,
                     current_index,
+                    current_key,
                     value_bind,
                     key_bind,
                     end_label,
@@ -260,25 +261,18 @@ pub fn moo_frame_execute(
                     );
                 };
 
-                let Ok(list_len) = sequence.len() else {
-                    return ExecutionResult::RaiseError(
-                        E_TYPE.msg("invalid sequence length in for loop"),
-                    );
-                };
-
-                // Check if we've exhausted the sequence
-                if *current_index >= list_len {
-                    let end_lbl = *end_label;
-                    f.jump(&end_lbl);
-                    continue;
-                }
-
                 // Get current element
-                let k_v = match sequence.type_class() {
+                let tc = sequence.type_class();
+                let next = match tc {
                     TypeClass::Sequence(s) => s
                         .index(*current_index)
                         .map(|v| (v_int(*current_index as i64 + 1), v.clone())),
-                    TypeClass::Associative(a) => a.index(*current_index),
+                    TypeClass::Associative(a) => match current_key {
+                        // Use case_sensitive=false because OrdMap is organized case-insensitively
+                        // (the default Str::cmp uses lowercase comparison)
+                        Some(current_key) => a.next_after(current_key, false),
+                        None => a.first(),
+                    },
                     TypeClass::Scalar => {
                         return ExecutionResult::RaiseError(
                             E_TYPE.msg("invalid sequence type in for loop"),
@@ -286,8 +280,15 @@ pub fn moo_frame_execute(
                     }
                 };
 
-                let k_v = match k_v {
+                let k_v = match next {
                     Ok(k_v) => k_v,
+                    // Range is exhausted
+                    Err(e) if e == E_RANGE => {
+                        let end_lbl = *end_label;
+                        f.jump(&end_lbl);
+                        continue;
+                    }
+                    // Something else... 'splode
                     Err(e) => {
                         let end_lbl = *end_label;
                         f.jump(&end_lbl);
@@ -300,7 +301,17 @@ pub fn moo_frame_execute(
                 let key_bind = *key_bind;
 
                 // Increment index for next iteration
-                *current_index += 1;
+                match tc {
+                    TypeClass::Sequence(_) => {
+                        *current_index += 1;
+                    }
+                    TypeClass::Associative(_) => {
+                        *current_key = Some(k_v.0.clone());
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
 
                 // Set loop variables (separate borrow)
                 f.set_variable(&value_bind, k_v.1);

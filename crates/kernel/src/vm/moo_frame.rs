@@ -81,9 +81,12 @@ pub(crate) enum ScopeType {
     While,
     For,
     /// For-sequence iteration state stored in scope instead of on stack
+    /// For sequences: current_index tracks position, current_key is None
+    /// For maps: current_key tracks the current key for efficient iteration
     ForSequence {
         sequence: moor_var::Var,
         current_index: usize,
+        current_key: Option<moor_var::Var>,
         value_bind: moor_var::program::names::Name,
         key_bind: Option<moor_var::program::names::Name>,
         end_label: moor_compiler::Label,
@@ -367,6 +370,7 @@ impl MooStackFrame {
         let scope_type = ScopeType::ForSequence {
             sequence,
             current_index: 0,
+            current_key: None,
             value_bind,
             key_bind,
             end_label: *end_label,

@@ -230,4 +230,9 @@ pub trait Associative {
     /// Return this map with the key/value pair removed.
     /// Return the new map and the value that was removed, if any
     fn remove(&self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>);
+    /// Get the first key/value pair in the association, or E_RANGE if empty
+    fn first(&self) -> Result<(Var, Var), Error>;
+    /// Get the next key after the given key in iteration order.
+    /// Returns None if the key is the last one or doesn't exist.
+    fn next_after(&self, key: &Var, case_sensitive: bool) -> Result<(Var, Var), Error>;
 }

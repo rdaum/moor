@@ -265,6 +265,7 @@ table ScopeForSequence {
     value_bind: MoorProgram.StoredName (required);
     key_bind: MoorProgram.StoredName;  // Optional
     end_label: uint16;
+    current_key: MoorVar.Var;  // Optional - used for efficient map iteration
 }
 
 table ScopeForRange {

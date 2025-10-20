@@ -496,6 +496,7 @@ pub(crate) fn scope_type_to_flatbuffer(
         KernelScopeType::ForSequence {
             sequence,
             current_index,
+            current_key,
             value_bind,
             key_bind,
             end_label,
@@ -513,6 +514,13 @@ pub(crate) fn scope_type_to_flatbuffer(
                 .map_err(|e| {
                     TaskConversionError::ProgramError(format!("Error encoding key_bind: {e}"))
                 })?;
+            let fb_current_key = current_key
+                .as_ref()
+                .map(convert_schema::var_to_db_flatbuffer)
+                .transpose()
+                .map_err(|e| {
+                    TaskConversionError::VarError(format!("Error encoding current_key: {e}"))
+                })?;
 
             ScopeTypeUnion::ScopeForSequence(Box::new(ScopeForSequence {
                 sequence: Box::new(fb_seq),
@@ -520,6 +528,7 @@ pub(crate) fn scope_type_to_flatbuffer(
                 value_bind: Box::new(fb_value_bind),
                 key_bind: fb_key_bind.map(Box::new),
                 end_label: end_label.0,
+                current_key: fb_current_key.map(Box::new),
             }))
         }
         KernelScopeType::ForRange {
@@ -589,9 +598,19 @@ pub(crate) fn scope_type_from_flatbuffer(
                     TaskConversionError::ProgramError(format!("Error decoding key_bind: {e}"))
                 })?;
 
+            let current_key = sfs
+                .current_key
+                .as_ref()
+                .map(|ck| convert_schema::var_from_db_flatbuffer(ck))
+                .transpose()
+                .map_err(|e| {
+                    TaskConversionError::VarError(format!("Error decoding current_key: {e}"))
+                })?;
+
             Ok(KernelScopeType::ForSequence {
                 sequence,
                 current_index: sfs.current_index as usize,
+                current_key,
                 value_bind,
                 key_bind,
                 end_label: Label(sfs.end_label),

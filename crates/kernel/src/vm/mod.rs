@@ -182,9 +182,13 @@ fn extract_anonymous_refs_from_moo_frame(
                 value_bind: _,
                 key_bind: _,
                 current_index: _,
+                current_key,
                 end_label: _,
             } => {
                 extract_anonymous_refs_from_var(sequence, refs);
+                if let Some(k) = current_key {
+                    extract_anonymous_refs_from_var(k, refs);
+                }
             }
             ScopeType::ForRange {
                 current_value,
