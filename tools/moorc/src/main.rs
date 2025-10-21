@@ -152,7 +152,7 @@ fn main() -> Result<(), eyre::Report> {
     });
 
     let version = build::PKG_VERSION;
-    let commit = build::SHORT_COMMIT;
+    let commit = build::short_commit();
     info!("mooRc {version}+{commit}");
 
     // Valid argument scenarios require 1 src and 1 out, no more.

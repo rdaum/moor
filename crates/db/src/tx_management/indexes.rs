@@ -19,6 +19,12 @@ use std::{
     hash::{BuildHasherDefault, Hash},
 };
 
+/// Type alias for imbl HashMap with AHasher
+type ImblHashMap<K, V> = imbl::GenericHashMap<K, V, BuildHasherDefault<AHasher>, DefaultSharedPtr>;
+
+/// Type alias for imbl HashSet with AHasher
+type ImblHashSet<T> = imbl::GenericHashSet<T, BuildHasherDefault<AHasher>, DefaultSharedPtr>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry<T: Clone + PartialEq> {
     pub ts: Timestamp,
@@ -73,23 +79,11 @@ where
     Codomain: Clone + PartialEq,
 {
     /// Internal index of the cache.
-    pub entries: imbl::GenericHashMap<
-        Domain,
-        Entry<Codomain>,
-        BuildHasherDefault<AHasher>,
-        DefaultSharedPtr,
-    >,
+    pub entries: ImblHashMap<Domain, Entry<Codomain>>,
 
     /// Optional secondary index: Codomain -> Set<Domain>
     /// Only present if secondary indexing is enabled
-    secondary_index: Option<
-        imbl::GenericHashMap<
-            Codomain,
-            imbl::GenericHashSet<Domain, BuildHasherDefault<AHasher>, DefaultSharedPtr>,
-            BuildHasherDefault<AHasher>,
-            DefaultSharedPtr,
-        >,
-    >,
+    secondary_index: Option<ImblHashMap<Codomain, ImblHashSet<Domain>>>,
 
     /// Whether the provider has been fully loaded
     provider_fully_loaded: bool,

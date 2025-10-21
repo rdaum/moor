@@ -12,7 +12,8 @@ rust-version.workspace = true
 description = "The set of values, and model/entities used across the system"
 
 [build-dependencies]
-shadow-rs.workspace = true
+vergen = { version = "9", default-features = false, features = ["cargo"] }
+vergen-gitcl = { version = "1", default-features = false }
 
 [dependencies]
 # Internal Dependencies
@@ -33,7 +34,6 @@ fast-counter.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true
 num-traits.workspace = true
-shadow-rs.workspace = true
 strum.workspace = true
 uuid.workspace = true
 zerocopy.workspace = true

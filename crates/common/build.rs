@@ -11,14 +11,25 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use shadow_rs::{BuildPattern, ShadowBuilder};
+use vergen::{CargoBuilder, Emitter};
+use vergen_gitcl::GitclBuilder;
 
-fn main() {
-    let shadow = ShadowBuilder::builder()
-        .build_pattern(BuildPattern::Lazy)
-        .build()
-        .unwrap();
-    // Note:  If there are no rerun-if-changed directives, cargo helpfully rebuilds *every single time*
-    //   despite ShadowBuilder not emitting anything new.
-    println!("rerun-if-changed={}", shadow.out_path);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Emit cargo version info with idempotent mode to prevent constant rebuilds
+    let cargo = CargoBuilder::default().build()?;
+
+    Emitter::default()
+        .idempotent()
+        .add_instructions(&cargo)?
+        .emit()?;
+
+    // Emit git SHA with idempotent mode
+    let gitcl = GitclBuilder::default().sha(true).build()?;
+
+    vergen_gitcl::Emitter::default()
+        .idempotent()
+        .add_instructions(&gitcl)?
+        .emit()?;
+
+    Ok(())
 }

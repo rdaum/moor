@@ -42,7 +42,7 @@ use crate::{
     },
 };
 use moor_common::{
-    build::{PKG_VERSION, SHORT_COMMIT},
+    build,
     model::{Named, ObjFlag, WorldStateError},
     tasks::{
         Event::{Present, Unpresent},
@@ -678,7 +678,7 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("server_version() does not take any arguments"),
         ));
     }
-    let version_string = format!("{PKG_VERSION}+{SHORT_COMMIT}");
+    let version_string = format!("{}+{}", build::PKG_VERSION, build::short_commit());
     Ok(Ret(v_string(version_string)))
 }
 

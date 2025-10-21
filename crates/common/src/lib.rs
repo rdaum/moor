@@ -13,8 +13,6 @@
 
 extern crate core;
 
-use shadow_rs::shadow;
-
 pub mod builtins;
 pub mod matching;
 pub mod model;
@@ -26,4 +24,26 @@ pub mod util;
 /// for validity / version checking.
 pub const DATA_LAYOUT_VERSION: u8 = 1;
 
-shadow!(build);
+/// Build-time version and git information module
+pub mod build {
+    /// Package version from Cargo.toml
+    pub const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    /// Short git commit hash (first 7 characters of SHA)
+    pub fn short_commit() -> &'static str {
+        lazy_static::lazy_static! {
+            static ref SHORT: String = {
+                option_env!("VERGEN_GIT_SHA")
+                    .map(|s| {
+                        if s.len() >= 7 {
+                            s[..7].to_string()
+                        } else {
+                            s.to_string()
+                        }
+                    })
+                    .unwrap_or_else(|| "unknown".to_string())
+            };
+        }
+        &SHORT
+    }
+}
