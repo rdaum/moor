@@ -396,8 +396,8 @@ fn main() -> Result<(), Report> {
 
     let resolved_db_path = args.resolved_db_path();
     info!(
-        "moor {} daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {:?}",
-        version, resolved_db_path
+        "moor {version} (commit: {}) daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {resolved_db_path:?}",
+        build::short_commit()
     );
     let (database, freshly_made) = TxDB::open(
         Some(&resolved_db_path),
@@ -622,6 +622,8 @@ fn main() -> Result<(), Report> {
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, kill_switch.clone())?;
     info!(
+        version = build::PKG_VERSION,
+        commit = build::short_commit(),
         rpc_endpoint = args.rpc_listen,
         events_endpoint = args.events_listen,
         "Daemon started. Listening for RPC events."
