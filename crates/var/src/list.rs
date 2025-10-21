@@ -12,7 +12,7 @@
 //
 
 // Clippy warns about Arc<im::Vector<Var>> not being Send/Sync due to circular type dependency,
-// but this is a false positive - Var is Send/Sync and im::Vector is thread-safe.
+// but this is a false positive - Var is Send/Sync and imbl::Vector is thread-safe.
 #![allow(clippy::arc_with_non_send_sync)]
 
 use crate::{
@@ -31,16 +31,16 @@ use std::{
 };
 
 #[derive(Clone)]
-pub struct List(Arc<im::Vector<Var>>);
+pub struct List(Arc<imbl::Vector<Var>>);
 
 impl List {
     pub fn build(values: &[Var]) -> Var {
-        let l = im::Vector::from(values.to_vec());
+        let l = imbl::Vector::from(values.to_vec());
         Var::from_variant(Variant::List(List(Arc::new(l))))
     }
 
     pub fn mk_list(values: &[Var]) -> List {
-        let l = im::Vector::from(values.to_vec());
+        let l = imbl::Vector::from(values.to_vec());
         List(Arc::new(l))
     }
 
@@ -340,14 +340,14 @@ impl Hash for List {
 
 impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
-        let l: im::Vector<Var> = im::Vector::from_iter(iter);
+        let l: imbl::Vector<Var> = imbl::Vector::from_iter(iter);
         Var::from_variant(Variant::List(List(Arc::new(l))))
     }
 }
 
 impl std::iter::FromIterator<Var> for List {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
-        let l: im::Vector<Var> = im::Vector::from_iter(iter);
+        let l: imbl::Vector<Var> = imbl::Vector::from_iter(iter);
         List(Arc::new(l))
     }
 }
@@ -774,44 +774,5 @@ mod tests {
             )
             .unwrap();
         assert_eq!(r, v_list(&[v_str("?"), v_str("."), v_str("@abort")]));
-    }
-
-    #[test]
-    fn test_im_vector_size() {
-        use crate::List;
-        use std::mem::size_of;
-        use std::sync::Arc;
-
-        // What's the actual size of im::Vector?
-        println!("Size of im::Vector<Var>: {}", size_of::<im::Vector<Var>>());
-        println!("Size of List (Box<im::Vector<Var>>): {}", size_of::<List>());
-        println!("Size of Var: {}", size_of::<Var>());
-        println!();
-
-        // What if we used Arc instead of Box?
-        println!("Arc vs Box comparison:");
-        println!(
-            "  Box<im::Vector<Var>>: {}",
-            size_of::<Box<im::Vector<Var>>>()
-        );
-        println!(
-            "  Arc<im::Vector<Var>>: {}",
-            size_of::<Arc<im::Vector<Var>>>()
-        );
-        println!();
-
-        // Clone cost comparison:
-        println!("Clone cost:");
-        println!("  Box::clone() = malloc(64) + memcpy(64) + im::Vector::clone()");
-        println!("  Arc::clone() = atomic refcount increment (nearly free)");
-        println!();
-
-        // What's inside im::Vector anyway?
-        // From im crate source: Vector contains an Arc to the tree root
-        // So im::Vector is already using Arc internally for structural sharing
-        println!("Structure:");
-        println!("  im::Vector internally uses Arc for tree nodes");
-        println!("  Box<im::Vector>: heap allocation on clone, then Arc bump inside");
-        println!("  Arc<im::Vector>: just Arc bump, no malloc!");
     }
 }

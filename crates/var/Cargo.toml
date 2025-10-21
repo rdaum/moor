@@ -35,7 +35,7 @@ papaya.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true
-im.workspace = true
+imbl.workspace = true
 
 # Text Processing & Regex
 unicase.workspace = true

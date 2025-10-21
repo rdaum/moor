@@ -162,7 +162,7 @@ pest_derive = "2.8"
 
 # Collections & Data Structures
 ahash = "0.8"
-im = "15.1"
+imbl = { version = "6.1", features = ["triomphe"] }
 indexmap = "2.11"
 itertools = "0.14"
 

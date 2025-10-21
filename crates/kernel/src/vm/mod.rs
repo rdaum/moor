@@ -318,17 +318,17 @@ mod tests {
         // When we clone List(Box<im::Vector<Var>>):
         // Box::clone() does:
         //   1. Allocates new heap memory for Box wrapper (malloc)
-        //   2. Calls im::Vector::clone() on the interior
-        //   3. im::Vector::clone() bumps Arc refcount (cheap!)
+        //   2. Calls imbl::Vector::clone() on the interior
+        //   3. imbl::Vector::clone() bumps Arc refcount (cheap!)
         //
         // The Box wrapper adds malloc overhead to every List::clone()
-        // But im::Vector::clone() itself is still cheap (just Arc refcount)
+        // But imbl::Vector::clone() itself is still cheap (just Arc refcount)
 
         println!("\nCloning behavior:");
         println!("- Box::clone() allocates heap memory (malloc overhead)");
-        println!("- im::Vector::clone() bumps Arc refcount (nearly free)");
+        println!("- imbl::Vector::clone() bumps Arc refcount (nearly free)");
         println!(
-            "\nSo List::clone has malloc overhead from Box, but structural sharing from im::Vector"
+            "\nSo List::clone has malloc overhead from Box, but structural sharing from imbl::Vector"
         );
     }
 }

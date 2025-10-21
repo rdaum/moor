@@ -54,7 +54,7 @@ oneshot.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true
-im.workspace = true
+imbl.workspace = true
 indexmap.workspace = true
 
 # Error Handling & Logging

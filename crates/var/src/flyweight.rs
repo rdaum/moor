@@ -43,7 +43,7 @@ pub struct Flyweight(Box<Inner>);
 #[derive(Clone, PartialOrd, Ord, Eq)]
 struct Inner {
     delegate: Obj,
-    slots: im::Vector<(Symbol, Var)>,
+    slots: imbl::Vector<(Symbol, Var)>,
     contents: List,
 }
 
@@ -77,7 +77,7 @@ impl Flyweight {
     pub fn mk_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Self {
         Self(Box::new(Inner {
             delegate,
-            slots: im::Vector::from(slots),
+            slots: imbl::Vector::from(slots),
             contents,
         }))
     }

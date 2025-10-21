@@ -13,6 +13,7 @@
 
 use crate::Timestamp;
 use ahash::AHasher;
+use imbl::shared_ptr::DefaultSharedPtr;
 use std::{
     any::Any,
     hash::{BuildHasherDefault, Hash},
@@ -64,7 +65,7 @@ where
     fn set_provider_fully_loaded(&mut self, loaded: bool);
 }
 
-/// Hash-based implementation of RelationIndex using im::HashMap
+/// Hash-based implementation of RelationIndex using imbl::HashMap
 #[derive(Clone)]
 pub struct HashRelationIndex<Domain, Codomain>
 where
@@ -72,12 +73,23 @@ where
     Codomain: Clone + PartialEq,
 {
     /// Internal index of the cache.
-    pub entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
+    pub entries: imbl::GenericHashMap<
+        Domain,
+        Entry<Codomain>,
+        BuildHasherDefault<AHasher>,
+        DefaultSharedPtr,
+    >,
 
     /// Optional secondary index: Codomain -> Set<Domain>
     /// Only present if secondary indexing is enabled
-    secondary_index:
-        Option<im::HashMap<Codomain, im::HashSet<Domain>, BuildHasherDefault<AHasher>>>,
+    secondary_index: Option<
+        imbl::GenericHashMap<
+            Codomain,
+            imbl::GenericHashSet<Domain, BuildHasherDefault<AHasher>, DefaultSharedPtr>,
+            BuildHasherDefault<AHasher>,
+            DefaultSharedPtr,
+        >,
+    >,
 
     /// Whether the provider has been fully loaded
     provider_fully_loaded: bool,
@@ -219,7 +231,7 @@ where
         if let Some(ref mut secondary) = self.inner.secondary_index {
             secondary
                 .entry(codomain.clone())
-                .or_insert_with(im::HashSet::new)
+                .or_insert_with(Default::default)
                 .insert(domain.clone());
         }
     }

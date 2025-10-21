@@ -11,10 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Clippy warns about Arc<im::Vector<(Var, Var)>> not being Send/Sync due to circular type dependency,
-// but this is a false positive - Var is Send/Sync and im::Vector is thread-safe.
-#![allow(clippy::arc_with_non_send_sync)]
-
 use crate::{
     Associative, Error,
     error::ErrorCode::{E_RANGE, E_TYPE},
@@ -24,14 +20,14 @@ use crate::{
 use std::{cmp::Ordering, hash::Hash, sync::Arc};
 
 #[derive(Clone)]
-pub struct Map(Arc<im::OrdMap<Var, Var>>);
+pub struct Map(Arc<imbl::OrdMap<Var, Var>>);
 
 impl Map {
     // Construct from an Iterator of pairs
     pub(crate) fn build<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
         let map = pairs
             .map(|(k, v)| (k.clone(), v.clone()))
-            .collect::<im::OrdMap<Var, Var>>();
+            .collect::<imbl::OrdMap<Var, Var>>();
         let m = Map(Arc::new(map));
         Var::from_variant(Variant::Map(m))
     }
