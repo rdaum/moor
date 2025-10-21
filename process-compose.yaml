@@ -9,12 +9,15 @@
 # This mimics the behavior of docker-compose.yml but runs processes directly on the host using cargo run.
 # Uses IPC defaults for ZMQ communication since all processes are running locally.
 
-# The first time the system starts, it will import cores/JHCore-DEV-2.db from the cores directory. This is a recent
-# JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
-# that resulted. To re-import the textdump, simply delete this directory.
+# The first time the system starts, it will import cores/lambda-moor from the cores directory.
+# This is a fork of LambdaCore, reconstituted in mooR's `objdef` format, with some modifications.
+# To import an existing LambdaMOO 1.8.x DB, change --import to point to it, and change --import-format to textdump
+# After import, `moor-data` will contain the database that resulted.
+# To re-import simply delete this directory.
 
 # After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
-# system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
+# system. (e.g. telnet localhost 8888). The web frontend is served on port 3000 and proxies API/WebSocket
+# requests to moor-web-host on port 8081.
 
 version: "0.5"
 
@@ -30,22 +33,17 @@ processes:
           cargo run --release -p moor-daemon -- --generate-keypair
         fi
       "
-    working_dir: /Users/ryan/moor
     restart: no
     availability:
       restart: exit_on_failure
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     command: >
-      cargo run --release -p moor-daemon -- 
+      cargo run --release -p moor-daemon --
       ./moor-data
-      --db=development.db 
-      --import=cores/JHCore-DEV-2.db --import-format=textdump 
-      --export=development-export --export-format=objdef 
-      --checkpoint-interval-seconds=360
-      --use-boolean-returns=false
-      --custom-errors=true
-    working_dir: /Users/ryan/moor
+      --db=development.db
+      --import=cores/lambda-moor/src --import-format=objdef
+      --export=export --export-format=objdef
     restart: on_failure
     depends_on:
       init-certificates:
@@ -54,10 +52,9 @@ processes:
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
     command: >
-      cargo run -p moor-telnet-host -- 
-      --telnet-address=0.0.0.0 
+      cargo run -p moor-telnet-host --
+      --telnet-address=0.0.0.0
       --telnet-port=8888
-    working_dir: /Users/ryan/moor
     restart: on_failure
     depends_on:
       init-certificates:
@@ -65,14 +62,28 @@ processes:
       moor-daemon:
         condition: process_started
 
-  # A web server that serves the client files and handles incoming websocket connections.
+  # Frontend web server that serves static files and proxies API calls
+  moor-frontend:
+    command: >
+      sh -c "
+        if [ ! -d node_modules ]; then
+          npm install
+        fi &&
+        npm run dev
+      "
+    environment:
+      - MOOR_API_URL=http://localhost:8081
+      - MOOR_WS_URL=ws://localhost:8081
+    restart: on_failure
+    depends_on:
+      moor-web-host:
+        condition: process_started
+
+  # API server that handles websocket connections and REST endpoints
   moor-web-host:
     command: >
-      cargo run -p moor-web-host -- 
-      --listen-address=0.0.0.0:8080 
-      --client-sources=./client
-      --watch-changes
-    working_dir: /Users/ryan/moor
+      cargo run -p moor-web-host --
+      --listen-address=0.0.0.0:8081
     restart: on_failure
     depends_on:
       init-certificates:
@@ -84,7 +95,6 @@ processes:
   # to the daemon.
   moor-curl-worker:
     command: cargo run -p moor-curl-worker
-    working_dir: /Users/ryan/moor
     restart: on_failure
     depends_on:
       init-certificates:
