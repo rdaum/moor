@@ -38,7 +38,8 @@ All components communicate through authenticated RPC (Remote Procedure Call) con
 - The **daemon** acts as the central coordinator
 - **Hosts** (telnet and web) connect to the daemon to relay player commands and receive responses
 - **Workers** (like curl-worker) connect to the daemon to handle specific tasks
-- Authentication uses cryptographic keys (`moor-signing-key.pem` and `moor-verifying-key.pem`)
+- Transport security uses CURVE encryption (for TCP) with enrollment-based authentication
+- Client/player authentication uses PASETO tokens signed by the daemon
 
 ## Advantages of This Design
 

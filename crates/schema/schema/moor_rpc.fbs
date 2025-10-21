@@ -22,19 +22,11 @@ namespace MoorRpc;
 // Basic primitive wrappers and tokens
 // ============================================================================
 
-table HostToken {
-    token: string (required);
-}
-
 table ClientToken {
     token: string (required);
 }
 
 table AuthToken {
-    token: string (required);
-}
-
-table WorkerToken {
     token: string (required);
 }
 
@@ -347,18 +339,21 @@ union HostToDaemonMessageUnion {
 }
 
 table RegisterHost {
+    host_id: MoorCommon.Uuid (required);
     timestamp: uint64;  // SystemTime as nanos since epoch
     host_type: HostType;
     listeners: [Listener] (required);
 }
 
 table DetachHost {
+    host_id: MoorCommon.Uuid (required);
 }
 
 table RequestPerformanceCounters {
 }
 
 table HostPong {
+    host_id: MoorCommon.Uuid (required);
     timestamp: uint64;  // SystemTime as nanos since epoch
     host_type: HostType;
     listeners: [Listener] (required);
@@ -875,7 +870,6 @@ table PingWorkers {
 
 table WorkerRequest {
     worker_id: MoorCommon.Uuid (required);
-    token: WorkerToken (required);
     id: MoorCommon.Uuid (required);
     perms: MoorCommon.Obj (required);
     request: [MoorVar.Var] (required);
@@ -883,7 +877,6 @@ table WorkerRequest {
 }
 
 table PleaseDie {
-    token: WorkerToken (required);
     worker_id: MoorCommon.Uuid (required);
 }
 
@@ -900,28 +893,28 @@ union WorkerToDaemonMessageUnion {
 }
 
 table AttachWorker {
-    token: WorkerToken (required);
+    worker_id: MoorCommon.Uuid (required);
     worker_type: MoorCommon.Symbol (required);
 }
 
 table WorkerPong {
-    token: WorkerToken (required);
+    worker_id: MoorCommon.Uuid (required);
     worker_type: MoorCommon.Symbol (required);
 }
 
 table DetachWorker {
-    token: WorkerToken (required);
+    worker_id: MoorCommon.Uuid (required);
 }
 
 table RequestResult {
-    token: WorkerToken (required);
-    id: MoorCommon.Uuid (required);
+    worker_id: MoorCommon.Uuid (required);
+    request_id: MoorCommon.Uuid (required);
     result: MoorVar.Var (required);
 }
 
 table RequestError {
-    token: WorkerToken (required);
-    id: MoorCommon.Uuid (required);
+    worker_id: MoorCommon.Uuid (required);
+    request_id: MoorCommon.Uuid (required);
     error: WorkerError (required);
 }
 
@@ -947,7 +940,6 @@ table WorkerRejected {
 }
 
 table WorkerAttached {
-    token: WorkerToken (required);
     worker_id: MoorCommon.Uuid (required);
 }
 
@@ -1000,7 +992,7 @@ union MessageTypeUnion {
 }
 
 table HostToDaemonMsg {
-    host_token: HostToken (required);
+    host_id: MoorCommon.Uuid (required);
     message: HostToDaemonMessage (required);
 }
 

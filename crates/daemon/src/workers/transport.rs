@@ -28,13 +28,19 @@ use super::message_handler::WorkersMessageHandler;
 pub struct WorkersTransport {
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
+    curve_secret_key: Option<String>, // Z85-encoded CURVE secret key
 }
 
 impl WorkersTransport {
-    pub fn new(zmq_context: zmq::Context, kill_switch: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        zmq_context: zmq::Context,
+        kill_switch: Arc<AtomicBool>,
+        curve_secret_key: Option<String>,
+    ) -> Self {
         Self {
             zmq_context,
             kill_switch,
+            curve_secret_key,
         }
     }
 
@@ -45,6 +51,28 @@ impl WorkersTransport {
         message_handler: Arc<H>,
     ) -> eyre::Result<()> {
         let rpc_socket = self.zmq_context.socket(zmq::REP)?;
+
+        // Configure CURVE encryption if key provided
+        if let Some(ref secret_key) = self.curve_secret_key {
+            // Set ZAP domain for authentication
+            rpc_socket
+                .set_zap_domain("moor")
+                .context("Failed to set ZAP domain on workers REP socket")?;
+
+            rpc_socket
+                .set_curve_server(true)
+                .context("Failed to enable CURVE server on workers REP socket")?;
+
+            // Decode Z85-encoded secret key to bytes
+            let secret_key_bytes =
+                zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
+            rpc_socket
+                .set_curve_secretkey(&secret_key_bytes)
+                .context("Failed to set CURVE secret key on workers REP socket")?;
+
+            info!("CURVE encryption enabled on workers REP socket with ZAP authentication");
+        }
+
         rpc_socket.bind(workers_endpoint)?;
 
         info!(
@@ -70,19 +98,18 @@ impl WorkersTransport {
                 .recv_multipart(0)
                 .with_context(|| "Error receiving message from ZMQ socket. Bailing out.")?;
 
-            if msg.len() != 3 {
+            if msg.len() != 2 {
                 warn!(
-                    "Received message with {} parts, expected 3; rejecting",
+                    "Received message with {} parts, expected 2; rejecting",
                     msg.len()
                 );
                 Self::reject(&rpc_socket);
                 continue;
             }
 
-            // First argument should be a WorkerToken
-            // Second argument is a Uuid
-            // Third argument is a flatbuffer RPC message
-            let (worker_token, worker_id, request) = (&msg[0], &msg[1], &msg[2]);
+            // First argument is a Uuid
+            // Second argument is a flatbuffer RPC message
+            let (worker_id, request) = (&msg[0], &msg[1]);
 
             let Ok(fb_msg) = moor_rpc::WorkerToDaemonMessageRef::read_as_root(request) else {
                 error!("Unable to decode flatbuffer WorkerToDaemonMessage");
@@ -91,7 +118,7 @@ impl WorkersTransport {
             };
 
             // Use flatbuffer handler
-            let fb_reply = message_handler.handle_worker_message(worker_token, worker_id, &fb_msg);
+            let fb_reply = message_handler.handle_worker_message(worker_id, &fb_msg);
             Self::send_flatbuffer_reply(&rpc_socket, fb_reply)?;
         }
     }

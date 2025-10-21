@@ -12,9 +12,10 @@
 //
 
 use moor_var::Obj;
-use rpc_common::{HostToken, HostType};
+use rpc_common::HostType;
 use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 use tracing::warn;
+use uuid::Uuid;
 
 /// Manages the set of known hosts and the listeners they have registered.
 struct HostRecord {
@@ -24,19 +25,19 @@ struct HostRecord {
 }
 
 #[derive(Default)]
-pub struct Hosts(HashMap<HostToken, HostRecord>);
+pub struct Hosts(HashMap<Uuid, HostRecord>);
 
 impl Hosts {
     pub(crate) fn receive_ping(
         &mut self,
-        host_token: HostToken,
+        host_id: Uuid,
         host_type: HostType,
         listeners: Vec<(Obj, SocketAddr)>,
     ) -> bool {
         let now = SystemTime::now();
         self.0
             .insert(
-                host_token,
+                host_id,
                 HostRecord {
                     last_seen: now,
                     host_type,
@@ -49,18 +50,18 @@ impl Hosts {
     pub(crate) fn ping_check(&mut self, timeout: std::time::Duration) {
         let now = SystemTime::now();
         let mut expired = vec![];
-        for (host_token, HostRecord { last_seen, .. }) in self.0.iter() {
+        for (host_id, HostRecord { last_seen, .. }) in self.0.iter() {
             if now.duration_since(*last_seen).unwrap() > timeout {
                 warn!(
                     "Host {} has not responded in time: {:?}, removing its listeners from the list",
-                    host_token.0,
+                    host_id,
                     now.duration_since(*last_seen).unwrap()
                 );
-                expired.push(host_token.clone());
+                expired.push(*host_id);
             }
         }
-        for host_token in expired {
-            self.unregister_host(&host_token);
+        for host_id in expired {
+            self.unregister_host(&host_id);
         }
     }
 
@@ -81,7 +82,7 @@ impl Hosts {
             .collect()
     }
 
-    pub(crate) fn unregister_host(&mut self, host_token: &HostToken) {
-        self.0.remove(host_token);
+    pub(crate) fn unregister_host(&mut self, host_id: &Uuid) {
+        self.0.remove(host_id);
     }
 }

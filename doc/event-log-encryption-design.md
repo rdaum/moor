@@ -115,7 +115,7 @@ web-host and database storage do not expose plaintext.
 │  - Never handles private keys               │
 │  - Never sees plaintext events              │
 └─────────────────────────────────────────────┘
-                    ↓ RPC (ZMQ)
+         ↓ ZMQ RPC (CURVE encrypted if TCP)
 ┌─────────────────────────────────────────────┐
 │  Daemon (Rust)                              │
 │  - Stores player public keys                │
@@ -129,6 +129,27 @@ web-host and database storage do not expose plaintext.
 │  - Sysadmin sees only encrypted data        │
 └─────────────────────────────────────────────┘
 ```
+
+### Encryption Layers
+
+This system has **multiple independent layers of encryption**:
+
+1. **Transport Layer (ZMQ)**: When using TCP endpoints, all ZMQ communication between web-host and
+   daemon is encrypted using CURVE (Curve25519). IPC endpoints skip this layer and rely on
+   filesystem permissions. See `doc/messaging.md` for details.
+
+2. **HTTPS/TLS Layer**: Communication between browser and web-host is encrypted using standard
+   HTTPS/TLS.
+
+3. **Application Layer (Age)**: Event logs are encrypted using age (X25519/ChaCha20-Poly1305) with
+   per-user passwords. This is the end-to-end encryption layer that protects event content at rest.
+
+These layers are independent and complementary:
+
+- CURVE/TLS protect data **in transit** between components
+- Age encryption protects data **at rest** in the database
+- Only age encryption provides **end-to-end protection** where the web-host cannot read event
+  content
 
 ---
 
@@ -502,10 +523,11 @@ must be trusted.
 **Mitigation**: Verify daemon binary integrity, run in isolated environment, monitor for
 unauthorized modifications.
 
-**Note on PASETO tokens and SSL/TLS**: These provide authentication and tamper-detection between
-components. SSL/TLS protects data in transit. The client-side encryption ensures stored events
-remain confidential even if the web-host or database is compromised, but cannot protect against a
-compromised daemon.
+**Note on PASETO tokens, CURVE, and TLS**: These provide authentication and tamper-detection between
+components. CURVE (for TCP ZMQ) and TLS (for HTTPS) protect data in transit. The client-side age
+encryption ensures stored events remain confidential even if the web-host or database is
+compromised, but cannot protect against a compromised daemon. See `doc/messaging.md` for details on
+ZMQ transport security.
 
 ### Why This Design Is Sufficient
 

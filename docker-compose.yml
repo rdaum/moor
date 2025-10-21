@@ -22,6 +22,28 @@ networks:
 
 
 services:
+  # Initialization container to generate enrollment token if needed
+  init-enrollment:
+    image: alpine:latest
+    container_name: "moor-init-enrollment"
+    volumes:
+      - moor-enrollment:/root/.moor
+    command: >
+      sh -c "
+        if [ ! -f /root/.moor/enrollment-token ]; then
+          echo 'Generating enrollment token...' &&
+          mkdir -p /root/.moor &&
+          cat /proc/sys/kernel/random/uuid > /root/.moor/enrollment-token &&
+          echo 'Enrollment token generated:' &&
+          cat /root/.moor/enrollment-token
+        else
+          echo 'Enrollment token already exists:' &&
+          cat /root/.moor/enrollment-token
+        fi
+      "
+    networks:
+      - moor_net
+
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     build:
@@ -33,17 +55,22 @@ services:
     container_name: "moor-daemon"
     environment:
       - RUST_BACKTRACE=1
+      - MOOR_ENROLLMENT_TOKEN_FILE=/root/.moor/enrollment-token
     working_dir: /moor
     volumes:
       - ./:/db
+      - moor-enrollment:/root/.moor
     command: >
-      ./moor-daemon 
+      ./moor-daemon
         /db/moor-data
-        --db=development.db 
-        --rpc-listen=tcp://0.0.0.0:7899 
-        --events-listen=tcp://0.0.0.0:7898 
-        --workers-response-listen=tcp://0.0.0.0:7897 
-        --workers-request-listen=tcp://0.0.0.0:7896 
+        --db=development.db
+        --rpc-listen=tcp://0.0.0.0:7899
+        --events-listen=tcp://0.0.0.0:7898
+        --workers-response-listen=tcp://0.0.0.0:7897
+        --workers-request-listen=tcp://0.0.0.0:7896
+        --enrollment-listen=tcp://0.0.0.0:7900
+        --enrollment-token-file=/root/.moor/enrollment-token
+        --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export --export-format objdef
     ports:
@@ -52,8 +79,12 @@ services:
       - "7898:7898" # Events listener
       - "7897:7897" # Workers response listener
       - "7896:7896" # Workers request listener
+      - "7900:7900" # Enrollment listener
     networks:
       - moor_net
+    depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
@@ -67,16 +98,27 @@ services:
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
-    command: >
-      ./moor-telnet-host --telnet-address=0.0.0.0 
-        --telnet-port=8888 
-        --rpc-address=tcp://moor-daemon:7899 
-        --events-address=tcp://moor-daemon:7898
+    volumes:
+      - moor-enrollment:/root/.moor:ro
+      - moor-telnet-data:/root/.moor-host-data
+    command:
+      - ./moor-telnet-host
+      - --telnet-address=0.0.0.0
+      - --telnet-port=8888
+      - --rpc-address=tcp://moor-daemon:7899
+      - --events-address=tcp://moor-daemon:7898
+      - --enrollment-address=tcp://moor-daemon:7900
+      - --enrollment-token-file=/root/.moor/enrollment-token
     ports:
       # Telnet listener
       - "8888:8888"
     networks:
       - moor_net
+    depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
+      moor-daemon:
+        condition: service_started
 
   # Frontend web server that serves static files and proxies API calls
   moor-frontend:
@@ -105,16 +147,26 @@ services:
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
-    command: >
-      ./moor-web-host 
-        --listen-address=0.0.0.0:8081
-        --rpc-address=tcp://moor-daemon:7899 
-        --events-address=tcp://moor-daemon:7898
+    volumes:
+      - moor-enrollment:/root/.moor:ro
+      - moor-web-data:/root/.moor-host-data
+    command:
+      - ./moor-web-host
+      - --listen-address=0.0.0.0:8081
+      - --rpc-address=tcp://moor-daemon:7899
+      - --events-address=tcp://moor-daemon:7898
+      - --enrollment-address=tcp://moor-daemon:7900
+      - --enrollment-token-file=/root/.moor/enrollment-token
     ports:
       # API listener (internal)
       - "8081:8081"
     networks:
       - moor_net
+    depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
+      moor-daemon:
+        condition: service_started
 
   # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
   # to the daemon.
@@ -129,11 +181,27 @@ services:
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
-    command: >
-      ./moor-curl-worker 
-        --rpc-address=tcp://moor-daemon:7899 
-        --events-address=tcp://moor-daemon:7898 
-        --workers-request-address=tcp://moor-daemon:7896 
-        --workers-response-address=tcp://moor-daemon:7897
+    volumes:
+      - moor-enrollment:/root/.moor:ro
+      - moor-curl-data:/root/.moor-host-data
+    command:
+      - ./moor-curl-worker
+      - --rpc-address=tcp://moor-daemon:7899
+      - --events-address=tcp://moor-daemon:7898
+      - --workers-request-address=tcp://moor-daemon:7896
+      - --workers-response-address=tcp://moor-daemon:7897
+      - --enrollment-address=tcp://moor-daemon:7900
+      - --enrollment-token-file=/root/.moor/enrollment-token
     networks:
       - moor_net
+    depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
+      moor-daemon:
+        condition: service_started
+
+volumes:
+  moor-enrollment:
+  moor-telnet-data:
+  moor-web-data:
+  moor-curl-data:

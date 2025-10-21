@@ -36,6 +36,7 @@ command = [
     "true",
     "--use-uuobjids",
     "true",
+    "--generate-keypair",
 ]
 allow_warnings = true
 need_stdout = true
@@ -66,6 +67,7 @@ command = [
     "true",
     "--use-uuobjids",
     "true",
+    "--generate-keypair",
 ]
 allow_warnings = true
 need_stdout = true
@@ -98,6 +100,7 @@ command = [
     "true",
     "--use-uuobjids",
     "true",
+    "--generate-keypair",
     "--trace-output",
     "moor-trace.json",
 ]
@@ -105,7 +108,15 @@ allow_warnings = true
 need_stdout = true
 
 [jobs.telnet]
-command = ["cargo", "run", "-p", "moor-telnet-host"]
+command = [
+    "cargo",
+    "run",
+    "-p",
+    "moor-telnet-host",
+    "--",
+    "--enrollment-token-file",
+    "./enrollment-token",
+]
 allow_warnings = true
 need_stdout = true
 
@@ -118,6 +129,8 @@ command = [
     "--",
     "--listen-address",
     "0.0.0.0:8080",
+    "--enrollment-token-file",
+    "./enrollment-token",
 ]
 allow_warnings = true
 
@@ -134,6 +147,14 @@ command = [
 need_stdout = true
 
 [jobs.curl-worker]
-command = ["cargo", "run", "-p", "moor-curl-worker"]
+command = [
+    "cargo",
+    "run",
+    "-p",
+    "moor-curl-worker",
+    "--",
+    "--enrollment-token-file",
+    "./enrollment-token",
+]
 allow_warnings = true
 need_stdout = true

@@ -27,6 +27,44 @@ The API uses [ZeroMQ](https://zeromq.org/) with two patterns:
 2. **[Publish-Subscribe](https://zeromq.org/socket-api/#publish-subscribe-pattern) (PUB/SUB)**: For
    daemon → host/client/worker broadcasts
 
+### Transport Security
+
+ZeroMQ communication security depends on the endpoint type:
+
+#### TCP Endpoints (Encrypted)
+
+When using TCP endpoints (e.g., `tcp://0.0.0.0:7899`), all communication is secured using
+**CurveZMQ** encryption:
+
+- **CURVE Protocol**: Uses Curve25519 elliptic curve cryptography for encryption and authentication
+- **ZAP Authentication**: The daemon validates connecting hosts/workers via ZeroMQ Authentication
+  Protocol (ZAP)
+- **Key Exchange**: Each host/worker has a unique CURVE keypair; public keys are registered during
+  enrollment
+- **Encryption**: All messages are encrypted end-to-end with ephemeral session keys
+- **Enrollment Flow**:
+  1. Host/worker generates CURVE keypair on first run
+  2. Connects to enrollment endpoint (default: `tcp://0.0.0.0:7900`) with enrollment token
+  3. Registers service type, hostname, and CURVE public key with daemon
+  4. Daemon stores public key in `~/.moor/allowed-hosts/{uuid}` for ZAP validation
+  5. All subsequent ZMQ connections (RPC, PUB/SUB) use CURVE encryption
+
+This ensures that:
+
+- Messages cannot be intercepted or read in transit
+- Only enrolled hosts/workers with registered public keys can connect
+- The daemon can verify the identity of each connecting client
+
+#### IPC Endpoints (No Encryption)
+
+When using IPC endpoints (e.g., `ipc:///tmp/moor_rpc.sock`), CURVE encryption is **disabled**:
+
+- **Filesystem Security**: Unix domain sockets rely on filesystem permissions for access control
+- **Local-Only**: Communication never leaves the local machine
+- **No Enrollment for CURVE**: Hosts/workers skip CURVE key registration (enrollment endpoint still
+  needed for PASETO tokens)
+- **Performance**: Lower latency and higher throughput than encrypted TCP
+
 ---
 
 ## Understanding the mooR Object System

@@ -15,7 +15,7 @@
 //!
 //! These helpers prioritize zero-copy and move semantics to avoid unnecessary allocations.
 
-use crate::{AuthToken, ClientToken, WorkerToken};
+use crate::{AuthToken, ClientToken};
 use moor_common::model::ObjectRef;
 use moor_schema::{
     convert::{
@@ -38,14 +38,6 @@ pub fn client_token_fb(token: &ClientToken) -> Box<rpc::ClientToken> {
 #[inline]
 pub fn auth_token_fb(token: &AuthToken) -> Box<rpc::AuthToken> {
     Box::new(rpc::AuthToken {
-        token: token.0.clone(),
-    })
-}
-
-/// Create a FlatBuffer WorkerToken from a reference (avoids moving the token)
-#[inline]
-pub fn mk_worker_token(token: &WorkerToken) -> Box<rpc::WorkerToken> {
-    Box::new(rpc::WorkerToken {
         token: token.0.clone(),
     })
 }

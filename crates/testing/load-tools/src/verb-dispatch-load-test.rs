@@ -30,8 +30,8 @@ use moor_var::{Obj, Symbol, Var, v_int};
 use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
 use rpc_common::{
-    AuthToken, ClientToken, HostToken, HostType, client_args::RpcClientArgs, load_keypair,
-    make_host_token, mk_invoke_verb_msg, mk_request_performance_counters_msg,
+    AuthToken, ClientToken, client_args::RpcClientArgs, mk_invoke_verb_msg,
+    mk_request_performance_counters_msg,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -131,7 +131,7 @@ const LOAD_TEST_INVOKE_VERB: &str = r#"
 let num_verb_invocations = args[1];
 for i in [1..num_verb_invocations]
     for object in (player.test_objects)
-        if (object:load_test() != 1) 
+        if (object:load_test() != 1)
             raise(E_INVARG, "Load test failed");
         endif
     endfor
@@ -315,7 +315,7 @@ async fn workload(
 async fn request_counters(
     zmq_ctx: tmq::Context,
     rpc_address: String,
-    host_token: &HostToken,
+    host_id: Uuid,
 ) -> Result<HashMap<Symbol, HashMap<Symbol, (isize, isize)>>, eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
         .set_rcvtimeo(100)
@@ -326,7 +326,7 @@ async fn request_counters(
 
     let request_msg = mk_request_performance_counters_msg();
     let reply_bytes = rpc_client
-        .make_host_rpc_call(host_token, request_msg)
+        .make_host_rpc_call(host_id, request_msg)
         .await
         .expect("Unable to send call request to RPC server");
 
@@ -402,7 +402,7 @@ async fn swamp_mode_workload(
         zmq_ctx,
         kill_switch,
     }: ExecutionContext,
-    host_token: &HostToken,
+    host_id: Uuid,
 ) -> Result<Vec<Results>, eyre::Error> {
     let (
         connection_oid,
@@ -480,7 +480,7 @@ async fn swamp_mode_workload(
     let before_counters = request_counters(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
-        host_token,
+        host_id,
     )
     .await?;
 
@@ -522,7 +522,7 @@ async fn swamp_mode_workload(
     let after_counters = request_counters(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
-        host_token,
+        host_id,
     )
     .await?;
 
@@ -561,7 +561,7 @@ async fn load_test_workload(
         zmq_ctx,
         kill_switch,
     }: ExecutionContext,
-    host_token: &HostToken,
+    host_id: Uuid,
 ) -> Result<Vec<Results>, eyre::Error> {
     let (
         connection_oid,
@@ -670,7 +670,7 @@ async fn load_test_workload(
         let before_counters = request_counters(
             zmq_ctx.clone(),
             args.client_args.rpc_address.clone(),
-            host_token,
+            host_id,
         )
         .await?;
         info!(
@@ -706,7 +706,7 @@ async fn load_test_workload(
         let after_counters = request_counters(
             zmq_ctx.clone(),
             args.client_args.rpc_address.clone(),
-            host_token,
+            host_id,
         )
         .await?;
 
@@ -775,20 +775,15 @@ async fn main() -> Result<(), eyre::Error> {
     let zmq_ctx = tmq::Context::new();
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let (private, _public) =
-        load_keypair(&args.client_args.public_key, &args.client_args.private_key)
-            .expect("Unable to load keypair from public and private key files");
-    let host_token = make_host_token(&private, HostType::TCP);
-
     let (listeners, _ljh) = setup::noop_listeners_loop().await;
 
     let rpc_address = args.client_args.rpc_address.clone();
-    let _rpc_client = start_host_session(
-        &host_token,
+    let (_rpc_client, host_id) = start_host_session(
         zmq_ctx.clone(),
         rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
+        None, // No CURVE encryption for load testing
     )
     .await
     .expect("Unable to establish initial host session");
@@ -799,9 +794,9 @@ async fn main() -> Result<(), eyre::Error> {
     };
 
     let results = if args.swamp_mode {
-        swamp_mode_workload(&args, exec_context, &host_token).await?
+        swamp_mode_workload(&args, exec_context, host_id).await?
     } else {
-        load_test_workload(&args, exec_context, &host_token).await?
+        load_test_workload(&args, exec_context, host_id).await?
     };
 
     if let Some(output_file) = args.output_file {

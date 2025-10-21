@@ -17,7 +17,7 @@ use futures_util::StreamExt;
 use hickory_resolver::TokioResolver;
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
-use rpc_async_client::{ListenersClient, ListenersMessage, rpc_client::RpcSendClient};
+use rpc_async_client::{ListenersClient, ListenersMessage, rpc_client::RpcSendClient, zmq};
 use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg};
 use std::{
     collections::HashMap,
@@ -35,18 +35,35 @@ use uuid::Uuid;
 
 /// Perform async reverse DNS lookup for an IP address
 async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
-    // Create a new resolver using system configuration
     let resolver = TokioResolver::builder_tokio()?.build();
-
-    // Perform reverse DNS lookup
     let response = resolver.reverse_lookup(ip).await?;
 
-    // Get the first hostname from the response
     if let Some(name) = response.iter().next() {
         Ok(name.to_string().trim_end_matches('.').to_string())
     } else {
         Err(eyre::eyre!("No PTR record found"))
     }
+}
+
+/// Configure CURVE encryption on a SUB socket builder
+fn configure_curve_subscriber(
+    mut builder: tmq::SocketBuilder<tmq::subscribe::SubscribeWithoutTopic>,
+    curve_keys: &Option<(String, String, String)>,
+) -> tmq::SocketBuilder<tmq::subscribe::SubscribeWithoutTopic> {
+    if let Some((client_secret, client_public, server_public)) = curve_keys {
+        let client_secret_bytes =
+            zmq::z85_decode(client_secret).expect("Failed to decode client secret key");
+        let client_public_bytes =
+            zmq::z85_decode(client_public).expect("Failed to decode client public key");
+        let server_public_bytes =
+            zmq::z85_decode(server_public).expect("Failed to decode server public key");
+
+        builder = builder
+            .set_curve_secretkey(&client_secret_bytes)
+            .set_curve_publickey(&client_public_bytes)
+            .set_curve_serverkey(&server_public_bytes);
+    }
+    builder
 }
 
 pub struct Listeners {
@@ -55,6 +72,7 @@ pub struct Listeners {
     rpc_address: String,
     events_address: String,
     kill_switch: Arc<AtomicBool>,
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public)
 }
 
 impl Listeners {
@@ -63,6 +81,7 @@ impl Listeners {
         rpc_address: String,
         events_address: String,
         kill_switch: Arc<AtomicBool>,
+        curve_keys: Option<(String, String, String)>,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -75,6 +94,7 @@ impl Listeners {
             rpc_address,
             events_address,
             kill_switch,
+            curve_keys,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
@@ -108,6 +128,7 @@ impl Listeners {
                     let rpc_address = self.rpc_address.clone();
                     let events_address = self.events_address.clone();
                     let kill_switch = self.kill_switch.clone();
+                    let curve_keys = self.curve_keys.clone();
 
                     // One task per listener.
                     tokio::spawn(async move {
@@ -127,6 +148,7 @@ impl Listeners {
                                             let rpc_address = rpc_address.clone();
                                             let events_address = events_address.clone();
                                             let kill_switch = kill_switch.clone();
+                                            let curve_keys = curve_keys.clone();
 
                                             // Spawn a task to handle the accepted connection.
                                             tokio::spawn(Listener::handle_accepted_connection(
@@ -138,6 +160,7 @@ impl Listeners {
                                                 listener_port,
                                                 stream,
                                                 addr,
+                                                curve_keys,
                                             ));
                                         }
                                         Err(e) => {
@@ -199,6 +222,7 @@ impl Listener {
         listener_port: u16,
         stream: TcpStream,
         peer_addr: SocketAddr,
+        curve_keys: Option<(String, String, String)>,
     ) -> Result<(), eyre::Report> {
         let connection_kill_switch = kill_switch.clone();
         let rpc_address = rpc_address.clone();
@@ -210,9 +234,20 @@ impl Listener {
                 "Accepted connection for listener"
             );
 
-            let rpc_request_sock = request(&zmq_ctx)
-                .set_rcvtimeo(100)
-                .set_sndtimeo(100)
+            let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+
+            // Configure CURVE encryption if keys provided
+            if let Some((client_secret, client_public, server_public)) = &curve_keys {
+                socket_builder = rpc_async_client::configure_curve_client(
+                    socket_builder,
+                    client_secret,
+                    client_public,
+                    server_public,
+                )
+                .expect("Failed to configure CURVE encryption");
+            }
+
+            let rpc_request_sock = socket_builder
                 .connect(rpc_address.as_str())
                 .expect("Unable to bind RPC server for connection");
 
@@ -342,15 +377,15 @@ impl Listener {
             };
             debug!(client_id = ?client_id, connection = ?connection_oid, "Connection established");
 
-            // Before attempting login, we subscribe to the events socket, using our client
-            // id. The daemon should be sending events here.
-            let events_sub = subscribe(&zmq_ctx)
+            // Subscribe to the events socket for this client's narrative events
+            let events_sub = configure_curve_subscriber(subscribe(&zmq_ctx), &curve_keys)
                 .connect(events_address.as_str())
                 .expect("Unable to connect narrative subscriber ");
             let events_sub = events_sub
                 .subscribe(&client_id.as_bytes()[..])
                 .expect("Unable to subscribe to narrative messages for client connection");
-            let broadcast_sub = subscribe(&zmq_ctx)
+
+            let broadcast_sub = configure_curve_subscriber(subscribe(&zmq_ctx), &curve_keys)
                 .connect(events_address.as_str())
                 .expect("Unable to connect broadcast subscriber ");
             let broadcast_sub = broadcast_sub

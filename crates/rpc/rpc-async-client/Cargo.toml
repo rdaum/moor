@@ -20,9 +20,12 @@ rpc-common = { path = "../rpc-common" }
 
 # Serialization & Data Formats
 planus.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 # Networking & Communication
 tmq.workspace = true
+zmq.workspace = true
 
 # Async Runtime & Concurrency
 futures-util.workspace = true
@@ -32,8 +35,11 @@ tokio.workspace = true
 rusty_paseto.workspace = true
 
 # Error Handling & Logging
+eyre.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
 # Utilities & Helpers
+chrono.workspace = true
+hostname.workspace = true
 uuid.workspace = true

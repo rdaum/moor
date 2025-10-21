@@ -12,7 +12,7 @@ rust-version.workspace = true
 description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a mooR daemon."
 
 [package.metadata.deb]
-depends = "$auto, systemd, openssl"
+depends = "$auto, systemd"
 extended-description = "Process for listening for telnet sessions and forwarding them to a mooR daemon."
 section = "net"
 license-file = ["../../LICENSE", "0"]

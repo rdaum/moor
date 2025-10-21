@@ -21,8 +21,8 @@ use moor_schema::{
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, Variant, v_str};
 use rpc_common::{
-    AuthToken, ClientToken, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
-    MOOR_SESSION_TOKEN_FOOTER, RpcMessageError, auth_token_from_ref, client_token_from_ref,
+    AuthToken, ClientToken, MOOR_AUTH_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, RpcMessageError,
+    auth_token_from_ref, client_token_from_ref,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -265,44 +265,6 @@ impl RpcMessageHandler {
                 },
             )),
         })
-    }
-
-    pub(crate) fn validate_host_token_impl(
-        &self,
-        token: &HostToken,
-    ) -> Result<HostType, RpcMessageError> {
-        // Check cache first.
-        {
-            let guard = self.host_token_cache.pin();
-            if let Some((t, host_type)) = guard.get(token)
-                && t.elapsed().as_secs() <= 60
-            {
-                return Ok(*host_type);
-            }
-        }
-        let pk: PasetoAsymmetricPublicKey<V4, Public> =
-            PasetoAsymmetricPublicKey::from(&self.public_key);
-        let host_type = Paseto::<V4, Public>::try_verify(
-            token.0.as_str(),
-            &pk,
-            Footer::from(MOOR_HOST_TOKEN_FOOTER),
-            None,
-        )
-        .map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
-            RpcMessageError::PermissionDenied
-        })?;
-
-        let Some(host_type) = HostType::parse_id_str(host_type.as_str()) else {
-            warn!("Unable to parse/validate host type in token");
-            return Err(RpcMessageError::PermissionDenied);
-        };
-
-        // Cache the result.
-        let guard = self.host_token_cache.pin();
-        guard.insert(token.clone(), (Instant::now(), host_type));
-
-        Ok(host_type)
     }
 
     pub(crate) fn validate_client_token_impl(

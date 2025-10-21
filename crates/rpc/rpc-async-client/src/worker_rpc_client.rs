@@ -16,7 +16,7 @@ use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Symbol, Var};
 use planus::{Builder, ReadAsRoot};
 use rpc_common::{
-    DaemonToWorkerReply, RpcError, WorkerToken, mk_attach_worker_msg, mk_request_error_msg,
+    DaemonToWorkerReply, RpcError, mk_attach_worker_msg, mk_request_error_msg,
     mk_request_result_msg, mk_worker_pong_msg,
 };
 use tmq::{Multipart, request_reply::RequestSender};
@@ -40,23 +40,17 @@ impl WorkerRpcSendClient {
 
     pub async fn make_worker_rpc_call_fb_pong(
         &mut self,
-        worker_token: &WorkerToken,
         worker_id: Uuid,
         worker_type: Symbol,
     ) -> Result<(), RpcError> {
-        let fb_message = mk_worker_pong_msg(worker_token, &worker_type);
+        let fb_message = mk_worker_pong_msg(worker_id, &worker_type);
 
-        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
         let worker_id_bytes = worker_id.as_bytes().to_vec();
 
         let mut builder = Builder::new();
         let rpc_msg_payload = builder.finish(&fb_message, None);
 
-        let message = Multipart::from(vec![
-            worker_token_bytes,
-            worker_id_bytes,
-            rpc_msg_payload.to_vec(),
-        ]);
+        let message = Multipart::from(vec![worker_id_bytes, rpc_msg_payload.to_vec()]);
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;
@@ -82,7 +76,6 @@ impl WorkerRpcSendClient {
 
     pub async fn make_worker_rpc_call_fb_result(
         &mut self,
-        worker_token: &WorkerToken,
         worker_id: Uuid,
         request_id: Uuid,
         result: Var,
@@ -90,19 +83,14 @@ impl WorkerRpcSendClient {
         let result_fb = var_to_flatbuffer(&result)
             .map_err(|e| RpcError::CouldNotSend(format!("Failed to serialize result: {e}")))?;
 
-        let fb_message = mk_request_result_msg(worker_token, request_id, result_fb);
+        let fb_message = mk_request_result_msg(worker_id, request_id, result_fb);
 
-        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
         let worker_id_bytes = worker_id.as_bytes().to_vec();
 
         let mut builder = Builder::new();
         let rpc_msg_payload = builder.finish(&fb_message, None);
 
-        let message = Multipart::from(vec![
-            worker_token_bytes,
-            worker_id_bytes,
-            rpc_msg_payload.to_vec(),
-        ]);
+        let message = Multipart::from(vec![worker_id_bytes, rpc_msg_payload.to_vec()]);
         let rcp_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;
@@ -131,23 +119,17 @@ impl WorkerRpcSendClient {
 
     pub async fn make_worker_rpc_call_fb_attach(
         &mut self,
-        worker_token: &WorkerToken,
         worker_id: Uuid,
         worker_type: Symbol,
     ) -> Result<DaemonToWorkerReply, RpcError> {
-        let fb_message = mk_attach_worker_msg(worker_token, &worker_type);
+        let fb_message = mk_attach_worker_msg(worker_id, &worker_type);
 
-        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
         let worker_id_bytes = worker_id.as_bytes().to_vec();
 
         let mut builder = Builder::new();
         let rpc_msg_payload = builder.finish(&fb_message, None);
 
-        let message = Multipart::from(vec![
-            worker_token_bytes,
-            worker_id_bytes,
-            rpc_msg_payload.to_vec(),
-        ]);
+        let message = Multipart::from(vec![worker_id_bytes, rpc_msg_payload.to_vec()]);
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;
@@ -191,15 +173,6 @@ impl WorkerRpcSendClient {
                 DaemonToWorkerReply::Rejected(reason)
             }
             moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAttached(attached) => {
-                let token_str = attached
-                    .token()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {e}")))?
-                    .token()
-                    .map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to get token string: {e}"))
-                    })?;
-                let token = WorkerToken(token_str.to_owned());
-
                 let worker_id_data = attached
                     .worker_id()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
@@ -210,7 +183,7 @@ impl WorkerRpcSendClient {
                 let worker_id = Uuid::from_slice(worker_id_data)
                     .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}")))?;
 
-                DaemonToWorkerReply::Attached(token, worker_id)
+                DaemonToWorkerReply::Attached(worker_id)
             }
             moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAuthFailed(auth_failed) => {
                 let reason = auth_failed
@@ -260,7 +233,6 @@ impl WorkerRpcSendClient {
 
     pub async fn make_worker_rpc_call_fb_error(
         &mut self,
-        worker_token: &WorkerToken,
         worker_id: Uuid,
         request_id: Uuid,
         error: WorkerError,
@@ -300,22 +272,17 @@ impl WorkerRpcSendClient {
         };
 
         let fb_message = mk_request_error_msg(
-            worker_token,
+            worker_id,
             request_id,
             moor_rpc::WorkerError { error: fb_error },
         );
 
-        let worker_token_bytes = worker_token.0.as_bytes().to_vec();
         let worker_id_bytes = worker_id.as_bytes().to_vec();
 
         let mut builder = Builder::new();
         let rpc_msg_payload = builder.finish(&fb_message, None);
 
-        let message = Multipart::from(vec![
-            worker_token_bytes,
-            worker_id_bytes,
-            rpc_msg_payload.to_vec(),
-        ]);
+        let message = Multipart::from(vec![worker_id_bytes, rpc_msg_payload.to_vec()]);
         let rcp_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;

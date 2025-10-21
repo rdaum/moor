@@ -206,11 +206,12 @@ authenticate a user. Initial connections are given a "connection" object, which 
 the system. Once authenticated, the connection object is replaced with the player object.
 
 In mooR the authentication system is extended with the use of [PASETO](https://github.com/paseto-standard/paseto-spec)
-tokens. Every RPC call from a host process to the daemon process is required to have a valid token. The token is used to
-identify the user and their permissions. The
-tokens are signed by the daemon process, and granted at login time.
+tokens for client sessions. When a client successfully logs in, the daemon grants them a PASETO token that is used to
+authenticate subsequent client RPC requests and identify the user's permissions.
 
-The same PASETO token system is used by the web host process to manage user sessions.
+Communication between the daemon and host/worker processes is secured using CURVE encryption (part of ZeroMQ), which
+provides authenticated and encrypted transport using public/private key pairs. Hosts and workers identify themselves
+via UUID, and CURVE handles both authentication and encryption at the transport layer.
 
 #### Front-end host processes
 

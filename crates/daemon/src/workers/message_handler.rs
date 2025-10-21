@@ -24,12 +24,10 @@ use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use moor_var::{Obj, Symbol, Var};
 use planus::Builder;
 use rpc_common::{
-    MOOR_WORKER_TOKEN_FOOTER, RpcMessageError, WORKER_BROADCAST_TOPIC, WorkerToken,
-    mk_ping_workers_msg, mk_worker_ack_reply, mk_worker_attached_reply,
-    mk_worker_auth_failed_reply, mk_worker_invalid_payload_reply, mk_worker_not_registered_reply,
-    mk_worker_request_msg, mk_worker_unknown_request_reply, worker_error_from_flatbuffer_struct,
+    WORKER_BROADCAST_TOPIC, mk_ping_workers_msg, mk_worker_ack_reply, mk_worker_attached_reply,
+    mk_worker_invalid_payload_reply, mk_worker_not_registered_reply, mk_worker_request_msg,
+    mk_worker_unknown_request_reply, worker_error_from_flatbuffer_struct,
 };
-use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPublicKey, Public, V4};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
@@ -46,7 +44,6 @@ struct Worker {
     id: Uuid,
     last_ping_time: Instant,
     worker_type: Symbol,
-    token: WorkerToken,
     /// The set of pending requests for this worker, that we are waiting on responses for.
     requests: Vec<(Uuid, Obj, Vec<Var>)>,
 }
@@ -56,7 +53,6 @@ pub trait WorkersMessageHandler: Send + Sync {
     /// Process a worker-to-daemon message (flatbuffer format)
     fn handle_worker_message(
         &self,
-        worker_token: &[u8],
         worker_id: &[u8],
         message: &moor_rpc::WorkerToDaemonMessageRef,
     ) -> moor_rpc::DaemonToWorkerReply;
@@ -76,12 +72,8 @@ pub trait WorkersMessageHandler: Send + Sync {
 
 /// Implementation of message handler that contains the actual business logic
 pub struct WorkersMessageHandlerImpl {
-    public_key: Key<32>,
-    #[allow(dead_code)]
-    private_key: Key<64>,
     workers: Arc<RwLock<HashMap<Uuid, Worker>>>,
     scheduler_send: flume::Sender<WorkerResponse>,
-    token_cache: Arc<RwLock<HashMap<WorkerToken, (Instant, Uuid)>>>,
     workers_publish: Arc<Mutex<Socket>>,
 }
 
@@ -89,14 +81,35 @@ impl WorkersMessageHandlerImpl {
     pub fn new(
         zmq_context: zmq::Context,
         workers_broadcast: &str,
-        public_key: Key<32>,
-        private_key: Key<64>,
         scheduler_send: flume::Sender<WorkerResponse>,
+        curve_secret_key: Option<String>, // Z85-encoded CURVE secret key
     ) -> Result<Self, eyre::Error> {
         // Create the publish socket for broadcasting to workers
         let publish = zmq_context
             .socket(SocketType::PUB)
             .context("Unable to create ZMQ PUB socket")?;
+
+        // Configure CURVE encryption if key provided
+        if let Some(ref secret_key) = curve_secret_key {
+            // Set ZAP domain for authentication
+            publish
+                .set_zap_domain("moor")
+                .context("Failed to set ZAP domain on workers PUB socket")?;
+
+            publish
+                .set_curve_server(true)
+                .context("Failed to enable CURVE server on workers PUB socket")?;
+
+            // Decode Z85-encoded secret key to bytes
+            let secret_key_bytes =
+                zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
+            publish
+                .set_curve_secretkey(&secret_key_bytes)
+                .context("Failed to set CURVE secret key on workers PUB socket")?;
+
+            info!("CURVE encryption enabled on workers PUB socket with ZAP authentication");
+        }
+
         publish
             .bind(workers_broadcast)
             .context("Unable to bind ZMQ PUB socket")?;
@@ -104,11 +117,8 @@ impl WorkersMessageHandlerImpl {
         let workers_publish = Arc::new(Mutex::new(publish));
 
         Ok(Self {
-            public_key,
-            private_key,
             workers: Arc::new(RwLock::new(HashMap::new())),
             scheduler_send,
-            token_cache: Arc::new(RwLock::new(HashMap::new())),
             workers_publish,
         })
     }
@@ -117,40 +127,13 @@ impl WorkersMessageHandlerImpl {
 impl WorkersMessageHandler for WorkersMessageHandlerImpl {
     fn handle_worker_message(
         &self,
-        worker_token: &[u8],
         worker_id: &[u8],
         message: &moor_rpc::WorkerToDaemonMessageRef,
     ) -> moor_rpc::DaemonToWorkerReply {
-        // Worker token has to be a valid UTF8 string
-        let Ok(worker_token_str) = std::str::from_utf8(worker_token) else {
-            error!("Worker token is not valid UTF8");
-            return mk_worker_invalid_payload_reply("Worker token is not valid UTF8");
-        };
-
-        // Verify the token
-        let pk: PasetoAsymmetricPublicKey<V4, Public> =
-            PasetoAsymmetricPublicKey::from(&self.public_key);
-
-        let Ok(token_worker_id) = Paseto::<V4, Public>::try_verify(
-            worker_token_str,
-            &pk,
-            Footer::from(MOOR_WORKER_TOKEN_FOOTER),
-            None,
-        ) else {
-            error!("Unable to verify worker token; ignoring");
-            return mk_worker_auth_failed_reply("Unable to verify worker token");
-        };
-
         let Ok(worker_id) = Uuid::from_slice(worker_id) else {
             error!("Unable to parse worker id {worker_id:?} from message");
             return mk_worker_invalid_payload_reply("Invalid worker ID format");
         };
-
-        // Worker ID must match the one in the token
-        if token_worker_id != worker_id.to_string() {
-            error!("Worker ID does not match token");
-            return mk_worker_auth_failed_reply("Worker ID does not match token");
-        }
 
         // Now handle the message using flatbuffer types directly
         let Ok(message_union) = message.message() else {
@@ -169,7 +152,7 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 self.handle_detach_worker(worker_id)
             }
             moor_rpc::WorkerToDaemonMessageUnionRef::RequestResult(result) => {
-                self.handle_request_result(result)
+                self.handle_request_result(worker_id, result)
             }
             moor_rpc::WorkerToDaemonMessageUnionRef::RequestError(error) => {
                 self.handle_request_error(worker_id, error)
@@ -265,14 +248,8 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
 
                 let timeout_ms = timeout.map(|d| d.as_millis() as u64).unwrap_or(0);
 
-                let fb_message = mk_worker_request_msg(
-                    worker.id,
-                    &worker.token,
-                    request_id,
-                    &perms,
-                    request_vars,
-                    timeout_ms,
-                );
+                let fb_message =
+                    mk_worker_request_msg(worker.id, request_id, &perms, request_vars, timeout_ms);
 
                 let mut builder = Builder::new();
                 let event_bytes = builder.finish(&fb_message, None);
@@ -348,15 +325,6 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
     }
 }
 
-/// Helper to safely extract WorkerToken from flatbuffer
-fn extract_worker_token(
-    token_ref: Result<moor_rpc::WorkerTokenRef, planus::Error>,
-) -> Result<WorkerToken, String> {
-    let token = token_ref.map_err(|_| "Failed to read token field")?;
-    let token_str = token.token().map_err(|_| "Failed to read token string")?;
-    Ok(WorkerToken(token_str.to_owned()))
-}
-
 /// Helper to extract WorkerError from flatbuffer
 fn extract_worker_error(
     error_ref: Result<moor_rpc::WorkerErrorRef, planus::Error>,
@@ -369,49 +337,12 @@ fn extract_worker_error(
 }
 
 impl WorkersMessageHandlerImpl {
-    fn validate_worker_token(&self, token: &WorkerToken) -> Result<Uuid, RpcMessageError> {
-        // Check cache first
-        {
-            let worker_tokens = self.token_cache.read().unwrap();
-            if let Some((t, worker_id)) = worker_tokens.get(token)
-                && t.elapsed().as_secs() <= 60
-            {
-                return Ok(*worker_id);
-            }
-        }
-
-        let pk: PasetoAsymmetricPublicKey<V4, Public> =
-            PasetoAsymmetricPublicKey::from(&self.public_key);
-        let worker_id = Paseto::<V4, Public>::try_verify(
-            token.0.as_str(),
-            &pk,
-            Footer::from(MOOR_WORKER_TOKEN_FOOTER),
-            None,
-        )
-        .map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
-            RpcMessageError::PermissionDenied
-        })?;
-
-        let worker_id = Uuid::parse_str(worker_id.as_str()).map_err(|e| {
-            warn!(error = ?e, "Unable to parse/validate token");
-            RpcMessageError::PermissionDenied
-        })?;
-
-        // Cache the result
-        let mut tokens = self.token_cache.write().unwrap();
-        tokens.insert(token.clone(), (Instant::now(), worker_id));
-
-        Ok(worker_id)
-    }
-
     /// Handle AttachWorker message
     fn handle_attach_worker(
         &self,
         worker_id: Uuid,
         attach: moor_rpc::AttachWorkerRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let token = extract_worker_token(attach.token())?;
         let worker_type = attach
             .worker_type()
             .map_err(|e| e.to_string())
@@ -421,7 +352,6 @@ impl WorkersMessageHandlerImpl {
         workers.insert(
             worker_id,
             Worker {
-                token: token.clone(),
                 last_ping_time: Instant::now(),
                 worker_type,
                 id: worker_id,
@@ -430,7 +360,7 @@ impl WorkersMessageHandlerImpl {
         );
         info!("Worker {} of type {} attached", worker_id, worker_type);
 
-        Ok(mk_worker_attached_reply(&token, worker_id))
+        Ok(mk_worker_attached_reply(worker_id))
     }
 
     /// Handle WorkerPong message
@@ -439,7 +369,6 @@ impl WorkersMessageHandlerImpl {
         worker_id: Uuid,
         pong: moor_rpc::WorkerPongRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let token = extract_worker_token(pong.token())?;
         let worker_type = pong
             .worker_type()
             .map_err(|e| e.to_string())
@@ -454,7 +383,6 @@ impl WorkersMessageHandlerImpl {
             workers.insert(
                 worker_id,
                 Worker {
-                    token: token.clone(),
                     last_ping_time: Instant::now(),
                     worker_type,
                     id: worker_id,
@@ -463,7 +391,7 @@ impl WorkersMessageHandlerImpl {
             );
             info!("Worker {} of type {} re-attached", worker_id, worker_type);
 
-            Ok(mk_worker_attached_reply(&token, worker_id))
+            Ok(mk_worker_attached_reply(worker_id))
         }
     }
 
@@ -495,16 +423,13 @@ impl WorkersMessageHandlerImpl {
     /// Handle RequestResult message
     fn handle_request_result(
         &self,
+        worker_id: Uuid,
         result: moor_rpc::RequestResultRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
-        let token = extract_worker_token(result.token())?;
         let request_id = result
-            .id()
+            .request_id()
             .map_err(|e| e.to_string())
             .and_then(uuid_from_ref)?;
-        let worker_id = self
-            .validate_worker_token(&token)
-            .map_err(|_| "Unable to validate worker token".to_string())?;
 
         let result_var = result
             .result()
@@ -549,7 +474,7 @@ impl WorkersMessageHandlerImpl {
         error: moor_rpc::RequestErrorRef,
     ) -> Result<moor_rpc::DaemonToWorkerReply, String> {
         let request_id = error
-            .id()
+            .request_id()
             .map_err(|e| e.to_string())
             .and_then(uuid_from_ref)?;
         let worker_error = extract_worker_error(error.error())?;

@@ -25,18 +25,22 @@ environment:
   - "RUST_BACKTRACE=1"
 
 processes:
-  # Initialization step: Generate keypair for signing PASETO tokens using moor-daemon
-  init-certificates:
+  # Initialization step: Generate enrollment token for CURVE authentication
+  init-enrollment:
     command: >
       sh -c "
-        if [ ! -f moor-signing-key.pem ]; then
-          cargo run --release -p moor-daemon -- --generate-keypair
-        fi
+        if [ ! -f enrollment-token ]; then
+          cargo run --release -p moor-daemon -- --rotate-enrollment-token
+        fi &&
+        export MOOR_ENROLLMENT_TOKEN=\$(cat enrollment-token) &&
+        echo \"Enrollment token: \$MOOR_ENROLLMENT_TOKEN\"
       "
     restart: no
     availability:
       restart: exit_on_failure
+
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
+  # Uses --generate-keypair to auto-generate PASETO keys on first run if they don't exist
   moor-daemon:
     command: >
       cargo run --release -p moor-daemon --
@@ -44,9 +48,11 @@ processes:
       --db=development.db
       --import=cores/lambda-moor/src --import-format=objdef
       --export=export --export-format=objdef
+      --enrollment-token-file=enrollment-token
+      --generate-keypair
     restart: on_failure
     depends_on:
-      init-certificates:
+      init-enrollment:
         condition: process_completed_successfully
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
@@ -55,9 +61,10 @@ processes:
       cargo run -p moor-telnet-host --
       --telnet-address=0.0.0.0
       --telnet-port=8888
+      --enrollment-token-file=enrollment-token
     restart: on_failure
     depends_on:
-      init-certificates:
+      init-enrollment:
         condition: process_completed_successfully
       moor-daemon:
         condition: process_started
@@ -84,9 +91,10 @@ processes:
     command: >
       cargo run -p moor-web-host --
       --listen-address=0.0.0.0:8081
+      --enrollment-token-file=enrollment-token
     restart: on_failure
     depends_on:
-      init-certificates:
+      init-enrollment:
         condition: process_completed_successfully
       moor-daemon:
         condition: process_started
@@ -94,10 +102,12 @@ processes:
   # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
   # to the daemon.
   moor-curl-worker:
-    command: cargo run -p moor-curl-worker
+    command: >
+      cargo run -p moor-curl-worker --
+      --enrollment-token-file=enrollment-token
     restart: on_failure
     depends_on:
-      init-certificates:
+      init-enrollment:
         condition: process_completed_successfully
       moor-daemon:
         condition: process_started

@@ -16,8 +16,8 @@ use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
 use reqwest::Url;
-use rpc_async_client::{make_worker_token, worker_loop};
-use rpc_common::{WorkerToken, client_args::RpcClientArgs, load_keypair};
+use rpc_async_client::worker_loop;
+use rpc_common::client_args::RpcClientArgs;
 use std::{
     str::FromStr,
     sync::{Arc, atomic::AtomicBool},
@@ -63,19 +63,47 @@ async fn main() -> Result<(), eyre::Error> {
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let (private_key, _public_key) =
-        match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+    // Check if we need CURVE encryption (only for TCP endpoints, not IPC)
+    let use_curve = args.client_args.rpc_address.starts_with("tcp://");
+
+    // Enroll with daemon and load CURVE keys only if using TCP
+    let (my_id, curve_keys) = if use_curve {
+        info!("TCP endpoint detected - enrolling with daemon and loading CURVE keys");
+
+        let enrollment_token = std::env::var("MOOR_ENROLLMENT_TOKEN").ok();
+        let (daemon_public_key, service_uuid) =
+            match rpc_async_client::enrollment_client::ensure_enrolled(
+                &args.client_args.enrollment_address,
+                enrollment_token.as_deref(),
+                args.client_args.enrollment_token_file.as_deref(),
+                "curl-worker",
+                &args.client_args.data_dir,
+            ) {
+                Ok(enrollment) => enrollment,
+                Err(e) => {
+                    error!("Failed to enroll with daemon: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+        let keypair = match rpc_async_client::curve_keys::load_or_generate_keypair(
+            &args.client_args.data_dir,
+            "curl-worker",
+        ) {
             Ok(keypair) => keypair,
             Err(e) => {
-                error!(
-                    "Unable to load keypair from public and private key files: {}",
-                    e
-                );
+                error!("Unable to load CURVE keypair: {}", e);
                 std::process::exit(1);
             }
         };
-    let my_id = Uuid::new_v4();
-    let worker_token = make_worker_token(&private_key, my_id);
+
+        let keys = Some((keypair.secret, keypair.public, daemon_public_key));
+
+        (service_uuid, keys)
+    } else {
+        info!("IPC endpoint detected - CURVE encryption disabled");
+        (uuid::Uuid::new_v4(), None)
+    };
 
     let worker_response_rpc_addr = args.client_args.workers_response_address.clone();
     let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
@@ -86,11 +114,11 @@ async fn main() -> Result<(), eyre::Error> {
         if let Err(e) = worker_loop(
             &ks,
             my_id,
-            &worker_token,
             &worker_response_rpc_addr,
             &worker_request_rpc_addr,
             worker_type,
             perform_func,
+            curve_keys,
         )
         .await
         {
@@ -116,7 +144,6 @@ async fn main() -> Result<(), eyre::Error> {
 }
 
 async fn perform_http_request(
-    _token: WorkerToken,
     _request_id: Uuid,
     _worker_type: Symbol,
     _perms: Obj,

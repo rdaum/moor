@@ -36,22 +36,6 @@ pub struct RpcClientArgs {
 
     #[arg(
         long,
-        value_name = "public_key",
-        help = "file containing the PEM encoded public key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "moor-verifying-key.pem"
-    )]
-    pub public_key: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "private_key",
-        help = "file containing an openssh generated ed25519 format private key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "moor-signing-key.pem"
-    )]
-    pub private_key: PathBuf,
-
-    #[arg(
-        long,
         value_name = "workers-dispatch-address",
         help = "Workers server ZMQ pub-sub address for receiving dispatch requests",
         default_value = "ipc:///tmp/moor_workers_response.sock"
@@ -65,4 +49,27 @@ pub struct RpcClientArgs {
         default_value = "ipc:///tmp/moor_workers_request.sock"
     )]
     pub workers_request_address: String,
+
+    #[arg(
+        long,
+        value_name = "enrollment-address",
+        help = "Enrollment server address for host registration",
+        default_value = "tcp://localhost:7900"
+    )]
+    pub enrollment_address: String,
+
+    #[arg(
+        long,
+        value_name = "data-dir",
+        help = "Directory for host identity and CURVE keys",
+        default_value = "./.moor-host-data"
+    )]
+    pub data_dir: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "enrollment-token-file",
+        help = "Path to enrollment token file (if not specified, checks MOOR_ENROLLMENT_TOKEN env var)"
+    )]
+    pub enrollment_token_file: Option<PathBuf>,
 }

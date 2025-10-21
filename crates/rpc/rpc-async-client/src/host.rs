@@ -16,7 +16,9 @@ use moor_schema::{
     convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
     rpc as moor_rpc,
 };
-use rpc_common::{HOST_BROADCAST_TOPIC, HostToken, HostType, RpcError};
+use rpc_common::{
+    HOST_BROADCAST_TOPIC, HostType, RpcError, mk_host_pong_msg, mk_register_host_msg,
+};
 use std::{
     net::SocketAddr,
     sync::{Arc, atomic::AtomicBool},
@@ -24,30 +26,39 @@ use std::{
 };
 use tmq::request;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
-pub async fn send_host_to_daemon_msg(
-    rpc_client: &mut RpcSendClient,
-    host_token: &HostToken,
-    msg: moor_rpc::HostToDaemonMessage,
-) -> Result<Vec<u8>, RpcError> {
-    rpc_client.make_host_rpc_call(host_token, msg).await
-}
-
-/// Start the host session with the daemon, and return the RPC client to use for further
+/// Start the host session with the daemon, and return the RPC client and host_id to use for further
 /// communication.
 pub async fn start_host_session(
-    host_token: &HostToken,
     zmq_ctx: tmq::Context,
     rpc_address: String,
     kill_switch: Arc<AtomicBool>,
     listeners: ListenersClient,
-) -> Result<RpcSendClient, RpcError> {
-    // Establish the initial connection to the daemon, and send the host token and our initial
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
+) -> Result<(RpcSendClient, Uuid), RpcError> {
+    // Generate a unique host ID for this session
+    let host_id = Uuid::new_v4();
+
+    // Establish the initial connection to the daemon, and send the host_id and our initial
     // listener list.
     let rpc_client = loop {
-        let rpc_request_sock = request(&zmq_ctx)
-            .set_rcvtimeo(100)
-            .set_sndtimeo(100)
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &curve_keys {
+            socket_builder = crate::configure_curve_client(
+                socket_builder,
+                client_secret,
+                client_public,
+                server_public,
+            )
+            .map_err(RpcError::CouldNotInitiateSession)?;
+
+            info!("CURVE encryption enabled for host connection");
+        }
+
+        let rpc_request_sock = socket_builder
             .connect(rpc_address.as_str())
             .expect("Unable to bind RPC server for connection");
 
@@ -76,16 +87,8 @@ pub async fn start_host_session(
             })
             .collect();
 
-        let host_hello = moor_rpc::HostToDaemonMessage {
-            message: moor_rpc::HostToDaemonMessageUnion::RegisterHost(Box::new(
-                moor_rpc::RegisterHost {
-                    timestamp,
-                    host_type: host_type_fb,
-                    listeners: listeners_fb,
-                },
-            )),
-        };
-        let reply_bytes = send_host_to_daemon_msg(&mut rpc_client, host_token, host_hello).await;
+        let host_hello = mk_register_host_msg(host_id, timestamp, host_type_fb, listeners_fb);
+        let reply_bytes = rpc_client.make_host_rpc_call(host_id, host_hello).await;
         match reply_bytes {
             Ok(bytes) => {
                 use planus::ReadAsRoot;
@@ -152,21 +155,45 @@ pub async fn start_host_session(
             }
         }
     };
-    Ok(rpc_client)
+    Ok((rpc_client, host_id))
 }
 
 pub async fn process_hosts_events(
     mut rpc_client: RpcSendClient,
-    host_token: HostToken,
+    host_id: Uuid,
     zmq_ctx: tmq::Context,
     events_zmq_address: String,
     listen_address: String,
     kill_switch: Arc<AtomicBool>,
     listeners: ListenersClient,
     our_host_type: HostType,
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
 ) -> Result<(), RpcError> {
     // Handle inbound events from the daemon specifically to the host
-    let events_sub = tmq::subscribe(&zmq_ctx)
+    let mut socket_builder = tmq::subscribe(&zmq_ctx);
+
+    // Configure CURVE encryption if keys provided
+    if let Some((client_secret, client_public, server_public)) = &curve_keys {
+        // Decode Z85 keys to bytes
+        let client_secret_bytes = zmq::z85_decode(client_secret).map_err(|_| {
+            RpcError::CouldNotInitiateSession("Invalid client secret key".to_string())
+        })?;
+        let client_public_bytes = zmq::z85_decode(client_public).map_err(|_| {
+            RpcError::CouldNotInitiateSession("Invalid client public key".to_string())
+        })?;
+        let server_public_bytes = zmq::z85_decode(server_public).map_err(|_| {
+            RpcError::CouldNotInitiateSession("Invalid server public key".to_string())
+        })?;
+
+        socket_builder = socket_builder
+            .set_curve_secretkey(&client_secret_bytes)
+            .set_curve_publickey(&client_public_bytes)
+            .set_curve_serverkey(&server_public_bytes);
+
+        info!("CURVE encryption enabled for host events connection");
+    }
+
+    let events_sub = socket_builder
         .connect(&events_zmq_address)
         .expect("Unable to connect host events subscriber ");
     let mut events_sub = events_sub.subscribe(HOST_BROADCAST_TOPIC).unwrap();
@@ -209,17 +236,8 @@ pub async fn process_hosts_events(
                     })
                     .collect();
 
-                let host_pong = moor_rpc::HostToDaemonMessage {
-                    message: moor_rpc::HostToDaemonMessageUnion::HostPong(Box::new(
-                        moor_rpc::HostPong {
-                            timestamp,
-                            host_type: host_type_fb,
-                            listeners: listeners_fb,
-                        },
-                    )),
-                };
-                let reply_bytes =
-                    send_host_to_daemon_msg(&mut rpc_client, &host_token, host_pong).await;
+                let host_pong = mk_host_pong_msg(host_id, timestamp, host_type_fb, listeners_fb);
+                let reply_bytes = rpc_client.make_host_rpc_call(host_id, host_pong).await;
                 match reply_bytes {
                     Ok(bytes) => {
                         let reply_ref =

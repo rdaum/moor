@@ -29,16 +29,13 @@ The `docker-compose.yml` file in the mooR repository defines all the components 
 ### Service Definitions
 
 **moor-daemon**
-: Configured with authentication keys (`moor-signing-key.pem` and `moor-verifying-key.pem`) and set up to listen for RPC
-requests from other components.
+: Auto-generates PASETO keys for client authentication (using `--generate-keypair`) and listens for RPC requests from hosts/workers. Uses CURVE encryption for transport security when using TCP endpoints.
 
 **moor-telnet-host**
-: Connected to the daemon using the same authentication keys, listening on port 8888 by default for traditional telnet
-connections.
+: Connects to the daemon using CURVE-encrypted transport (TCP mode) or IPC sockets (local mode), listening on port 8888 by default for traditional telnet connections.
 
 **moor-web-host**
-: Connected to the daemon with matching authentication, providing RESTful API endpoints and WebSocket connections for
-web clients.
+: Connects to the daemon with CURVE-encrypted transport, providing RESTful API endpoints and WebSocket connections for web clients.
 
 **moor-frontend**
 : An nginx container serving the web application and proxying API calls to moor-web-host. Accessible via web browser on

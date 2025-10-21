@@ -90,6 +90,7 @@ tracing-subscriber.workspace = true
 # Utilities & Helpers
 ahash.workspace = true
 byteview.workspace = true
+chrono.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true
 rand.workspace = true

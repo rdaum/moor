@@ -27,23 +27,19 @@ ARG TARGET_ARCH
 
 WORKDIR /moor-build
 RUN apt update
-RUN apt -y install clang-16 libclang-16-dev swig python3-dev cmake libc6 git
+RUN apt -y install clang-16 libclang-16-dev swig python3-dev cmake libc6 git libsodium-dev pkg-config
 
 # Install ARM64 cross-compilation toolchain if building for ARM64
 RUN if [ "$TARGET_ARCH" = "arm64" ]; then \
         dpkg --add-architecture arm64 && \
         apt update && \
         apt -y install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libssl-dev:arm64 pkg-config && \
+            libssl-dev:arm64 libsodium-dev:arm64 pkg-config && \
         rustup target add aarch64-unknown-linux-gnu; \
     fi
 
 # Configure pkg-config for ARM64 cross-compilation
 ENV PKG_CONFIG_ALLOW_CROSS=1
-
-# Generate the keypair for signing PASETO tokens. Shared between hosts and the daemon.
-RUN openssl genpkey -algorithm ed25519 -out moor-signing-key.pem
-RUN openssl pkey -in moor-signing-key.pem -pubout -out moor-verifying-key.pem
 
 # Stuff we'll need from the host to make the build work
 COPY ./crates ./crates
@@ -96,15 +92,11 @@ FROM --platform=linux/${TARGET_ARCH} linuxcontainers/debian-slim:latest AS backe
 ARG TARGET_ARCH
 ARG BUILD_PROFILE=debug
 
-# We need libssl for the curl worker and ca-certificates for HTTPS
+# We need libssl for the curl worker, ca-certificates for HTTPS, and libsodium for CURVE encryption
 RUN apt update
-RUN apt -y install libssl3 ca-certificates
+RUN apt -y install libssl3 ca-certificates libsodium23
 
 WORKDIR /moor
-
-# The keys for signing and verifying PASETO tokens, we built them in the backend build image
-COPY --from=backend-build ./moor-build/moor-signing-key.pem ./moor-signing-key.pem
-COPY --from=backend-build ./moor-build/moor-verifying-key.pem ./moor-verifying-key.pem
 
 # The compiled service binaries from the backend build (debug or release depending on BUILD_PROFILE)
 COPY --from=backend-build /moor-build/target-final/moor-daemon /moor/moor-daemon

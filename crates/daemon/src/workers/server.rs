@@ -14,7 +14,6 @@
 //! Thin coordinator for workers server that delegates business logic to message handler
 
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
-use rusty_paseto::core::Key;
 use std::{
     sync::{
         Arc,
@@ -37,6 +36,9 @@ pub struct WorkersServer {
     // Core business logic handler
     message_handler: Arc<WorkersMessageHandlerImpl>,
 
+    // CURVE encryption key
+    curve_secret_key: Option<String>,
+
     // Thread handles
     request_processor_jh: Option<std::thread::JoinHandle<()>>,
     transport_jh: Option<std::thread::JoinHandle<()>>,
@@ -46,25 +48,24 @@ impl WorkersServer {
     /// Create a new workers server coordinator
     pub fn new(
         kill_switch: Arc<AtomicBool>,
-        public_key: Key<32>,
-        private_key: Key<64>,
         zmq_context: zmq::Context,
         workers_broadcast: &str,
         scheduler_send: flume::Sender<WorkerResponse>,
+        curve_secret_key: Option<String>, // Z85-encoded CURVE secret key
     ) -> eyre::Result<Self> {
         // Create the message handler
         let message_handler = Arc::new(WorkersMessageHandlerImpl::new(
             zmq_context.clone(),
             workers_broadcast,
-            public_key,
-            private_key,
             scheduler_send,
+            curve_secret_key.clone(),
         )?);
 
         Ok(Self {
             zmq_context,
             kill_switch,
             message_handler,
+            curve_secret_key,
             request_processor_jh: None,
             transport_jh: None,
         })
@@ -87,7 +88,11 @@ impl WorkersServer {
 
     /// Start the transport layer to listen for worker connections
     pub fn listen(&mut self, workers_endpoint: &str) -> eyre::Result<()> {
-        let transport = WorkersTransport::new(self.zmq_context.clone(), self.kill_switch.clone());
+        let transport = WorkersTransport::new(
+            self.zmq_context.clone(),
+            self.kill_switch.clone(),
+            self.curve_secret_key.clone(),
+        );
         let message_handler = self.message_handler.clone();
         let workers_endpoint = workers_endpoint.to_string();
 

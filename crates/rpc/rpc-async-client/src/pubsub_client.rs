@@ -22,11 +22,11 @@ use moor_schema::{
 };
 use moor_var::{Obj, Var};
 use planus::ReadAsRoot;
-use rpc_common::{RpcError, WorkerToken};
+use rpc_common::RpcError;
 use std::time::Duration;
 
 /// Type alias for the complex return type of worker request extraction
-type WorkerRequestData = (Uuid, WorkerToken, Uuid, Obj, Vec<Var>, Option<Duration>);
+type WorkerRequestData = (Uuid, Uuid, Obj, Vec<Var>, Option<Duration>);
 
 /// Owned wrapper around worker message flatbuffer data that provides zero-copy access
 pub struct WorkerMessage {
@@ -72,15 +72,6 @@ impl WorkerMessage {
                 let request_id = Uuid::from_slice(request_id_data)
                     .map_err(|e| RpcError::CouldNotDecode(format!("Invalid request UUID: {e}")))?;
 
-                let token_str = req
-                    .token()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {e}")))?
-                    .token()
-                    .map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to get token string: {e}"))
-                    })?;
-                let token = WorkerToken(token_str.to_owned());
-
                 let perms_ref = req
                     .perms()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get perms: {e}")))?;
@@ -118,7 +109,7 @@ impl WorkerMessage {
                     Some(Duration::from_millis(timeout_ms))
                 };
 
-                Ok((worker_id, token, request_id, perms, request, timeout))
+                Ok((worker_id, request_id, perms, request, timeout))
             }
             _ => Err(RpcError::CouldNotDecode(
                 "Expected WorkerRequest message".to_string(),
@@ -127,18 +118,9 @@ impl WorkerMessage {
     }
 
     /// Extract PleaseDie data with all business logic conversions
-    pub fn extract_please_die(&self) -> Result<(WorkerToken, Uuid), RpcError> {
+    pub fn extract_please_die(&self) -> Result<Uuid, RpcError> {
         match self.message()? {
             rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
-                let token_str = die
-                    .token()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get token: {e}")))?
-                    .token()
-                    .map_err(|e| {
-                        RpcError::CouldNotDecode(format!("Failed to get token string: {e}"))
-                    })?;
-                let token = WorkerToken(token_str.to_owned());
-
                 let worker_id_data = die
                     .worker_id()
                     .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
@@ -149,7 +131,7 @@ impl WorkerMessage {
                 let worker_id = Uuid::from_slice(worker_id_data)
                     .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}")))?;
 
-                Ok((token, worker_id))
+                Ok(worker_id)
             }
             _ => Err(RpcError::CouldNotDecode(
                 "Expected PleaseDie message".to_string(),

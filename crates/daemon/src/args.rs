@@ -118,6 +118,23 @@ pub struct Args {
 
     #[arg(
         long,
+        value_name = "enrollment-listen",
+        help = "Enrollment server address for host registration",
+        default_value = "tcp://0.0.0.0:7900"
+    )]
+    pub enrollment_listen: String,
+
+    #[arg(
+        long,
+        value_name = "enrollment-token-file",
+        help = "Path to enrollment token file",
+        value_hint = ValueHint::FilePath,
+        default_value = "./enrollment-token"
+    )]
+    pub enrollment_token_file: PathBuf,
+
+    #[arg(
+        long,
         value_name = "public_key",
         help = "file containing the PEM encoded public key (shared with the daemon), used for authenticating client & host connections",
         default_value = "moor-verifying-key.pem"
@@ -143,8 +160,11 @@ pub struct Args {
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     pub debug: bool,
 
-    #[arg(long, help = "Generate ED25519 keypair and exit")]
+    #[arg(long, help = "Generate ED25519 keypair if it doesn't exist, then continue")]
     pub generate_keypair: bool,
+
+    #[arg(long, help = "Rotate enrollment token and exit")]
+    pub rotate_enrollment_token: bool,
 
     #[cfg(feature = "trace_events")]
     #[arg(

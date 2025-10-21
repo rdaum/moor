@@ -32,11 +32,10 @@ mod tests {
     use moor_var::{Obj, SYSTEM_OBJECT};
     use planus::ReadAsRoot;
     use rpc_common::{
-        HostToken, make_host_token, mk_client_pong_msg, mk_command_msg,
-        mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_host_pong_msg,
-        mk_login_command_msg, mk_properties_msg, mk_register_host_msg,
-        mk_request_performance_counters_msg, mk_request_sys_prop_msg, mk_requested_input_msg,
-        mk_verbs_msg, obj_fb,
+        mk_client_pong_msg, mk_command_msg, mk_connection_establish_msg, mk_detach_host_msg,
+        mk_detach_msg, mk_host_pong_msg, mk_login_command_msg, mk_properties_msg,
+        mk_register_host_msg, mk_request_performance_counters_msg, mk_request_sys_prop_msg,
+        mk_requested_input_msg, mk_verbs_msg, obj_fb,
     };
     use std::{
         net::SocketAddr,
@@ -72,14 +71,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (private_key, public_key) = rpc_common::parse_keypair(VERIFYING_KEY, SIGNING_KEY)
             .expect("Failed to parse test keypair");
         (public_key, private_key)
-    }
-
-    fn create_test_host_token() -> HostToken {
-        let (_, private_key) = create_test_keys();
-        let host_type = rpc_common::HostType::WebSocket;
-
-        // Create a proper PASETO host token using the same private key as the message handler
-        make_host_token(&private_key, host_type)
     }
 
     fn setup_test_environment() -> (
@@ -134,15 +125,16 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     fn test_host_registration_message() {
         let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
 
-        let host_token = create_test_host_token();
+        let host_id = Uuid::new_v4();
         let listeners: Vec<moor_rpc::Listener> = Vec::new();
         let message = mk_register_host_msg(
+            host_id,
             systemtime_to_nanos(SystemTime::now()),
             moor_rpc::HostType::WebSocket,
             listeners,
         );
 
-        let result = transport.process_host_message(message_handler.as_ref(), host_token, message);
+        let result = transport.process_host_message(message_handler.as_ref(), host_id, message);
 
         assert!(result.is_ok(), "Host registration should succeed");
         match result.unwrap().reply {
@@ -157,7 +149,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     fn test_host_attach_detach_lifecycle() {
         let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
 
-        let host_token = create_test_host_token();
+        let host_id = Uuid::new_v4();
 
         // Create some test listeners for the host
         let listener1_addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
@@ -169,16 +161,14 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 1: Register the host (attach)
         let register_message = mk_register_host_msg(
+            host_id,
             systemtime_to_nanos(SystemTime::now()),
             moor_rpc::HostType::WebSocket,
             listeners.clone(),
         );
 
-        let result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            register_message,
-        );
+        let result =
+            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
 
         assert!(result.is_ok(), "Host registration should succeed");
         match result.unwrap().reply {
@@ -220,12 +210,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 3: Detach the host and verify reply
-        let detach_message = mk_detach_host_msg();
-        let result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            detach_message,
-        );
+        let detach_message = mk_detach_host_msg(host_id);
+        let result =
+            transport.process_host_message(message_handler.as_ref(), host_id, detach_message);
 
         assert!(result.is_ok(), "Host detach should succeed");
         match result.unwrap().reply {
@@ -264,23 +251,21 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     fn test_host_detach_with_client_connections() {
         let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
 
-        let host_token = create_test_host_token();
+        let host_id = Uuid::new_v4();
 
         // Step 1: Register host with listeners
         let listener1_addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
         let listeners = vec![create_listener(Obj::mk_id(100), listener1_addr)];
 
         let register_message = mk_register_host_msg(
+            host_id,
             systemtime_to_nanos(SystemTime::now()),
             moor_rpc::HostType::WebSocket,
             listeners,
         );
 
-        let result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            register_message,
-        );
+        let result =
+            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
         assert!(result.is_ok(), "Host registration should succeed");
 
         // Step 2: Establish a client connection
@@ -312,12 +297,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 3: Detach the host
-        let detach_message = mk_detach_host_msg();
-        let result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            detach_message,
-        );
+        let detach_message = mk_detach_host_msg(host_id);
+        let result =
+            transport.process_host_message(message_handler.as_ref(), host_id, detach_message);
 
         assert!(result.is_ok(), "Host detach should succeed");
 
@@ -335,10 +317,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     fn test_performance_counters_request() {
         let (message_handler, transport, _event_log, _scheduler) = setup_test_environment();
 
-        let host_token = create_test_host_token();
+        let host_id = Uuid::new_v4();
         let message = mk_request_performance_counters_msg();
 
-        let result = transport.process_host_message(message_handler.as_ref(), host_token, message);
+        let result = transport.process_host_message(message_handler.as_ref(), host_id, message);
 
         assert!(
             result.is_ok(),
@@ -600,11 +582,12 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     fn test_message_reply_flows() {
         let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
 
-        let host_token = create_test_host_token();
+        let host_id = Uuid::new_v4();
         let client_id = Uuid::new_v4();
 
         // Test 1: Host registration should reply with Ack
         let register_message = mk_register_host_msg(
+            host_id,
             systemtime_to_nanos(SystemTime::now()),
             moor_rpc::HostType::WebSocket,
             vec![create_listener(
@@ -613,11 +596,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             )],
         );
 
-        let register_result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            register_message,
-        );
+        let register_result =
+            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
 
         assert!(register_result.is_ok(), "Host registration should succeed");
         assert!(matches!(
@@ -636,11 +616,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Test 2: Performance counters request should reply with PerfCounters
         let perf_message = mk_request_performance_counters_msg();
 
-        let perf_result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            perf_message,
-        );
+        let perf_result =
+            transport.process_host_message(message_handler.as_ref(), host_id, perf_message);
 
         assert!(
             perf_result.is_ok(),
@@ -1428,34 +1405,33 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
 
         // Step 1: Register a host first
-        let host_token = create_test_host_token();
+        let host_id = Uuid::new_v4();
         let listeners = vec![create_listener(
             SYSTEM_OBJECT,
             "127.0.0.1:7777".parse().unwrap(),
         )];
         let register_message = mk_register_host_msg(
+            host_id,
             systemtime_to_nanos(SystemTime::now()),
             moor_rpc::HostType::Tcp,
             listeners.clone(),
         );
 
-        let register_result = transport.process_host_message(
-            message_handler.as_ref(),
-            host_token.clone(),
-            register_message,
-        );
+        let register_result =
+            transport.process_host_message(message_handler.as_ref(), host_id, register_message);
         assert!(register_result.is_ok(), "Host registration should succeed");
 
         // Step 2: Send a HostPong message (response to daemon's ping)
         let pong_time = SystemTime::now();
         let pong_message = mk_host_pong_msg(
+            host_id,
             systemtime_to_nanos(pong_time),
             moor_rpc::HostType::Tcp,
             listeners,
         );
 
         let pong_result =
-            transport.process_host_message(message_handler.as_ref(), host_token, pong_message);
+            transport.process_host_message(message_handler.as_ref(), host_id, pong_message);
 
         // With NormalOperation scenario, pong should be acknowledged
         assert!(
@@ -1563,19 +1539,10 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
     }
 
     #[test]
-    fn test_token_validation() {
+    fn test_client_token_validation() {
         let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
 
-        let host_token = create_test_host_token();
         let client_id = Uuid::new_v4();
-
-        // Test host token validation - should work with our test token
-        let host_validation = message_handler.validate_host_token(&host_token);
-        // Host token validation should succeed with valid test token
-        assert!(
-            host_validation.is_ok(),
-            "Host token validation should succeed: {host_validation:?}"
-        );
 
         // Test client token validation with a real token
         let establish_message = mk_connection_establish_msg(

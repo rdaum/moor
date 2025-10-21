@@ -22,7 +22,7 @@ use std::{
     },
     time::Duration,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use zmq::Socket;
 
@@ -71,6 +71,7 @@ pub struct RpcTransport {
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
     events_publish: Arc<Mutex<Socket>>,
+    curve_secret_key: Option<String>, // Z85-encoded CURVE secret key for server mode
 }
 
 impl RpcTransport {
@@ -78,11 +79,32 @@ impl RpcTransport {
         zmq_context: zmq::Context,
         kill_switch: Arc<AtomicBool>,
         narrative_endpoint: &str,
+        curve_secret_key: Option<String>,
     ) -> Result<Self, eyre::Error> {
         // Create the socket for publishing narrative events
         let publish = zmq_context
             .socket(zmq::SocketType::PUB)
             .context("Unable to create ZMQ PUB socket")?;
+
+        // Configure CURVE encryption if key provided
+        if let Some(ref secret_key) = curve_secret_key {
+            // Set ZAP domain for authentication
+            publish
+                .set_zap_domain("moor")
+                .context("Failed to set ZAP domain on PUB socket")?;
+
+            publish
+                .set_curve_server(true)
+                .context("Failed to enable CURVE server on PUB socket")?;
+            // Decode Z85-encoded secret key to bytes
+            let secret_key_bytes =
+                zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
+            publish
+                .set_curve_secretkey(&secret_key_bytes)
+                .context("Failed to set CURVE secret key on PUB socket")?;
+            info!("CURVE encryption enabled on events publisher with ZAP authentication");
+        }
+
         publish
             .bind(narrative_endpoint)
             .context("Unable to bind ZMQ PUB socket")?;
@@ -93,6 +115,7 @@ impl RpcTransport {
             zmq_context,
             kill_switch,
             events_publish,
+            curve_secret_key,
         })
     }
 
@@ -124,6 +147,7 @@ impl RpcTransport {
                     return Ok(());
                 }
                 Ok(request) => {
+                    debug!("Received RPC request on daemon, {} parts", request.len());
                     if let Err(e) = Self::process_request(
                         &rpc_socket,
                         request,
@@ -168,31 +192,27 @@ impl RpcTransport {
             .map_err(|_| eyre::eyre!("Missing message union"))?
         {
             MessageTypeUnionRef::HostToDaemonMsg(host_msg) => {
-                // Extract host token from discriminator
-                let host_token_ref = match host_msg.host_token() {
-                    Ok(t) => t,
+                // Extract host_id from discriminator
+                let host_id_ref = match host_msg.host_id() {
+                    Ok(id) => id,
                     Err(_) => {
-                        Self::reply_invalid_request(rpc_socket, "Missing host token")?;
+                        Self::reply_invalid_request(rpc_socket, "Missing host_id")?;
                         return Ok(());
                     }
                 };
-                let host_token_string = match host_token_ref.token() {
-                    Ok(s) => s.to_string(),
+                let host_id_data = match host_id_ref.data() {
+                    Ok(data) => data,
                     Err(_) => {
-                        Self::reply_invalid_request(rpc_socket, "Invalid host token")?;
+                        Self::reply_invalid_request(rpc_socket, "Invalid host_id")?;
                         return Ok(());
                     }
                 };
-                let host_token = rpc_common::HostToken(host_token_string);
-
-                // Validate host token
-                if let Err(e) = message_handler.validate_host_token(&host_token) {
-                    Self::reply_invalid_request(
-                        rpc_socket,
-                        &format!("Invalid host token received: {e}"),
-                    )?;
+                let Ok(host_id) = Uuid::from_slice(host_id_data) else {
+                    Self::reply_invalid_request(rpc_socket, "Bad host_id")?;
                     return Ok(());
-                }
+                };
+
+                debug!(host_id = %host_id, "Processing host RPC message on daemon");
 
                 // Decode the actual HostToDaemonMessage from request_body
                 let Ok(host_message_fb) = HostToDaemonMessageRef::read_as_root(request_body) else {
@@ -201,10 +221,15 @@ impl RpcTransport {
                 };
 
                 // Process
-                let response = message_handler.handle_host_message(host_token, host_message_fb);
+                let response = message_handler.handle_host_message(host_id, host_message_fb);
                 match Self::pack_host_response(response) {
                     Ok(response) => {
+                        let response_len = response.len();
                         rpc_socket.send_multipart(vec![response], 0)?;
+                        debug!(
+                            response_bytes = response_len,
+                            "Sent host RPC response from daemon"
+                        );
                     }
                     Err(e) => {
                         error!(error = ?e, "Failed to encode host response");
@@ -222,6 +247,8 @@ impl RpcTransport {
                     return Ok(());
                 };
 
+                debug!(client_id = %client_id, "Processing client RPC message on daemon");
+
                 // Decode the actual HostClientToDaemonMessage from request_body
                 let Ok(request_fb) =
                     moor_rpc::HostClientToDaemonMessageRef::read_as_root(request_body)
@@ -236,9 +263,12 @@ impl RpcTransport {
                     client_id,
                     request_fb,
                 );
+                debug!(client_id = %client_id, "Sending client RPC response from daemon");
                 match Self::pack_client_response(response) {
                     Ok(response) => {
+                        let response_len = response.len();
                         rpc_socket.send_multipart(vec![response], 0)?;
+                        debug!(client_id = %client_id, response_bytes = response_len, "Sent client RPC response from daemon");
                     }
                     Err(e) => {
                         error!(error = ?e, "Failed to encode client response");
@@ -342,6 +372,25 @@ impl Transport for RpcTransport {
 
         let mut clients = self.zmq_context.socket(zmq::ROUTER)?;
         let mut workers = self.zmq_context.socket(zmq::DEALER)?;
+
+        // Configure CURVE encryption on the public-facing ROUTER socket
+        if let Some(ref secret_key) = self.curve_secret_key {
+            // Set ZAP domain for authentication
+            clients
+                .set_zap_domain("moor")
+                .context("Failed to set ZAP domain on ROUTER socket")?;
+
+            clients
+                .set_curve_server(true)
+                .context("Failed to enable CURVE server on ROUTER socket")?;
+            // Decode Z85-encoded secret key to bytes
+            let secret_key_bytes =
+                zmq::z85_decode(secret_key).context("Failed to decode Z85 secret key")?;
+            clients
+                .set_curve_secretkey(&secret_key_bytes)
+                .context("Failed to set CURVE secret key on ROUTER socket")?;
+            info!("CURVE encryption enabled on RPC server with ZAP authentication");
+        }
 
         clients.bind(&rpc_endpoint)?;
         workers.bind("inproc://rpc-workers")?;

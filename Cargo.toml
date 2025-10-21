@@ -179,6 +179,7 @@ bytes = "1.10"
 byteview = "0.6"
 enum-primitive-derive = "0.3"
 fast-counter = "1.0"
+hostname = "0.4"
 lazy_static = "1.5"
 num-traits = "0.2"
 once_cell = { version = "1.21" }
@@ -206,3 +207,8 @@ unindent = "0.2"
 # Terminal & UI
 rustyline = "17.0"
 termimad = "0.34"
+
+# Patches to fix CURVE key generation issue in zmq 0.10
+# See: https://github.com/erickt/rust-zmq/issues/401
+[patch.crates-io]
+zmq = { git = "https://github.com/jito-labs/rust-zmq", branch = "eric/libsodium-fix" }

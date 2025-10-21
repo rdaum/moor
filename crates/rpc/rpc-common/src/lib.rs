@@ -22,9 +22,8 @@ use thiserror::Error;
 // Re-export domain types
 pub use host::{HostType, extract_host_type};
 pub use tokens::{
-    AuthToken, ClientToken, HostToken, KeyError, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
-    MOOR_SESSION_TOKEN_FOOTER, MOOR_WORKER_TOKEN_FOOTER, WorkerToken, load_keypair,
-    make_host_token, parse_keypair,
+    AuthToken, ClientToken, KeyError, MOOR_AUTH_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER,
+    load_keypair, parse_keypair,
 };
 pub use worker::DaemonToWorkerReply;
 
@@ -42,8 +41,8 @@ pub use errors::*;
 
 // Re-export FlatBuffer construction helpers
 pub use helpers::{
-    auth_token_fb, client_token_fb, mk_worker_token, obj_fb, objectref_fb, string_list_fb,
-    symbol_fb, symbol_list_fb, uuid_fb, var_fb,
+    auth_token_fb, client_token_fb, obj_fb, objectref_fb, string_list_fb, symbol_fb,
+    symbol_list_fb, uuid_fb, var_fb,
 };
 
 // Re-export client message builders

@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tokens::WorkerToken;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -19,7 +18,7 @@ pub enum DaemonToWorkerReply {
     Ack,
     Rejected(String),
     /// Let the worker know that it is attached to the daemon.
-    Attached(WorkerToken, Uuid),
+    Attached(Uuid),
     AuthFailed(String),
     InvalidPayload(String),
     UnknownRequest(Uuid),

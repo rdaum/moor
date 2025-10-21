@@ -59,12 +59,12 @@ use moor_schema::convert::{
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
-    AuthToken, ClientToken, HostToken, HostType, RpcMessageError, auth_token_from_ref,
-    client_token_from_ref, extract_field_rpc, extract_host_type, extract_obj_rpc,
-    extract_object_ref_rpc, extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc,
-    extract_uuid_rpc, extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack,
-    mk_disconnected_reply, mk_new_connection_reply, mk_presentation_dismissed_reply,
-    mk_thanks_pong_reply, var_to_flatbuffer_rpc, verb_program_error_to_flatbuffer_struct,
+    AuthToken, ClientToken, HostType, RpcMessageError, auth_token_from_ref, client_token_from_ref,
+    extract_field_rpc, extract_host_type, extract_obj_rpc, extract_object_ref_rpc,
+    extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc, extract_uuid_rpc,
+    extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack, mk_disconnected_reply,
+    mk_new_connection_reply, mk_presentation_dismissed_reply, mk_thanks_pong_reply,
+    var_to_flatbuffer_rpc, verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
 use tracing::{error, info, warn};
@@ -92,7 +92,7 @@ pub trait MessageHandler: Send + Sync {
     /// Process a host-to-daemon message (FlatBuffer refs)
     fn handle_host_message(
         &self,
-        host_token: HostToken,
+        host_id: Uuid,
         message: moor_rpc::HostToDaemonMessageRef<'_>,
     ) -> Result<DaemonToHostReply, RpcMessageError>;
 
@@ -103,9 +103,6 @@ pub trait MessageHandler: Send + Sync {
         client_id: Uuid,
         message: HostClientToDaemonMessageRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError>;
-
-    /// Validate a host token
-    fn validate_host_token(&self, token: &HostToken) -> Result<HostType, RpcMessageError>;
 
     /// Broadcast a listen event to hosts
     fn broadcast_listen(
@@ -145,8 +142,6 @@ pub struct RpcMessageHandler {
 
     pub(crate) hosts: Arc<RwLock<Hosts>>,
 
-    pub(crate) host_token_cache:
-        PapayaHashMap<HostToken, (Instant, HostType), BuildHasherDefault<AHasher>>,
     pub(crate) auth_token_cache:
         PapayaHashMap<AuthToken, (Instant, Obj), BuildHasherDefault<AHasher>>,
     pub(crate) client_token_cache: PapayaHashMap<ClientToken, Instant, BuildHasherDefault<AHasher>>,
@@ -176,7 +171,6 @@ impl RpcMessageHandler {
             connections,
             task_monitor,
             hosts,
-            host_token_cache: Default::default(),
             auth_token_cache: Default::default(),
             client_token_cache: Default::default(),
             mailbox_sender,
@@ -189,7 +183,7 @@ impl RpcMessageHandler {
 impl MessageHandler for RpcMessageHandler {
     fn handle_host_message(
         &self,
-        host_token: HostToken,
+        host_id: Uuid,
         message: moor_rpc::HostToDaemonMessageRef<'_>,
     ) -> Result<DaemonToHostReply, RpcMessageError> {
         let response = match message.message().map_err(|e| {
@@ -203,11 +197,11 @@ impl MessageHandler for RpcMessageHandler {
 
                 info!(
                     "Host {} registered with {} listeners",
-                    host_token.0,
+                    host_id,
                     listeners.len()
                 );
                 let mut hosts = self.hosts.write().unwrap();
-                hosts.receive_ping(host_token, host_type, listeners);
+                hosts.receive_ping(host_id, host_type, listeners);
 
                 mk_daemon_to_host_ack()
             }
@@ -218,10 +212,10 @@ impl MessageHandler for RpcMessageHandler {
 
                 let num_listeners = listeners.len();
                 let mut hosts = self.hosts.write().unwrap();
-                if hosts.receive_ping(host_token.clone(), host_type, listeners) {
+                if hosts.receive_ping(host_id, host_type, listeners) {
                     info!(
                         "Host {} registered with {} listeners",
-                        host_token.0, num_listeners
+                        host_id, num_listeners
                     );
                 }
 
@@ -298,7 +292,7 @@ impl MessageHandler for RpcMessageHandler {
             }
             moor_rpc::HostToDaemonMessageUnionRef::DetachHost(_) => {
                 let mut hosts = self.hosts.write().unwrap();
-                hosts.unregister_host(&host_token);
+                hosts.unregister_host(&host_id);
                 mk_daemon_to_host_ack()
             }
         };
@@ -392,10 +386,6 @@ impl MessageHandler for RpcMessageHandler {
                 self.handle_update_property(scheduler_client, client_id, req)
             }
         }
-    }
-
-    fn validate_host_token(&self, token: &HostToken) -> Result<HostType, RpcMessageError> {
-        self.validate_host_token_impl(token)
     }
 
     fn broadcast_listen(

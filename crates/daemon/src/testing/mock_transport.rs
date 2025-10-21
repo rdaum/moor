@@ -22,11 +22,11 @@ use moor_kernel::SchedulerClient;
 use moor_schema::rpc as moor_rpc;
 use moor_var::Obj;
 use planus::ReadAsRoot;
-use rpc_common::{HostToken, RpcMessageError};
+use rpc_common::RpcMessageError;
 
 /// Type alias for captured host reply tuples
 type HostReply = (
-    HostToken,
+    Uuid,
     Vec<u8>,
     Result<moor_rpc::DaemonToHostReply, RpcMessageError>,
 );
@@ -70,7 +70,7 @@ impl MockTransport {
     pub fn process_host_message(
         &self,
         message_handler: &dyn MessageHandler,
-        host_token: HostToken,
+        host_id: Uuid,
         message: moor_rpc::HostToDaemonMessage,
     ) -> Result<moor_rpc::DaemonToHostReply, RpcMessageError> {
         // Serialize to bytes then parse as Ref for handler
@@ -81,11 +81,11 @@ impl MockTransport {
                 RpcMessageError::InvalidRequest(format!("Failed to parse message: {e}"))
             })?;
 
-        let result = message_handler.handle_host_message(host_token.clone(), message_ref);
+        let result = message_handler.handle_host_message(host_id, message_ref);
 
         // Capture the reply for verification
         let mut replies = self.host_replies.lock().unwrap();
-        replies.push((host_token, message_bytes, result.clone()));
+        replies.push((host_id, message_bytes, result.clone()));
 
         result
     }

@@ -24,41 +24,81 @@ restarted
 independently of the daemon, allowing for flexible deployment and scaling, including live upgrades of the daemon without
 restarting running connections.
 
-When located on the same machine, the default addresses for the daemon's RPC and events sockets are set to communicate
-using Unix domain sockets, which are fast and efficient. If you want to run the daemon on a different machine, you
-must specify the appropriate network addresses for the RPC and events sockets.
+When located on the same machine, the default addresses for the daemon's RPC and events sockets use IPC (Inter-Process
+Communication) endpoints (e.g., `ipc:///tmp/moor_rpc.sock`), which are fast and efficient Unix domain sockets that
+rely on filesystem permissions for security.
+
+When running in a distributed environment across multiple machines, you must use TCP endpoints (e.g.,
+`tcp://0.0.0.0:7899`). TCP endpoints automatically enable CURVE encryption to protect communication over the network.
 
 Examples of running the daemon and hosts using TCP connections can be found in the `docker-compose.yml` file in the
 `moor` repository.
 
-## Encryption keys
+## Encryption and Authentication Keys
 
-Because the daemon and hosts communicate over ZeroMQ sockets, they need to authenticate each other to prevent
-unauthorized
-access. This is done using public/private key pairs, which must be shared between the daemon and hosts/workers.
+The mooR system uses two separate key systems for security:
 
-These keys are in the common `pem` format and can be created using the `moor-daemon` binary:
+### 1. PASETO Authentication Keys (Ed25519) - Client/Player Authentication
+
+PASETO tokens authenticate **clients/players** (connecting users) using Ed25519 digital signatures. These are used **only by the daemon** to sign and verify player session tokens.
+
+The daemon automatically generates these keys on first run when using the `--generate-keypair` flag:
 
 ```bash
-moor-daemon --generate-keypair
+# Keys are auto-generated on first run
+moor-daemon --generate-keypair <other-args>
 ```
 
-This will create `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the current directory.
+This creates `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the current directory.
 
-Alternatively, you can create them manually using the `openssl` command-line tool:
+Alternatively, you can pre-generate them using `openssl`:
 
 ```bash
 openssl genpkey -algorithm ed25519 -out moor-signing-key.pem
 openssl pkey -in moor-signing-key.pem -pubout -out moor-verifying-key.pem
 ```
 
-These files must then exist on the filesystem at the paths specified by the `--private_key` and `--public_key`
-command-line
-arguments for both the daemon and all hosts/workers. The daemon uses the private key to sign messages, while the
-hosts/workers
-use the public key to verify those messages. This ensures that only authorized hosts/workers can communicate with the
-daemon,
-and that messages cannot be tampered with in transit.
+**Note**: Hosts and workers do **not** need these PEM files - they are only used by the daemon for client authentication.
+
+### 2. CURVE Transport Encryption (Curve25519) - Daemon↔Host/Worker Transport
+
+When using **TCP endpoints**, all ZeroMQ communication between the daemon and hosts/workers is encrypted using CurveZMQ (Curve25519 elliptic curve cryptography). When using **IPC endpoints** (local Unix domain sockets), CURVE encryption is **disabled** since communication never leaves the local machine and is protected by filesystem permissions.
+
+#### TCP Mode (Encrypted)
+
+For distributed deployments using TCP endpoints:
+
+- **Automatic Key Generation**: The daemon generates a CURVE keypair on first run (stored as Z85-encoded text)
+- **Enrollment Process**: Hosts/workers must enroll before connecting:
+  1. Generate their own CURVE keypair on first run
+  2. Connect to the enrollment endpoint (default: `tcp://0.0.0.0:7900`) with an enrollment token
+  3. Register their service type, hostname, and CURVE public key with the daemon
+  4. Daemon stores the public key in `~/.moor/allowed-hosts/{uuid}` for ZAP authentication
+- **ZAP Authentication**: After enrollment, the daemon validates all incoming ZMQ connections using ZeroMQ Authentication Protocol (ZAP)
+- **Per-Connection Encryption**: Each ZMQ socket (RPC REQ/REP, PUB/SUB) uses CURVE with ephemeral session keys
+
+#### IPC Mode (No Encryption)
+
+For local deployments using IPC endpoints:
+
+- **No CURVE Encryption**: IPC endpoints are exempt from CURVE encryption
+- **Filesystem Security**: Unix domain sockets rely on filesystem permissions for access control
+- **No Enrollment Required**: Hosts/workers connect directly without enrollment
+- **Performance**: IPC mode offers lower latency and higher throughput than encrypted TCP
+
+#### Enrollment Token
+
+TCP mode requires an **enrollment token** for CURVE enrollment:
+
+```bash
+# Generate enrollment token (one-time setup)
+moor-daemon --rotate-enrollment-token
+
+# Token is saved to enrollment-token file
+# Pass to hosts/workers via --enrollment-token-file argument
+```
+
+The enrollment token is a shared secret used during the CURVE enrollment process to authorize hosts/workers to register their public keys with the daemon.
 
 ## How to set server options
 
@@ -78,13 +118,14 @@ These options control the basic server behavior:
 - `--config-file <PATH>`: Path to configuration (YAML) file to use. If not specified, defaults are used.
 - `--connections-file <PATH>` (default: `connections.db`): Path to connections database
 - `--tasks-db <PATH>` (default: `tasks.db`): Path to persistent tasks database
-- `--rpc-listen <ADDR>` (default: `ipc:///tmp/moor_rpc.sock`): RPC server address
-- `--events-listen <ADDR>` (default: `ipc:///tmp/moor_events.sock`): Events publisher listen address
-- `--workers-response-listen <ADDR>` (default: `ipc:///tmp/moor_workers_response.sock`): Workers server RPC address
-- `--workers-request-listen <ADDR>` (default: `ipc:///tmp/moor_workers_request.sock`): Workers server pub-sub address
-- `--public_key <PATH>` (default: `moor-verifying-key.pem`): File containing the PEM encoded public key
-- `--private_key <PATH>` (default: `moor-signing-key.pem`): File containing an openssh generated ed25519 format private
-  key
+- `--rpc-listen <ADDR>` (default: `ipc:///tmp/moor_rpc.sock`): RPC server address (CURVE-encrypted if TCP)
+- `--events-listen <ADDR>` (default: `ipc:///tmp/moor_events.sock`): Events publisher listen address (CURVE-encrypted if TCP)
+- `--workers-response-listen <ADDR>` (default: `ipc:///tmp/moor_workers_response.sock`): Workers server RPC address (CURVE-encrypted if TCP)
+- `--workers-request-listen <ADDR>` (default: `ipc:///tmp/moor_workers_request.sock`): Workers server pub-sub address (CURVE-encrypted if TCP)
+- `--enrollment-listen <ADDR>` (default: `tcp://0.0.0.0:7900`): ZMQ REP socket for host/worker enrollment (not CURVE-encrypted)
+- `--enrollment-token-file <PATH>` (default: `~/.moor/enrollment-token`): Path to enrollment token file
+- `--public_key <PATH>` (default: `moor-verifying-key.pem`): PEM encoded PASETO public key for token verification
+- `--private_key <PATH>` (default: `moor-signing-key.pem`): PEM encoded PASETO private key for token signing
 - `--num-io-threads <NUM>` (default: `8`): Number of ZeroMQ IO threads
 - `--debug` (default: `false`): Enable debug logging
 

@@ -22,7 +22,7 @@ use figment::{
 };
 use moor_var::SYSTEM_OBJECT;
 use rpc_async_client::{process_hosts_events, start_host_session};
-use rpc_common::{HostType, client_args::RpcClientArgs, load_keypair, make_host_token};
+use rpc_common::{HostType, client_args::RpcClientArgs};
 use serde::{Deserialize, Serialize};
 use std::{
     net::SocketAddr,
@@ -114,11 +114,53 @@ async fn main() -> Result<(), eyre::Error> {
 
     let zmq_ctx = tmq::Context::new();
 
+    // Check if we need CURVE encryption (only for TCP endpoints, not IPC)
+    let use_curve = args.client_args.rpc_address.starts_with("tcp://");
+
+    // Enroll with daemon and load CURVE keys only if using TCP
+    let curve_keys = if use_curve {
+        info!("TCP endpoint detected - enrolling with daemon and loading CURVE keys");
+
+        let enrollment_token = std::env::var("MOOR_ENROLLMENT_TOKEN").ok();
+        let (daemon_public_key, _service_uuid) =
+            match rpc_async_client::enrollment_client::ensure_enrolled(
+                &args.client_args.enrollment_address,
+                enrollment_token.as_deref(),
+                args.client_args.enrollment_token_file.as_deref(),
+                "telnet-host",
+                &args.client_args.data_dir,
+            ) {
+                Ok(enrollment) => enrollment,
+                Err(e) => {
+                    error!("Failed to enroll with daemon: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+        let keypair = match rpc_async_client::curve_keys::load_or_generate_keypair(
+            &args.client_args.data_dir,
+            "telnet-host",
+        ) {
+            Ok(keypair) => keypair,
+            Err(e) => {
+                error!("Unable to load CURVE keypair: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        // Create curve_keys tuple for per-connection RPC sockets
+        Some((keypair.secret, keypair.public, daemon_public_key))
+    } else {
+        info!("IPC endpoint detected - CURVE encryption disabled");
+        None
+    };
+
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         args.client_args.events_address.clone(),
         kill_switch.clone(),
+        curve_keys.clone(),
     );
     let listeners_thread = tokio::spawn(async move {
         listeners_server.run(listeners_channel).await;
@@ -132,29 +174,16 @@ async fn main() -> Result<(), eyre::Error> {
             std::process::exit(1);
         });
 
-    let (private_key, _public_key) =
-        match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
-            Ok(keypair) => keypair,
-            Err(e) => {
-                error!(
-                    "Unable to load keypair from public and private key files: {}",
-                    e
-                );
-                std::process::exit(1);
-            }
-        };
-    let host_token = make_host_token(&private_key, HostType::TCP);
-
-    let rpc_client = match start_host_session(
-        &host_token,
+    let (rpc_client, host_id) = match start_host_session(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
+        curve_keys.clone(),
     )
     .await
     {
-        Ok(client) => client,
+        Ok((client, id)) => (client, id),
         Err(e) => {
             error!("Unable to establish initial host session: {}", e);
             std::process::exit(1);
@@ -163,13 +192,14 @@ async fn main() -> Result<(), eyre::Error> {
 
     let host_listen_loop = process_hosts_events(
         rpc_client,
-        host_token,
+        host_id,
         zmq_ctx.clone(),
         args.client_args.events_address.clone(),
         args.telnet_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
         HostType::TCP,
+        curve_keys,
     );
     select! {
         _ = host_listen_loop => {

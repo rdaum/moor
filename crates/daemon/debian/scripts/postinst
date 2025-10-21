@@ -26,13 +26,18 @@ create_directories() {
 }
 
 generate_keys() {
-  echo "** Generating signing and verifying keys for the daemon and the processes that use it."
-  openssl genpkey -algorithm ed25519 -out ${LIB_DIR}/moor-signing-key.pem
-  openssl pkey -in ${LIB_DIR}/moor-signing-key.pem -pubout -out ${LIB_DIR}/moor-verifying-key.pem
+  # Only generate keys if they don't already exist (e.g., on first install, not upgrades)
+  if [ ! -f ${LIB_DIR}/moor-signing-key.pem ] || [ ! -f ${LIB_DIR}/moor-verifying-key.pem ]; then
+    echo "** Generating PASETO signing and verifying keys for client authentication."
+    openssl genpkey -algorithm ed25519 -out ${LIB_DIR}/moor-signing-key.pem
+    openssl pkey -in ${LIB_DIR}/moor-signing-key.pem -pubout -out ${LIB_DIR}/moor-verifying-key.pem
 
-  # Set permissions on the keys
-  chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-signing-key.pem
-  chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-verifying-key.pem
+    # Set permissions on the keys
+    chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-signing-key.pem
+    chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-verifying-key.pem
+  else
+    echo "** PASETO keys already exist at ${LIB_DIR}/moor-*-key.pem, skipping generation."
+  fi
 }
 
 

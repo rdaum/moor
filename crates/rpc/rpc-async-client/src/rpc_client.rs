@@ -13,9 +13,9 @@
 
 use moor_schema::rpc as moor_rpc;
 use planus::Builder;
-use rpc_common::{HostToken, RpcError};
+use rpc_common::{RpcError, uuid_fb};
 use tmq::{Multipart, request_reply::RequestSender};
-use tracing::error;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 /// Lightweight wrapper around the TMQ RequestSender to make it slightly simpler to make RPC
@@ -58,6 +58,8 @@ impl RpcSendClient {
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;
+
+        debug!(client_id = %client_id, "Sending RPC client request to daemon");
         let rpc_reply_sock = match rpc_request_sock.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
@@ -69,6 +71,7 @@ impl RpcSendClient {
             }
         };
 
+        debug!(client_id = %client_id, "Waiting for RPC client response from daemon");
         let (msg, recv_sock) = match rpc_reply_sock.recv().await {
             Ok((msg, recv_sock)) => (msg, recv_sock),
             Err(e) => {
@@ -82,13 +85,14 @@ impl RpcSendClient {
 
         // Return raw reply bytes - caller will decode the FlatBuffer
         let reply_bytes = msg[0].to_vec();
+        debug!(client_id = %client_id, response_bytes = reply_bytes.len(), "Received RPC client response from daemon");
         self.rcp_request_sock = Some(recv_sock);
         Ok(reply_bytes)
     }
 
     pub async fn make_host_rpc_call(
         &mut self,
-        host_token: &HostToken,
+        host_id: Uuid,
         rpc_message: moor_rpc::HostToDaemonMessage,
     ) -> Result<Vec<u8>, RpcError> {
         // Serialize the message to FlatBuffer bytes
@@ -96,11 +100,8 @@ impl RpcSendClient {
         let rpc_msg_payload = builder.finish(&rpc_message, None).to_vec();
 
         // Build the MessageType discriminator
-        let host_token_fb = moor_rpc::HostToken {
-            token: host_token.0.clone(),
-        };
         let host_msg = moor_rpc::HostToDaemonMsg {
-            host_token: Box::new(host_token_fb),
+            host_id: uuid_fb(host_id),
             message: Box::new(rpc_message),
         };
         let message_type = moor_rpc::MessageType {
@@ -113,6 +114,8 @@ impl RpcSendClient {
         let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
             RpcError::CouldNotSend("RPC request socket not initialized".to_string())
         })?;
+
+        debug!(host_id = %host_id, "Sending RPC host request to daemon");
         let rpc_reply_sock = match rpc_request_sock.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
@@ -124,6 +127,7 @@ impl RpcSendClient {
             }
         };
 
+        debug!(host_id = %host_id, "Waiting for RPC host response from daemon");
         let (msg, recv_sock) = match rpc_reply_sock.recv().await {
             Ok((msg, recv_sock)) => (msg, recv_sock),
             Err(e) => {
@@ -137,6 +141,7 @@ impl RpcSendClient {
 
         // Return raw reply bytes - caller will decode the FlatBuffer
         let reply_bytes = msg[0].to_vec();
+        debug!(host_id = %host_id, response_bytes = reply_bytes.len(), "Received RPC host response from daemon");
         self.rcp_request_sock = Some(recv_sock);
         Ok(reply_bytes)
     }

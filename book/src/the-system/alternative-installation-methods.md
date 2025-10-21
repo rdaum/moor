@@ -76,12 +76,13 @@ source ~/.cargo/env
 
 When building from source, you'll need to manually set up:
 
-- **Authentication keys**: Generate `moor-signing-key.pem` and `moor-verifying-key.pem`
+- **PASETO authentication keys**: The daemon auto-generates these keys with the `--generate-keypair` flag (creates `moor-signing-key.pem` and `moor-verifying-key.pem`)
+- **Enrollment token**: Generate for CURVE transport encryption if using TCP endpoints: `moor-daemon --rotate-enrollment-token`
 - **Configuration files**: Create appropriate configuration for each component
 - **Core database**: Install and configure your chosen MOO core
 - **Service coordination**: Ensure all components can communicate properly
 
-The `docker-compose.yml` file provides excellent examples of how to configure each component.
+The `docker-compose.yml` and `process-compose.yaml` files provide excellent examples of how to configure each component.
 
 ### When to Build from Source
 

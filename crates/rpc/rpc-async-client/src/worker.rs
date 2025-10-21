@@ -13,40 +13,47 @@
 
 use crate::worker_rpc_client::WorkerRpcSendClient;
 use moor_var::Symbol;
-use rpc_common::{DaemonToWorkerReply, MOOR_WORKER_TOKEN_FOOTER, RpcError, WorkerToken};
-use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
+use rpc_common::{DaemonToWorkerReply, RpcError};
 use tmq::request;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-/// Construct a PASETO token for a worker, to authenticate the worker itself to the daemon.
-pub fn make_worker_token(private_key: &Key<64>, worker_id: Uuid) -> WorkerToken {
-    let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
-        PasetoAsymmetricPrivateKey::from(private_key.as_ref());
-    let token = Paseto::<V4, Public>::default()
-        .set_footer(Footer::from(MOOR_WORKER_TOKEN_FOOTER))
-        .set_payload(Payload::from(worker_id.to_string().as_str()))
-        .try_sign(&privkey)
-        .expect("Unable to build Paseto worker token");
-
-    WorkerToken(token)
-}
-
 /// Start the worker session with the daemon, and return the RPC client to use for further
 /// communication.
 pub async fn attach_worker(
-    worker_token: &WorkerToken,
     worker_type: Symbol,
     worker_id: Uuid,
     zmq_ctx: tmq::Context,
     rpc_address: &str,
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
 ) -> Result<WorkerRpcSendClient, RpcError> {
     // Establish the initial connection to the daemon, and send the worker token and our initial
     // listener list.
     let rpc_client = loop {
-        let rpc_request_sock = request(&zmq_ctx)
-            .set_rcvtimeo(100)
-            .set_sndtimeo(100)
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &curve_keys {
+            // Decode Z85 keys to bytes
+            let client_secret_bytes = zmq::z85_decode(client_secret).map_err(|_| {
+                RpcError::CouldNotInitiateSession("Invalid client secret key".to_string())
+            })?;
+            let client_public_bytes = zmq::z85_decode(client_public).map_err(|_| {
+                RpcError::CouldNotInitiateSession("Invalid client public key".to_string())
+            })?;
+            let server_public_bytes = zmq::z85_decode(server_public).map_err(|_| {
+                RpcError::CouldNotInitiateSession("Invalid server public key".to_string())
+            })?;
+
+            socket_builder = socket_builder
+                .set_curve_secretkey(&client_secret_bytes)
+                .set_curve_publickey(&client_public_bytes)
+                .set_curve_serverkey(&server_public_bytes);
+
+            info!("CURVE encryption enabled for worker connection");
+        }
+
+        let rpc_request_sock = socket_builder
             .connect(rpc_address)
             .expect("Unable to bind RPC server for connection");
 
@@ -59,11 +66,11 @@ pub async fn attach_worker(
             worker_type, worker_id, rpc_address
         );
         match rpc_client
-            .make_worker_rpc_call_fb_attach(worker_token, worker_id, worker_type)
+            .make_worker_rpc_call_fb_attach(worker_id, worker_type)
             .await
         {
-            Ok(DaemonToWorkerReply::Attached(_, _)) => {
-                info!("Worker token accepted by daemon.");
+            Ok(DaemonToWorkerReply::Attached(_)) => {
+                info!("Worker attached to daemon.");
                 break rpc_client;
             }
             Ok(DaemonToWorkerReply::Ack) => {

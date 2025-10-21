@@ -12,11 +12,13 @@ and flexible message passing between the various components of the system. 0mq s
 messaging patterns, including request-reply and publish-subscribe.
 
 When running purely on a single host, the IPC (Inter-Process Communication) transport can be used
-for fast local communication.
+for fast local communication. IPC endpoints (e.g., `ipc:///tmp/moor_rpc.sock`) use Unix domain
+sockets that rely on filesystem permissions for security and do not use encryption.
 
-When running in a distributed environment, TCP transport is used to communicate over the network. In
-this manner, the daemon can run on one machine while the hosts and workers can run on different
-machines, allowing for a scalable, flexible, and resilient architecture.
+When running in a distributed environment, TCP transport is used to communicate over the network.
+TCP endpoints (e.g., `tcp://0.0.0.0:7899`) automatically enable CURVE encryption to protect all
+communication. In this manner, the daemon can run on one machine while the hosts and workers can run
+on different machines, allowing for a scalable, flexible, and resilient architecture.
 
 ## Purpose
 
@@ -163,6 +165,41 @@ Used for broadcasting events:
 - Narrative events to client connections (CLIENT_BROADCAST_TOPIC)
 - System events to hosts (HOST_BROADCAST_TOPIC)
 - Work assignments to workers (WORKER_BROADCAST_TOPIC)
+
+### 3. Transport Security
+
+ZeroMQ transport security depends on the endpoint type:
+
+#### TCP Endpoints (Encrypted)
+
+When using TCP endpoints, all communication is encrypted using **CURVE** (Curve25519 elliptic curve
+cryptography):
+
+- **Encryption**: All messages are encrypted in transit using ephemeral session keys
+- **Authentication**: Each host/worker authenticates to the daemon using CURVE public keys
+- **ZAP Protocol**: The daemon uses ZeroMQ Authentication Protocol (ZAP) to validate client public
+  keys
+- **Key Management**: CURVE keys are automatically generated and persisted for each host/worker
+- **Enrollment Process**:
+  1. Host/worker generates CURVE keypair on first run (Z85-encoded, stored in data directory)
+  2. Connects to enrollment endpoint (e.g., `tcp://0.0.0.0:7900`) with enrollment token
+  3. Sends `EnrollHost` or `EnrollWorker` message with service type, hostname, and CURVE public key
+  4. Daemon stores public key in `~/.moor/allowed-hosts/{uuid}` file
+  5. Daemon's ZAP handler validates all subsequent connections against stored public keys
+  6. All ZMQ sockets (RPC REQ/REP, PUB/SUB) use CURVE encryption
+
+This provides end-to-end encryption for all RPC and pub/sub communication, protecting against
+eavesdropping and man-in-the-middle attacks.
+
+#### IPC Endpoints (No Encryption)
+
+When using IPC endpoints (Unix domain sockets):
+
+- **No CURVE Encryption**: Communication stays local and uses filesystem permissions
+- **Performance**: Lower latency and higher throughput than encrypted TCP
+- **Enrollment Skipped**: Hosts/workers skip CURVE key registration (still connect to enrollment
+  endpoint for PASETO tokens)
+- **Security**: Relies on filesystem permissions to restrict socket access
 
 ## Message Flow
 

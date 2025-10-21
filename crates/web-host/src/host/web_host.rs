@@ -25,7 +25,7 @@ use hickory_resolver::TokioResolver;
 use moor_common::model::ObjectRef;
 use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
-use rpc_async_client::rpc_client::RpcSendClient;
+use rpc_async_client::{rpc_client::RpcSendClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_connection_establish_msg,
     mk_detach_msg, mk_eval_msg, mk_request_sys_prop_msg, mk_resolve_msg,
@@ -129,6 +129,7 @@ pub struct WebHost {
     pubsub_addr: String,
     pub(crate) handler_object: Obj,
     local_port: u16,
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -145,6 +146,7 @@ impl WebHost {
         narrative_addr: String,
         handler_object: Obj,
         local_port: u16,
+        curve_keys: Option<(String, String, String)>,
     ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
@@ -153,6 +155,7 @@ impl WebHost {
             pubsub_addr: narrative_addr,
             handler_object,
             local_port,
+            curve_keys,
         }
     }
 }
@@ -169,9 +172,20 @@ impl WebHost {
         let zmq_ctx = self.zmq_context.clone();
         // Establish a connection to the RPC server
         let client_id = Uuid::new_v4();
-        let rcp_request_sock = request(&zmq_ctx)
-            .set_rcvtimeo(100)
-            .set_sndtimeo(100)
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
+            socket_builder = rpc_async_client::configure_curve_client(
+                socket_builder,
+                client_secret,
+                client_public,
+                server_public,
+            )
+            .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
+        }
+
+        let rcp_request_sock = socket_builder
             .connect(self.rpc_addr.as_str())
             .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
 
@@ -297,14 +311,50 @@ impl WebHost {
         let zmq_ctx = self.zmq_context.clone();
 
         // We'll need to subscribe to the narrative & broadcast messages for this connection.
-        let narrative_sub = subscribe(&zmq_ctx)
+        let mut narrative_socket_builder = subscribe(&zmq_ctx);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
+            // Decode Z85 keys to bytes
+            let client_secret_bytes = zmq::z85_decode(client_secret)
+                .map_err(|_| eyre::eyre!("Invalid client secret key"))?;
+            let client_public_bytes = zmq::z85_decode(client_public)
+                .map_err(|_| eyre::eyre!("Invalid client public key"))?;
+            let server_public_bytes = zmq::z85_decode(server_public)
+                .map_err(|_| eyre::eyre!("Invalid server public key"))?;
+
+            narrative_socket_builder = narrative_socket_builder
+                .set_curve_secretkey(&client_secret_bytes)
+                .set_curve_publickey(&client_public_bytes)
+                .set_curve_serverkey(&server_public_bytes);
+        }
+
+        let narrative_sub = narrative_socket_builder
             .connect(self.pubsub_addr.as_str())
             .expect("Unable to connect narrative subscriber ");
         let narrative_sub = narrative_sub
             .subscribe(&client_id.as_bytes()[..])
             .expect("Unable to subscribe to narrative messages for client connection");
 
-        let broadcast_sub = subscribe(&zmq_ctx)
+        let mut broadcast_socket_builder = subscribe(&zmq_ctx);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
+            // Decode Z85 keys to bytes
+            let client_secret_bytes = zmq::z85_decode(client_secret)
+                .map_err(|_| eyre::eyre!("Invalid client secret key"))?;
+            let client_public_bytes = zmq::z85_decode(client_public)
+                .map_err(|_| eyre::eyre!("Invalid client public key"))?;
+            let server_public_bytes = zmq::z85_decode(server_public)
+                .map_err(|_| eyre::eyre!("Invalid server public key"))?;
+
+            broadcast_socket_builder = broadcast_socket_builder
+                .set_curve_secretkey(&client_secret_bytes)
+                .set_curve_publickey(&client_public_bytes)
+                .set_curve_serverkey(&server_public_bytes);
+        }
+
+        let broadcast_sub = broadcast_socket_builder
             .connect(self.pubsub_addr.as_str())
             .expect("Unable to connect broadcast subscriber ");
         let broadcast_sub = broadcast_sub
@@ -335,9 +385,20 @@ impl WebHost {
         addr: SocketAddr,
     ) -> Result<(Uuid, RpcSendClient, ClientToken), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
-        let rcp_request_sock = request(&zmq_ctx)
-            .set_rcvtimeo(100)
-            .set_sndtimeo(100)
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
+            socket_builder = rpc_async_client::configure_curve_client(
+                socket_builder,
+                client_secret,
+                client_public,
+                server_public,
+            )
+            .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
+        }
+
+        let rcp_request_sock = socket_builder
             .connect(self.rpc_addr.as_str())
             .expect("Unable to bind RPC server for connection");
 

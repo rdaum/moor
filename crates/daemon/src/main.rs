@@ -50,9 +50,13 @@ use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use rand::{Rng, rngs::OsRng};
 use rpc_common::load_keypair;
 use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
+mod allowed_hosts;
 mod args;
 mod connections;
+mod curve_keys;
+mod enrollment;
 mod event_log;
 mod feature_args;
 mod rpc;
@@ -61,6 +65,7 @@ mod tasks;
 #[cfg(test)]
 mod testing;
 mod workers;
+mod zap_auth;
 
 // main.rs
 use crate::tasks::tasks_db_fjall::FjallTasksDB;
@@ -158,6 +163,53 @@ fn perform_import(
     Ok(())
 }
 
+/// Rotate the enrollment token
+fn rotate_enrollment_token(token_path: &PathBuf) -> Result<(), Report> {
+    use std::fs;
+
+    let new_token = Uuid::new_v4().to_string();
+
+    // Read old token if it exists
+    let old_token = if token_path.exists() {
+        Some(fs::read_to_string(token_path)?.trim().to_string())
+    } else {
+        None
+    };
+
+    // Create parent directory if needed
+    if let Some(parent) = token_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Write new token
+    fs::write(token_path, &new_token)?;
+
+    // Set restrictive permissions (Unix only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(token_path)?.permissions();
+        perms.set_mode(0o600); // Read/write for owner only
+        fs::set_permissions(token_path, perms)?;
+    }
+
+    if let Some(old) = old_token {
+        info!("Old enrollment token: {}", old);
+    }
+    info!("New enrollment token: {}", new_token);
+    info!("Token saved to: {:?}", token_path);
+    info!("");
+    info!(
+        "Hosts must set MOOR_ENROLLMENT_TOKEN={} or --enrollment-token-file={:?}",
+        new_token, token_path
+    );
+    info!("");
+    info!("Note: Hosts already enrolled with CURVE keys will continue to work.");
+    info!("      Only new hosts need the new token to enroll.");
+
+    Ok(())
+}
+
 /// Generate ED25519 keypair and write to PEM files
 fn generate_keypair(public_key_path: &PathBuf, private_key_path: &PathBuf) -> Result<(), Report> {
     info!("Generating ED25519 keypair...");
@@ -243,9 +295,10 @@ fn create_rpc_transport(
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
     events_listen: &str,
+    curve_secret_key: Option<String>,
 ) -> Result<Arc<dyn Transport>, Report> {
     let transport = Arc::new(
-        RpcTransport::new(zmq_context, kill_switch, events_listen)
+        RpcTransport::new(zmq_context, kill_switch, events_listen, curve_secret_key)
             .map_err(|e| eyre!("Failed to create RPC transport: {}", e))?,
     ) as Arc<dyn Transport>;
     Ok(transport)
@@ -339,14 +392,14 @@ fn main() -> Result<(), Report> {
     moor_common::tracing::init_tracing(args.debug)
         .map_err(|e| eyre!("Unable to configure logging: {}", e))?;
 
-    // If generate-keypair flag is provided, generate keypair and exit
-    if args.generate_keypair {
-        generate_keypair(&args.public_key, &args.private_key)?;
+    // If rotate-enrollment-token flag is provided, rotate token and exit
+    if args.rotate_enrollment_token {
+        rotate_enrollment_token(&args.enrollment_token_file)?;
         return Ok(());
     }
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
-    // the keypair from it...
+    // the keypair from it. If generate-keypair flag is set and keys don't exist, generate them.
     let (private_key, public_key) = if args.public_key.exists() && args.private_key.exists() {
         load_keypair(&args.public_key, &args.private_key).map_err(|e| {
             eyre!(
@@ -354,9 +407,18 @@ fn main() -> Result<(), Report> {
                 e
             )
         })?
+    } else if args.generate_keypair {
+        // Generate keypair if flag is set and files don't exist
+        generate_keypair(&args.public_key, &args.private_key)?;
+        load_keypair(&args.public_key, &args.private_key).map_err(|e| {
+            eyre!(
+                "Unable to load generated keypair: {}",
+                e
+            )
+        })?
     } else {
         bail!(
-            "Public ({:?}) and/or private ({:?}) key files must exist",
+            "Public ({:?}) and/or private ({:?}) key files must exist. Use --generate-keypair to create them.",
             args.public_key,
             args.private_key
         );
@@ -364,6 +426,16 @@ fn main() -> Result<(), Report> {
 
     // Acquire exclusive lock on the data directory to prevent multiple daemon instances
     let _data_dir_lock = acquire_data_directory_lock(&args.data_dir)?;
+
+    // Generate or load CURVE keypair for daemon
+    let daemon_curve_keypair = curve_keys::load_or_generate_daemon_keypair(&args.data_dir)?;
+    info!("Daemon CURVE public key: {}", daemon_curve_keypair.public);
+
+    // Ensure enrollment token exists (or generate it)
+    let _enrollment_token = enrollment::ensure_enrollment_token(&args.enrollment_token_file)?;
+
+    // Initialize allowed hosts registry
+    let allowed_hosts_registry = allowed_hosts::AllowedHostsRegistry::new(&args.data_dir)?;
 
     let (phys_cores, logical_cores) = (
         gdt_cpus::num_physical_cores()
@@ -484,11 +556,44 @@ fn main() -> Result<(), Report> {
 
     let resolved_events_db_path = args.resolved_events_db_path();
 
-    // Create the RPC transport
+    // Check if we need CURVE encryption (only for TCP endpoints, not IPC)
+    let use_curve =
+        args.rpc_listen.starts_with("tcp://") || args.events_listen.starts_with("tcp://");
+
+    if use_curve {
+        // Start ZAP authentication handler for CURVE
+        // IMPORTANT: This must be started before any CURVE-enabled sockets are created
+        info!("TCP endpoints detected - enabling CURVE encryption with ZAP authentication");
+        let zap_handler = zap_auth::ZapAuthHandler::new(
+            zmq_ctx.clone(),
+            kill_switch.clone(),
+            allowed_hosts_registry.clone(),
+        );
+        std::thread::Builder::new()
+            .name("moor-zap-auth".to_string())
+            .spawn(move || {
+                if let Err(e) = zap_handler.run() {
+                    error!(error = ?e, "ZAP authentication handler failed");
+                }
+            })
+            .map_err(|e| eyre!("Failed to spawn ZAP authentication thread: {}", e))?;
+
+        // Give the ZAP handler time to bind before creating CURVE sockets
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    } else {
+        info!("IPC endpoints detected - CURVE encryption disabled (using filesystem permissions)");
+    }
+
+    // Create the RPC transport with optional CURVE encryption
     let rpc_transport = create_rpc_transport(
         zmq_ctx.clone(),
         kill_switch.clone(),
         args.events_listen.as_str(),
+        if use_curve {
+            Some(daemon_curve_keypair.secret.clone())
+        } else {
+            None
+        },
     )?;
 
     // Create the event log based on configuration
@@ -518,11 +623,14 @@ fn main() -> Result<(), Report> {
     // Workers RPC server
     let mut workers_server = WorkersServer::new(
         kill_switch.clone(),
-        public_key,
-        private_key,
         zmq_ctx.clone(),
         &args.workers_request_listen,
         worker_scheduler_send,
+        if use_curve {
+            Some(daemon_curve_keypair.secret.clone())
+        } else {
+            None
+        },
     )
     .map_err(|e| eyre!("Failed to create workers server: {}", e))?;
     let workers_sender = workers_server.start().map_err(|e| {
@@ -542,6 +650,28 @@ fn main() -> Result<(), Report> {
             );
         }
     });
+
+    // Enrollment server for host registration (only needed for CURVE/TCP)
+    if use_curve {
+        let enrollment_server = enrollment::EnrollmentServer::new(
+            zmq_ctx.clone(),
+            kill_switch.clone(),
+            daemon_curve_keypair.public.clone(),
+            allowed_hosts_registry.clone(),
+            args.enrollment_token_file.clone(),
+        );
+        let enrollment_listen_addr = args.enrollment_listen.clone();
+        std::thread::Builder::new()
+            .name("moor-enrollment".to_string())
+            .spawn(move || {
+                if let Err(e) = enrollment_server.listen(&enrollment_listen_addr) {
+                    error!(
+                        "Enrollment server failed to listen on {}: {}",
+                        enrollment_listen_addr, e
+                    );
+                }
+            })?;
+    }
 
     // The pieces from core we're going to use:
     //   Our DB.

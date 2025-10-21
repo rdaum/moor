@@ -11,24 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::HostType;
 use ed25519_dalek::{
     SigningKey, VerifyingKey,
     pkcs8::{DecodePrivateKey, DecodePublicKey},
 };
 use moor_schema::rpc;
-use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
+use rusty_paseto::core::Key;
 use std::path::Path;
 use thiserror::Error;
 
-pub const MOOR_HOST_TOKEN_FOOTER: &str = "key-id:moor_host";
 pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_client";
 pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
-pub const MOOR_WORKER_TOKEN_FOOTER: &str = "key-id:moor_worker";
-
-/// PASETO public token representing the host's identity.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct HostToken(pub String);
 
 /// PASETO public token for a connection, used for the validation of RPC requests after the initial
 /// connection is established.
@@ -38,10 +31,6 @@ pub struct ClientToken(pub String);
 /// PASTEO public token for an authenticated player, encoding the player's identity.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct AuthToken(pub String);
-
-/// PASETO public token for a worker. Encodes the worker type, and its creation time.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct WorkerToken(pub String);
 
 #[derive(Error, Debug)]
 pub enum KeyError {
@@ -78,19 +67,6 @@ pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<(Key<64>, K
     };
 
     parse_keypair(&pubkey_pem, &privkey_pem)
-}
-
-/// Construct a PASETO token for this host, to authenticate the host itself to the daemon.
-pub fn make_host_token(private_key: &Key<64>, host_type: HostType) -> HostToken {
-    let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
-        PasetoAsymmetricPrivateKey::from(private_key.as_ref());
-    let token = Paseto::<V4, Public>::default()
-        .set_footer(Footer::from(MOOR_HOST_TOKEN_FOOTER))
-        .set_payload(Payload::from(host_type.id_str()))
-        .try_sign(&privkey)
-        .expect("Unable to build Paseto host token");
-
-    HostToken(token)
 }
 
 /// Convert from FlatBuffer ClientTokenRef to ClientToken

@@ -13,10 +13,7 @@
 
 //! Worker message builders for DaemonToWorker and WorkerToDaemon messages
 
-use crate::{
-    WorkerToken,
-    helpers::{mk_worker_token, obj_fb, symbol_fb, uuid_fb},
-};
+use crate::helpers::{obj_fb, symbol_fb, uuid_fb};
 use moor_schema::{rpc, var};
 use moor_var::{Obj, Symbol};
 use uuid::Uuid;
@@ -37,7 +34,6 @@ pub fn mk_ping_workers_msg() -> rpc::DaemonToWorkerMessage {
 #[inline]
 pub fn mk_worker_request_msg(
     worker_id: Uuid,
-    worker_token: &WorkerToken,
     request_id: Uuid,
     perms: &Obj,
     request: Vec<var::Var>,
@@ -46,7 +42,6 @@ pub fn mk_worker_request_msg(
     rpc::DaemonToWorkerMessage {
         message: rpc::DaemonToWorkerMessageUnion::WorkerRequest(Box::new(rpc::WorkerRequest {
             worker_id: uuid_fb(worker_id),
-            token: mk_worker_token(worker_token),
             id: uuid_fb(request_id),
             perms: obj_fb(perms),
             request,
@@ -61,13 +56,9 @@ pub fn mk_worker_request_msg(
 
 /// Build a WorkerAttached reply
 #[inline]
-pub fn mk_worker_attached_reply(
-    worker_token: &WorkerToken,
-    worker_id: Uuid,
-) -> rpc::DaemonToWorkerReply {
+pub fn mk_worker_attached_reply(worker_id: Uuid) -> rpc::DaemonToWorkerReply {
     rpc::DaemonToWorkerReply {
         reply: rpc::DaemonToWorkerReplyUnion::WorkerAttached(Box::new(rpc::WorkerAttached {
-            token: mk_worker_token(worker_token),
             worker_id: uuid_fb(worker_id),
         })),
     }
@@ -143,13 +134,10 @@ pub fn mk_worker_not_registered_reply(worker_id: Uuid) -> rpc::DaemonToWorkerRep
 
 /// Build an AttachWorker message
 #[inline]
-pub fn mk_attach_worker_msg(
-    worker_token: &WorkerToken,
-    worker_type: &Symbol,
-) -> rpc::WorkerToDaemonMessage {
+pub fn mk_attach_worker_msg(worker_id: Uuid, worker_type: &Symbol) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::AttachWorker(Box::new(rpc::AttachWorker {
-            token: mk_worker_token(worker_token),
+            worker_id: uuid_fb(worker_id),
             worker_type: symbol_fb(worker_type),
         })),
     }
@@ -157,13 +145,10 @@ pub fn mk_attach_worker_msg(
 
 /// Build a WorkerPong message
 #[inline]
-pub fn mk_worker_pong_msg(
-    worker_token: &WorkerToken,
-    worker_type: &Symbol,
-) -> rpc::WorkerToDaemonMessage {
+pub fn mk_worker_pong_msg(worker_id: Uuid, worker_type: &Symbol) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::WorkerPong(Box::new(rpc::WorkerPong {
-            token: mk_worker_token(worker_token),
+            worker_id: uuid_fb(worker_id),
             worker_type: symbol_fb(worker_type),
         })),
     }
@@ -171,10 +156,10 @@ pub fn mk_worker_pong_msg(
 
 /// Build a DetachWorker message
 #[inline]
-pub fn mk_detach_worker_msg(worker_token: &WorkerToken) -> rpc::WorkerToDaemonMessage {
+pub fn mk_detach_worker_msg(worker_id: Uuid) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::DetachWorker(Box::new(rpc::DetachWorker {
-            token: mk_worker_token(worker_token),
+            worker_id: uuid_fb(worker_id),
         })),
     }
 }
@@ -182,14 +167,14 @@ pub fn mk_detach_worker_msg(worker_token: &WorkerToken) -> rpc::WorkerToDaemonMe
 /// Build a RequestResult message
 #[inline]
 pub fn mk_request_result_msg(
-    worker_token: &WorkerToken,
+    worker_id: Uuid,
     request_id: Uuid,
     result: var::Var,
 ) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::RequestResult(Box::new(rpc::RequestResult {
-            token: mk_worker_token(worker_token),
-            id: uuid_fb(request_id),
+            worker_id: uuid_fb(worker_id),
+            request_id: uuid_fb(request_id),
             result: Box::new(result),
         })),
     }
@@ -198,14 +183,14 @@ pub fn mk_request_result_msg(
 /// Build a RequestError message
 #[inline]
 pub fn mk_request_error_msg(
-    worker_token: &WorkerToken,
+    worker_id: Uuid,
     request_id: Uuid,
     error: rpc::WorkerError,
 ) -> rpc::WorkerToDaemonMessage {
     rpc::WorkerToDaemonMessage {
         message: rpc::WorkerToDaemonMessageUnion::RequestError(Box::new(rpc::RequestError {
-            token: mk_worker_token(worker_token),
-            id: uuid_fb(request_id),
+            worker_id: uuid_fb(worker_id),
+            request_id: uuid_fb(request_id),
             error: Box::new(error),
         })),
     }

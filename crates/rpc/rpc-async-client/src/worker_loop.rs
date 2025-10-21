@@ -22,14 +22,14 @@ use moor_schema::{
 };
 
 use moor_var::{Obj, Symbol, Var};
-use rpc_common::{WORKER_BROADCAST_TOPIC, WorkerToken};
+use rpc_common::WORKER_BROADCAST_TOPIC;
 use std::{
     future::Future,
     sync::{Arc, atomic::AtomicBool},
 };
 use thiserror::Error;
 use tmq::{TmqError, request};
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 #[derive(Debug, Error)]
@@ -43,34 +43,64 @@ pub enum WorkerRpcError {
 pub async fn worker_loop<ProcessFunc, Fut>(
     kill_switch: &Arc<AtomicBool>,
     my_id: Uuid,
-    worker_token: &WorkerToken,
     worker_response_rpc_addr: &str,
     worker_request_rpc_addr: &str,
     worker_type: Symbol,
     perform: Arc<ProcessFunc>,
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
 ) -> Result<(), WorkerRpcError>
 where
-    ProcessFunc: Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut
-        + Send
-        + Sync
-        + 'static,
+    ProcessFunc:
+        Fn(Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<Var, WorkerError>> + Send + 'static + Sync,
 {
     let zmq_ctx = tmq::Context::new();
 
     // First attempt to connect to the daemon and "attach" ourselves.
     let _rpc_client = attach_worker(
-        worker_token,
         worker_type,
         my_id,
         zmq_ctx.clone(),
         worker_response_rpc_addr,
+        curve_keys.clone(),
     )
     .await
     .expect("Unable to attach to daemon");
 
     // Now make the pub-sub client to the daemon and listen.
-    let sub = tmq::subscribe(&zmq_ctx)
+    let mut socket_builder = tmq::subscribe(&zmq_ctx);
+
+    // Configure CURVE encryption if keys provided
+    if let Some((client_secret, client_public, server_public)) = &curve_keys {
+        use rpc_common::RpcError;
+        use tracing::info;
+
+        // Decode Z85 keys to bytes
+        let client_secret_bytes = zmq::z85_decode(client_secret).map_err(|_| {
+            WorkerRpcError::RpcError(RpcError::CouldNotInitiateSession(
+                "Invalid client secret key".to_string(),
+            ))
+        })?;
+        let client_public_bytes = zmq::z85_decode(client_public).map_err(|_| {
+            WorkerRpcError::RpcError(RpcError::CouldNotInitiateSession(
+                "Invalid client public key".to_string(),
+            ))
+        })?;
+        let server_public_bytes = zmq::z85_decode(server_public).map_err(|_| {
+            WorkerRpcError::RpcError(RpcError::CouldNotInitiateSession(
+                "Invalid server public key".to_string(),
+            ))
+        })?;
+
+        socket_builder = socket_builder
+            .set_curve_secretkey(&client_secret_bytes)
+            .set_curve_publickey(&client_public_bytes)
+            .set_curve_serverkey(&server_public_bytes);
+
+        info!("CURVE encryption enabled for worker events connection");
+    }
+
+    let sub = socket_builder
         .connect(worker_request_rpc_addr)
         .map_err(WorkerRpcError::UnableToConnectToDaemon)?;
     let mut sub = sub
@@ -86,17 +116,17 @@ where
             .map_err(WorkerRpcError::RpcError)?;
 
         let ctx = zmq_ctx.clone();
-        let worker_token = worker_token.clone();
         let perform_p = perform.clone();
+        let curve_keys_clone = curve_keys.clone();
         tokio::spawn(process_fb(
             event,
             ctx,
             worker_response_rpc_addr.to_string(),
             my_id,
-            worker_token,
             worker_type,
             kill_switch.clone(),
             perform_p,
+            curve_keys_clone,
         ));
     }
     Ok(())
@@ -107,20 +137,49 @@ async fn process_fb<ProcessFunc, Fut>(
     zmq_ctx: tmq::Context,
     rpc_address: String,
     my_id: Uuid,
-    worker_token: WorkerToken,
     worker_type: Symbol,
     kill_switch: Arc<AtomicBool>,
     perform: Arc<ProcessFunc>,
+    curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
 ) where
-    ProcessFunc: Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut
-        + Send
-        + Sync
-        + 'static,
+    ProcessFunc:
+        Fn(Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<Var, WorkerError>> + Send + 'static + Sync,
 {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
+    let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+
+    // Configure CURVE encryption if keys provided
+    if let Some((client_secret, client_public, server_public)) = &curve_keys {
+        // Decode Z85 keys to bytes
+        let client_secret_bytes = match zmq::z85_decode(client_secret) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                error!("Invalid client secret key for worker task");
+                return;
+            }
+        };
+        let client_public_bytes = match zmq::z85_decode(client_public) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                error!("Invalid client public key for worker task");
+                return;
+            }
+        };
+        let server_public_bytes = match zmq::z85_decode(server_public) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                error!("Invalid server public key for worker task");
+                return;
+            }
+        };
+
+        socket_builder = socket_builder
+            .set_curve_secretkey(&client_secret_bytes)
+            .set_curve_publickey(&client_public_bytes)
+            .set_curve_serverkey(&server_public_bytes);
+    }
+
+    let rpc_request_sock = socket_builder
         .connect(&rpc_address)
         .expect("Unable to bind RPC server for connection");
     let mut rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
@@ -137,7 +196,7 @@ async fn process_fb<ProcessFunc, Fut>(
     match message_union {
         moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => {
             rpc_client
-                .make_worker_rpc_call_fb_pong(&worker_token, my_id, worker_type)
+                .make_worker_rpc_call_fb_pong(my_id, worker_type)
                 .await
                 .expect("Unable to send pong to daemon");
         }
@@ -176,15 +235,6 @@ async fn process_fb<ProcessFunc, Fut>(
                     return;
                 }
             };
-
-            let token_str = match req.token().and_then(|t| t.token()) {
-                Ok(token) => token,
-                Err(e) => {
-                    info!("Failed to get token: {}", e);
-                    return;
-                }
-            };
-            let token = WorkerToken(token_str.to_owned());
 
             let perms_ref = match req.perms() {
                 Ok(perms) => perms,
@@ -253,45 +303,26 @@ async fn process_fb<ProcessFunc, Fut>(
             };
 
             // Make an outbound HTTP request w/ request, pass timeout if needed
-            let result = perform(
-                token.clone(),
-                request_id,
-                worker_type,
-                perms,
-                request,
-                timeout,
-            )
-            .await;
+            let result = perform(request_id, worker_type, perms, request, timeout).await;
             match result {
                 Ok(r) => {
                     rpc_client
-                        .make_worker_rpc_call_fb_result(&worker_token, my_id, request_id, r)
+                        .make_worker_rpc_call_fb_result(my_id, request_id, r)
                         .await
                         .expect("Unable to send response to daemon");
                 }
                 Err(e) => {
                     info!("Error performing request: {}", e);
                     rpc_client
-                        .make_worker_rpc_call_fb_error(&worker_token, my_id, request_id, e)
+                        .make_worker_rpc_call_fb_error(my_id, request_id, e)
                         .await
                         .expect("Unable to send error response to daemon");
                 }
             }
         }
-        moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(die) => {
-            let token_str = match die.token().and_then(|t| t.token()) {
-                Ok(token) => token,
-                Err(e) => {
-                    info!("Failed to get token: {}", e);
-                    return;
-                }
-            };
-            let token = WorkerToken(token_str.to_owned());
-
-            if token == worker_token {
-                info!("Received please die from daemon");
-                kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
-            }
+        moor_rpc::DaemonToWorkerMessageUnionRef::PleaseDie(_) => {
+            info!("Received please die from daemon");
+            kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
 }
