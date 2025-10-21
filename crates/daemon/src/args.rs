@@ -160,7 +160,10 @@ pub struct Args {
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     pub debug: bool,
 
-    #[arg(long, help = "Generate ED25519 keypair if it doesn't exist, then continue")]
+    #[arg(
+        long,
+        help = "Generate ED25519 keypair if it doesn't exist, then continue"
+    )]
     pub generate_keypair: bool,
 
     #[arg(long, help = "Rotate enrollment token and exit")]

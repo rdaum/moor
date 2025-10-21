@@ -337,46 +337,20 @@ async fn main() -> Result<(), eyre::Error> {
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    // Check if we need CURVE encryption (only for TCP endpoints, not IPC)
-    let use_curve = args.client_args.rpc_address.starts_with("tcp://");
-
-    // Enroll with daemon and load CURVE keys only if using TCP
-    let curve_keys = if use_curve {
-        info!("TCP endpoint detected - enrolling with daemon and loading CURVE keys");
-
-        let enrollment_token = std::env::var("MOOR_ENROLLMENT_TOKEN").ok();
-        let (daemon_public_key, _service_uuid) =
-            match rpc_async_client::enrollment_client::ensure_enrolled(
-                &args.client_args.enrollment_address,
-                enrollment_token.as_deref(),
-                args.client_args.enrollment_token_file.as_deref(),
-                "web-host",
-                &args.client_args.data_dir,
-            ) {
-                Ok(enrollment) => enrollment,
-                Err(e) => {
-                    error!("Failed to enroll with daemon: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-        let keypair = match rpc_async_client::curve_keys::load_or_generate_keypair(
-            &args.client_args.data_dir,
-            "web-host",
-        ) {
-            Ok(keypair) => keypair,
-            Err(e) => {
-                error!("Unable to load CURVE keypair: {}", e);
-                std::process::exit(1);
-            }
-        };
-
-        Some((keypair.secret, keypair.public, daemon_public_key))
-    } else {
-        info!("IPC endpoint detected - CURVE encryption disabled");
-        None
+    // Setup CURVE encryption if using TCP endpoint
+    let curve_keys = match rpc_async_client::enrollment_client::setup_curve_auth(
+        &args.client_args.rpc_address,
+        &args.client_args.enrollment_address,
+        args.client_args.enrollment_token_file.as_deref(),
+        "web-host",
+        &args.client_args.data_dir,
+    ) {
+        Ok(keys) => keys,
+        Err(e) => {
+            error!("Failed to setup CURVE authentication: {}", e);
+            std::process::exit(1);
+        }
     };
-
 
     let zmq_ctx = tmq::Context::new();
 

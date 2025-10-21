@@ -410,12 +410,8 @@ fn main() -> Result<(), Report> {
     } else if args.generate_keypair {
         // Generate keypair if flag is set and files don't exist
         generate_keypair(&args.public_key, &args.private_key)?;
-        load_keypair(&args.public_key, &args.private_key).map_err(|e| {
-            eyre!(
-                "Unable to load generated keypair: {}",
-                e
-            )
-        })?
+        load_keypair(&args.public_key, &args.private_key)
+            .map_err(|e| eyre!("Unable to load generated keypair: {}", e))?
     } else {
         bail!(
             "Public ({:?}) and/or private ({:?}) key files must exist. Use --generate-keypair to create them.",

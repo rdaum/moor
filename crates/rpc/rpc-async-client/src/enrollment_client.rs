@@ -196,3 +196,48 @@ pub fn ensure_enrolled(
 
     unreachable!()
 }
+
+/// Setup CURVE encryption by enrolling with the daemon and loading keys
+///
+/// This is a high-level helper that encapsulates the common pattern used by
+/// hosts and workers for setting up CURVE authentication.
+///
+/// Returns:
+/// - None if the RPC address uses IPC (no encryption needed)
+/// - Some((client_secret, client_public, server_public)) if using TCP
+///
+/// All returned keys are Z85-encoded strings.
+pub fn setup_curve_auth(
+    rpc_address: &str,
+    enrollment_endpoint: &str,
+    enrollment_token_file: Option<&Path>,
+    service_type: &str,
+    data_dir: &Path,
+) -> Result<Option<(String, String, String)>> {
+    // Check if we need CURVE encryption (only for TCP endpoints, not IPC)
+    let use_curve = rpc_address.starts_with("tcp://");
+
+    if !use_curve {
+        info!("IPC endpoint detected - CURVE encryption disabled");
+        return Ok(None);
+    }
+
+    info!("TCP endpoint detected - enrolling with daemon and loading CURVE keys");
+
+    // Get enrollment token from environment variable
+    let enrollment_token = std::env::var("MOOR_ENROLLMENT_TOKEN").ok();
+
+    // Enroll with daemon
+    let (daemon_public_key, _service_uuid) = ensure_enrolled(
+        enrollment_endpoint,
+        enrollment_token.as_deref(),
+        enrollment_token_file,
+        service_type,
+        data_dir,
+    )?;
+
+    // Load or generate CURVE keypair
+    let keypair = crate::curve_keys::load_or_generate_keypair(data_dir, service_type)?;
+
+    Ok(Some((keypair.secret, keypair.public, daemon_public_key)))
+}
