@@ -31,6 +31,24 @@ table AuthToken {
 }
 
 // ============================================================================
+// Enrollment messages
+// ============================================================================
+
+table EnrollmentRequest {
+    enrollment_token: string (required);
+    curve_public_key: string (required);
+    service_type: string (required);
+    hostname: string (required);
+}
+
+table EnrollmentResponse {
+    success: bool;
+    service_uuid: string;  // Optional - present if success is true
+    daemon_curve_public_key: string;  // Optional - present if success is true
+    error: string;  // Optional - present if success is false
+}
+
+// ============================================================================
 // Scheduler and other errors (properly structured)
 // ============================================================================
 

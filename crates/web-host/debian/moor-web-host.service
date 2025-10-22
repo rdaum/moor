@@ -3,6 +3,7 @@ AssertPathExists=/usr/bin/moor-web-host
 
 [Service]
 Environment="RUST_BACKTRACE=full"
+Environment="XDG_CONFIG_HOME=/etc"
 ExecStart=/usr/bin/moor-web-host --config-file /etc/moor/web-host.yaml
 WorkingDirectory=/var/lib/moor
 Restart=always

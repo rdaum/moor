@@ -75,7 +75,10 @@ pub use reply_builders::{
     var_to_flatbuffer_rpc,
 };
 
-pub use enrollment::{EnrollmentRequest, EnrollmentResponse};
+pub use enrollment::{
+    EnrollmentRequest, EnrollmentRequestRef, EnrollmentResponse, EnrollmentResponseRef,
+    mk_enrollment_request, mk_enrollment_response_failure, mk_enrollment_response_success,
+};
 
 // Public modules - allow direct access to generated types and client args
 pub mod client_args;

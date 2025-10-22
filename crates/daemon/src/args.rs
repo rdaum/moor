@@ -19,6 +19,7 @@ use figment::{
     Figment,
     providers::{Format as ProviderFormat, Serialized, Yaml},
 };
+use moor_common::util::config_path;
 use moor_db::DatabaseConfig;
 use moor_kernel::config::{Config, ImportExportConfig, ImportExportFormat, RuntimeConfig};
 use moor_textdump::EncodingMode;
@@ -127,27 +128,26 @@ pub struct Args {
     #[arg(
         long,
         value_name = "enrollment-token-file",
-        help = "Path to enrollment token file",
-        value_hint = ValueHint::FilePath,
-        default_value = "./enrollment-token"
+        help = "Path to enrollment token file. If omitted, defaults to ${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token. Relative paths are resolved under the XDG config directory.",
+        value_hint = ValueHint::FilePath
     )]
-    pub enrollment_token_file: PathBuf,
+    pub enrollment_token_file: Option<PathBuf>,
 
     #[arg(
         long,
-        value_name = "public_key",
-        help = "file containing the PEM encoded public key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "moor-verifying-key.pem"
+        value_name = "public-key",
+        help = "file containing the PEM encoded public key (shared with the daemon), used for authenticating client & host connections. If omitted, defaults to ${XDG_CONFIG_HOME:-$HOME/.config}/moor/moor-verifying-key.pem. Relative paths are resolved under the XDG config directory.",
+        value_hint = ValueHint::FilePath
     )]
-    pub public_key: PathBuf,
+    pub public_key: Option<PathBuf>,
 
     #[arg(
         long,
-        value_name = "private_key",
-        help = "file containing an openssh generated ed25519 format private key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "moor-signing-key.pem"
+        value_name = "private-key",
+        help = "file containing an openssh generated ed25519 format private key (shared with the daemon), used for authenticating client & host connections. If omitted, defaults to ${XDG_CONFIG_HOME:-$HOME/.config}/moor/moor-signing-key.pem. Relative paths are resolved under the XDG config directory.",
+        value_hint = ValueHint::FilePath
     )]
-    pub private_key: PathBuf,
+    pub private_key: Option<PathBuf>,
 
     #[arg(
         long,
@@ -379,67 +379,118 @@ impl Args {
     }
 }
 
-// Helper functions for resolving database paths relative to data_dir
+// Helper functions for resolving configuration and data paths (XDG-compliant)
 impl Args {
-    /// Resolve the main database path relative to data_dir
+    /// Resolve the data directory for moor (databases live under this)
+    pub fn resolved_data_dir(&self) -> PathBuf {
+        self.data_dir.clone()
+    }
+
+    /// Resolve the allowed-hosts directory (XDG data)
+    pub fn resolved_allowed_hosts_dir(&self) -> PathBuf {
+        if let Ok(data) = std::env::var("XDG_DATA_HOME") {
+            std::path::PathBuf::from(data).join("moor/allowed-hosts")
+        } else if let Ok(home) = std::env::var("HOME") {
+            std::path::PathBuf::from(home).join(".local/share/moor/allowed-hosts")
+        } else {
+            self.resolved_data_dir().join("allowed-hosts")
+        }
+    }
+
+    /// Resolve the enrollment token path
+    ///
+    /// Priority:
+    /// - explicit path if provided (absolute used as-is, relative resolved under XDG config)
+    /// - XDG default: $XDG_CONFIG_HOME/moor/enrollment-token or ~/.config/moor/enrollment-token
+    pub fn resolved_enrollment_token_path(&self) -> PathBuf {
+        match &self.enrollment_token_file {
+            Some(p) if p.is_absolute() => p.clone(),
+            Some(p) => config_path(p),
+            None => config_path("enrollment-token"),
+        }
+    }
+
+    /// Resolve the PASETO verifying key path (public key)
+    ///
+    /// If not provided, defaults to XDG config: moor-verifying-key.pem
+    pub fn resolved_public_key_path(&self) -> PathBuf {
+        match &self.public_key {
+            Some(p) if p.is_absolute() => p.clone(),
+            Some(p) => config_path(p),
+            None => config_path("moor-verifying-key.pem"),
+        }
+    }
+
+    /// Resolve the PASETO signing key path (private key)
+    ///
+    /// If not provided, defaults to XDG config: moor-signing-key.pem
+    pub fn resolved_private_key_path(&self) -> PathBuf {
+        match &self.private_key {
+            Some(p) if p.is_absolute() => p.clone(),
+            Some(p) => config_path(p),
+            None => config_path("moor-signing-key.pem"),
+        }
+    }
+
+    /// Resolve the main database path relative to resolved data dir
     pub(crate) fn resolved_db_path(&self) -> PathBuf {
         if self.db_args.db.is_absolute() {
             self.db_args.db.clone()
         } else {
-            self.data_dir.join(&self.db_args.db)
+            self.resolved_data_dir().join(&self.db_args.db)
         }
     }
 
-    /// Resolve the tasks database path relative to data_dir
+    /// Resolve the tasks database path relative to resolved data dir
     pub(crate) fn resolved_tasks_db_path(&self) -> PathBuf {
         match &self.tasks_db {
             Some(path) => {
                 if path.is_absolute() {
                     path.clone()
                 } else {
-                    self.data_dir.join(path)
+                    self.resolved_data_dir().join(path)
                 }
             }
-            None => self.data_dir.join("tasks.db"),
+            None => self.resolved_data_dir().join("tasks.db"),
         }
     }
 
-    /// Resolve the connections database path relative to data_dir
+    /// Resolve the connections database path relative to resolved data dir
     pub(crate) fn resolved_connections_db_path(&self) -> Option<PathBuf> {
         match &self.connections_file {
             Some(path) => {
                 if path.is_absolute() {
                     Some(path.clone())
                 } else {
-                    Some(self.data_dir.join(path))
+                    Some(self.resolved_data_dir().join(path))
                 }
             }
-            None => Some(self.data_dir.join("connections.db")),
+            None => Some(self.resolved_data_dir().join("connections.db")),
         }
     }
 
-    /// Resolve the events database path relative to data_dir
+    /// Resolve the events database path relative to resolved data dir
     pub(crate) fn resolved_events_db_path(&self) -> PathBuf {
         match &self.events_db {
             Some(path) => {
                 if path.is_absolute() {
                     path.clone()
                 } else {
-                    self.data_dir.join(path)
+                    self.resolved_data_dir().join(path)
                 }
             }
-            None => self.data_dir.join("events.db"),
+            None => self.resolved_data_dir().join("events.db"),
         }
     }
 
     #[cfg(feature = "trace_events")]
-    /// Resolve the trace output path relative to data_dir
+    /// Resolve the trace output path relative to resolved data dir
     pub(crate) fn resolved_trace_output_path(&self) -> Option<PathBuf> {
         self.trace_output.as_ref().map(|path| {
             if path.is_absolute() {
                 path.clone()
             } else {
-                self.data_dir.join(path)
+                self.resolved_data_dir().join(path)
             }
         })
     }

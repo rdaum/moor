@@ -4,6 +4,7 @@ set -e
 MOOR_USER="moor"
 DATABASE_DIR="/var/spool/moor-daemon"
 LIB_DIR="/var/lib/moor"
+CONFIG_DIR="/etc/moor"
 MOOR_HOME=${DATABASE_DIR}
 
 create_user() {
@@ -14,8 +15,11 @@ create_user() {
 create_directories() {
   mkdir -p ${DATABASE_DIR}
   mkdir -p ${LIB_DIR}
+  mkdir -p ${CONFIG_DIR}
   chown -R ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}
   chown -R ${MOOR_USER}:${MOOR_USER} ${DATABASE_DIR}
+  chown -R ${MOOR_USER}:${MOOR_USER} ${CONFIG_DIR}
+  chmod 700 ${CONFIG_DIR}
 
   echo ""
   echo "** The moor-daemon package includes a LambdaCore-based core (with modifications for moor)"
@@ -27,25 +31,40 @@ create_directories() {
 
 generate_keys() {
   # Only generate keys if they don't already exist (e.g., on first install, not upgrades)
-  if [ ! -f ${LIB_DIR}/moor-signing-key.pem ] || [ ! -f ${LIB_DIR}/moor-verifying-key.pem ]; then
+  if [ ! -f ${CONFIG_DIR}/moor-signing-key.pem ] || [ ! -f ${CONFIG_DIR}/moor-verifying-key.pem ]; then
     echo "** Generating PASETO signing and verifying keys for client authentication."
-    openssl genpkey -algorithm ed25519 -out ${LIB_DIR}/moor-signing-key.pem
-    openssl pkey -in ${LIB_DIR}/moor-signing-key.pem -pubout -out ${LIB_DIR}/moor-verifying-key.pem
+    openssl genpkey -algorithm ed25519 -out ${CONFIG_DIR}/moor-signing-key.pem
+    openssl pkey -in ${CONFIG_DIR}/moor-signing-key.pem -pubout -out ${CONFIG_DIR}/moor-verifying-key.pem
 
     # Set permissions on the keys
-    chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-signing-key.pem
-    chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-verifying-key.pem
+    chown ${MOOR_USER}:${MOOR_USER} ${CONFIG_DIR}/moor-signing-key.pem
+    chown ${MOOR_USER}:${MOOR_USER} ${CONFIG_DIR}/moor-verifying-key.pem
+    chmod 600 ${CONFIG_DIR}/moor-signing-key.pem ${CONFIG_DIR}/moor-verifying-key.pem
   else
-    echo "** PASETO keys already exist at ${LIB_DIR}/moor-*-key.pem, skipping generation."
+    echo "** PASETO keys already exist at ${CONFIG_DIR}/moor-*-key.pem, skipping generation."
   fi
 }
 
+generate_enrollment_token() {
+  # Only generate token if it doesn't already exist
+  if [ ! -f ${CONFIG_DIR}/enrollment-token ]; then
+    echo "** Generating enrollment token."
+    if command -v uuidgen >/dev/null 2>&1; then
+      uuidgen > ${CONFIG_DIR}/enrollment-token
+    else
+      cat /proc/sys/kernel/random/uuid > ${CONFIG_DIR}/enrollment-token
+    fi
+    chown ${MOOR_USER}:${MOOR_USER} ${CONFIG_DIR}/enrollment-token
+    chmod 600 ${CONFIG_DIR}/enrollment-token
+  fi
+}
 
 case "$1" in
 configure)
     create_user
     create_directories
     generate_keys
+    generate_enrollment_token
     ;;
 esac
 

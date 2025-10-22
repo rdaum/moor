@@ -14,7 +14,8 @@
 //! Client for enrolling hosts/workers with the daemon
 
 use eyre::{Context, Result, eyre};
-use rpc_common::{EnrollmentRequest, EnrollmentResponse};
+use planus::ReadAsRoot;
+use rpc_common::{EnrollmentResponseRef, mk_enrollment_request};
 use std::path::Path;
 use tracing::info;
 use uuid::Uuid;
@@ -59,19 +60,19 @@ pub fn enroll_with_daemon(
     })?;
 
     // Build enrollment request
-    let request = EnrollmentRequest {
-        enrollment_token: enrollment_token.to_string(),
-        curve_public_key: keypair.public.clone(),
-        service_type: service_type.to_string(),
-        hostname,
-    };
+    let request = mk_enrollment_request(
+        enrollment_token.to_string(),
+        keypair.public.clone(),
+        service_type.to_string(),
+        hostname.clone(),
+    );
 
-    // Serialize and send request
-    let request_json =
-        serde_json::to_vec(&request).context("Failed to serialize enrollment request")?;
+    // Serialize FlatBuffer request
+    let mut builder = planus::Builder::new();
+    let request_bytes = builder.finish(&request, None).to_vec();
 
     socket
-        .send(&request_json, 0)
+        .send(&request_bytes, 0)
         .context("Failed to send enrollment request")?;
 
     // Receive response
@@ -79,29 +80,36 @@ pub fn enroll_with_daemon(
         .recv_bytes(0)
         .context("Failed to receive enrollment response")?;
 
-    // Deserialize response
-    let response: EnrollmentResponse = serde_json::from_slice(&response_bytes)
+    // Deserialize FlatBuffer response
+    let response = EnrollmentResponseRef::read_as_root(&response_bytes)
         .context("Failed to deserialize enrollment response")?;
 
     // Check if enrollment succeeded
-    if !response.success {
-        let error_msg = response
-            .error
-            .unwrap_or_else(|| "Unknown error".to_string());
+    let success = response
+        .success()
+        .context("Missing success field in enrollment response")?;
+
+    if !success {
+        let error_msg = response.error().ok().flatten().unwrap_or("Unknown error");
         return Err(eyre!("Enrollment failed: {}", error_msg));
     }
 
     // Extract daemon public key and service UUID
     let daemon_public_key = response
-        .daemon_curve_public_key
-        .ok_or_else(|| eyre!("No daemon public key in response"))?;
+        .daemon_curve_public_key()
+        .ok()
+        .flatten()
+        .ok_or_else(|| eyre!("No daemon public key in response"))?
+        .to_string();
 
     let service_uuid_str = response
-        .service_uuid
+        .service_uuid()
+        .ok()
+        .flatten()
         .ok_or_else(|| eyre!("No service UUID in response"))?;
 
     let service_uuid =
-        Uuid::parse_str(&service_uuid_str).context("Invalid service UUID from daemon")?;
+        Uuid::parse_str(service_uuid_str).context("Invalid service UUID from daemon")?;
 
     info!(
         service_uuid = %service_uuid,
@@ -113,7 +121,7 @@ pub fn enroll_with_daemon(
         data_dir,
         service_type,
         service_uuid,
-        &request.hostname,
+        &hostname,
         &daemon_public_key,
     )?;
 
@@ -125,6 +133,20 @@ fn read_enrollment_token_from_file(token_path: &Path) -> Option<String> {
     std::fs::read_to_string(token_path)
         .ok()
         .map(|s| s.trim().to_string())
+}
+
+/// Resolve the default XDG enrollment token path
+///
+/// Returns $XDG_CONFIG_HOME/moor/enrollment-token or ~/.config/moor/enrollment-token
+fn xdg_default_token_path() -> std::path::PathBuf {
+    if let Ok(dir) = std::env::var("XDG_CONFIG_HOME") {
+        std::path::PathBuf::from(dir).join("moor/enrollment-token")
+    } else if let Ok(home) = std::env::var("HOME") {
+        std::path::PathBuf::from(home).join(".config/moor/enrollment-token")
+    } else {
+        // Last-resort fallback for non-standard environments
+        std::path::PathBuf::from("enrollment-token")
+    }
 }
 
 /// Check if already enrolled and return identity, or enroll if needed
@@ -151,15 +173,22 @@ pub fn ensure_enrolled(
     }
 
     // Not enrolled yet - need enrollment token
-    // Priority: explicit token arg > token file arg > MOOR_ENROLLMENT_TOKEN env var
+    // Priority:
+    //   1) explicit token arg
+    //   2) token file arg
+    //   3) XDG default token file ($XDG_CONFIG_HOME/moor/enrollment-token or ~/.config/moor/enrollment-token)
+    //   4) MOOR_ENROLLMENT_TOKEN env var
     let token = enrollment_token
         .map(|s| s.to_string())
         .or_else(|| enrollment_token_file.and_then(read_enrollment_token_from_file))
+        .or_else(|| read_enrollment_token_from_file(&xdg_default_token_path()))
+        .or_else(|| std::env::var("MOOR_ENROLLMENT_TOKEN").ok())
         .ok_or_else(|| {
             eyre!(
                 "Not enrolled and no enrollment token provided. Either:\n\
              1. Set MOOR_ENROLLMENT_TOKEN environment variable, or\n\
-             2. Use --enrollment-token-file to specify token file path"
+             2. Use --enrollment-token-file to specify token file path, or\n\
+             3. Place token in ${{XDG_CONFIG_HOME:-$HOME/.config}}/moor/enrollment-token"
             )
         })?;
 

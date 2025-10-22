@@ -16,6 +16,8 @@
 use eyre::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tracing::{info, warn};
@@ -32,20 +34,36 @@ pub struct AllowedHostsRegistry {
 }
 
 impl AllowedHostsRegistry {
-    /// Create a new registry
+    /// Create a new registry at an explicit allowed-hosts directory
     ///
-    /// Creates the allowed-hosts directory if it doesn't exist
-    pub fn new(data_dir: &Path) -> Result<Self> {
-        let hosts_dir = data_dir.join("allowed-hosts");
-        fs::create_dir_all(&hosts_dir).with_context(|| {
+    /// Creates the allowed-hosts directory if it doesn't exist, initializes cache, and loads entries.
+    pub fn from_dir(hosts_dir: &Path) -> Result<Self> {
+        fs::create_dir_all(hosts_dir).with_context(|| {
             format!(
                 "Failed to create allowed-hosts directory at {:?}",
                 hosts_dir
             )
         })?;
+        #[cfg(unix)]
+        {
+            let mut perms = fs::metadata(hosts_dir)
+                .with_context(|| format!("Failed to stat allowed-hosts dir {:?}", hosts_dir))?
+                .permissions();
+            perms.set_mode(0o700); // owner rwx only
+            fs::set_permissions(hosts_dir, perms)
+                .with_context(|| format!("Failed to set permissions on {:?}", hosts_dir))?;
+            let mode = fs::metadata(hosts_dir)?.permissions().mode() & 0o777;
+            if mode & 0o077 != 0 {
+                warn!(
+                    ?hosts_dir,
+                    mode = format_args!("{:o}", mode),
+                    "allowed-hosts directory permissions are too permissive; expected 700"
+                );
+            }
+        }
 
         let mut registry = Self {
-            hosts_dir,
+            hosts_dir: hosts_dir.to_path_buf(),
             cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
@@ -143,6 +161,23 @@ impl AllowedHostsRegistry {
 
         fs::write(&file_path, content)
             .with_context(|| format!("Failed to write host public key to {:?}", file_path))?;
+        #[cfg(unix)]
+        {
+            let mut perms = fs::metadata(&file_path)
+                .with_context(|| format!("Failed to stat host key file {:?}", file_path))?
+                .permissions();
+            perms.set_mode(0o600); // owner rw only
+            fs::set_permissions(&file_path, perms)
+                .with_context(|| format!("Failed to set permissions on {:?}", file_path))?;
+            let mode = fs::metadata(&file_path)?.permissions().mode() & 0o777;
+            if mode & 0o177 != 0 {
+                warn!(
+                    ?file_path,
+                    mode = format_args!("{:o}", mode),
+                    "host key file permissions are too permissive; expected 600"
+                );
+            }
+        }
 
         // Update cache
         let mut cache = self.cache.write().unwrap();
@@ -226,7 +261,8 @@ mod tests {
     #[test]
     fn test_new_registry_creates_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let registry = AllowedHostsRegistry::new(temp_dir.path()).unwrap();
+        let registry =
+            AllowedHostsRegistry::from_dir(&temp_dir.path().join("allowed-hosts")).unwrap();
 
         assert!(temp_dir.path().join("allowed-hosts").exists());
         assert_eq!(registry.count(), 0);
@@ -235,7 +271,8 @@ mod tests {
     #[test]
     fn test_add_and_check_host() {
         let temp_dir = TempDir::new().unwrap();
-        let registry = AllowedHostsRegistry::new(temp_dir.path()).unwrap();
+        let registry =
+            AllowedHostsRegistry::from_dir(&temp_dir.path().join("allowed-hosts")).unwrap();
 
         let uuid = Uuid::new_v4();
         let public_key = "a".repeat(40);
@@ -252,7 +289,8 @@ mod tests {
     #[test]
     fn test_remove_host() {
         let temp_dir = TempDir::new().unwrap();
-        let registry = AllowedHostsRegistry::new(temp_dir.path()).unwrap();
+        let registry =
+            AllowedHostsRegistry::from_dir(&temp_dir.path().join("allowed-hosts")).unwrap();
 
         let uuid = Uuid::new_v4();
         let public_key = "a".repeat(40);
@@ -277,7 +315,8 @@ mod tests {
 
         // First registry instance
         {
-            let registry = AllowedHostsRegistry::new(temp_dir.path()).unwrap();
+            let registry =
+                AllowedHostsRegistry::from_dir(&temp_dir.path().join("allowed-hosts")).unwrap();
             registry
                 .add_host(uuid, &public_key, "web-host", "test-host")
                 .unwrap();
@@ -285,7 +324,8 @@ mod tests {
 
         // Second registry instance - should load from disk
         {
-            let registry = AllowedHostsRegistry::new(temp_dir.path()).unwrap();
+            let registry =
+                AllowedHostsRegistry::from_dir(&temp_dir.path().join("allowed-hosts")).unwrap();
             assert_eq!(registry.count(), 1);
             assert_eq!(registry.is_authorized(&public_key), Some(uuid));
         }

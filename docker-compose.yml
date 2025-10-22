@@ -20,25 +20,24 @@ networks:
   # of how to use the system over a network if we were in a real distributed system.
   moor_net:
 
-
 services:
   # Initialization container to generate enrollment token if needed
   init-enrollment:
     image: alpine:latest
     container_name: "moor-init-enrollment"
     volumes:
-      - moor-enrollment:/root/.moor
+      - moor-enrollment:/root/.config/moor
     command: >
       sh -c "
-        if [ ! -f /root/.moor/enrollment-token ]; then
+        if [ ! -f /root/.config/moor/enrollment-token ]; then
           echo 'Generating enrollment token...' &&
-          mkdir -p /root/.moor &&
-          cat /proc/sys/kernel/random/uuid > /root/.moor/enrollment-token &&
-          echo 'Enrollment token generated:' &&
-          cat /root/.moor/enrollment-token
+          mkdir -p /root/.config/moor &&
+          cat /proc/sys/kernel/random/uuid > /root/.config/moor/enrollment-token &&
+          echo 'Enrollment token generated at /root/.config/moor/enrollment-token' &&
+          :
         else
-          echo 'Enrollment token already exists:' &&
-          cat /root/.moor/enrollment-token
+          echo 'Enrollment token already exists at /root/.config/moor/enrollment-token' &&
+          :
         fi
       "
     networks:
@@ -55,11 +54,11 @@ services:
     container_name: "moor-daemon"
     environment:
       - RUST_BACKTRACE=1
-      - MOOR_ENROLLMENT_TOKEN_FILE=/root/.moor/enrollment-token
     working_dir: /moor
     volumes:
       - ./:/db
-      - moor-enrollment:/root/.moor
+      - moor-enrollment:/root/.config/moor
+      - moor-allowed-hosts:/root/.local/share/moor/allowed-hosts
     command: >
       ./moor-daemon
         /db/moor-data
@@ -69,7 +68,7 @@ services:
         --workers-response-listen=tcp://0.0.0.0:7897
         --workers-request-listen=tcp://0.0.0.0:7896
         --enrollment-listen=tcp://0.0.0.0:7900
-        --enrollment-token-file=/root/.moor/enrollment-token
+
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export --export-format objdef
@@ -99,7 +98,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - moor-enrollment:/root/.moor:ro
+      - moor-enrollment:/root/.config/moor:ro
       - moor-telnet-data:/root/.moor-host-data
     command:
       - ./moor-telnet-host
@@ -108,7 +107,7 @@ services:
       - --rpc-address=tcp://moor-daemon:7899
       - --events-address=tcp://moor-daemon:7898
       - --enrollment-address=tcp://moor-daemon:7900
-      - --enrollment-token-file=/root/.moor/enrollment-token
+
     ports:
       # Telnet listener
       - "8888:8888"
@@ -148,7 +147,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - moor-enrollment:/root/.moor:ro
+      - moor-enrollment:/root/.config/moor:ro
       - moor-web-data:/root/.moor-host-data
     command:
       - ./moor-web-host
@@ -156,7 +155,7 @@ services:
       - --rpc-address=tcp://moor-daemon:7899
       - --events-address=tcp://moor-daemon:7898
       - --enrollment-address=tcp://moor-daemon:7900
-      - --enrollment-token-file=/root/.moor/enrollment-token
+
     ports:
       # API listener (internal)
       - "8081:8081"
@@ -182,7 +181,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - moor-enrollment:/root/.moor:ro
+      - moor-enrollment:/root/.config/moor:ro
       - moor-curl-data:/root/.moor-host-data
     command:
       - ./moor-curl-worker
@@ -191,7 +190,7 @@ services:
       - --workers-request-address=tcp://moor-daemon:7896
       - --workers-response-address=tcp://moor-daemon:7897
       - --enrollment-address=tcp://moor-daemon:7900
-      - --enrollment-token-file=/root/.moor/enrollment-token
+
     networks:
       - moor_net
     depends_on:
@@ -202,6 +201,7 @@ services:
 
 volumes:
   moor-enrollment:
+  moor-allowed-hosts:
   moor-telnet-data:
   moor-web-data:
   moor-curl-data:

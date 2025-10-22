@@ -3,6 +3,7 @@ AssertPathExists=/usr/bin/moor-telnet-host
 
 [Service]
 Environment="RUST_BACKTRACE=full"
+Environment="XDG_CONFIG_HOME=/etc"
 ExecStart=/usr/bin/moor-telnet-host --config-file /etc/moor/telnet-host.yaml
 WorkingDirectory=/tmp
 Restart=always

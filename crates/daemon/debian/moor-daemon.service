@@ -3,7 +3,9 @@ AssertPathExists=/usr/bin/moor-daemon
 
 [Service]
 Environment="RUST_BACKTRACE=full"
-ExecStart=/usr/bin/moor-daemon --private-key=/var/lib/moor/moor-signing-key.pem --public-key=/var/lib/moor/moor-verifying-key.pem --config-file /etc/moor/daemon-config.yaml /var/spool/moor-daemon/moor.db
+Environment="XDG_CONFIG_HOME=/etc"
+Environment="XDG_DATA_HOME=/var/lib"
+ExecStart=/usr/bin/moor-daemon --config-file /etc/moor/daemon-config.yaml /var/spool/moor-daemon/moor.db
 WorkingDirectory=/var/spool/moor-daemon
 Restart=always
 # TODO: This is off so that IPC files can be shared between the daemon and the hosts

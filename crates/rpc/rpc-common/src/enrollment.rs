@@ -11,32 +11,51 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Entities used as JSON blobs sent to/from the host/worker <-> daemon for the enrollment process.
+//! Enrollment message types and builders for host/worker registration
 
-use serde::{Deserialize, Serialize};
+use moor_schema::rpc;
 
-/// Enrollment request from a host/worker
-#[derive(Debug, Deserialize, Serialize)]
-pub struct EnrollmentRequest {
-    /// Enrollment token (one-time shared secret)
-    pub enrollment_token: String,
-    /// Host's CURVE public key (Z85-encoded, 40 characters)
-    pub curve_public_key: String,
-    /// Service type (e.g., "web-host", "telnet-host", "curl-worker")
-    pub service_type: String,
-    /// Hostname for logging/debugging
-    pub hostname: String,
+// Re-export FlatBuffer enrollment types
+pub use rpc::{EnrollmentRequest, EnrollmentRequestRef, EnrollmentResponse, EnrollmentResponseRef};
+
+// ============================================================================
+// Enrollment message builders
+// ============================================================================
+
+/// Create an EnrollmentRequest
+pub fn mk_enrollment_request(
+    enrollment_token: String,
+    curve_public_key: String,
+    service_type: String,
+    hostname: String,
+) -> EnrollmentRequest {
+    EnrollmentRequest {
+        enrollment_token,
+        curve_public_key,
+        service_type,
+        hostname,
+    }
 }
 
-/// Enrollment response to host/worker
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EnrollmentResponse {
-    /// Whether enrollment succeeded
-    pub success: bool,
-    /// UUID assigned to this service instance (if successful)
-    pub service_uuid: Option<String>,
-    /// Daemon's CURVE public key (Z85-encoded, if successful)
-    pub daemon_curve_public_key: Option<String>,
-    /// Error message (if failed)
-    pub error: Option<String>,
+/// Create a successful EnrollmentResponse
+pub fn mk_enrollment_response_success(
+    service_uuid: String,
+    daemon_curve_public_key: String,
+) -> EnrollmentResponse {
+    EnrollmentResponse {
+        success: true,
+        service_uuid: Some(service_uuid),
+        daemon_curve_public_key: Some(daemon_curve_public_key),
+        error: None,
+    }
+}
+
+/// Create a failed EnrollmentResponse
+pub fn mk_enrollment_response_failure(error: String) -> EnrollmentResponse {
+    EnrollmentResponse {
+        success: false,
+        service_uuid: None,
+        daemon_curve_public_key: None,
+        error: Some(error),
+    }
 }

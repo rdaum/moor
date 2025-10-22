@@ -114,8 +114,6 @@ command = [
     "-p",
     "moor-telnet-host",
     "--",
-    "--enrollment-token-file",
-    "./enrollment-token",
 ]
 allow_warnings = true
 need_stdout = true
@@ -129,8 +127,6 @@ command = [
     "--",
     "--listen-address",
     "0.0.0.0:8080",
-    "--enrollment-token-file",
-    "./enrollment-token",
 ]
 allow_warnings = true
 
@@ -153,8 +149,6 @@ command = [
     "-p",
     "moor-curl-worker",
     "--",
-    "--enrollment-token-file",
-    "./enrollment-token",
 ]
 allow_warnings = true
 need_stdout = true

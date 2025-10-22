@@ -49,7 +49,7 @@ The daemon automatically generates these keys on first run when using the `--gen
 moor-daemon --generate-keypair <other-args>
 ```
 
-This creates `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the current directory.
+This creates `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the moor config directory (`${XDG_CONFIG_HOME:-$HOME/.config}/moor`).
 
 Alternatively, you can pre-generate them using `openssl`:
 
@@ -73,7 +73,7 @@ For distributed deployments using TCP endpoints:
   1. Generate their own CURVE keypair on first run
   2. Connect to the enrollment endpoint (default: `tcp://0.0.0.0:7900`) with an enrollment token
   3. Register their service type, hostname, and CURVE public key with the daemon
-  4. Daemon stores the public key in `~/.moor/allowed-hosts/{uuid}` for ZAP authentication
+  4. Daemon stores the public key in `${XDG_DATA_HOME:-$HOME/.local/share}/moor/allowed-hosts/{uuid}` for ZAP authentication
 - **ZAP Authentication**: After enrollment, the daemon validates all incoming ZMQ connections using ZeroMQ Authentication Protocol (ZAP)
 - **Per-Connection Encryption**: Each ZMQ socket (RPC REQ/REP, PUB/SUB) uses CURVE with ephemeral session keys
 
@@ -94,8 +94,8 @@ TCP mode requires an **enrollment token** for CURVE enrollment:
 # Generate enrollment token (one-time setup)
 moor-daemon --rotate-enrollment-token
 
-# Token is saved to enrollment-token file
-# Pass to hosts/workers via --enrollment-token-file argument
+# Token is saved to ${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token
+# Hosts/workers and the daemon will use this path by default (no flag needed)
 ```
 
 The enrollment token is a shared secret used during the CURVE enrollment process to authorize hosts/workers to register their public keys with the daemon.
@@ -123,9 +123,9 @@ These options control the basic server behavior:
 - `--workers-response-listen <ADDR>` (default: `ipc:///tmp/moor_workers_response.sock`): Workers server RPC address (CURVE-encrypted if TCP)
 - `--workers-request-listen <ADDR>` (default: `ipc:///tmp/moor_workers_request.sock`): Workers server pub-sub address (CURVE-encrypted if TCP)
 - `--enrollment-listen <ADDR>` (default: `tcp://0.0.0.0:7900`): ZMQ REP socket for host/worker enrollment (not CURVE-encrypted)
-- `--enrollment-token-file <PATH>` (default: `~/.moor/enrollment-token`): Path to enrollment token file
-- `--public_key <PATH>` (default: `moor-verifying-key.pem`): PEM encoded PASETO public key for token verification
-- `--private_key <PATH>` (default: `moor-signing-key.pem`): PEM encoded PASETO private key for token signing
+- `--enrollment-token-file <PATH>` (default: `${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token`): Path to enrollment token file
+- `--public-key <PATH>` (default: `${XDG_CONFIG_HOME:-$HOME/.config}/moor/moor-verifying-key.pem`): PEM encoded PASETO public key for token verification
+- `--private-key <PATH>` (default: `${XDG_CONFIG_HOME:-$HOME/.config}/moor/moor-signing-key.pem`): PEM encoded PASETO private key for token signing
 - `--num-io-threads <NUM>` (default: `8`): Number of ZeroMQ IO threads
 - `--debug` (default: `false`): Enable debug logging
 

@@ -394,14 +394,27 @@ fn main() -> Result<(), Report> {
 
     // If rotate-enrollment-token flag is provided, rotate token and exit
     if args.rotate_enrollment_token {
-        rotate_enrollment_token(&args.enrollment_token_file)?;
+        let token_path = args.resolved_enrollment_token_path();
+        rotate_enrollment_token(&token_path)?;
         return Ok(());
     }
 
+    // Resolve key paths using XDG config defaults and ensure config dir exists securely
+    let public_key_path = args.resolved_public_key_path();
+    let private_key_path = args.resolved_private_key_path();
+    let config_dir = moor_common::util::config_dir();
+    std::fs::create_dir_all(&config_dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&config_dir)?.permissions();
+        perms.set_mode(0o700);
+        std::fs::set_permissions(&config_dir, perms)?;
+    }
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it. If generate-keypair flag is set and keys don't exist, generate them.
-    let (private_key, public_key) = if args.public_key.exists() && args.private_key.exists() {
-        load_keypair(&args.public_key, &args.private_key).map_err(|e| {
+    let (private_key, public_key) = if public_key_path.exists() && private_key_path.exists() {
+        load_keypair(&public_key_path, &private_key_path).map_err(|e| {
             eyre!(
                 "Unable to load keypair from public and private key files: {}",
                 e
@@ -409,14 +422,14 @@ fn main() -> Result<(), Report> {
         })?
     } else if args.generate_keypair {
         // Generate keypair if flag is set and files don't exist
-        generate_keypair(&args.public_key, &args.private_key)?;
-        load_keypair(&args.public_key, &args.private_key)
+        generate_keypair(&public_key_path, &private_key_path)?;
+        load_keypair(&public_key_path, &private_key_path)
             .map_err(|e| eyre!("Unable to load generated keypair: {}", e))?
     } else {
         bail!(
             "Public ({:?}) and/or private ({:?}) key files must exist. Use --generate-keypair to create them.",
-            args.public_key,
-            args.private_key
+            public_key_path,
+            private_key_path
         );
     };
 
@@ -425,13 +438,15 @@ fn main() -> Result<(), Report> {
 
     // Generate or load CURVE keypair for daemon
     let daemon_curve_keypair = curve_keys::load_or_generate_daemon_keypair(&args.data_dir)?;
-    info!("Daemon CURVE public key: {}", daemon_curve_keypair.public);
+    info!("Daemon CURVE keys are initialized");
 
     // Ensure enrollment token exists (or generate it)
-    let _enrollment_token = enrollment::ensure_enrollment_token(&args.enrollment_token_file)?;
+    let _enrollment_token =
+        enrollment::ensure_enrollment_token(&args.resolved_enrollment_token_path())?;
 
     // Initialize allowed hosts registry
-    let allowed_hosts_registry = allowed_hosts::AllowedHostsRegistry::new(&args.data_dir)?;
+    let allowed_hosts_registry =
+        allowed_hosts::AllowedHostsRegistry::from_dir(&args.resolved_allowed_hosts_dir())?;
 
     let (phys_cores, logical_cores) = (
         gdt_cpus::num_physical_cores()
@@ -654,7 +669,7 @@ fn main() -> Result<(), Report> {
             kill_switch.clone(),
             daemon_curve_keypair.public.clone(),
             allowed_hosts_registry.clone(),
-            args.enrollment_token_file.clone(),
+            args.resolved_enrollment_token_path(),
         );
         let enrollment_listen_addr = args.enrollment_listen.clone();
         std::thread::Builder::new()

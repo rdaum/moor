@@ -29,11 +29,9 @@ processes:
   init-enrollment:
     command: >
       sh -c "
-        if [ ! -f enrollment-token ]; then
-          cargo run --release -p moor-daemon -- --rotate-enrollment-token
-        fi &&
-        export MOOR_ENROLLMENT_TOKEN=\$(cat enrollment-token) &&
-        echo \"Enrollment token: \$MOOR_ENROLLMENT_TOKEN\"
+        TOKEN_PATH=${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token &&
+        if [ ! -f "$TOKEN_PATH" ]; then cargo run --release -p moor-daemon -- --rotate-enrollment-token; fi
+        :
       "
     restart: no
     availability:
@@ -48,7 +46,7 @@ processes:
       --db=development.db
       --import=cores/lambda-moor/src --import-format=objdef
       --export=export --export-format=objdef
-      --enrollment-token-file=enrollment-token
+
       --generate-keypair
     restart: on_failure
     depends_on:
@@ -61,7 +59,7 @@ processes:
       cargo run -p moor-telnet-host --
       --telnet-address=0.0.0.0
       --telnet-port=8888
-      --enrollment-token-file=enrollment-token
+
     restart: on_failure
     depends_on:
       init-enrollment:
@@ -91,7 +89,7 @@ processes:
     command: >
       cargo run -p moor-web-host --
       --listen-address=0.0.0.0:8081
-      --enrollment-token-file=enrollment-token
+
     restart: on_failure
     depends_on:
       init-enrollment:
@@ -104,7 +102,7 @@ processes:
   moor-curl-worker:
     command: >
       cargo run -p moor-curl-worker --
-      --enrollment-token-file=enrollment-token
+
     restart: on_failure
     depends_on:
       init-enrollment:

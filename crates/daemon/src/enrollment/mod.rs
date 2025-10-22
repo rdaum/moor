@@ -23,13 +23,15 @@
 
 use crate::allowed_hosts::AllowedHostsRegistry;
 use eyre::{Context, Result};
-use rpc_common::{EnrollmentRequest, EnrollmentResponse};
+use planus::ReadAsRoot;
+use rpc_common::{
+    EnrollmentRequestRef, EnrollmentResponse, mk_enrollment_response_failure,
+    mk_enrollment_response_success,
+};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -103,9 +105,9 @@ impl EnrollmentServer {
             // Process request
             let response = self.handle_request(&request_bytes);
 
-            // Send response
-            let response_bytes =
-                serde_json::to_vec(&response).context("Failed to serialize enrollment response")?;
+            // Send response - serialize FlatBuffer
+            let mut builder = planus::Builder::new();
+            let response_bytes = builder.finish(&response, None).to_vec();
 
             if let Err(e) = socket.send(&response_bytes, 0) {
                 error!(error = ?e, "Failed to send enrollment response");
@@ -117,52 +119,69 @@ impl EnrollmentServer {
 
     /// Handle a single enrollment request
     fn handle_request(&self, request_bytes: &[u8]) -> EnrollmentResponse {
-        // Parse request
-        let request: EnrollmentRequest = match serde_json::from_slice(request_bytes) {
+        // Parse FlatBuffer request
+        let request = match EnrollmentRequestRef::read_as_root(request_bytes) {
             Ok(r) => r,
             Err(e) => {
                 warn!(error = ?e, "Invalid enrollment request");
-                return EnrollmentResponse {
-                    success: false,
-                    error: Some(format!("Invalid request format: {}", e)),
-                    service_uuid: None,
-                    daemon_curve_public_key: None,
-                };
+                return mk_enrollment_response_failure(format!("Invalid request format: {}", e));
+            }
+        };
+
+        let enrollment_token = match request.enrollment_token() {
+            Ok(token) => token,
+            Err(e) => {
+                warn!(error = ?e, "Missing enrollment token");
+                return mk_enrollment_response_failure("Missing enrollment token".to_string());
+            }
+        };
+
+        let curve_public_key = match request.curve_public_key() {
+            Ok(key) => key,
+            Err(e) => {
+                warn!(error = ?e, "Missing CURVE public key");
+                return mk_enrollment_response_failure("Missing CURVE public key".to_string());
+            }
+        };
+
+        let service_type = match request.service_type() {
+            Ok(st) => st,
+            Err(e) => {
+                warn!(error = ?e, "Missing service type");
+                return mk_enrollment_response_failure("Missing service type".to_string());
+            }
+        };
+
+        let hostname = match request.hostname() {
+            Ok(h) => h,
+            Err(e) => {
+                warn!(error = ?e, "Missing hostname");
+                return mk_enrollment_response_failure("Missing hostname".to_string());
             }
         };
 
         // Validate public key format
-        if request.curve_public_key.len() != 40 {
-            return EnrollmentResponse {
-                success: false,
-                error: Some(format!(
-                    "Invalid CURVE public key length: expected 40, got {}",
-                    request.curve_public_key.len()
-                )),
-                service_uuid: None,
-                daemon_curve_public_key: None,
-            };
+        if curve_public_key.len() != 40 {
+            return mk_enrollment_response_failure(format!(
+                "Invalid CURVE public key length: expected 40, got {}",
+                curve_public_key.len()
+            ));
         }
 
         // Validate enrollment token
-        if let Err(e) = self.validate_enrollment_token(&request.enrollment_token) {
+        if let Err(e) = self.validate_enrollment_token(enrollment_token) {
             warn!(
-                service_type = %request.service_type,
-                hostname = %request.hostname,
+                service_type = %service_type,
+                hostname = %hostname,
                 error = %e,
                 "Enrollment failed: invalid token"
             );
-            return EnrollmentResponse {
-                success: false,
-                error: Some(e),
-                service_uuid: None,
-                daemon_curve_public_key: None,
-            };
+            return mk_enrollment_response_failure(e);
         }
 
         info!(
-            service_type = %request.service_type,
-            hostname = %request.hostname,
+            service_type = %service_type,
+            hostname = %hostname,
             "Enrolling new host"
         );
 
@@ -170,27 +189,21 @@ impl EnrollmentServer {
         let service_uuid = Uuid::new_v4();
 
         // Add to allowed hosts
-        if let Err(e) = self.allowed_hosts.add_host(
-            service_uuid,
-            &request.curve_public_key,
-            &request.service_type,
-            &request.hostname,
-        ) {
+        if let Err(e) =
+            self.allowed_hosts
+                .add_host(service_uuid, curve_public_key, service_type, hostname)
+        {
             error!(error = ?e, "Failed to save host public key");
-            return EnrollmentResponse {
-                success: false,
-                error: Some(format!("Failed to save host public key: {}", e)),
-                service_uuid: None,
-                daemon_curve_public_key: None,
-            };
+            return mk_enrollment_response_failure(format!(
+                "Failed to save host public key: {}",
+                e
+            ));
         }
 
-        EnrollmentResponse {
-            success: true,
-            service_uuid: Some(service_uuid.to_string()),
-            daemon_curve_public_key: Some(self.daemon_curve_public_key.clone()),
-            error: None,
-        }
+        mk_enrollment_response_success(
+            service_uuid.to_string(),
+            self.daemon_curve_public_key.clone(),
+        )
     }
 
     /// Validate enrollment token
@@ -223,6 +236,19 @@ pub fn ensure_enrollment_token(token_path: &std::path::Path) -> Result<String> {
             .trim()
             .to_string();
         info!("Using enrollment token from {:?}", token_path);
+        // Warn if permissions are too permissive (Unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(token_path)?.permissions().mode() & 0o777;
+            if mode & 0o077 != 0 {
+                warn!(
+                    ?token_path,
+                    mode = format_args!("{:o}", mode),
+                    "Enrollment token file permissions are too permissive; expected 600"
+                );
+            }
+        }
         Ok(token)
     } else {
         let token = Uuid::new_v4().to_string();
@@ -236,10 +262,22 @@ pub fn ensure_enrollment_token(token_path: &std::path::Path) -> Result<String> {
             let mut perms = fs::metadata(token_path)?.permissions();
             perms.set_mode(0o600); // Read/write for owner only
             fs::set_permissions(token_path, perms)?;
+            // Verify final permissions and warn if not as expected
+            let mode = fs::metadata(token_path)?.permissions().mode() & 0o777;
+            if mode != 0o600 {
+                warn!(
+                    ?token_path,
+                    mode = format_args!("{:o}", mode),
+                    "Enrollment token file permissions are {:o}, expected 600",
+                    mode
+                );
+            }
         }
 
-        info!("Generated new enrollment token: {}", token);
-        info!("Hosts must set MOOR_ENROLLMENT_TOKEN={}", token);
+        info!("Generated new enrollment token at {:?}", token_path);
+        info!(
+            "Hosts must set MOOR_ENROLLMENT_TOKEN or provide --enrollment-token-file pointing to the token file"
+        );
         Ok(token)
     }
 }
