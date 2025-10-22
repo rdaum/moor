@@ -1,0 +1,107 @@
+# Dockerfile for cross-compiling moor to ARM64 (aarch64) from x86_64
+# This is used by build-and-deploy.fish for building ARM64 images on x86_64 hardware
+
+# Multi-stage build: Frontend build stage
+FROM node:20-bookworm AS frontend-build
+WORKDIR /moor-frontend
+# Install git for git hash lookup during build
+RUN apt update && apt -y install git
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY web-client/ ./web-client/
+COPY tsconfig.json vite.config.ts ./
+# Copy .git directory so vite can get the git hash during build
+COPY ./.git ./.git
+RUN npm run build
+
+# Backend build stage - runs on native x86_64 platform
+FROM rust:1.88-bookworm AS backend-build
+
+WORKDIR /moor-build
+
+# Install build dependencies
+RUN apt update
+RUN apt -y install clang-16 libclang-16-dev swig python3-dev cmake libc6 git libsodium-dev pkg-config
+
+# Install ARM64 cross-compilation toolchain and runtime libraries
+RUN dpkg --add-architecture arm64 && \
+    apt update && \
+    apt -y install \
+        gcc-aarch64-linux-gnu \
+        g++-aarch64-linux-gnu \
+        libssl-dev:arm64 \
+        libsodium-dev:arm64 \
+        libssl3:arm64 \
+        ca-certificates \
+        libsodium23:arm64 && \
+    rustup target add aarch64-unknown-linux-gnu
+
+# Configure pkg-config for ARM64 cross-compilation
+ENV PKG_CONFIG_ALLOW_CROSS=1
+
+# Copy source code
+COPY ./crates ./crates
+COPY ./tools ./tools
+COPY ./Cargo.toml ./Cargo.toml
+COPY ./Cargo.lock ./Cargo.lock
+COPY ./.git ./.git
+
+# Build configuration
+ARG BUILD_PROFILE=release
+ARG CARGO_BUILD_FLAGS=""
+
+# Cross-compile to ARM64
+# Uses reduced parallelism (2 jobs) to avoid exhausting build machine resources
+# Sets codegen-units=1 to reduce memory usage during linking
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/moor-build/target,sharing=locked \
+    export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig && \
+    export PKG_CONFIG_SYSROOT_DIR=/ && \
+    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc && \
+    export CARGO_BUILD_JOBS=2 && \
+    export RUSTFLAGS="-C codegen-units=1" && \
+    if [ "$BUILD_PROFILE" = "release" ]; then \
+        CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release --target aarch64-unknown-linux-gnu -j 2 $CARGO_BUILD_FLAGS && \
+        cp -r target/aarch64-unknown-linux-gnu/release /moor-build/target-final; \
+    else \
+        cargo build --target aarch64-unknown-linux-gnu -j 2 $CARGO_BUILD_FLAGS && \
+        cp -r target/aarch64-unknown-linux-gnu/debug /moor-build/target-final; \
+    fi
+
+# Runtime image - ARM64 platform
+# Note: Uses --platform to ensure correct image metadata
+# Only uses COPY commands (no RUN) to avoid needing QEMU for ARM64 execution
+FROM --platform=linux/arm64 debian:bookworm-slim AS backend
+
+ARG BUILD_PROFILE=release
+
+# Copy ARM64 runtime libraries from build stage
+# These were installed as :arm64 packages in the build stage
+COPY --from=backend-build /usr/lib/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu
+COPY --from=backend-build /etc/ssl /etc/ssl
+
+WORKDIR /moor
+
+# Copy compiled ARM64 binaries
+COPY --from=backend-build /moor-build/target-final/moor-daemon /moor/moor-daemon
+COPY --from=backend-build /moor-build/target-final/moor-web-host /moor/moor-web-host
+COPY --from=backend-build /moor-build/target-final/moor-telnet-host /moor/moor-telnet-host
+COPY --from=backend-build /moor-build/target-final/moor-curl-worker /moor/moor-curl-worker
+
+# Copy web client static files
+COPY --from=frontend-build /moor-frontend/dist /moor/web-client
+
+# Copy utility binaries
+COPY --from=backend-build /moor-build/target-final/moorc /moor/moorc
+COPY --from=backend-build /moor-build/target-final/moor-admin /moor/moor-admin
+
+EXPOSE 8080
+
+# nginx-based frontend image
+FROM --platform=linux/arm64 nginx:alpine AS frontend
+COPY --from=frontend-build /moor-frontend/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+EXPOSE 80
+
+# Default stage
+FROM backend AS default
