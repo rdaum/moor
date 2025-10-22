@@ -1,28 +1,23 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 //! Client for enrolling hosts/workers with the daemon
 
 use eyre::{Context, Result, eyre};
-use serde::{Deserialize, Serialize};
+use rpc_common::{EnrollmentRequest, EnrollmentResponse};
 use std::path::Path;
 use tracing::info;
 use uuid::Uuid;
-
-/// Enrollment request sent to daemon
-#[derive(Debug, Serialize)]
-struct EnrollmentRequest {
-    enrollment_token: String,
-    curve_public_key: String,
-    service_type: String,
-    hostname: String,
-}
-
-/// Enrollment response from daemon
-#[derive(Debug, Deserialize)]
-struct EnrollmentResponse {
-    success: bool,
-    service_uuid: Option<String>,
-    daemon_curve_public_key: Option<String>,
-    error: Option<String>,
-}
 
 /// Enroll this host/worker with the daemon
 ///

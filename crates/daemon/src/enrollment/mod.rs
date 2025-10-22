@@ -23,7 +23,7 @@
 
 use crate::allowed_hosts::AllowedHostsRegistry;
 use eyre::{Context, Result};
-use serde::{Deserialize, Serialize};
+use rpc_common::{EnrollmentRequest, EnrollmentResponse};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{
@@ -32,32 +32,6 @@ use std::sync::{
 };
 use tracing::{error, info, warn};
 use uuid::Uuid;
-
-/// Enrollment request from a host/worker
-#[derive(Debug, Deserialize)]
-pub struct EnrollmentRequest {
-    /// Enrollment token (one-time shared secret)
-    pub enrollment_token: String,
-    /// Host's CURVE public key (Z85-encoded, 40 characters)
-    pub curve_public_key: String,
-    /// Service type (e.g., "web-host", "telnet-host", "curl-worker")
-    pub service_type: String,
-    /// Hostname for logging/debugging
-    pub hostname: String,
-}
-
-/// Enrollment response to host/worker
-#[derive(Debug, Serialize)]
-pub struct EnrollmentResponse {
-    /// Whether enrollment succeeded
-    pub success: bool,
-    /// UUID assigned to this service instance (if successful)
-    pub service_uuid: Option<String>,
-    /// Daemon's CURVE public key (Z85-encoded, if successful)
-    pub daemon_curve_public_key: Option<String>,
-    /// Error message (if failed)
-    pub error: Option<String>,
-}
 
 /// Enrollment server that listens for host registration requests
 pub struct EnrollmentServer {

@@ -75,11 +75,14 @@ pub use reply_builders::{
     var_to_flatbuffer_rpc,
 };
 
+pub use enrollment::{EnrollmentRequest, EnrollmentResponse};
+
 // Public modules - allow direct access to generated types and client args
 pub mod client_args;
 
 // Private domain-organized modules
 mod client_messages;
+mod enrollment;
 mod errors;
 mod extract;
 mod helpers;
