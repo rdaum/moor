@@ -487,7 +487,7 @@ fn bf_binary_to_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(s) => s,
             Err(e) => {
                 return Err(BfErr::ErrValue(
-                    E_INVARG.with_msg(|| format!("Cannot convert to string: {}", e)),
+                    E_INVARG.with_msg(|| format!("Cannot convert to string: {e}")),
                 ));
             }
         }
