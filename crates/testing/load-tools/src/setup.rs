@@ -73,8 +73,8 @@ pub async fn broadcast_handle(
     kill_switch: Arc<AtomicBool>,
 ) {
     let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
+        .set_rcvtimeo(5000)
+        .set_sndtimeo(5000)
         .connect(rpc_address.as_str())
         .expect("Unable to bind RPC server for connection");
 
@@ -125,8 +125,8 @@ pub async fn create_user_session(
     eyre::Error,
 > {
     let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
+        .set_rcvtimeo(5000)
+        .set_sndtimeo(5000)
         .connect(rpc_address.as_str())
         .expect("Unable to bind RPC server for connection");
 

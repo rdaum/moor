@@ -172,7 +172,7 @@ impl WebHost {
         let zmq_ctx = self.zmq_context.clone();
         // Establish a connection to the RPC server
         let client_id = Uuid::new_v4();
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
 
         // Configure CURVE encryption if keys provided
         if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
@@ -385,7 +385,7 @@ impl WebHost {
         addr: SocketAddr,
     ) -> Result<(Uuid, RpcSendClient, ClientToken), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
 
         // Configure CURVE encryption if keys provided
         if let Some((client_secret, client_public, server_public)) = &self.curve_keys {

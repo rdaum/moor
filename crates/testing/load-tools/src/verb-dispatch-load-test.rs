@@ -157,8 +157,8 @@ async fn continuous_workload(
     stop_time: Instant,
 ) -> Result<(Duration, usize), eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
+        .set_rcvtimeo(5000)
+        .set_sndtimeo(5000)
         .connect(rpc_address.as_str())
         .expect("Unable to bind RPC server for connection");
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);
@@ -243,8 +243,8 @@ async fn workload(
     task_results: TaskResults,
 ) -> Result<Duration, eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
+        .set_rcvtimeo(5000)
+        .set_sndtimeo(5000)
         .connect(rpc_address.as_str())
         .expect("Unable to bind RPC server for connection");
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);
@@ -318,8 +318,8 @@ async fn request_counters(
     host_id: Uuid,
 ) -> Result<HashMap<Symbol, HashMap<Symbol, (isize, isize)>>, eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
+        .set_rcvtimeo(5000)
+        .set_sndtimeo(5000)
         .connect(rpc_address.as_str())
         .expect("Unable to bind RPC server for connection");
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);

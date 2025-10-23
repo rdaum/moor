@@ -22,7 +22,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// ZAP authentication handler
 ///
@@ -198,7 +198,7 @@ impl ZapAuthHandler {
         // Check if this public key is authorized
         match self.allowed_hosts.is_authorized(&client_public_key) {
             Some(uuid) => {
-                info!(
+                trace!(
                     client_public_key = %client_public_key,
                     service_uuid = %uuid,
                     address = %address,

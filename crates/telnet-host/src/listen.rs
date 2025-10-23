@@ -234,7 +234,7 @@ impl Listener {
                 "Accepted connection for listener"
             );
 
-            let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+            let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
 
             // Configure CURVE encryption if keys provided
             if let Some((client_secret, client_public, server_public)) = &curve_keys {

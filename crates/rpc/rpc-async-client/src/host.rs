@@ -43,7 +43,7 @@ pub async fn start_host_session(
     // Establish the initial connection to the daemon, and send the host_id and our initial
     // listener list.
     let rpc_client = loop {
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(100).set_sndtimeo(100);
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
 
         // Configure CURVE encryption if keys provided
         if let Some((client_secret, client_public, server_public)) = &curve_keys {
