@@ -32,7 +32,7 @@ use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig},
-    tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
+    tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Sequence, Symbol, Var};
 use rustyline::ExternalPrinter;
@@ -988,20 +988,26 @@ fn eval_expression(
         .submit_eval_task(wizard, wizard, code, session, features)
         .map_err(|e| eyre!("Failed to submit eval task: {:?}", e))?;
 
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out after 30 seconds"))?;
+    let result = loop {
+        let (_task_id, result) = handle
+            .receiver()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| eyre!("Task timed out after 30 seconds"))?;
+        match result {
+            Ok(TaskNotification::Suspended) => continue,
+            other => break other,
+        }
+    };
 
     match result {
-        Ok(TaskResult::Result(value)) => {
+        Ok(TaskNotification::Result(value)) => {
             let skin = create_skin();
             let output = to_literal(&value);
             let markdown = format!("**=>** `{output}`");
             println!("{}", skin.term_text(&markdown));
         }
-        Ok(TaskResult::Replaced(_)) => {
-            warn!("Task was replaced by scheduler");
+        Ok(TaskNotification::Suspended) => {
+            bail!("Received unexpected suspension notification while waiting for eval result");
         }
         Err(e) => {
             error!("Task failed: {:?}", e);
@@ -1029,12 +1035,18 @@ fn cmd_get(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resu
         .submit_eval_task(wizard, wizard, eval_code, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
+    let result = loop {
+        let (_task_id, result) = handle
+            .receiver()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| eyre!("Task timed out"))?;
+        match result {
+            Ok(TaskNotification::Suspended) => continue,
+            other => break other,
+        }
+    };
 
-    let Ok(TaskResult::Result(value)) = result else {
+    let Ok(TaskNotification::Result(value)) = result else {
         if let Err(e) = result {
             eprintln!("{}", format_scheduler_error(&e));
             bail!("Failed to get property");
@@ -1249,10 +1261,16 @@ fn cmd_prog(
         .submit_eval_task(wizard, wizard, moo_code, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
+    let result = loop {
+        let (_task_id, result) = handle
+            .receiver()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| eyre!("Task timed out"))?;
+        match result {
+            Ok(TaskNotification::Suspended) => continue,
+            other => break other,
+        }
+    };
 
     let Err(e) = result else {
         let markdown = format!(
@@ -1284,12 +1302,18 @@ fn cmd_su(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Resul
         .submit_eval_task(wizard, wizard, check_code, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
+    let result = loop {
+        let (_task_id, result) = handle
+            .receiver()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| eyre!("Task timed out"))?;
+        match result {
+            Ok(TaskNotification::Suspended) => continue,
+            other => break other,
+        }
+    };
 
-    let Ok(TaskResult::Result(value)) = result else {
+    let Ok(TaskNotification::Result(value)) = result else {
         if let Err(e) = result {
             eprintln!("{}", format_scheduler_error(&e));
             bail!("Failed to check object");
@@ -1349,12 +1373,18 @@ fn cmd_list(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
         .submit_eval_task(wizard, wizard, code, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
+    let result = loop {
+        let (_task_id, result) = handle
+            .receiver()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| eyre!("Task timed out"))?;
+        match result {
+            Ok(TaskNotification::Suspended) => continue,
+            other => break other,
+        }
+    };
 
-    let Ok(TaskResult::Result(value)) = result else {
+    let Ok(TaskNotification::Result(value)) = result else {
         if let Err(e) = result {
             eprintln!("{}", format_scheduler_error(&e));
             bail!("Failed to list verb");
@@ -1411,12 +1441,18 @@ fn cmd_dump(scheduler_client: &SchedulerClient, wizard: &Obj, args: &str) -> Res
         .submit_eval_task(wizard, wizard, code, session, features)
         .map_err(|e| eyre!("Failed to submit task: {:?}", e))?;
 
-    let (_task_id, result) = handle
-        .receiver()
-        .recv_timeout(std::time::Duration::from_secs(30))
-        .map_err(|_| eyre!("Task timed out"))?;
+    let result = loop {
+        let (_task_id, result) = handle
+            .receiver()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| eyre!("Task timed out"))?;
+        match result {
+            Ok(TaskNotification::Suspended) => continue,
+            other => break other,
+        }
+    };
 
-    let Ok(TaskResult::Result(value)) = result else {
+    let Ok(TaskNotification::Result(value)) = result else {
         if let Err(e) = result {
             eprintln!("{}", format_scheduler_error(&e));
             bail!("Failed to dump object");
@@ -1805,8 +1841,15 @@ Type `help` for available commands or `quit` to deactivate.
                             continue;
                         };
 
-                        match handle.receiver().recv_timeout(Duration::from_secs(30)) {
-                            Ok((_task_id, Ok(TaskResult::Result(value)))) => {
+                        let result = loop {
+                            match handle.receiver().recv_timeout(Duration::from_secs(30)) {
+                                Ok((_task_id, Ok(TaskNotification::Suspended))) => continue,
+                                other => break other,
+                            }
+                        };
+
+                        match result {
+                            Ok((_task_id, Ok(TaskNotification::Result(value)))) => {
                                 let skin = create_skin();
                                 let output = to_literal(&value);
                                 let markdown = format!("**=>** `{output}`");

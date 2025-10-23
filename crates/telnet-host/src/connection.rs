@@ -440,7 +440,8 @@ impl TelnetConnection {
                                 .map_err(|e| eyre::eyre!("Failed to convert scheduler error: {}", e))?;
                             self.handle_task_error(scheduler_error).await?;
                         }
-                        moor_rpc::ClientEventUnionRef::TaskSuccessEvent(_task_success) => {
+                        moor_rpc::ClientEventUnionRef::TaskSuccessEvent(_) |
+                        moor_rpc::ClientEventUnionRef::TaskSuspendedEvent(_) => {
                             trace!("TaskSuccess")
                             // We don't need to do anything with successes.
                         }
@@ -1057,6 +1058,21 @@ impl TelnetConnection {
                 self.send_output_suffix()
                     .await
                     .expect("Unable to send output suffix");
+                Ok(None)
+            }
+            moor_rpc::ClientEventUnionRef::TaskSuspendedEvent(task_suspended) => {
+                let ti = task_suspended
+                    .task_id()
+                    .map_err(|e| eyre::eyre!("Missing task_id: {}", e))?
+                    as usize;
+
+                if let Some(pending_event) = self.pending_task.take()
+                    && pending_event.task_id != ti
+                {
+                    error!(
+                        "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
+                    );
+                }
                 Ok(None)
             }
             moor_rpc::ClientEventUnionRef::PlayerSwitchedEvent(switch) => {

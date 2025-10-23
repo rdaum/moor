@@ -27,7 +27,7 @@ use moor_compiler::compile;
 use moor_db::{Database, TxDB};
 use moor_kernel::{
     config::{Config, FeaturesConfig},
-    tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
+    tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int};
@@ -179,14 +179,25 @@ async fn main() -> Result<(), eyre::Error> {
             session,
         )?;
 
-        task_futures.push(async move { task_handle.receiver().recv_async().await });
+        let receiver = task_handle.into_receiver();
+        task_futures.push(async move {
+            loop {
+                match receiver.recv_async().await {
+                    Ok((_task_id, Ok(TaskNotification::Suspended))) => {
+                        // Ignore intermediate suspension notifications
+                        continue;
+                    }
+                    other => break other,
+                }
+            }
+        });
     }
 
     // Wait for all tasks to complete
     let mut completed = 0;
     while let Some(result) = task_futures.next().await {
         match result {
-            Ok((_, Ok(TaskResult::Result(result)))) => {
+            Ok((_, Ok(TaskNotification::Result(result)))) => {
                 let result_int = result
                     .as_integer()
                     .ok_or_else(|| eyre::eyre!("Expected integer result"))?;

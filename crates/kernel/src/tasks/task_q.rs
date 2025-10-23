@@ -44,7 +44,7 @@ impl TimerEntryWithDelay for TimerEntry {
         self.delay
     }
 }
-use crate::tasks::{TaskDescription, TaskResult, TaskStart, TasksDb};
+use crate::tasks::{TaskDescription, TaskNotification, TaskStart, TasksDb};
 use moor_common::tasks::{SchedulerError, Session, SessionFactory, TaskId};
 
 /// The internal state of the task queue.
@@ -76,7 +76,7 @@ pub(crate) struct RunningTask {
     /// The connection-session for this task.
     pub(crate) session: Arc<dyn Session>,
     /// A mailbox to deliver the result of the task to a waiting party with a subscription, if any.
-    pub(crate) result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
+    pub(crate) result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
 }
 
 fn none_or_push(vec: &mut Option<Vec<TaskId>>, task: TaskId) {
@@ -180,7 +180,7 @@ pub struct SuspendedTask {
     pub wake_condition: WakeCondition,
     pub task: Box<Task>,
     pub session: Arc<dyn Session>,
-    pub result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
+    pub result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
 }
 
 /// Possible conditions in which a suspended task can wake from suspension.
@@ -397,7 +397,7 @@ impl SuspensionQ {
         wake_condition: WakeCondition,
         task: Box<Task>,
         session: Arc<dyn Session>,
-        result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
+        result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
     ) {
         let task_id = task.task_id;
         let now = Instant::now();

@@ -358,14 +358,15 @@ fn invoke_server_started_hook(
 
         match result {
             Ok(task_result) => match task_result {
-                moor_kernel::tasks::TaskResult::Result(value) => {
+                moor_kernel::tasks::TaskNotification::Result(value) => {
                     info!(
                         "Server started hook completed successfully with result: {:?}",
                         value
                     );
                 }
-                moor_kernel::tasks::TaskResult::Replaced(_) => {
-                    warn!("Server started hook task was replaced by scheduler");
+                moor_kernel::tasks::TaskNotification::Suspended => {
+                    // Ignore suspension notifications; keep waiting for completion.
+                    continue;
                 }
             },
             Err(e) => {

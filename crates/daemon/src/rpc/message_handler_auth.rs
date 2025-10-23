@@ -13,7 +13,7 @@
 
 use crate::rpc::{message_handler::RpcMessageHandler, session::RpcSession};
 use moor_common::model::ObjectRef;
-use moor_kernel::{SchedulerClient, tasks::TaskResult};
+use moor_kernel::{SchedulerClient, tasks::TaskNotification};
 use moor_schema::{
     convert::{obj_to_flatbuffer_struct, symbol_from_ref, var_from_ref},
     rpc as moor_rpc,
@@ -164,7 +164,7 @@ impl RpcMessageHandler {
             self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
-        let mut task_handle = match scheduler_client.submit_verb_task(
+        let task_handle = match scheduler_client.submit_verb_task(
             connection,
             &ObjectRef::Id(*handler_object),
             *crate::rpc::message_handler::DO_LOGIN_COMMAND,
@@ -180,14 +180,10 @@ impl RpcMessageHandler {
                 return Err(RpcMessageError::InternalError(e.to_string()));
             }
         };
+        let receiver = task_handle.into_receiver();
         let player = loop {
-            let receiver = task_handle.into_receiver();
             match receiver.recv() {
-                Ok((_, Ok(TaskResult::Replaced(th)))) => {
-                    task_handle = th;
-                    continue;
-                }
-                Ok((_, Ok(TaskResult::Result(v)))) => {
+                Ok((_, Ok(TaskNotification::Result(v)))) => {
                     // If v is an objid, we have a successful login and we need to rewrite this
                     // client id to use the player objid and then return a result to the client.
                     // with its new player objid and login result.
@@ -209,6 +205,7 @@ impl RpcMessageHandler {
                         }
                     }
                 }
+                Ok((_, Ok(TaskNotification::Suspended))) => continue,
                 Ok((_, Err(e))) => {
                     error!(error = ?e, "Error waiting for login results");
 

@@ -165,7 +165,8 @@ impl WebSocketConnection {
                             expecting_input.push_back(request_id);
                         }
                         moor_rpc::ClientEventUnionRef::TaskSuccessEvent(_) |
-                        moor_rpc::ClientEventUnionRef::TaskErrorEvent(_) => {
+                        moor_rpc::ClientEventUnionRef::TaskErrorEvent(_) |
+                        moor_rpc::ClientEventUnionRef::TaskSuspendedEvent(_) => {
                             // Clear the pending task so we can process the next command
                             self.pending_task = None;
                         }

@@ -31,7 +31,7 @@ use moor_db::{Database, TxDB};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig, RuntimeConfig},
-    tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
+    tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_obj};
@@ -222,8 +222,16 @@ async fn workload(
 
     // Now wait for all results
     for task_handle in task_handles {
-        match task_handle.receiver().recv_async().await {
-            Ok((_, Ok(TaskResult::Result(result)))) => {
+        let receiver = task_handle.into_receiver();
+        let result = loop {
+            match receiver.recv_async().await {
+                Ok((_task_id, Ok(TaskNotification::Suspended))) => continue,
+                other => break other,
+            }
+        };
+
+        match result {
+            Ok((_, Ok(TaskNotification::Result(result)))) => {
                 let Some(result_int) = result.as_integer() else {
                     return Err(eyre::eyre!("Unexpected task result: {:?}", result));
                 };
@@ -279,8 +287,16 @@ async fn continuous_workload(
 
     // Now wait for all submitted tasks to complete
     for task_handle in task_handles {
-        match task_handle.receiver().recv_async().await {
-            Ok((_, Ok(TaskResult::Result(_result)))) => {
+        let receiver = task_handle.into_receiver();
+        let result = loop {
+            match receiver.recv_async().await {
+                Ok((_task_id, Ok(TaskNotification::Suspended))) => continue,
+                other => break other,
+            }
+        };
+
+        match result {
+            Ok((_, Ok(TaskNotification::Result(_result)))) => {
                 // Task completed successfully
             }
             Ok((_, Err(e))) => {

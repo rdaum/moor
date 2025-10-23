@@ -20,7 +20,7 @@ use crate::rpc::{
 };
 use eyre::{Context, Error};
 use moor_common::{model::ObjectRef, util::parse_into_words};
-use moor_kernel::{SchedulerClient, tasks::TaskResult};
+use moor_kernel::{SchedulerClient, tasks::TaskNotification};
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
 use rpc_common::RpcMessageError;
@@ -263,7 +263,7 @@ impl RpcMessageHandler {
             self.mailbox_sender.clone(),
         ));
 
-        let mut task_handle = match scheduler_client.submit_eval_task(
+        let task_handle = match scheduler_client.submit_eval_task(
             player,
             player,
             expression,
@@ -276,13 +276,10 @@ impl RpcMessageHandler {
                 return Err(RpcMessageError::InternalError(e.to_string()));
             }
         };
+        let receiver = task_handle.into_receiver();
         loop {
-            match task_handle.into_receiver().recv() {
-                Ok((_, Ok(TaskResult::Replaced(th)))) => {
-                    task_handle = th;
-                    continue;
-                }
-                Ok((_, Ok(TaskResult::Result(v)))) => {
+            match receiver.recv() {
+                Ok((_, Ok(TaskNotification::Result(v)))) => {
                     let result_fb = var_to_flatbuffer(&v).map_err(|e| {
                         RpcMessageError::InternalError(format!("Failed to encode result: {e}"))
                     })?;
@@ -294,6 +291,7 @@ impl RpcMessageHandler {
                         )),
                     });
                 }
+                Ok((_, Ok(TaskNotification::Suspended))) => continue,
                 Ok((_, Err(e))) => break Err(RpcMessageError::TaskError(e)),
                 Err(e) => {
                     error!(error = ?e, "Error processing eval");

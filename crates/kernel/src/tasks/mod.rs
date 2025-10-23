@@ -57,17 +57,16 @@ pub fn sched_counters<'a>() -> &'a SchedulerPerfCounters {
 /// Just a handle to a task, with a receiver for the result.
 pub struct TaskHandle(
     TaskId,
-    Receiver<(TaskId, Result<TaskResult, SchedulerError>)>,
+    Receiver<(TaskId, Result<TaskNotification, SchedulerError>)>,
 );
 
 // Results from a task which are either a value or a notification that the underlying task handle
 // was replaced at the whim of the scheduler.
-pub enum TaskResult {
+pub enum TaskNotification {
+    /// Task is completed, and here are its results.
     Result(Var),
-    // TODO: this is no longer used, 'twas used in previous implementation of task restarting on
-    //  conflict. But the facility could come in handy in the future, so leaving it in for now,
-    //  rather than gut all the code I wrote to handle it on the other side.
-    Replaced(TaskHandle),
+    /// Task has transitioned into a suspended/background state.
+    Suspended,
 }
 
 impl Debug for TaskHandle {
@@ -84,18 +83,18 @@ impl TaskHandle {
     }
 
     /// Dissolve the handle into a receiver for the result.
-    pub fn into_receiver(self) -> Receiver<(TaskId, Result<TaskResult, SchedulerError>)> {
+    pub fn into_receiver(self) -> Receiver<(TaskId, Result<TaskNotification, SchedulerError>)> {
         self.1
     }
 
-    pub fn receiver(&self) -> &Receiver<(TaskId, Result<TaskResult, SchedulerError>)> {
+    pub fn receiver(&self) -> &Receiver<(TaskId, Result<TaskNotification, SchedulerError>)> {
         &self.1
     }
 
     /// Create a new TaskHandle (for testing/mocking purposes)
     pub fn new_mock(
         task_id: TaskId,
-        receiver: Receiver<(TaskId, Result<TaskResult, SchedulerError>)>,
+        receiver: Receiver<(TaskId, Result<TaskNotification, SchedulerError>)>,
     ) -> Self {
         Self(task_id, receiver)
     }

@@ -20,7 +20,7 @@ use moor_var::{E_VERBNF, Obj, SYSTEM_OBJECT, Var};
 
 use crate::{
     config::FeaturesConfig,
-    tasks::{TaskHandle, TaskResult, scheduler_client::SchedulerClient},
+    tasks::{TaskHandle, TaskNotification, scheduler_client::SchedulerClient},
 };
 use moor_common::tasks::{
     Exception,
@@ -35,26 +35,28 @@ where
     F: FnOnce() -> Result<TaskHandle, SchedulerError>,
 {
     let task_handle = fun()?;
-    match task_handle
-        .receiver()
-        .recv_timeout(Duration::from_secs(1))
-        .inspect_err(|e| {
-            eprintln!(
-                "subscriber.recv_timeout() failed for task {}: {e}",
-                task_handle.task_id(),
-            )
-        })
-        .unwrap()
-    {
-        // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
-        // `moot` tests can match against them.
-        (_, Err(TaskAbortedException(Exception { error, .. }))) => Ok(error.into()),
-        (_, Err(CommandExecutionError(CommandError::NoCommandMatch))) => {
-            Ok(E_VERBNF.msg("No command match").into())
+    loop {
+        match task_handle
+            .receiver()
+            .recv_timeout(Duration::from_secs(1))
+            .inspect_err(|e| {
+                eprintln!(
+                    "subscriber.recv_timeout() failed for task {}: {e}",
+                    task_handle.task_id(),
+                )
+            })
+            .unwrap()
+        {
+            // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
+            // `moot` tests can match against them.
+            (_, Err(TaskAbortedException(Exception { error, .. }))) => return Ok(error.into()),
+            (_, Err(CommandExecutionError(CommandError::NoCommandMatch))) => {
+                return Ok(E_VERBNF.msg("No command match").into());
+            }
+            (_, Err(err)) => return Err(err),
+            (_, Ok(TaskNotification::Result(var))) => return Ok(var),
+            (_, Ok(TaskNotification::Suspended)) => continue,
         }
-        (_, Err(err)) => Err(err),
-        (_, Ok(TaskResult::Result(var))) => Ok(var),
-        (_, Ok(TaskResult::Replaced(_))) => panic!("Unexpected task restart"),
     }
 }
 

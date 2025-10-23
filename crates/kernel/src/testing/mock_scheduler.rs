@@ -30,7 +30,7 @@ use moor_common::model::ObjectRef;
 use moor_var::Symbol;
 
 use crate::tasks::{
-    TaskHandle, TaskResult,
+    TaskHandle, TaskNotification,
     scheduler_client::{SchedulerClient, SchedulerClientMsg},
     workers::{WorkerRequest, WorkerResponse},
 };
@@ -356,7 +356,7 @@ impl MockScheduler {
         &self,
         task_id: usize,
         delay: Duration,
-        result: Result<TaskResult, SchedulerError>,
+        result: Result<TaskNotification, SchedulerError>,
     ) -> TaskHandle {
         let (sender, receiver) = flume::unbounded();
 
@@ -394,7 +394,7 @@ impl MockScheduler {
 
                 let delay = self.get_delay();
                 let result = if self.should_succeed(config.task_completion_rate) {
-                    Ok(TaskResult::Result(v_str(&format!(
+                    Ok(TaskNotification::Result(v_str(&format!(
                         "Command '{command}' executed"
                     ))))
                 } else {
@@ -423,9 +423,9 @@ impl MockScheduler {
                 // Special handling for login
                 if verb.as_string() == "do_login_command" {
                     let result = if self.should_succeed(config.login_success_rate) {
-                        Ok(TaskResult::Result(v_obj(self.default_login_player)))
+                        Ok(TaskNotification::Result(v_obj(self.default_login_player)))
                     } else {
-                        Ok(TaskResult::Result(v_str("Invalid credentials")))
+                        Ok(TaskNotification::Result(v_str("Invalid credentials")))
                     };
 
                     let task_handle = self.create_mock_task_handle(task_id, delay, result);
@@ -438,7 +438,7 @@ impl MockScheduler {
                     return;
                 }
 
-                let result = Ok(TaskResult::Result(v_str(&format!(
+                let result = Ok(TaskNotification::Result(v_str(&format!(
                     "Verb '{verb}' executed"
                 ))));
                 let task_handle = self.create_mock_task_handle(task_id, delay, result);

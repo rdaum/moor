@@ -36,7 +36,7 @@ use crate::{
     tasks::{
         DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
         DEFAULT_GC_INTERVAL_SECONDS, DEFAULT_MAX_STACK_DEPTH, DEFAULT_MAX_TASK_RETRIES,
-        ServerOptions, TaskHandle, TaskResult, TaskStart,
+        ServerOptions, TaskHandle, TaskNotification, TaskStart,
         gc_thread::spawn_gc_mark_phase,
         sched_counters,
         scheduler_client::{SchedulerClient, SchedulerClientMsg},
@@ -1045,6 +1045,11 @@ impl Scheduler {
                         WakeCondition::Worker(worker_request_id)
                     }
                 };
+
+                if !matches!(wake_condition, WakeCondition::Immediate(_))
+                    && let Some(sender) = tc.result_sender.as_ref() {
+                        let _ = sender.send((task_id, Ok(TaskNotification::Suspended)));
+                    }
 
                 task_q
                     .suspended
@@ -2101,7 +2106,7 @@ impl TaskQ {
     ) -> Result<TaskHandle, SchedulerError> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.start_task);
-        let (sender, receiver) = flume::bounded(1);
+        let (sender, receiver) = flume::unbounded();
 
         let kill_switch = Arc::new(AtomicBool::new(false));
         let task = Task::new(
@@ -2134,7 +2139,7 @@ impl TaskQ {
         mut task: Box<Task>,
         resume_action: ResumeAction,
         session: Arc<dyn Session>,
-        result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
+        result_sender: Option<Sender<(TaskId, Result<TaskNotification, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
@@ -2237,7 +2242,7 @@ impl TaskQ {
         let Some(result_sender) = result_sender else {
             return;
         };
-        let result = result.map(|v| TaskResult::Result(v.clone()));
+        let result = result.map(|v| TaskNotification::Result(v.clone()));
         result_sender.send((task_id, result)).ok();
     }
 

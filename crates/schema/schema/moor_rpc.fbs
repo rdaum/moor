@@ -811,6 +811,7 @@ union ClientEventUnion {
     DisconnectEvent,
     TaskErrorEvent,
     TaskSuccessEvent,
+    TaskSuspendedEvent,
     PlayerSwitchedEvent,
     SetConnectionOptionEvent
 }
@@ -840,6 +841,10 @@ table TaskErrorEvent {
 table TaskSuccessEvent {
     task_id: uint64;
     result: MoorVar.Var (required);
+}
+
+table TaskSuspendedEvent {
+    task_id: uint64;
 }
 
 table PlayerSwitchedEvent {

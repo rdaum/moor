@@ -28,7 +28,7 @@ use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig, ImportExportConfig},
-    tasks::{NoopTasksDb, TaskResult, scheduler::Scheduler},
+    tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
@@ -385,7 +385,7 @@ fn main() -> Result<(), eyre::Report> {
 
     // Run unit tests
     if args.run_tests == Some(true) && !unit_tests.is_empty() {
-        for (o, verb) in unit_tests {
+        'outer: for (o, verb) in unit_tests {
             let session = test_session_factory
                 .clone()
                 .mk_background_session(&wizard)
@@ -401,32 +401,31 @@ fn main() -> Result<(), eyre::Report> {
                     session,
                 )
                 .expect("Failed to submit task");
-            let result = handle
-                .receiver()
-                .recv_timeout(Duration::from_secs(4))
-                .expect("Test timed out");
-            let result_value = match result {
-                (_, Ok(rv)) => rv,
-                (_, Err(e)) => match e {
-                    SchedulerError::TaskAbortedException(e) => {
-                        error!("Test {}:{} aborted: {}", o, verb, e.error);
-                        for l in e.backtrace {
-                            let Some(s) = l.as_string() else {
-                                continue;
-                            };
-                            error!("{s}");
+            let result_value = loop {
+                let result = handle
+                    .receiver()
+                    .recv_timeout(Duration::from_secs(4))
+                    .expect("Test timed out");
+                match result {
+                    (_, Ok(TaskNotification::Result(rv))) => break rv,
+                    (_, Ok(TaskNotification::Suspended)) => continue,
+                    (_, Err(e)) => match e {
+                        SchedulerError::TaskAbortedException(e) => {
+                            error!("Test {}:{} aborted: {}", o, verb, e.error);
+                            for l in e.backtrace {
+                                let Some(s) = l.as_string() else {
+                                    continue;
+                                };
+                                error!("{s}");
+                            }
+                            continue 'outer;
                         }
-                        continue;
-                    }
-                    _ => {
-                        error!("Test {}:{} failed: {:?}", o, verb, e);
-                        continue;
-                    }
-                },
-            };
-            let TaskResult::Result(result_value) = result_value else {
-                error!("Test failed to return a result");
-                continue;
+                        _ => {
+                            error!("Test {}:{} failed: {:?}", o, verb, e);
+                            continue 'outer;
+                        }
+                    },
+                }
             };
             // Result must be non-Error
             if let Some(e) = result_value.as_error() {
