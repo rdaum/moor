@@ -149,6 +149,76 @@ present(player, "edit-look", "text/plain", "verb-editor", "",
 - : The player to disconnect `player`
 - `reason`: Optional message explaining the reason for disconnection
 
+### `player_event_log_stats`
+
+**Description:** Returns summary information about a player's encrypted event history.
+
+**Syntax:** `list player_event_log_stats(obj player [, num|float|none since [, num|float|none until]])`
+
+**Arguments:**
+
+- `player`: Player object to inspect (must be owned by the caller or the caller must be a wizard)
+- `since`: (Optional) Earliest timestamp (seconds since UNIX epoch) to include; pass `none` to ignore
+- `until`: (Optional) Latest timestamp (seconds since UNIX epoch) to include; pass `none` to ignore
+
+**Returns:** A list `[total_events, earliest, latest]` where `total_events` is the count of matching entries,
+`earliest` and `latest` are timestamps (seconds since epoch) or `none` if no events exist.
+
+**Permission Requirements:**
+
+- Caller must own the target player or be a wizard.
+
+**Examples:**
+
+```moo
+// Summary of entire history
+player_event_log_stats(player);
+
+// Only consider events from the last day
+player_event_log_stats(player, time() - 86400);
+```
+
+**Notes:**
+
+- Timestamps may be provided as integers or floating point numbers.
+- Returns `none` for `earliest`/`latest` when no matching entries exist.
+
+### `purge_player_event_log`
+
+**Description:** Deletes part or all of a player's encrypted history, optionally removing their stored public key.
+
+**Syntax:** `list purge_player_event_log(obj player [, num|float|none before [, any drop_pubkey]])`
+
+**Arguments:**
+
+- `player`: Player object to purge (must be owned by the caller or the caller must be a wizard)
+- `before`: (Optional) Remove events at or before this timestamp (seconds since UNIX epoch). Pass `none` to remove all
+  history.
+- `drop_pubkey`: (Optional) Truthy value indicates the player's stored public key should also be removed.
+
+**Returns:** A list `[deleted_events, pubkey_deleted]` where `deleted_events` is the number of entries removed and
+`pubkey_deleted` is `1` if the stored encryption public key was removed, `0` otherwise.
+
+**Permission Requirements:**
+
+- Caller must own the target player or be a wizard.
+
+**Examples:**
+
+```moo
+// Remove all history and force the player to regenerate encryption keys
+purge_player_event_log(player, none, 1);
+
+// Trim history older than a week but keep the existing key
+purge_player_event_log(player, time() - 7 * 86400, 0);
+```
+
+**Notes:**
+
+- Removing the public key causes the client to generate a fresh keypair on next login, making older encrypted entries
+  unreadable.
+- Passing `none` for `before` deletes all stored history for the player.
+
 ## Permission and Caller Management
 
 ### `caller_perms`

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use flume::Sender;
 
@@ -21,7 +21,10 @@ use crate::{
 };
 use moor_common::{
     model::{Perms, WorldState},
-    tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, SchedulerError, TaskId},
+    tasks::{
+        AbortLimitReason, CommandError, EventLogPurgeResult, EventLogStats, Exception,
+        NarrativeEvent, SchedulerError, TaskId,
+    },
 };
 use moor_var::{Error, Obj, Symbol, Var};
 
@@ -318,6 +321,52 @@ impl TaskSchedulerClient {
             .expect("Could not receive rotate enrollment token reply -- scheduler shut down?")
     }
 
+    pub fn player_event_log_stats(
+        &self,
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+    ) -> Result<EventLogStats, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::PlayerEventLogStats {
+                    player,
+                    since,
+                    until,
+                    reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive event log stats reply -- scheduler shut down?")
+    }
+
+    pub fn purge_player_event_log(
+        &self,
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::PurgePlayerEventLog {
+                    player,
+                    before,
+                    drop_pubkey,
+                    reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive event log purge reply -- scheduler shut down?")
+    }
+
     pub fn force_input(&self, who: Obj, line: String) -> Result<TaskId, Error> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
@@ -495,6 +544,20 @@ pub enum TaskControlMsg {
     /// Request that the scheduler rotate the enrollment token
     RotateEnrollmentToken {
         reply: oneshot::Sender<Result<String, Error>>,
+    },
+    /// Request event log statistics for a player
+    PlayerEventLogStats {
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+        reply: oneshot::Sender<Result<EventLogStats, Error>>,
+    },
+    /// Request that part or all of a player's event log be purged
+    PurgePlayerEventLog {
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+        reply: oneshot::Sender<Result<EventLogPurgeResult, Error>>,
     },
 }
 

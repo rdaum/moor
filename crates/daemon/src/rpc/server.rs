@@ -100,6 +100,7 @@ impl RpcServer {
             kill_switch.clone(),
             message_handler.clone(),
             enrollment_token_path,
+            event_log.clone(),
         );
 
         let server = Self {

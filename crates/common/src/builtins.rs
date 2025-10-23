@@ -628,6 +628,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin("binary_to_str", Q(1), Q(2), vec![Any, Any], true),
         mk_builtin("binary_from_str", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
         mk_builtin("rotate_enrollment_token", Q(0), Q(0), vec![], true),
+        mk_builtin(
+            "player_event_log_stats",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Any, Any],
+            true,
+        ),
+        mk_builtin(
+            "purge_player_event_log",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Any, Any],
+            true,
+        ),
     ]
 }
 

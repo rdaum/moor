@@ -57,8 +57,9 @@ use moor_db::{
 };
 use moor_var::{
     E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Sequence, Symbol, Var,
-    VarType::TYPE_STR, Variant, v_arc_string, v_bool_int, v_float, v_int, v_list, v_list_iter,
-    v_map, v_obj, v_str, v_string, v_sym,
+    VarType::{TYPE_NONE, TYPE_STR},
+    Variant, v_arc_string, v_bool_int, v_float, v_int, v_list, v_list_iter, v_map, v_none, v_obj,
+    v_str, v_string, v_sym,
 };
 
 /// Placeholder function for unimplemented builtins.
@@ -2113,6 +2114,148 @@ fn bf_rotate_enrollment_token(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Bf
     }
 }
 
+fn parse_optional_timestamp(arg: &Var, label: &str) -> Result<Option<SystemTime>, BfErr> {
+    if arg.type_code() == TYPE_NONE {
+        return Ok(None);
+    }
+
+    if let Some(int_value) = arg.as_integer() {
+        if int_value < 0 {
+            return Err(ErrValue(E_INVARG.with_msg(|| {
+                format!("{label} must be a non-negative UNIX timestamp")
+            })));
+        }
+        return Ok(Some(UNIX_EPOCH + Duration::from_secs(int_value as u64)));
+    }
+
+    if let Some(float_value) = arg.as_float() {
+        if !float_value.is_finite() || float_value < 0.0 {
+            return Err(ErrValue(E_INVARG.with_msg(|| {
+                format!("{label} must be a non-negative finite timestamp")
+            })));
+        }
+        return Ok(Some(UNIX_EPOCH + Duration::from_secs_f64(float_value)));
+    }
+
+    Err(ErrValue(E_TYPE.with_msg(|| {
+        format!("{label} must be an integer, float, or none")
+    })))
+}
+
+/// Returns summary information about a player's encrypted event history.
+/// MOO: `list player_event_log_stats(obj player [, num|float|none since [, num|float|none until]])`
+fn bf_player_event_log_stats(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
+        return Err(ErrValue(
+            E_ARGS.msg("player_event_log_stats() takes 1 to 3 arguments"),
+        ));
+    }
+
+    let Some(player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(E_TYPE.msg(
+            "player_event_log_stats() requires an object as the first argument",
+        )));
+    };
+
+    // Ensure caller has permission to manage the target player's history.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_obj_owner_perms(&player)
+        .map_err(world_state_bf_err)?;
+
+    let since = if bf_args.args.len() >= 2 {
+        parse_optional_timestamp(&bf_args.args[1], "since")?
+    } else {
+        None
+    };
+    let until = if bf_args.args.len() == 3 {
+        parse_optional_timestamp(&bf_args.args[2], "until")?
+    } else {
+        None
+    };
+
+    let stats = current_task_scheduler_client()
+        .player_event_log_stats(player, since, until)
+        .map_err(ErrValue)?;
+
+    let total_events = if stats.total_events > i64::MAX as u64 {
+        i64::MAX
+    } else {
+        stats.total_events as i64
+    };
+    let earliest_var = if let Some(time) = stats.earliest {
+        let secs = time
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| ErrValue(E_INVARG.msg("earliest timestamp predates UNIX epoch")))?;
+        v_int(secs.as_secs() as i64)
+    } else {
+        v_none()
+    };
+    let latest_var = if let Some(time) = stats.latest {
+        let secs = time
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| ErrValue(E_INVARG.msg("latest timestamp predates UNIX epoch")))?;
+        v_int(secs.as_secs() as i64)
+    } else {
+        v_none()
+    };
+
+    Ok(Ret(v_list(&[
+        v_int(total_events),
+        earliest_var,
+        latest_var,
+    ])))
+}
+
+/// Deletes part or all of a player's encrypted event history and optionally drops the stored public key.
+/// MOO: `list purge_player_event_log(obj player [, num|float|none before [, any drop_pubkey]])`
+fn bf_purge_player_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 3 {
+        return Err(ErrValue(
+            E_ARGS.msg("purge_player_event_log() takes 1 to 3 arguments"),
+        ));
+    }
+
+    let Some(player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(E_TYPE.msg(
+            "purge_player_event_log() requires an object as the first argument",
+        )));
+    };
+
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_obj_owner_perms(&player)
+        .map_err(world_state_bf_err)?;
+
+    let before = if bf_args.args.len() >= 2 {
+        parse_optional_timestamp(&bf_args.args[1], "before")?
+    } else {
+        None
+    };
+    let drop_pubkey = if bf_args.args.len() == 3 {
+        bf_args.args[2].is_true()
+    } else {
+        false
+    };
+
+    let result = current_task_scheduler_client()
+        .purge_player_event_log(player, before, drop_pubkey)
+        .map_err(ErrValue)?;
+
+    let deleted_events = if result.deleted_events > i64::MAX as u64 {
+        i64::MAX
+    } else {
+        result.deleted_events as i64
+    };
+
+    Ok(Ret(v_list(&[
+        v_int(deleted_events),
+        v_bool_int(result.pubkey_deleted),
+    ])))
+}
+
 /// Helper function to convert cache statistics to a LambdaMOO-compatible list.
 fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
     // Return a LambdaMOO-compatible list: [hits, negative_hits, misses, generation, histogram]
@@ -2597,4 +2740,6 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("connection_option")] = Box::new(bf_connection_option);
     builtins[offset_for_builtin("set_connection_option")] = Box::new(bf_set_connection_option);
     builtins[offset_for_builtin("rotate_enrollment_token")] = Box::new(bf_rotate_enrollment_token);
+    builtins[offset_for_builtin("player_event_log_stats")] = Box::new(bf_player_event_log_stats);
+    builtins[offset_for_builtin("purge_player_event_log")] = Box::new(bf_purge_player_event_log);
 }

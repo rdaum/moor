@@ -1286,6 +1286,38 @@ impl Scheduler {
                     );
                 }
             }
+            TaskControlMsg::PlayerEventLogStats {
+                player,
+                since,
+                until,
+                reply,
+            } => {
+                let result = self
+                    .system_control
+                    .player_event_log_stats(player, since, until);
+                if let Err(e) = reply.send(result) {
+                    error!(
+                        ?e,
+                        "Could not send player event log stats reply to requester"
+                    );
+                }
+            }
+            TaskControlMsg::PurgePlayerEventLog {
+                player,
+                before,
+                drop_pubkey,
+                reply,
+            } => {
+                let result =
+                    self.system_control
+                        .purge_player_event_log(player, before, drop_pubkey);
+                if let Err(e) = reply.send(result) {
+                    error!(
+                        ?e,
+                        "Could not send purge player event log reply to requester"
+                    );
+                }
+            }
             TaskControlMsg::ForceGC => {
                 info!("Forcing garbage collection via gc_collect() builtin");
                 if !self.config.features.anonymous_objects {

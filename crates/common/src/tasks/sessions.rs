@@ -11,7 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    time::SystemTime,
+};
 
 use thiserror::Error;
 use uuid::Uuid;
@@ -30,6 +33,26 @@ pub struct ConnectionDetails {
     pub idle_seconds: f64,
     /// List of acceptable content types for this connection (text/plain is always implied)
     pub acceptable_content_types: Vec<Symbol>,
+}
+
+/// Summary information about a player's event history.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EventLogStats {
+    /// Total number of events within the inspected window.
+    pub total_events: u64,
+    /// Timestamp for the earliest event (if any).
+    pub earliest: Option<SystemTime>,
+    /// Timestamp for the most recent event (if any).
+    pub latest: Option<SystemTime>,
+}
+
+/// Result information when purging player event history.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EventLogPurgeResult {
+    /// Number of events removed.
+    pub deleted_events: u64,
+    /// Indicates whether the player's public key was removed.
+    pub pubkey_deleted: bool,
 }
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
@@ -168,6 +191,22 @@ pub trait SystemControl: Send + Sync {
 
     /// Rotate the enrollment token used for host enrollment, returning the new token string.
     fn rotate_enrollment_token(&self) -> Result<String, Error>;
+
+    /// Return summary statistics about a player's event history.
+    fn player_event_log_stats(
+        &self,
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+    ) -> Result<EventLogStats, Error>;
+
+    /// Purge part or all of a player's event history, optionally removing their public key.
+    fn purge_player_event_log(
+        &self,
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, Error>;
 }
 
 /// A factory for creating background sessions, usually on task resumption on server restart.
@@ -310,6 +349,24 @@ impl SystemControl for NoopSystemControl {
 
     fn rotate_enrollment_token(&self) -> Result<String, Error> {
         Ok(String::new())
+    }
+
+    fn player_event_log_stats(
+        &self,
+        _player: Obj,
+        _since: Option<SystemTime>,
+        _until: Option<SystemTime>,
+    ) -> Result<EventLogStats, Error> {
+        Ok(EventLogStats::default())
+    }
+
+    fn purge_player_event_log(
+        &self,
+        _player: Obj,
+        _before: Option<SystemTime>,
+        _drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, Error> {
+        Ok(EventLogPurgeResult::default())
     }
 }
 /// A 'mock' client connection which collects output in a vector of strings that tests can use to
@@ -489,5 +546,23 @@ impl SystemControl for MockClientSession {
         let mut system = self.system.write().unwrap();
         system.push(String::from("rotate_enrollment_token"));
         Ok("mock-token".to_string())
+    }
+
+    fn player_event_log_stats(
+        &self,
+        _player: Obj,
+        _since: Option<SystemTime>,
+        _until: Option<SystemTime>,
+    ) -> Result<EventLogStats, Error> {
+        Ok(EventLogStats::default())
+    }
+
+    fn purge_player_event_log(
+        &self,
+        _player: Obj,
+        _before: Option<SystemTime>,
+        _drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, Error> {
+        Ok(EventLogPurgeResult::default())
     }
 }

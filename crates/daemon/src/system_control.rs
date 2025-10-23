@@ -19,14 +19,15 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::SystemTime,
 };
 
-use moor_common::tasks::SystemControl;
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats, SystemControl};
 use moor_var::{E_INVARG, E_QUOTA, Obj};
 use rpc_common::HostType;
 use tracing::warn;
 
-use crate::{enrollment, rpc::MessageHandler};
+use crate::{enrollment, event_log::EventLogOps, rpc::MessageHandler};
 
 /// Handle for system control operations - just what the scheduler needs
 #[derive(Clone)]
@@ -34,6 +35,7 @@ pub struct SystemControlHandle {
     kill_switch: Arc<AtomicBool>,
     message_handler: Arc<dyn MessageHandler>,
     enrollment_token_path: Option<PathBuf>,
+    event_log: Arc<dyn EventLogOps>,
 }
 
 impl SystemControlHandle {
@@ -41,11 +43,13 @@ impl SystemControlHandle {
         kill_switch: Arc<AtomicBool>,
         message_handler: Arc<dyn MessageHandler>,
         enrollment_token_path: Option<PathBuf>,
+        event_log: Arc<dyn EventLogOps>,
     ) -> Self {
         Self {
             kill_switch,
             message_handler,
             enrollment_token_path,
+            event_log,
         }
     }
 }
@@ -112,5 +116,27 @@ impl SystemControl for SystemControlHandle {
 
         enrollment::rotate_enrollment_token(path.as_path())
             .map_err(|e| E_QUOTA.with_msg(|| format!("Failed to rotate enrollment token: {e}")))
+    }
+
+    fn player_event_log_stats(
+        &self,
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+    ) -> Result<EventLogStats, moor_var::Error> {
+        self.event_log
+            .player_event_log_stats(player, since, until)
+            .map_err(|msg| E_INVARG.with_msg(|| msg))
+    }
+
+    fn purge_player_event_log(
+        &self,
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, moor_var::Error> {
+        self.event_log
+            .purge_player_event_log(player, before, drop_pubkey)
+            .map_err(|msg| E_INVARG.with_msg(|| msg))
     }
 }

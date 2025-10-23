@@ -23,6 +23,6 @@ pub use errors::{
 
 pub use events::{Event, NarrativeEvent, Presentation};
 pub use sessions::{
-    ConnectionDetails, MockClientSession, NoopClientSession, NoopSystemControl, Session,
-    SessionError, SessionFactory, SystemControl,
+    ConnectionDetails, EventLogPurgeResult, EventLogStats, MockClientSession, NoopClientSession,
+    NoopSystemControl, Session, SessionError, SessionFactory, SystemControl,
 };

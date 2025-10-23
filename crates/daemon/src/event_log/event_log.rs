@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::event_log::{PresentationAction, presentation_from_flatbuffer};
 use fjall::{CompressionType, Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use flume::{Receiver, Sender};
-use moor_common::tasks::Presentation;
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats, Presentation};
 use moor_schema::convert::presentation_to_flatbuffer_struct;
 use moor_schema::{
     common::{ObjUnion, ObjUnionRef},
@@ -78,6 +78,22 @@ pub trait EventLogOps: Send + Sync {
 
     /// Delete all event history for a player
     fn delete_all_events(&self, player: Obj) -> Result<(), String>;
+
+    /// Return summary statistics about a player's event history.
+    fn player_event_log_stats(
+        &self,
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+    ) -> Result<EventLogStats, String>;
+
+    /// Purge part or all of a player's event history, optionally removing their public key.
+    fn purge_player_event_log(
+        &self,
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, String>;
 }
 
 // LoggedNarrativeEvent and PlayerPresentations are now imported from
@@ -89,6 +105,24 @@ enum PersistenceMessage {
     WriteNarrativeEvent(Uuid, LoggedNarrativeEvent),
     WritePresentationState(PlayerPresentations),
     Shutdown,
+}
+
+fn system_time_to_nanos(time: SystemTime) -> u64 {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(duration) => {
+            let nanos = duration.as_nanos();
+            if nanos > u64::MAX as u128 {
+                u64::MAX
+            } else {
+                nanos as u64
+            }
+        }
+        Err(_) => 0,
+    }
+}
+
+fn opt_system_time_to_nanos(time: Option<SystemTime>) -> Option<u64> {
+    time.map(system_time_to_nanos)
 }
 
 /// Configuration for event log persistence
@@ -543,6 +577,142 @@ impl EventPersistence {
 
         Ok(())
     }
+
+    fn count_events_for_player(
+        &self,
+        player: &moor_schema::common::Obj,
+        since_ns: Option<u64>,
+        until_ns: Option<u64>,
+    ) -> Result<EventLogStats, eyre::Error> {
+        let mut stats = EventLogStats::default();
+        let player_key_prefix = Self::obj_to_key(player);
+        let player_prefix_with_colon = format!("{player_key_prefix}:");
+
+        for result in self
+            .player_index_partition
+            .range(player_prefix_with_colon.as_bytes()..)
+        {
+            let (key, value) = result?;
+
+            let key_str = std::str::from_utf8(&key)?;
+            if !key_str.starts_with(&player_prefix_with_colon) {
+                break;
+            }
+
+            if value.len() != 16 {
+                continue;
+            }
+            let mut bytes = [0u8; 16];
+            bytes.copy_from_slice(&value);
+            let event_id = Uuid::from_bytes(bytes);
+
+            let Some(event_bytes) = self.narrative_events_partition.get(event_id.as_bytes())?
+            else {
+                continue;
+            };
+            let event_ref =
+                <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&event_bytes)?;
+            let timestamp = event_ref.timestamp()?;
+
+            if let Some(since) = since_ns
+                && timestamp < since {
+                    continue;
+                }
+            if let Some(until) = until_ns
+                && timestamp > until {
+                    continue;
+                }
+
+            stats.total_events += 1;
+
+            let event_time = UNIX_EPOCH + Duration::from_nanos(timestamp);
+            if stats.earliest.is_none_or(|current| event_time < current) {
+                stats.earliest = Some(event_time);
+            }
+            if stats.latest.is_none_or(|current| event_time > current) {
+                stats.latest = Some(event_time);
+            }
+        }
+
+        Ok(stats)
+    }
+
+    fn purge_events_for_player(
+        &mut self,
+        player: &moor_schema::common::Obj,
+        before_ns: Option<u64>,
+    ) -> Result<u64, eyre::Error> {
+        let player_key_prefix = Self::obj_to_key(player);
+        let player_prefix_with_colon = format!("{player_key_prefix}:");
+
+        let mut index_keys = Vec::new();
+        let mut event_ids = Vec::new();
+
+        for result in self
+            .player_index_partition
+            .range(player_prefix_with_colon.as_bytes()..)
+        {
+            let (key, value) = result?;
+
+            let key_str = std::str::from_utf8(&key)?;
+            if !key_str.starts_with(&player_prefix_with_colon) {
+                break;
+            }
+
+            let mut should_remove = before_ns.is_none();
+            let mut event_id_opt = None;
+            if value.len() == 16 {
+                let mut bytes = [0u8; 16];
+                bytes.copy_from_slice(&value);
+                let event_id = Uuid::from_bytes(bytes);
+                event_id_opt = Some(event_id);
+
+                if let Some(before) = before_ns {
+                    if let Some(event_bytes) =
+                        self.narrative_events_partition.get(event_id.as_bytes())?
+                    {
+                        let event_ref =
+                            <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&event_bytes)?;
+                        let timestamp = event_ref.timestamp()?;
+                        if timestamp <= before {
+                            should_remove = true;
+                        }
+                    } else {
+                        should_remove = true;
+                    }
+                }
+            } else {
+                should_remove = true;
+            }
+
+            if should_remove {
+                index_keys.push(key.to_vec());
+                if let Some(event_id) = event_id_opt {
+                    event_ids.push(event_id);
+                }
+            }
+        }
+
+        for key in index_keys {
+            self.player_index_partition.remove(key)?;
+        }
+
+        for event_id in &event_ids {
+            self.narrative_events_partition
+                .remove(event_id.as_bytes())?;
+        }
+
+        Ok(event_ids.len() as u64)
+    }
+
+    fn delete_pubkey(&mut self, player: &moor_schema::common::Obj) -> Result<bool, eyre::Error> {
+        let player_key = Self::obj_to_key(player);
+        let existed = self.pubkeys_partition.get(player_key.as_bytes())?.is_some();
+        if existed {
+            self.pubkeys_partition.remove(player_key.as_bytes())?;
+        }
+        Ok(existed)
+    }
 }
 
 impl EventLog {
@@ -896,6 +1066,56 @@ impl EventLogOps for EventLog {
             .delete_all_events_for_player(&player_fb)
             .map_err(|e| e.to_string())
     }
+
+    fn player_event_log_stats(
+        &self,
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+    ) -> Result<EventLogStats, String> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let persistence = self.persistence.lock().unwrap();
+        persistence
+            .count_events_for_player(
+                &player_fb,
+                opt_system_time_to_nanos(since),
+                opt_system_time_to_nanos(until),
+            )
+            .map_err(|e| e.to_string())
+    }
+
+    fn purge_player_event_log(
+        &self,
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, String> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let mut persistence = self.persistence.lock().unwrap();
+        let deleted_events = persistence
+            .purge_events_for_player(&player_fb, opt_system_time_to_nanos(before))
+            .map_err(|e| e.to_string())?;
+
+        if before.is_none() {
+            let player_key = EventPersistence::obj_to_key(&player_fb);
+            persistence
+                .presentations_partition
+                .remove(player_key.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+
+        let mut pubkey_deleted = false;
+        if drop_pubkey {
+            pubkey_deleted = persistence
+                .delete_pubkey(&player_fb)
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(EventLogPurgeResult {
+            deleted_events,
+            pubkey_deleted,
+        })
+    }
 }
 
 /// No-op event log implementation that discards all events
@@ -973,6 +1193,24 @@ impl EventLogOps for NoOpEventLog {
 
     fn delete_all_events(&self, _player: Obj) -> Result<(), String> {
         Ok(())
+    }
+
+    fn player_event_log_stats(
+        &self,
+        _player: Obj,
+        _since: Option<SystemTime>,
+        _until: Option<SystemTime>,
+    ) -> Result<EventLogStats, String> {
+        Ok(EventLogStats::default())
+    }
+
+    fn purge_player_event_log(
+        &self,
+        _player: Obj,
+        _before: Option<SystemTime>,
+        _drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, String> {
+        Ok(EventLogPurgeResult::default())
     }
 }
 

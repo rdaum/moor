@@ -20,7 +20,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use moor_common::tasks::Presentation;
+use moor_common::tasks::{EventLogPurgeResult, EventLogStats, Presentation};
 use moor_schema::{
     common::ObjUnion,
     convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
@@ -36,6 +36,8 @@ pub struct MockEventLog {
     narrative_events: Arc<Mutex<HashMap<Uuid, LoggedNarrativeEvent>>>,
     /// Current presentations by player (Vec instead of HashMap to match new API)
     presentations: Arc<Mutex<HashMap<Obj, Vec<Presentation>>>>,
+    /// Stored public keys per player
+    pubkeys: Arc<Mutex<HashMap<Obj, String>>>,
 }
 
 impl MockEventLog {
@@ -43,6 +45,7 @@ impl MockEventLog {
         Self {
             narrative_events: Arc::new(Mutex::new(HashMap::new())),
             presentations: Arc::new(Mutex::new(HashMap::new())),
+            pubkeys: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -94,6 +97,7 @@ impl MockEventLog {
     pub fn clear(&self) {
         self.narrative_events.lock().unwrap().clear();
         self.presentations.lock().unwrap().clear();
+        self.pubkeys.lock().unwrap().clear();
     }
 
     /// Get count of narrative events
@@ -231,13 +235,12 @@ impl EventLogOps for MockEventLog {
         }
     }
 
-    fn get_pubkey(&self, _player: Obj) -> Option<String> {
-        // Mock implementation - no encryption in tests
-        None
+    fn get_pubkey(&self, player: Obj) -> Option<String> {
+        self.pubkeys.lock().unwrap().get(&player).cloned()
     }
 
-    fn set_pubkey(&self, _player: Obj, _pubkey: String) {
-        // Mock implementation - no encryption in tests
+    fn set_pubkey(&self, player: Obj, pubkey: String) {
+        self.pubkeys.lock().unwrap().insert(player, pubkey);
     }
 
     fn delete_all_events(&self, player: Obj) -> Result<(), String> {
@@ -246,6 +249,8 @@ impl EventLogOps for MockEventLog {
 
         // Remove all events for this player
         events.retain(|_, event| !Self::obj_matches(&player_fb, &event.player));
+
+        self.pubkeys.lock().unwrap().remove(&player);
 
         Ok(())
     }
@@ -331,5 +336,95 @@ impl EventLogOps for MockEventLog {
         // Sort by event ID (chronological for UUID v7)
         player_events.sort_by_key(Self::extract_event_id);
         player_events
+    }
+
+    fn player_event_log_stats(
+        &self,
+        player: Obj,
+        since: Option<SystemTime>,
+        until: Option<SystemTime>,
+    ) -> Result<EventLogStats, String> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let events = self.narrative_events.lock().unwrap();
+        let mut stats = EventLogStats::default();
+
+        for event in events.values() {
+            if !Self::obj_matches(&player_fb, &event.player) {
+                continue;
+            }
+
+            let event_time = UNIX_EPOCH + Duration::from_nanos(event.timestamp);
+            if let Some(since_time) = since
+                && event_time < since_time {
+                    continue;
+                }
+            if let Some(until_time) = until
+                && event_time > until_time {
+                    continue;
+                }
+
+            stats.total_events += 1;
+            if stats.earliest.is_none_or(|current| event_time < current) {
+                stats.earliest = Some(event_time);
+            }
+            if stats.latest.is_none_or(|current| event_time > current) {
+                stats.latest = Some(event_time);
+            }
+        }
+
+        Ok(stats)
+    }
+
+    fn purge_player_event_log(
+        &self,
+        player: Obj,
+        before: Option<SystemTime>,
+        drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, String> {
+        let player_fb = obj_to_flatbuffer_struct(&player);
+        let deleted_events = {
+            let mut events = self.narrative_events.lock().unwrap();
+            let mut to_remove = Vec::new();
+
+            match before {
+                Some(before_time) => {
+                    for (event_id, event) in events.iter() {
+                        if Self::obj_matches(&player_fb, &event.player) {
+                            let event_time = UNIX_EPOCH + Duration::from_nanos(event.timestamp);
+                            if event_time <= before_time {
+                                to_remove.push(*event_id);
+                            }
+                        }
+                    }
+                }
+                None => {
+                    for (event_id, event) in events.iter() {
+                        if Self::obj_matches(&player_fb, &event.player) {
+                            to_remove.push(*event_id);
+                        }
+                    }
+                }
+            }
+
+            for event_id in &to_remove {
+                events.remove(event_id);
+            }
+
+            to_remove.len() as u64
+        };
+
+        if before.is_none() && deleted_events > 0 {
+            self.presentations.lock().unwrap().remove(&player);
+        }
+
+        let mut pubkey_deleted = false;
+        if drop_pubkey {
+            pubkey_deleted = self.pubkeys.lock().unwrap().remove(&player).is_some();
+        }
+
+        Ok(EventLogPurgeResult {
+            deleted_events,
+            pubkey_deleted,
+        })
     }
 }

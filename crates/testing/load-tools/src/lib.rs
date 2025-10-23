@@ -15,7 +15,10 @@
 //!
 //! Provides shared session and system control implementations for load test binaries.
 
-use moor_common::tasks::{NarrativeEvent, Session, SessionError, SessionFactory, SystemControl};
+use moor_common::tasks::{
+    EventLogPurgeResult, EventLogStats, NarrativeEvent, Session, SessionError, SessionFactory,
+    SystemControl,
+};
 use moor_var::{Error, Obj, Symbol, Var};
 use std::sync::Arc;
 
@@ -156,5 +159,23 @@ impl SystemControl for NoopSystemControl {
 
     fn rotate_enrollment_token(&self) -> Result<String, Error> {
         Ok(String::new())
+    }
+
+    fn player_event_log_stats(
+        &self,
+        _player: Obj,
+        _since: Option<std::time::SystemTime>,
+        _until: Option<std::time::SystemTime>,
+    ) -> Result<EventLogStats, Error> {
+        Ok(EventLogStats::default())
+    }
+
+    fn purge_player_event_log(
+        &self,
+        _player: Obj,
+        _before: Option<std::time::SystemTime>,
+        _drop_pubkey: bool,
+    ) -> Result<EventLogPurgeResult, Error> {
+        Ok(EventLogPurgeResult::default())
     }
 }

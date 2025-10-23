@@ -167,6 +167,21 @@ with the oldest currently loaded event's identifier.
 New events that arrive via WebSocket connections are seamlessly integrated into the existing history view, maintaining
 proper chronological order and avoiding duplicates.
 
+## Managing History In-World
+
+Players (or wizards acting on their behalf) can manage encrypted history directly from in-world code by using two
+server builtins:
+
+- [`player_event_log_stats()`](../the-moo-programming-language/built-in-functions/server.md#player_event_log_stats) –
+  returns a summary of how many entries exist for the player and the oldest/newest event timestamps.
+- [`purge_player_event_log()`](../the-moo-programming-language/built-in-functions/server.md#purge_player_event_log) –
+  deletes history up to an optional cut-off time and can also remove the player’s stored public key.
+
+Both builtins accept target players so long as the caller owns the player object (or is a wizard). Timestamps are
+expressed as seconds since the UNIX epoch, and passing `none` skips the filter. If you remove all events and drop the
+stored public key, the next login through the web client will generate a fresh keypair, effectively resetting encrypted
+history for that player.
+
 ## Configuring Event Logging
 
 Event logging is disabled by default and must be explicitly enabled by server administrators. To enable event logging:

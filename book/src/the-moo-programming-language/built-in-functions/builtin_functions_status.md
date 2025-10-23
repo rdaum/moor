@@ -156,6 +156,8 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`connections`](server.md#connections)                 | &check;  | Returns connections for current player, or other players.                |  mooR extension. |
 | [`notify`](server.md#notify)                           | &check;  | With `rich_notify` feature on, supports sending additional content types |
 | [`boot_player`](server.md#boot_player)                 | &check;  |                                                                          |
+| [`player_event_log_stats`](server.md#player_event_log_stats) | &check;  | mooR extension. Inspect encrypted event history.                         |
+| [`purge_player_event_log`](server.md#purge_player_event_log) | &check;  | mooR extension. Delete encrypted history / public key.                   |
 | [`server_log`](server.md#server_log)                   | &check;  |                                                                          |
 | [`load_server_options`](server.md#load_server_options) |          |                                                                          |
 | [`function_info`](server.md#function_info)             | &check;  |                                                                          |
