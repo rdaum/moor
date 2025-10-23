@@ -18,7 +18,7 @@ members = [
     "crates/textdump",
     "crates/var",
     "crates/web-host",
-    "tools/moor-admin",
+    "tools/moor-emh",
     "tools/moorc",
 ]
 default-members = [
@@ -40,7 +40,7 @@ default-members = [
     "crates/testing/load-tools",
     "crates/curl-worker",
     "tools/moorc",
-    "tools/moor-admin",
+    "tools/moor-emh",
 ]
 
 [workspace.package]

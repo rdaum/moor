@@ -12,8 +12,7 @@ mooR is a modern, from-scratch rewrite of [LambdaMOO](https://en.wikipedia.org/w
 maintaining full compatibility with existing LambdaMOO 1.8.x databases while adding significant
 enhancements.
 
-📖 **For comprehensive documentation, see our
-[mooR Book](https://timbran.org/book/html/).**
+📖 **For comprehensive documentation, see our [mooR Book](https://timbran.org/book/html/).**
 
 > **📦 Repository Migration Notice (August 2025):** We've recently moved our primary repository from
 > GitHub to [Codeberg](https://codeberg.org/timbran/moor). If you're viewing this on GitHub, please
@@ -115,8 +114,8 @@ The server comes pre-loaded with an extraction of LambdaCore, providing a ready-
 world.
 
 For more detailed setup instructions, see the
-[Docker Compose Setup](https://timbran.org/book/html/the-system/docker-compose-setup.html)
-section in the mooR Book.
+[Docker Compose Setup](https://timbran.org/book/html/the-system/docker-compose-setup.html) section
+in the mooR Book.
 
 ### Alternative: Frontend Development Setup
 
@@ -129,7 +128,8 @@ npm run full:dev
 This starts the moor-daemon and web development server, accessible at
 [http://localhost:3000](http://localhost:3000). This setup excludes telnet and provides
 hot-reloading for frontend development, but it requires installing some dependencies. See
-[the web client's readme](https://codeberg.org/timbran/moor/src/branch/main/web-client#readme) for details.
+[the web client's readme](https://codeberg.org/timbran/moor/src/branch/main/web-client#readme) for
+details.
 
 ## For Developers & Contributors
 
@@ -159,8 +159,7 @@ mooR offers several opportunities for contribution:
 - **Issues**: Check our [Codeberg Issues](https://codeberg.org/timbran/moor/issues) for current
   needs
 - **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
-- **Development**: See the [mooR Book](https://timbran.org/book/html/) for
-  architecture details
+- **Development**: See the [mooR Book](https://timbran.org/book/html/) for architecture details
 - **Support**: Consider [sponsoring the project](https://github.com/sponsors/rdaum) to help with
   ongoing development
 
@@ -178,15 +177,13 @@ When reporting bugs, please include:
 
 ## Resources
 
-- 📖 **[Complete Documentation](https://timbran.org/book/html/)** - The comprehensive
-  mooR Book
-- 🏗️ **[Server Architecture](https://timbran.org/book/html/moor-architecture.html)** -
-  Technical overview
+- 📖 **[Complete Documentation](https://timbran.org/book/html/)** - The comprehensive mooR Book
+- 🏗️ **[Server Architecture](https://timbran.org/book/html/moor-architecture.html)** - Technical
+  overview
 - 💻
   **[MOO Programming Language](https://timbran.org/book/html/the-moo-programming-language.html)** -
   Language reference
-- 🚀
-  **[Running a Server](https://timbran.org/book/html/the-system/running-the-server.html)** -
+- 🚀 **[Running a Server](https://timbran.org/book/html/the-system/running-the-server.html)** -
   Deployment guide
 
 ## License

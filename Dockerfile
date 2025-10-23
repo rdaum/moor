@@ -72,7 +72,7 @@ COPY --from=frontend-build /moor-frontend/dist /moor/web-client
 
 # Utility binaries
 COPY --from=backend-build /moor-build/target-final/moorc /moor/moorc
-COPY --from=backend-build /moor-build/target-final/moor-admin /moor/moor-admin
+COPY --from=backend-build /moor-build/target-final/moor-emh /moor/moor-emh
 
 EXPOSE 8080
 

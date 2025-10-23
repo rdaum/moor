@@ -1,10 +1,10 @@
-# Emergency Admin Tool (moor-admin)
+# Emergency Medical Hologram Tool (moor-emh)
 
-The `moor-admin` tool is an emergency database administration utility for mooR. It provides direct database access when normal logins are unavailable, making it essential for database recovery, emergency repairs, and system administration tasks.
+The `moor-emh` tool is an emergency database administration utility for mooR. It provides direct database access when normal logins are unavailable, making it essential for database recovery, emergency repairs, and system administration tasks.
 
 ## Overview
 
-Think of `moor-admin` as the Emergency Medical Hologram for your MOO database - it activates when you need immediate access to repair critical issues. The tool provides a REPL (Read-Eval-Print Loop) interface with full wizard privileges, allowing you to:
+Think of `moor-emh` as the Emergency Medical Hologram for your MOO database - it activates when you need immediate access to repair critical issues. The tool provides a REPL (Read-Eval-Print Loop) interface with full wizard privileges, allowing you to:
 
 - Inspect and modify object properties
 - View and edit verb code
@@ -14,9 +14,9 @@ Think of `moor-admin` as the Emergency Medical Hologram for your MOO database - 
 - Reload objects from version-controlled source files
 - Perform emergency database repairs
 
-## When to Use moor-admin
+## When to Use moor-emh
 
-Use `moor-admin` when:
+Use `moor-emh` when:
 
 - Normal telnet/web access is broken or unavailable
 - You need to recover from a catastrophic database error
@@ -26,14 +26,14 @@ Use `moor-admin` when:
 - You need to reload objects from version-controlled source files
 - You want to export objects for backup or sharing with other MOOs
 
-**Important:** `moor-admin` acquires an exclusive lock on the database, preventing other mooR processes from accessing it. Always shut down your mooR server before using this tool.
+**Important:** `moor-emh` acquires an exclusive lock on the database, preventing other mooR processes from accessing it. Always shut down your mooR server before using this tool.
 
-## Running moor-admin
+## Running moor-emh
 
 ### Basic Usage
 
 ```bash
-moor-admin [OPTIONS] [DATA-DIR]
+moor-emh [OPTIONS] [DATA-DIR]
 ```
 
 **Arguments:**
@@ -48,27 +48,27 @@ moor-admin [OPTIONS] [DATA-DIR]
 
 Start with default settings (looks for `./moor-data/world.db`):
 ```bash
-moor-admin
+moor-emh
 ```
 
 Specify a custom data directory:
 ```bash
-moor-admin /path/to/my/moo/data
+moor-emh /path/to/my/moo/data
 ```
 
 Use a specific wizard object:
 ```bash
-moor-admin --wizard 3
+moor-emh --wizard 3
 ```
 
 Use a different database file:
 ```bash
-moor-admin --db backup.db /var/moor-data
+moor-emh --db backup.db /var/moor-data
 ```
 
 ## The REPL Interface
 
-When you start moor-admin, you'll see the Emergency Medical Hologram welcome screen:
+When you start moor-emh, you'll see the Emergency Medical Hologram welcome screen:
 
 ```
 # Emergency Medical Hologram - Database Administration Subroutine
@@ -86,7 +86,7 @@ The prompt shows the wizard object you're operating as (e.g., `(#2):`).
 
 ### Object Reference Syntax
 
-Throughout moor-admin, you can reference objects in two ways:
+Throughout moor-emh, you can reference objects in two ways:
 
 - **Direct reference:** `#123` - References object with ID 123
 - **Property reference:** `$player` - Looks up the value of `#0.player` property
@@ -357,7 +357,7 @@ When typing object IDs, press Tab to see available objects:
 
 ## Tab Completion Features
 
-`moor-admin` provides comprehensive tab completion to make navigation easier:
+`moor-emh` provides comprehensive tab completion to make navigation easier:
 
 - **Commands:** Type the beginning of a command and press Tab
 - **Object IDs:** Type `#` followed by Tab to see all objects (works with `props`, `verbs`, `list`, `prog`, `dump`, `reload`, and `su`)
@@ -372,7 +372,7 @@ The completion system queries the database in real-time, so you always see the c
 
 ### Data Safety
 
-- **Exclusive Lock:** moor-admin locks the database to prevent corruption. Shut down your mooR server first.
+- **Exclusive Lock:** moor-emh locks the database to prevent corruption. Shut down your mooR server first.
 - **Auto-save:** Changes are automatically saved to the database. There is no "undo" feature.
 - **Backups:** Always make a backup before performing emergency repairs:
   ```bash
@@ -463,7 +463,7 @@ The tool uses `termimad` for beautiful terminal output with:
 
 **"Failed to acquire lock on data directory"**
 - Another mooR process is running. Shut down the server first.
-- Or another moor-admin instance is already running.
+- Or another moor-emh instance is already running.
 
 **"No wizard objects found in database"**
 - The database may be corrupted or empty.

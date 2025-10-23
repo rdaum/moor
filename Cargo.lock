@@ -3067,30 +3067,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-admin"
-version = "0.9.0-alpha"
-dependencies = [
- "clap",
- "clap_derive",
- "color-eyre",
- "eyre",
- "figment",
- "fs2",
- "moor-common",
- "moor-compiler",
- "moor-db",
- "moor-kernel",
- "moor-objdef",
- "moor-var",
- "rustyline",
- "semver",
- "termimad",
- "tracing",
- "tracing-subscriber",
- "uuid 1.18.1",
-]
-
-[[package]]
 name = "moor-bench-utils"
 version = "0.9.0-alpha"
 dependencies = [
@@ -3250,6 +3226,30 @@ dependencies = [
  "tracing",
  "uuid 1.18.1",
  "zerocopy",
+]
+
+[[package]]
+name = "moor-emh"
+version = "0.9.0-alpha"
+dependencies = [
+ "clap",
+ "clap_derive",
+ "color-eyre",
+ "eyre",
+ "figment",
+ "fs2",
+ "moor-common",
+ "moor-compiler",
+ "moor-db",
+ "moor-kernel",
+ "moor-objdef",
+ "moor-var",
+ "rustyline",
+ "semver",
+ "termimad",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.18.1",
 ]
 
 [[package]]
