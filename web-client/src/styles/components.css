@@ -274,7 +274,7 @@
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   resize: none;
   overflow: auto;
   border: 1px solid var(--color-border-medium);
@@ -291,7 +291,7 @@
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
   margin: var(--space-md);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   flex-shrink: 0;
 }
 
@@ -310,7 +310,7 @@
   border-radius: 0;
   padding: var(--space-xl) var(--space-lg);
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   max-width: 480px;
   margin-left: auto;
   margin-right: auto;
@@ -330,7 +330,7 @@
   border: none;
   border-bottom: 3px solid transparent;
   padding: calc(var(--space-md) * 1.2) var(--space-lg);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1.05em;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -389,7 +389,7 @@
 }
 
 .oauth2_complete_title {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1.8em;
   font-weight: 600;
   color: var(--color-text-primary);
@@ -397,7 +397,7 @@
 }
 
 .oauth2_complete_subtitle {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1em;
   color: var(--color-text-secondary);
   margin: 0;
@@ -432,7 +432,7 @@
   padding: calc(var(--space-md) * 1.2) var(--space-lg);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1em;
   font-weight: 500;
   cursor: pointer;
@@ -531,14 +531,14 @@
 }
 
 .login_field_label {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 0.95em;
   font-weight: 500;
   color: var(--color-text-primary);
 }
 
 .login_field_error {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 0.85em;
   color: var(--color-text-error);
   margin-top: calc(var(--space-xs) * 0.5);
@@ -548,7 +548,7 @@
   padding: calc(var(--space-md) * 1.2);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1em;
   background-color: var(--color-bg-input);
   color: var(--color-text-primary);
@@ -574,7 +574,7 @@
   padding: calc(var(--space-md) * 1.3) var(--space-lg);
   border: none;
   border-radius: var(--radius-md);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1.05em;
   font-weight: 600;
   background-color: var(--color-text-accent);
@@ -603,7 +603,7 @@
   padding: calc(var(--space-md) * 1.3) var(--space-lg);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1.05em;
   font-weight: 600;
   background-color: transparent;
@@ -1190,7 +1190,7 @@ input[type="text"]:focus {
   display: flex;
   flex-direction: column;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
 }
 
 .settings-header {
@@ -1204,7 +1204,7 @@ input[type="text"]:focus {
 
 .settings-header h2 {
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1.3em;
   color: var(--color-text-primary);
 }
@@ -1234,7 +1234,7 @@ input[type="text"]:focus {
   flex: 1;
   padding: var(--space-lg);
   overflow-y: auto;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
 }
 
 /* Ensure all text elements in settings inherit properly */
@@ -1253,7 +1253,7 @@ input[type="text"]:focus {
 
 .settings-section h3 {
   margin: 0 0 var(--space-md) 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 1em;
   font-weight: bold;
   color: var(--color-text-primary);
@@ -1268,7 +1268,7 @@ input[type="text"]:focus {
   justify-content: space-between;
   padding: var(--space-md) 0;
   border-bottom: 1px solid var(--color-border-light);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   color: var(--color-text-primary);
 }
 
@@ -1287,7 +1287,7 @@ input[type="text"]:focus {
   width: 100%;
   background: none;
   border: none;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   color: var(--color-text-primary);
   cursor: pointer;
   padding: var(--space-md) 0;
@@ -1319,7 +1319,7 @@ input[type="text"]:focus {
   width: 100%;
   background: none;
   border: none;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   color: var(--color-text-primary);
   cursor: pointer;
   padding: var(--space-md) 0;

@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useEffect, useState } from "react";
-import { applyTheme } from "./ThemeProvider";
+import React from "react";
+import { useTheme } from "./ThemeProvider";
+import { type Theme } from "./themeSupport";
 
-type Theme = "dark" | "light" | "crt" | "crt-amber";
+const THEME_SEQUENCE: Theme[] = ["dark", "light", "crt", "crt-amber"];
 
 /**
  * Theme toggle component for switching between dark, light, and CRT modes
@@ -22,26 +23,13 @@ type Theme = "dark" | "light" | "crt" | "crt-amber";
  * @returns A button that cycles between dark, light, and CRT themes
  */
 export const ThemeToggle: React.FC = () => {
-    // Check if user has a saved theme preference
-    const savedTheme = localStorage.getItem("theme") as Theme | null;
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-    // Initialize theme state (use saved preference, fallback to system preference, default to dark)
-    const [currentTheme, setCurrentTheme] = useState<Theme>(
-        savedTheme || (prefersDark ? "dark" : "light"),
-    );
-
-    // Apply the theme class when state changes
-    useEffect(() => {
-        applyTheme(currentTheme);
-    }, [currentTheme]);
+    const { theme, setTheme } = useTheme();
 
     // Cycle through themes: dark -> light -> crt -> crt-amber -> dark
     const cycleTheme = () => {
-        const themeOrder: Theme[] = ["dark", "light", "crt", "crt-amber"];
-        const currentIndex = themeOrder.indexOf(currentTheme);
-        const nextIndex = (currentIndex + 1) % themeOrder.length;
-        setCurrentTheme(themeOrder[nextIndex]);
+        const currentIndex = THEME_SEQUENCE.indexOf(theme);
+        const nextIndex = (currentIndex + 1) % THEME_SEQUENCE.length;
+        setTheme(THEME_SEQUENCE[nextIndex]);
     };
 
     const getThemeDisplay = (theme: Theme) => {
@@ -62,12 +50,12 @@ export const ThemeToggle: React.FC = () => {
         <button
             className="theme-toggle-row"
             onClick={cycleTheme}
-            aria-label={`Switch theme (current: ${currentTheme})`}
+            aria-label={`Switch theme (current: ${theme})`}
             title="Click to cycle through Dark → Light → RetroGreen → RetroAmber themes"
         >
             <span>Theme</span>
             <span className="theme-indicator">
-                {getThemeDisplay(currentTheme)}
+                {getThemeDisplay(theme)}
             </span>
         </button>
     );

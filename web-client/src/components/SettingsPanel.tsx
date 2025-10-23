@@ -84,7 +84,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, o
                                         border: "none",
                                         borderRadius: "4px",
                                         cursor: "pointer",
-                                        fontFamily: "var(--font-sans)",
+                                        fontFamily: "var(--font-ui)",
                                     }}
                                 >
                                     Logout

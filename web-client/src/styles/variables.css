@@ -128,7 +128,9 @@
 
   /* Typography - Shared between themes */
   --font-mono: 'Roboto Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-  --font-sans: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-sans-base: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: var(--font-sans-base);
+  --font-ui: var(--font-sans-base);
   --font-crt: 'Glass_TTY_VT220', 'Perfect DOS VGA 437', 'Px437 IBM VGA8', 'DOS', 'Courier New', 'Monaco', 'Menlo', monospace;
 
   /* Transitions */
@@ -175,6 +177,8 @@
 
 /* CRT Theme Class - Applied to body for retro phosphor terminal look */
 .crt-theme {
+  --font-sans: var(--font-crt);
+  --font-ui: var(--font-crt);
   /* Color Palette - CRT Theme */
   --color-bg-base: var(--crt-color-bg-base);
   --color-bg-primary: var(--crt-color-bg-primary);
@@ -405,6 +409,8 @@
 
 /* CRT Amber Theme Class - Applied to body for retro amber terminal look */
 .crt-amber-theme {
+  --font-sans: var(--font-crt);
+  --font-ui: var(--font-crt);
   /* Color Palette - CRT Amber Theme */
   --color-bg-base: var(--crt-amber-color-bg-base);
   --color-bg-primary: var(--crt-amber-color-bg-primary);

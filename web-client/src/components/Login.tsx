@@ -563,7 +563,7 @@ export const Login: React.FC<LoginProps> = (
                                 color: "var(--color-text-primary)",
                                 fontSize: "16px",
                                 fontWeight: 600,
-                                fontFamily: "var(--font-sans)",
+                                fontFamily: "var(--font-ui)",
                             }}
                         >
                             Connecting to server...
@@ -572,7 +572,7 @@ export const Login: React.FC<LoginProps> = (
                             style={{
                                 color: "var(--color-text-secondary)",
                                 fontSize: "14px",
-                                fontFamily: "var(--font-sans)",
+                                fontFamily: "var(--font-ui)",
                             }}
                         >
                             Please wait
