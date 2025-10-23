@@ -280,9 +280,12 @@ function AppContent({
 
     // Comprehensive logout handler
     const handleLogout = useCallback(() => {
+        if (narrativeRef.current) {
+            narrativeRef.current.clearAll();
+        }
         // Just disconnect from auth - the useEffect above will handle all cleanup
         disconnect();
-    }, [disconnect]);
+    }, [disconnect, narrativeRef]);
 
     // Handle OAuth2 callback from URL parameters
     useEffect(() => {
@@ -747,6 +750,7 @@ function AppContent({
                                     onLoadMoreHistory={handleLoadMoreHistory}
                                     isLoadingHistory={isLoadingHistory}
                                     onLinkClick={onLinkClick}
+                                    playerOid={authState.player?.oid}
                                 />
                             </section>
 

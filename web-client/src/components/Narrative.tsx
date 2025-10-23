@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
 import { OutputWindow } from "./OutputWindow";
@@ -33,6 +33,7 @@ interface NarrativeProps {
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
+    playerOid?: string | null;
 }
 
 export interface NarrativeRef {
@@ -49,6 +50,16 @@ export interface NarrativeRef {
     clearAll: () => void;
 }
 
+const COMMAND_HISTORY_STORAGE_PREFIX = "moor-command-history";
+const MAX_COMMAND_HISTORY = 500;
+
+const getCommandHistoryStorageKey = (playerOid?: string | null) => {
+    if (!playerOid) {
+        return null;
+    }
+    return `${COMMAND_HISTORY_STORAGE_PREFIX}:${playerOid}`;
+};
+
 export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     visible,
     connected,
@@ -56,10 +67,39 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     onLoadMoreHistory,
     isLoadingHistory = false,
     onLinkClick,
+    playerOid,
 }, ref) => {
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
     const narrativeContainerRef = useRef<HTMLDivElement>(null);
+    const storageKeyRef = useRef<string | null>(null);
+    const previousStorageKeyRef = useRef<string | null>(null);
+    const currentStorageKey = getCommandHistoryStorageKey(playerOid);
+
+    if (storageKeyRef.current !== currentStorageKey) {
+        previousStorageKeyRef.current = storageKeyRef.current;
+        storageKeyRef.current = currentStorageKey;
+    }
+
+    const clearStoredHistory = useCallback(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        try {
+            const storage = window.localStorage;
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < storage.length; i += 1) {
+                const key = storage.key(i);
+                if (key && key.startsWith(COMMAND_HISTORY_STORAGE_PREFIX)) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => storage.removeItem(key));
+        } catch (error) {
+            console.warn("Failed to clear stored command history:", error);
+        }
+    }, []);
 
     // Add a new message to the narrative
     const addMessage = useCallback((
@@ -93,7 +133,25 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
     // Add to command history
     const addToHistory = useCallback((command: string) => {
-        setCommandHistory(prev => [...prev, command]);
+        setCommandHistory(prev => {
+            const nextHistory = [...prev, command];
+            const cappedHistory = nextHistory.length > MAX_COMMAND_HISTORY
+                ? nextHistory.slice(-MAX_COMMAND_HISTORY)
+                : nextHistory;
+
+            if (typeof window !== "undefined") {
+                const storageKey = storageKeyRef.current;
+                if (storageKey) {
+                    try {
+                        window.localStorage.setItem(storageKey, JSON.stringify(cappedHistory));
+                    } catch (error) {
+                        console.warn("Failed to persist command history:", error);
+                    }
+                }
+            }
+
+            return cappedHistory;
+        });
     }, []);
 
     // Add a method to add narrative content from WebSocket messages
@@ -144,9 +202,15 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
     // Clear all messages and command history (used on logout)
     const clearAll = useCallback(() => {
+        if (typeof window !== "undefined") {
+            clearStoredHistory();
+            storageKeyRef.current = null;
+            previousStorageKeyRef.current = null;
+        }
+
         setMessages([]);
         setCommandHistory([]);
-    }, []);
+    }, [clearStoredHistory]);
 
     // Expose methods to parent component
     useImperativeHandle(ref, () => ({
@@ -166,6 +230,47 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         getContainerHeight,
         clearAll,
     ]);
+
+    // Track the current storage key for this player and load stored history when it changes
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            setCommandHistory([]);
+            return;
+        }
+
+        const storageKey = storageKeyRef.current;
+
+        if (!storageKey) {
+            setCommandHistory([]);
+            return;
+        }
+
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            if (!raw) {
+                setCommandHistory([]);
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                const normalized = parsed.map(item => (typeof item === "string" ? item : String(item)));
+                if (normalized.length > MAX_COMMAND_HISTORY) {
+                    const capped = normalized.slice(-MAX_COMMAND_HISTORY);
+                    window.localStorage.setItem(storageKey, JSON.stringify(capped));
+                    setCommandHistory(capped);
+                } else {
+                    setCommandHistory(normalized);
+                }
+            } else {
+                window.localStorage.removeItem(storageKey);
+                setCommandHistory([]);
+            }
+        } catch (error) {
+            console.warn("Failed to read command history from storage:", error);
+            window.localStorage.removeItem(storageKey);
+            setCommandHistory([]);
+        }
+    }, [currentStorageKey]);
 
     if (!visible) {
         return null;
