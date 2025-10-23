@@ -261,7 +261,7 @@ impl Scheduler {
             if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
                 for sr in to_wake {
                     let task_id = sr.task.task_id;
-                    if let Err(e) = self.task_q.resume_task_thread(
+                    if let Err(e) = self.task_q.wake_task_thread(
                         sr.task,
                         ResumeAction::Return(v_int(0)),
                         sr.session,
@@ -504,18 +504,14 @@ impl Scheduler {
 
                 trace_task_create_command!(task_id, &player, &command, &handler_object);
 
-                let result = task_q.start_task_thread(
+                let result = task_q.submit_new_task(
                     task_id,
+                    &player,
+                    &player,
                     task_start,
-                    &player,
-                    session,
                     None,
-                    &player,
+                    session,
                     &self.server_options,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
                     self.config.features.anonymous_objects
                         && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
@@ -568,18 +564,14 @@ impl Scheduler {
                     argstr,
                 };
 
-                let result = task_q.start_task_thread(
+                let result = task_q.submit_new_task(
                     task_id,
-                    task_start,
                     &player,
-                    session,
-                    None,
                     &perms,
+                    task_start,
+                    None,
+                    session,
                     &self.server_options,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
                     self.config.features.anonymous_objects
                         && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
@@ -609,7 +601,7 @@ impl Scheduler {
                 };
 
                 // Wake and bake.
-                let response = task_q.resume_task_thread(
+                let response = task_q.wake_task_thread(
                     sr.task,
                     ResumeAction::Return(input),
                     sr.session,
@@ -644,18 +636,14 @@ impl Scheduler {
                     argstr,
                 };
 
-                let result = task_q.start_task_thread(
+                let result = task_q.submit_new_task(
                     task_id,
+                    &player,
+                    &player,
                     task_start,
-                    &player,
-                    session,
                     None,
-                    &player,
+                    session,
                     &self.server_options,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
                     self.config.features.anonymous_objects
                         && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
@@ -677,18 +665,14 @@ impl Scheduler {
 
                 let task_start = TaskStart::StartEval { player, program };
 
-                let result = task_q.start_task_thread(
+                let result = task_q.submit_new_task(
                     task_id,
-                    task_start,
                     &player,
-                    sessions,
-                    None,
                     &perms,
+                    task_start,
+                    None,
+                    sessions,
                     &self.server_options,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
                     self.config.features.anonymous_objects
                         && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
@@ -1035,7 +1019,9 @@ impl Scheduler {
                     TaskSuspend::Never => WakeCondition::Never,
                     TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
-                    TaskSuspend::Commit(return_value) => WakeCondition::Immediate(return_value),
+                    TaskSuspend::Commit(return_value) => {
+                        WakeCondition::Immediate(Some(return_value))
+                    }
                     TaskSuspend::WorkerRequest(worker_type, args, timeout) => {
                         let worker_request_id = Uuid::new_v4();
                         // Send out a message over the workers channel.
@@ -1209,18 +1195,14 @@ impl Scheduler {
 
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
-                let result = task_q.start_task_thread(
+                let result = task_q.submit_new_task(
                     task_id,
+                    &who,
+                    &who,
                     task_start,
-                    &who,
-                    new_session,
                     None,
-                    &who,
+                    new_session,
                     &self.server_options,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
                     self.config.features.anonymous_objects
                         && (self.gc_sweep_in_progress || self.gc_force_collect),
                 );
@@ -1466,34 +1448,34 @@ impl Scheduler {
 
     fn handle_immediate_wake(&mut self, task_id: TaskId) {
         // Handle immediate wake task from channel
-        // Check if task still exists in suspended state and wake it
-        if let Some(sr) = self.task_q.suspended.remove_task(task_id) {
-            // Extract the return value from the wake condition
-            let return_value = match sr.wake_condition {
-                WakeCondition::Immediate(val) => val,
-                _ => {
-                    error!(
-                        ?task_id,
-                        "Immediate wake task has non-immediate wake condition"
-                    );
-                    v_int(0)
-                }
-            };
-
-            if let Err(e) = self.task_q.resume_task_thread(
-                sr.task,
-                ResumeAction::Return(return_value),
-                sr.session,
-                sr.result_sender,
-                &self.task_control_sender,
-                self.database.as_ref(),
-                self.builtin_registry.clone(),
-                self.config.clone(),
-            ) {
-                error!(?task_id, ?e, "Error resuming immediate wake task");
-            }
-        } else {
+        let Some(sr) = self.task_q.suspended.remove_task(task_id) else {
             // Task was already removed (e.g., killed), ignore
+            return;
+        };
+
+        // Extract the return value from the wake condition
+        let return_value = match sr.wake_condition {
+            WakeCondition::Immediate(val) => val.unwrap_or_else(|| v_int(0)),
+            _ => {
+                error!(
+                    ?task_id,
+                    "Immediate wake task has non-immediate wake condition"
+                );
+                v_int(0)
+            }
+        };
+
+        if let Err(e) = self.task_q.wake_task_thread(
+            sr.task,
+            ResumeAction::Return(return_value),
+            sr.session,
+            sr.result_sender,
+            &self.task_control_sender,
+            self.database.as_ref(),
+            self.builtin_registry.clone(),
+            self.config.clone(),
+        ) {
+            error!(?task_id, ?e, "Error resuming immediate wake task");
         }
     }
 
@@ -1536,7 +1518,7 @@ impl Scheduler {
             return;
         };
 
-        if let Err(e) = self.task_q.resume_task_thread(
+        if let Err(e) = self.task_q.wake_task_thread(
             sr.task,
             resume_action,
             sr.session,
@@ -1554,12 +1536,7 @@ impl Scheduler {
         // Check if a checkpoint is already in progress
         if self
             .checkpoint_in_progress
-            .compare_exchange(
-                false,
-                true,
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            )
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
             warn!("Checkpoint already in progress, skipping duplicate request");
@@ -1567,16 +1544,14 @@ impl Scheduler {
         }
 
         let Some(textdump_path) = self.config.import_export.output_path.clone() else {
-            self.checkpoint_in_progress
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.checkpoint_in_progress.store(false, Ordering::SeqCst);
             error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
 
         // Verify the directory exists / create it
         if let Err(e) = std::fs::create_dir_all(&textdump_path) {
-            self.checkpoint_in_progress
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.checkpoint_in_progress.store(false, Ordering::SeqCst);
             error!(?e, "Could not create textdump directory");
             return Err(SchedulerError::CouldNotStartTask);
         }
@@ -1610,7 +1585,7 @@ impl Scheduler {
                     Ok(loader_client) => loader_client,
                     Err(e) => {
                         error!(?e, "Could not create snapshot for checkpoint");
-                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        checkpoint_flag.store(false, Ordering::SeqCst);
                         return Ok(());
                     }
                 };
@@ -1621,14 +1596,14 @@ impl Scheduler {
                         Ok(objects) => objects,
                         Err(e) => {
                             error!(?e, "Failed to collect objects for dump");
-                            checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                            checkpoint_flag.store(false, Ordering::SeqCst);
                             return Ok(());
                         }
                     };
                     info!("Dumping objects to {textdump_path:?}");
                     if let Err(e) = dump_object_definitions(&objects, &textdump_path) {
                         error!(?e, "Failed to dump objects");
-                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        checkpoint_flag.store(false, Ordering::SeqCst);
                         return Ok(());
                     }
                     // Now that the dump has been written, strip the in-progress suffix.
@@ -1640,7 +1615,7 @@ impl Scheduler {
                 } else {
                     let Ok(mut output) = File::create(&textdump_path) else {
                         error!("Could not open textdump file for writing");
-                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        checkpoint_flag.store(false, Ordering::SeqCst);
                         return Ok(());
                     };
 
@@ -1649,7 +1624,7 @@ impl Scheduler {
                     let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
                     if let Err(e) = writer.write_textdump(&textdump) {
                         error!(?e, "Could not write textdump");
-                        checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        checkpoint_flag.store(false, Ordering::SeqCst);
                         return Ok(());
                     }
 
@@ -1662,13 +1637,12 @@ impl Scheduler {
                 }
 
                 // Clear the checkpoint flag when operation completes successfully
-                checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                checkpoint_flag.store(false, Ordering::SeqCst);
                 Ok(())
             }));
 
         if result.is_err() {
-            self.checkpoint_in_progress
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.checkpoint_in_progress.store(false, Ordering::SeqCst);
             return Err(SchedulerError::CouldNotStartTask);
         }
 
@@ -1683,12 +1657,7 @@ impl Scheduler {
         // Check if a checkpoint is already in progress
         if self
             .checkpoint_in_progress
-            .compare_exchange(
-                false,
-                true,
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            )
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
             warn!("Checkpoint already in progress, skipping duplicate request");
@@ -1696,16 +1665,14 @@ impl Scheduler {
         }
 
         let Some(textdump_path) = self.config.import_export.output_path.clone() else {
-            self.checkpoint_in_progress
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.checkpoint_in_progress.store(false, Ordering::SeqCst);
             error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
 
         // Verify the directory exists / create it
         if let Err(e) = std::fs::create_dir_all(&textdump_path) {
-            self.checkpoint_in_progress
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.checkpoint_in_progress.store(false, Ordering::SeqCst);
             error!(?e, "Could not create textdump directory");
             return Err(SchedulerError::CouldNotStartTask);
         }
@@ -1794,7 +1761,7 @@ impl Scheduler {
                 })();
 
                 // Clear the checkpoint flag regardless of the result
-                checkpoint_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                checkpoint_flag.store(false, Ordering::SeqCst);
 
                 // Send the result back to the waiting thread
                 if completion_sender.send(result).is_err() {
@@ -1804,8 +1771,7 @@ impl Scheduler {
             }));
 
         if result.is_err() {
-            self.checkpoint_in_progress
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.checkpoint_in_progress.store(false, Ordering::SeqCst);
             return Err(SchedulerError::CouldNotStartTask);
         }
 
@@ -1838,18 +1804,14 @@ impl Scheduler {
         };
         let task_id = self.next_task_id;
         self.next_task_id += 1;
-        match self.task_q.start_task_thread(
+        match self.task_q.submit_new_task(
             task_id,
-            task_start,
             &player,
-            forked_session,
-            delay,
             &progr,
+            task_start,
+            delay,
+            forked_session,
             &self.server_options,
-            &self.task_control_sender,
-            self.database.as_ref(),
-            self.builtin_registry.clone(),
-            self.config.clone(),
             self.gc_collection_in_progress || self.gc_force_collect,
         ) {
             Ok(th) => th,
@@ -2126,146 +2088,48 @@ impl Scheduler {
 
 impl TaskQ {
     #[allow(clippy::too_many_arguments)]
-    fn start_task_thread(
+    fn submit_new_task(
         &mut self,
         task_id: TaskId,
-        task_start: TaskStart,
         player: &Obj,
-        session: Arc<dyn Session>,
-        delay_start: Option<Duration>,
         perms: &Obj,
+        task_start: TaskStart,
+        delay_start: Option<Duration>,
+        session: Arc<dyn Session>,
         server_options: &ServerOptions,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
-        database: &dyn Database,
-        builtin_registry: BuiltinRegistry,
-        config: Arc<Config>,
         gc_in_progress: bool,
     ) -> Result<TaskHandle, SchedulerError> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.start_task);
-        let is_background = task_start.is_background();
-
         let (sender, receiver) = flume::bounded(1);
 
-        let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
-
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let mut task = Task::new(
+        let task = Task::new(
             task_id,
             *player,
-            task_start.clone(),
             *perms,
+            task_start.clone(),
             server_options,
             kill_switch.clone(),
         );
 
-        // If this task is delayed, stick it into suspension state immediately.
-        if let Some(delay) = delay_start {
-            // However we'll need the task to be in a resumable state, which means executing
-            //  setup_task_start in a transaction.
-            let world_state = match database.new_world_state() {
-                Ok(ws) => ws,
-                Err(e) => {
-                    error!(error = ?e, "Could not start transaction for delayed task");
-                    return Err(SchedulerError::CouldNotStartTask);
-                }
-            };
-
-            // Set up transaction context for task setup
-            let _tx_guard = TaskGuard::new(
-                world_state,
-                task_scheduler_client.clone(),
-                task_id,
-                *player,
-                session.clone(),
-            );
-            if !task.setup_task_start(control_sender) {
-                error!(task_id, "Could not setup task start");
-                return Err(SchedulerError::CouldNotStartTask);
-            }
-            task.retry_state = task.vm_host.snapshot_state();
-
-            match crate::task_context::commit_current_transaction() {
-                Ok(CommitResult::Success { .. }) => {}
-                // TODO: perform a retry here in a modest loop.
-                Ok(CommitResult::ConflictRetry) => {
-                    error!(task_id, "Conflict during task start");
-                    return Err(SchedulerError::CouldNotStartTask);
-                }
-                Err(e) => {
-                    error!(task_id, error = ?e, "Error committing task start");
-                    return Err(SchedulerError::CouldNotStartTask);
-                }
-            }
-            let wake_condition = WakeCondition::Time(Instant::now() + delay);
-            self.suspended
-                .add_task(wake_condition, task, session, Some(sender));
-            return Ok(TaskHandle(task_id, receiver));
-        }
-
-        // If GC is in progress, suspend this task instead of starting a thread
-        if gc_in_progress {
-            self.suspended
-                .add_task(WakeCondition::GCComplete, task, session, Some(sender));
-            return Ok(TaskHandle(task_id, receiver));
-        }
-
-        // Otherwise, we create a task control record and fire up a thread.
-        let task_control = RunningTask {
-            player: *player,
-            kill_switch,
-            task_start,
-            session: session.clone(),
-            result_sender: (!is_background).then_some(sender),
+        let wake_condition = if let Some(delay) = delay_start {
+            WakeCondition::Time(Instant::now() + delay)
+        } else if gc_in_progress {
+            WakeCondition::GCComplete
+        } else {
+            // No delay, wake immediately
+            WakeCondition::Immediate(None)
         };
 
-        // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
-        self.active.insert(task_id, task_control);
-
-        let control_sender = control_sender.clone();
-
-        let world_state = match database.new_world_state() {
-            Ok(ws) => ws,
-            Err(e) => {
-                error!(error = ?e, "Could not start transaction for task due to DB error");
-                return Err(SchedulerError::CouldNotStartTask);
-            }
-        };
-        self.thread_pool.spawn(move || {
-            // Set up transaction context for this thread
-            let _tx_guard = TaskGuard::new(
-                world_state,
-                task_scheduler_client.clone(),
-                task.task_id,
-                task.player,
-                session.clone(),
-            );
-
-            // Start the db transaction, which will initially be used to resolve the verb before the task
-            // starts executing.
-            let setup_success = task.setup_task_start(&control_sender);
-
-            if !setup_success {
-                // Log level should be low here as this happens on every command if `do_command`
-                // is not found.
-                return;
-            }
-            task.retry_state = task.vm_host.snapshot_state();
-
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                builtin_registry,
-                config,
-            );
-        });
+        self.suspended
+            .add_task(wake_condition, task, session, Some(sender));
 
         Ok(TaskHandle(task_id, receiver))
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn resume_task_thread(
+    fn wake_task_thread(
         &mut self,
         mut task: Box<Task>,
         resume_action: ResumeAction,
@@ -2280,10 +2144,8 @@ impl TaskQ {
         let _t = PerfTimerGuard::new(&perfc.resume_task);
 
         // Take a task out of a suspended state and start running it again.
-        // Means:
-        //   Start a new transaction
-        //   Create a new control record
-        //   Push resume-value into the task
+        // For Created tasks, we need to call setup_task_start first.
+        // For Running tasks, we just resume execution.
 
         // Start its new transaction...
         let world_state = match database.new_world_state() {
@@ -2305,23 +2167,17 @@ impl TaskQ {
             kill_switch,
             session: session.clone(),
             result_sender,
-            task_start: task.task_start.clone(),
+            task_start: task.state.task_start().clone(),
         };
 
         self.active.insert(task_id, task_control);
 
-        // Handle the resume action: either return a value or raise an error
-        match resume_action {
-            ResumeAction::Return(value) => {
-                task.vm_host.resume_execution(value);
-            }
-            ResumeAction::Raise(error) => {
-                task.vm_host.resume_with_error(error);
-            }
-        }
-
         let control_sender = control_sender.clone();
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
+
+        // Check if this is a brand new task or a resuming task
+        let is_created = matches!(task.state, crate::tasks::task::TaskState::Created(_));
+
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
             let _tx_guard = TaskGuard::new(
@@ -2331,6 +2187,32 @@ impl TaskQ {
                 player,
                 session.clone(),
             );
+
+            if is_created {
+                // Brand new task - call setup_task_start and transition to Running
+                let setup_success = task.setup_task_start(&control_sender);
+                if !setup_success {
+                    // Setup failed (e.g., verb not found)
+                    return;
+                }
+
+                // Transition to Running state
+                if let crate::tasks::task::TaskState::Created(start) = &task.state {
+                    task.state = crate::tasks::task::TaskState::Running(start.clone());
+                }
+
+                task.retry_state = task.vm_host.snapshot_state();
+            } else {
+                // Resuming an existing task - handle the resume action
+                match resume_action {
+                    ResumeAction::Return(value) => {
+                        task.vm_host.resume_execution(value);
+                    }
+                    ResumeAction::Raise(error) => {
+                        task.vm_host.resume_with_error(error);
+                    }
+                }
+            }
 
             Task::run_task_loop(
                 task,
@@ -2415,7 +2297,7 @@ impl TaskQ {
             kill_switch,
             session: new_session.clone(),
             result_sender: old_tc.result_sender,
-            task_start: task.task_start.clone(),
+            task_start: task.state.task_start().clone(),
         };
 
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
@@ -2556,7 +2438,7 @@ impl TaskQ {
         let sr = self.suspended.remove_task(queued_task_id).unwrap();
 
         if self
-            .resume_task_thread(
+            .wake_task_thread(
                 sr.task,
                 ResumeAction::Return(return_value),
                 sr.session,

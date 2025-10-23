@@ -54,7 +54,7 @@ table WakeInput {
 }
 
 table WakeImmediate {
-    return_value: MoorVar.Var (required);
+    return_value: MoorVar.Var;
 }
 
 table WakeTask {
@@ -69,6 +69,27 @@ table WakeGCComplete {}
 
 table WakeCondition {
     condition: WakeConditionUnion (required);
+}
+
+// ============================================================================
+// TaskState - Lifecycle state of the task
+// ============================================================================
+
+union TaskStateUnion {
+    TaskCreated,
+    TaskRunning
+}
+
+table TaskCreated {
+    start: TaskStartUnion (required);
+}
+
+table TaskRunning {
+    start: TaskStartUnion (required);
+}
+
+table TaskState {
+    state: TaskStateUnion (required);
 }
 
 // ============================================================================
@@ -386,7 +407,7 @@ table Task {
 
     task_id: uint64;
     player: MoorCommon.Obj (required);
-    task_start: TaskStart (required);
+    state: TaskState (required);
     vm_host: VmHost (required);
     perms: MoorCommon.Obj (required);
     retries: uint8;

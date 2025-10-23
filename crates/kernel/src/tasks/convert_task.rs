@@ -17,6 +17,7 @@ use crate::{
     tasks::{
         TaskStart as KernelTaskStart,
         task::Task as KernelTask,
+        task::TaskState as KernelTaskState,
         task_q::{SuspendedTask as KernelSuspendedTask, WakeCondition as KernelWakeCondition},
     },
     vm::{
@@ -184,9 +185,13 @@ pub(crate) fn wake_condition_to_flatbuffer(
             }))
         }
         KernelWakeCondition::Immediate(return_value) => {
-            let return_value_fb = var_to_db_flatbuffer(return_value)?;
+            let return_value_fb = if let Some(val) = return_value {
+                Some(Box::new(var_to_db_flatbuffer(val)?))
+            } else {
+                None
+            };
             WakeImmediate(Box::new(fb::WakeImmediate {
-                return_value: Box::new(return_value_fb),
+                return_value: return_value_fb,
             }))
         }
         KernelWakeCondition::Task(task_id) => WakeTask(Box::new(fb::WakeTask {
@@ -246,7 +251,10 @@ pub(crate) fn wake_condition_from_flatbuffer(
             Ok(KernelWakeCondition::Input(uuid))
         }
         WakeConditionUnion::WakeImmediate(wi) => {
-            let return_value = var_from_db_flatbuffer(&wi.return_value)?;
+            let return_value = match &wi.return_value {
+                Some(rv) => Some(var_from_db_flatbuffer(rv)?),
+                None => None,
+            };
             Ok(KernelWakeCondition::Immediate(return_value))
         }
         WakeConditionUnion::WakeTask(wt) => Ok(KernelWakeCondition::Task(wt.task_id as usize)),
@@ -1135,6 +1143,44 @@ pub(crate) fn vm_host_from_flatbuffer(
 }
 
 // ============================================================================
+// TaskState Conversion
+// ============================================================================
+
+fn task_state_to_flatbuffer(state: &KernelTaskState) -> Result<fb::TaskState, TaskConversionError> {
+    let state_union = match state {
+        KernelTaskState::Created(start) => {
+            let fb_start = task_start_to_flatbuffer(start)?;
+            fb::TaskStateUnion::TaskCreated(Box::new(fb::TaskCreated {
+                start: fb_start.start,
+            }))
+        }
+        KernelTaskState::Running(start) => {
+            let fb_start = task_start_to_flatbuffer(start)?;
+            fb::TaskStateUnion::TaskRunning(Box::new(fb::TaskRunning {
+                start: fb_start.start,
+            }))
+        }
+    };
+
+    Ok(fb::TaskState { state: state_union })
+}
+
+fn task_state_from_flatbuffer(fb: &fb::TaskState) -> Result<KernelTaskState, TaskConversionError> {
+    use fb::TaskStateUnion;
+
+    match &fb.state {
+        TaskStateUnion::TaskCreated(created) => {
+            let task_start = task_start_from_flatbuffer_union(&created.start)?;
+            Ok(KernelTaskState::Created(task_start))
+        }
+        TaskStateUnion::TaskRunning(running) => {
+            let task_start = task_start_from_flatbuffer_union(&running.start)?;
+            Ok(KernelTaskState::Running(task_start))
+        }
+    }
+}
+
+// ============================================================================
 // TaskStart Conversion
 // ============================================================================
 
@@ -1218,37 +1264,44 @@ pub(crate) fn task_start_to_flatbuffer(
     Ok(fb::TaskStart { start: start_union })
 }
 
-pub(crate) fn task_start_from_flatbuffer(
-    fb: &fb::TaskStart,
+pub(crate) fn task_start_from_flatbuffer_union(
+    fb: &fb::TaskStartUnion,
 ) -> Result<KernelTaskStart, TaskConversionError> {
     use fb::TaskStartUnion;
 
-    match &fb.start {
-        TaskStartUnion::StartCommandVerb(scv) => Ok(KernelTaskStart::StartCommandVerb {
-            handler_object: convert_schema::obj_from_flatbuffer_struct(&scv.handler_object)
-                .map_err(|e| {
-                    TaskConversionError::DecodingError(format!(
-                        "Error decoding handler_object: {e}"
-                    ))
+    match fb {
+        TaskStartUnion::StartCommandVerb(scv) => {
+            let scv = scv.as_ref();
+            Ok(KernelTaskStart::StartCommandVerb {
+                handler_object: convert_schema::obj_from_flatbuffer_struct(&scv.handler_object)
+                    .map_err(|e| {
+                        TaskConversionError::DecodingError(format!(
+                            "Error decoding handler_object: {e}"
+                        ))
+                    })?,
+                player: convert_schema::obj_from_flatbuffer_struct(&scv.player).map_err(|e| {
+                    TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
                 })?,
-            player: convert_schema::obj_from_flatbuffer_struct(&scv.player).map_err(|e| {
-                TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
-            })?,
-            command: scv.command.clone(),
-        }),
-        TaskStartUnion::StartDoCommand(sdc) => Ok(KernelTaskStart::StartDoCommand {
-            handler_object: convert_schema::obj_from_flatbuffer_struct(&sdc.handler_object)
-                .map_err(|e| {
-                    TaskConversionError::DecodingError(format!(
-                        "Error decoding handler_object: {e}"
-                    ))
+                command: scv.command.clone(),
+            })
+        }
+        TaskStartUnion::StartDoCommand(sdc) => {
+            let sdc = sdc.as_ref();
+            Ok(KernelTaskStart::StartDoCommand {
+                handler_object: convert_schema::obj_from_flatbuffer_struct(&sdc.handler_object)
+                    .map_err(|e| {
+                        TaskConversionError::DecodingError(format!(
+                            "Error decoding handler_object: {e}"
+                        ))
+                    })?,
+                player: convert_schema::obj_from_flatbuffer_struct(&sdc.player).map_err(|e| {
+                    TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
                 })?,
-            player: convert_schema::obj_from_flatbuffer_struct(&sdc.player).map_err(|e| {
-                TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
-            })?,
-            command: sdc.command.clone(),
-        }),
+                command: sdc.command.clone(),
+            })
+        }
         TaskStartUnion::StartVerb(sv) => {
+            let sv = sv.as_ref();
             let vloc = convert_schema::var_from_db_flatbuffer(&sv.vloc)
                 .map_err(|e| TaskConversionError::VarError(format!("Error decoding vloc: {e}")))?;
             let args: Result<Vec<_>, _> = sv
@@ -1273,6 +1326,7 @@ pub(crate) fn task_start_from_flatbuffer(
             })
         }
         TaskStartUnion::StartFork(sf) => {
+            let sf = sf.as_ref();
             let fork_request = fork_from_flatbuffer(&sf.fork_request)?;
             let suspended = sf.suspended_nanos == u64::MAX;
 
@@ -1282,6 +1336,7 @@ pub(crate) fn task_start_from_flatbuffer(
             })
         }
         TaskStartUnion::StartEval(se) => {
+            let se = se.as_ref();
             let program = decode_stored_program_struct(&se.program).map_err(|e| {
                 TaskConversionError::ProgramError(format!("Error decoding program: {e}"))
             })?;
@@ -1404,7 +1459,7 @@ pub(crate) fn pending_timeout_from_flatbuffer(
 // ============================================================================
 
 pub(crate) fn task_to_flatbuffer(task: &KernelTask) -> Result<fb::Task, TaskConversionError> {
-    let fb_task_start = task_start_to_flatbuffer(&task.task_start)?;
+    let fb_task_state = task_state_to_flatbuffer(&task.state)?;
     let fb_vm_host = vm_host_to_flatbuffer(&task.vm_host)?;
     let fb_retry_state = vm_exec_state_to_flatbuffer(&task.retry_state)?;
 
@@ -1424,7 +1479,7 @@ pub(crate) fn task_to_flatbuffer(task: &KernelTask) -> Result<fb::Task, TaskConv
         version: CURRENT_TASK_VERSION,
         task_id: task.task_id as u64,
         player: Box::new(convert_schema::obj_to_flatbuffer_struct(&task.player)),
-        task_start: Box::new(fb_task_start),
+        state: Box::new(fb_task_state),
         vm_host: Box::new(fb_vm_host),
         perms: Box::new(convert_schema::obj_to_flatbuffer_struct(&task.perms)),
         retries: task.retries,
@@ -1445,7 +1500,7 @@ pub(crate) fn task_from_flatbuffer(fb: &fb::Task) -> Result<KernelTask, TaskConv
         )));
     }
 
-    let task_start = task_start_from_flatbuffer(&fb.task_start)?;
+    let task_state = task_state_from_flatbuffer(&fb.state)?;
     let vm_host = vm_host_from_flatbuffer(&fb.vm_host)?;
     let mut retry_state = vm_exec_state_from_flatbuffer(&fb.retry_state)?;
     retry_state.task_id = fb.task_id as usize;
@@ -1467,7 +1522,7 @@ pub(crate) fn task_from_flatbuffer(fb: &fb::Task) -> Result<KernelTask, TaskConv
         player: convert_schema::obj_from_flatbuffer_struct(&fb.player).map_err(|e| {
             TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
         })?,
-        task_start,
+        state: task_state,
         vm_host,
         perms: convert_schema::obj_from_flatbuffer_struct(&fb.perms).map_err(|e| {
             TaskConversionError::DecodingError(format!("Error decoding perms: {e}"))

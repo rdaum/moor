@@ -82,12 +82,34 @@ lazy_static! {
     static ref DO_COMMAND_SYM: Symbol = Symbol::mk("do_command");
 }
 
+/// Tracks the lifecycle state of a task
+#[derive(Debug, Clone)]
+pub enum TaskState {
+    /// Brand new task that hasn't executed yet, needs setup_task_start called
+    Created(TaskStart),
+    /// Task has been initialized and can be resumed
+    Running(TaskStart),
+}
+
+impl TaskState {
+    pub fn task_start(&self) -> &TaskStart {
+        match self {
+            TaskState::Created(start) => start,
+            TaskState::Running(start) => start,
+        }
+    }
+
+    pub fn is_background(&self) -> bool {
+        self.task_start().is_background()
+    }
+}
+
 #[derive(Debug)]
 pub struct Task {
     /// My unique task id.
     pub task_id: TaskId,
-    /// What I was asked to do.
-    pub(crate) task_start: TaskStart,
+    /// What I was asked to do and current lifecycle state.
+    pub(crate) state: TaskState,
     /// The player on behalf of whom this task is running. Who owns this task.
     pub(crate) player: Obj,
     /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
@@ -117,12 +139,13 @@ impl Task {
     pub fn new(
         task_id: TaskId,
         player: Obj,
-        task_start: TaskStart,
         perms: Obj,
+        task_start: TaskStart,
         server_options: &ServerOptions,
         kill_switch: Arc<AtomicBool>,
     ) -> Box<Self> {
         let is_background = task_start.is_background();
+        let state = TaskState::Created(task_start.clone());
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
         // the DB or from default constants.
@@ -170,7 +193,7 @@ impl Task {
         Box::new(Self {
             task_id,
             player,
-            task_start,
+            state,
             vm_host,
             perms,
             kill_switch,
@@ -350,16 +373,16 @@ impl Task {
                     handler_object,
                     player,
                     command,
-                } = &self.task_start
+                } = self.state.task_start()
                 {
                     let (player, command) = (*player, command.clone());
                     if !result.is_true() {
                         // Intercept and rewrite us back to StartVerbCommand and do old school parse.
-                        self.task_start = TaskStart::StartCommandVerb {
+                        self.state = TaskState::Running(TaskStart::StartCommandVerb {
                             handler_object: *handler_object,
                             player,
                             command: command.clone(),
-                        };
+                        });
 
                         if let Err(e) = with_current_transaction_mut(|world_state| {
                             self.setup_start_parse_command(&player, &command, world_state)
@@ -464,7 +487,7 @@ impl Task {
                         self.task_id,
                         self.player,
                         self.retries,
-                        self.task_start.diagnostic(),
+                        self.state.task_start().diagnostic(),
                     );
                     session.rollback().unwrap();
 
@@ -698,7 +721,7 @@ impl Task {
     ) -> bool {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.setup_task);
-        match &self.task_start {
+        match self.state.task_start() {
             // We've been asked to start a command.
             // We need to set up the VM and then execute it.
             TaskStart::StartCommandVerb {
@@ -843,11 +866,11 @@ impl Task {
                     command.to_string(),
                     program,
                 );
-                self.task_start = TaskStart::StartDoCommand {
+                self.state = TaskState::Running(TaskStart::StartDoCommand {
                     handler_object: *handler_object,
                     player: *player,
                     command: command.to_string(),
-                };
+                });
             }
             Err(e) => {
                 panic!("Unable to start task due to error: {e:?}");
@@ -1048,8 +1071,8 @@ mod tests {
         let task = Task::new(
             1,
             SYSTEM_OBJECT,
-            task_start.clone(),
             SYSTEM_OBJECT,
+            task_start.clone(),
             &server_options,
             kill_switch.clone(),
         );
@@ -1363,9 +1386,9 @@ mod tests {
         tx.commit().unwrap();
 
         // Pull a copy of the program out for comparison later.
-        let task_start = task.task_start.clone();
+        let task_start = task.state.task_start().clone();
         let TaskStart::StartEval { program, .. } = &task_start else {
-            panic!("Expected StartEval, got {:?}", task.task_start);
+            panic!("Expected StartEval, got {:?}", task.state.task_start());
         };
 
         // This one needs to run in a thread because it's going to block waiting on a reply from
@@ -1401,7 +1424,7 @@ mod tests {
                 fork_request.activation.frame
             );
         };
-        assert_eq!(&moo_frame.program, program);
+        assert_eq!(moo_frame.program, *program);
 
         // Reply back with the new task id.
         reply_channel.send(2).unwrap();

@@ -194,8 +194,9 @@ pub enum WakeCondition {
     Input(Uuid),
     /// This task will wake up when the given task is completed.
     Task(TaskId),
-    /// Wake immediately with the given return value. This is used for tasks that performed a commit().
-    Immediate(Var),
+    /// Wake immediately with optional return value. Some(val) for tasks that performed a commit(),
+    /// None for brand new tasks that haven't executed yet.
+    Immediate(Option<Var>),
     /// Wake when a worker responds to this request id
     Worker(Uuid),
     /// Wake when garbage collection completes
@@ -626,8 +627,7 @@ impl SuspensionQ {
             .tasks
             .iter()
             .filter_map(|(task_id, sr)| {
-                (!sr.task.task_start.is_background() && sr.task.player.eq(player))
-                    .then_some(*task_id)
+                (!sr.task.state.is_background() && sr.task.player.eq(player)).then_some(*task_id)
             })
             .collect::<Vec<_>>();
         for task_id in to_remove {

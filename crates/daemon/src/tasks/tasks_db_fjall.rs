@@ -187,11 +187,11 @@ mod tests {
         let task = Task::new(
             task_id,
             SYSTEM_OBJECT,
+            SYSTEM_OBJECT,
             TaskStart::StartEval {
                 player: SYSTEM_OBJECT,
                 program: Default::default(),
             },
-            SYSTEM_OBJECT,
             &so,
             Arc::new(AtomicBool::new(false)),
         );
@@ -243,11 +243,11 @@ mod tests {
             let task = Task::new(
                 task_id,
                 SYSTEM_OBJECT,
+                SYSTEM_OBJECT,
                 TaskStart::StartEval {
                     player: SYSTEM_OBJECT,
                     program: Default::default(),
                 },
-                SYSTEM_OBJECT,
                 &so,
                 Arc::new(AtomicBool::new(false)),
             );
@@ -303,11 +303,11 @@ mod tests {
             let task = Task::new(
                 task_id,
                 SYSTEM_OBJECT,
+                SYSTEM_OBJECT,
                 TaskStart::StartEval {
                     player: SYSTEM_OBJECT,
                     program: Default::default(),
                 },
-                SYSTEM_OBJECT,
                 &so,
                 Arc::new(AtomicBool::new(false)),
             );
@@ -396,18 +396,18 @@ mod tests {
                 3 => WakeCondition::Time(now.checked_sub(Duration::from_secs(1)).unwrap_or(now)),
                 4 => WakeCondition::Never,
                 5 => WakeCondition::Input(input_uuid),
-                6 => WakeCondition::Immediate(v_int(0)),
+                6 => WakeCondition::Immediate(Some(v_int(0))),
                 _ => unreachable!(),
             };
 
             let task = Task::new(
                 *i,
                 SYSTEM_OBJECT,
+                SYSTEM_OBJECT,
                 TaskStart::StartEval {
                     player: SYSTEM_OBJECT,
                     program: Default::default(),
                 },
-                SYSTEM_OBJECT,
                 &so,
                 Arc::new(AtomicBool::new(false)),
             );
@@ -499,11 +499,11 @@ mod tests {
             let task = Task::new(
                 i,
                 SYSTEM_OBJECT,
+                SYSTEM_OBJECT,
                 TaskStart::StartEval {
                     player: SYSTEM_OBJECT,
                     program: Default::default(),
                 },
-                SYSTEM_OBJECT,
                 &so,
                 Arc::new(AtomicBool::new(false)),
             );
@@ -559,11 +559,11 @@ mod tests {
         let task = Task::new(
             999,
             SYSTEM_OBJECT,
+            SYSTEM_OBJECT,
             TaskStart::StartEval {
                 player: SYSTEM_OBJECT,
                 program: Default::default(),
             },
-            SYSTEM_OBJECT,
             &so,
             Arc::new(AtomicBool::new(false)),
         );
