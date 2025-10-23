@@ -29,7 +29,7 @@ use rpc_common::{
     mk_enrollment_response_success,
 };
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{error, info, warn};
@@ -280,4 +280,52 @@ pub fn ensure_enrollment_token(token_path: &std::path::Path) -> Result<String> {
         );
         Ok(token)
     }
+}
+
+/// Rotate the enrollment token by generating and saving a new shared secret.
+pub fn rotate_enrollment_token(token_path: &Path) -> Result<String> {
+    let new_token = Uuid::new_v4().to_string();
+
+    let old_token = if token_path.exists() {
+        Some(
+            fs::read_to_string(token_path)
+                .with_context(|| format!("Failed to read existing token from {:?}", token_path))?
+                .trim()
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    if let Some(parent) = token_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory {:?}", parent))?;
+    }
+
+    fs::write(token_path, &new_token)
+        .with_context(|| format!("Failed to write new enrollment token to {:?}", token_path))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(token_path)?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(token_path, perms)?;
+    }
+
+    if let Some(old) = old_token {
+        info!("Old enrollment token: {}", old);
+    }
+    info!("New enrollment token: {}", new_token);
+    info!("Token saved to: {:?}", token_path);
+    info!("");
+    info!(
+        "Hosts must set MOOR_ENROLLMENT_TOKEN={} or --enrollment-token-file={:?}",
+        new_token, token_path
+    );
+    info!("");
+    info!("Note: Hosts already enrolled with CURVE keys will continue to work.");
+    info!("      Only new hosts need the new token to enroll.");
+
+    Ok(new_token)
 }

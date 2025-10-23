@@ -15,6 +15,7 @@
 
 use flume::{Receiver, Sender};
 use std::{
+    path::PathBuf,
     sync::{
         Arc, RwLock,
         atomic::{AtomicBool, Ordering},
@@ -65,6 +66,7 @@ impl RpcServer {
         event_log: Arc<dyn EventLogOps>,
         transport: Arc<dyn Transport>,
         config: Arc<Config>,
+        enrollment_token_path: Option<PathBuf>,
     ) -> (Self, Arc<TaskMonitor>, SystemControlHandle) {
         info!("Creating new RPC server...");
 
@@ -94,7 +96,11 @@ impl RpcServer {
         ));
 
         // Create the system control handle for the scheduler
-        let system_control = SystemControlHandle::new(kill_switch.clone(), message_handler.clone());
+        let system_control = SystemControlHandle::new(
+            kill_switch.clone(),
+            message_handler.clone(),
+            enrollment_token_path,
+        );
 
         let server = Self {
             kill_switch,

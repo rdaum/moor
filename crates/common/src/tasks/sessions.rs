@@ -165,6 +165,9 @@ pub trait SystemControl: Send + Sync {
 
     /// Switch the player for the given connection object to the new player.
     fn switch_player(&self, connection_obj: Obj, new_player: Obj) -> Result<(), Error>;
+
+    /// Rotate the enrollment token used for host enrollment, returning the new token string.
+    fn rotate_enrollment_token(&self) -> Result<String, Error>;
 }
 
 /// A factory for creating background sessions, usually on task resumption on server restart.
@@ -303,6 +306,10 @@ impl SystemControl for NoopSystemControl {
 
     fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {
         Ok(())
+    }
+
+    fn rotate_enrollment_token(&self) -> Result<String, Error> {
+        Ok(String::new())
     }
 }
 /// A 'mock' client connection which collects output in a vector of strings that tests can use to
@@ -476,5 +483,11 @@ impl SystemControl for MockClientSession {
         let mut system = self.system.write().unwrap();
         system.push(String::from("switch_player"));
         Ok(())
+    }
+
+    fn rotate_enrollment_token(&self) -> Result<String, Error> {
+        let mut system = self.system.write().unwrap();
+        system.push(String::from("rotate_enrollment_token"));
+        Ok("mock-token".to_string())
     }
 }

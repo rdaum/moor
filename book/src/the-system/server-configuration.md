@@ -100,6 +100,8 @@ moor-daemon --rotate-enrollment-token
 
 The enrollment token is a shared secret used during the CURVE enrollment process to authorize hosts/workers to register their public keys with the daemon.
 
+Once the server is running, wizard administrators can rotate the token in-world via the `rotate_enrollment_token()` builtin. The call returns the freshly generated token string and writes it back to the enrollment token file, making it easy to distribute new secrets without shell access.
+
 ## How to set server options
 
 In general, all options can be set either by command line arguments or by configuration file. The same option cannot be

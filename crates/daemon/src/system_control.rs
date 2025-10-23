@@ -13,30 +13,39 @@
 
 //! SystemControl handle for the scheduler - minimal interface for system operations
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use moor_common::tasks::SystemControl;
-use moor_var::Obj;
+use moor_var::{E_INVARG, E_QUOTA, Obj};
 use rpc_common::HostType;
 use tracing::warn;
 
-use crate::rpc::MessageHandler;
+use crate::{enrollment, rpc::MessageHandler};
 
 /// Handle for system control operations - just what the scheduler needs
 #[derive(Clone)]
 pub struct SystemControlHandle {
     kill_switch: Arc<AtomicBool>,
     message_handler: Arc<dyn MessageHandler>,
+    enrollment_token_path: Option<PathBuf>,
 }
 
 impl SystemControlHandle {
-    pub fn new(kill_switch: Arc<AtomicBool>, message_handler: Arc<dyn MessageHandler>) -> Self {
+    pub fn new(
+        kill_switch: Arc<AtomicBool>,
+        message_handler: Arc<dyn MessageHandler>,
+        enrollment_token_path: Option<PathBuf>,
+    ) -> Self {
         Self {
             kill_switch,
             message_handler,
+            enrollment_token_path,
         }
     }
 }
@@ -94,5 +103,14 @@ impl SystemControl for SystemControlHandle {
         self.message_handler
             .switch_player(connection_obj, new_player)
             .map_err(|e| moor_var::E_QUOTA.with_msg(|| e.to_string()))
+    }
+
+    fn rotate_enrollment_token(&self) -> Result<String, moor_var::Error> {
+        let path = self.enrollment_token_path.as_ref().ok_or_else(|| {
+            E_INVARG.msg("Enrollment token rotation is not configured for this deployment")
+        })?;
+
+        enrollment::rotate_enrollment_token(path.as_path())
+            .map_err(|e| E_QUOTA.with_msg(|| format!("Failed to rotate enrollment token: {e}")))
     }
 }

@@ -304,6 +304,20 @@ impl TaskSchedulerClient {
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
+    /// Request that the enrollment token be rotated, returning the new token.
+    pub fn rotate_enrollment_token(&self) -> Result<String, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::RotateEnrollmentToken { reply },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive rotate enrollment token reply -- scheduler shut down?")
+    }
+
     pub fn force_input(&self, who: Obj, line: String) -> Result<TaskId, Error> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
@@ -478,6 +492,10 @@ pub enum TaskControlMsg {
     RequestNewTransaction(oneshot::Sender<Result<Box<dyn WorldState>, SchedulerError>>),
     /// Request that the scheduler force a garbage collection cycle
     ForceGC,
+    /// Request that the scheduler rotate the enrollment token
+    RotateEnrollmentToken {
+        reply: oneshot::Sender<Result<String, Error>>,
+    },
 }
 
 impl TaskSchedulerClient {

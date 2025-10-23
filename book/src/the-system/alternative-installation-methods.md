@@ -77,7 +77,7 @@ source ~/.cargo/env
 When building from source, you'll need to manually set up:
 
 - **PASETO authentication keys**: The daemon auto-generates these keys with the `--generate-keypair` flag (creates `moor-signing-key.pem` and `moor-verifying-key.pem`)
-- **Enrollment token**: Generate for CURVE transport encryption if using TCP endpoints: `moor-daemon --rotate-enrollment-token`
+- **Enrollment token**: Generate for CURVE transport encryption if using TCP endpoints: `moor-daemon --rotate-enrollment-token` or rotate later from inside the MOO with the wizard-only `rotate_enrollment_token()` builtin
 - **Configuration files**: Create appropriate configuration for each component
 - **Core database**: Install and configure your chosen MOO core
 - **Service coordination**: Ensure all components can communicate properly

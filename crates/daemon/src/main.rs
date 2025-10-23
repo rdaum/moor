@@ -50,7 +50,6 @@ use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use rand::{Rng, rngs::OsRng};
 use rpc_common::load_keypair;
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 mod allowed_hosts;
 mod args;
@@ -160,53 +159,6 @@ fn perform_import(
         warn!("Loaded requested rollback, not committing results");
         // Just dropping the transaction (LoaderInterface) is sufficient here.
     }
-    Ok(())
-}
-
-/// Rotate the enrollment token
-fn rotate_enrollment_token(token_path: &PathBuf) -> Result<(), Report> {
-    use std::fs;
-
-    let new_token = Uuid::new_v4().to_string();
-
-    // Read old token if it exists
-    let old_token = if token_path.exists() {
-        Some(fs::read_to_string(token_path)?.trim().to_string())
-    } else {
-        None
-    };
-
-    // Create parent directory if needed
-    if let Some(parent) = token_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    // Write new token
-    fs::write(token_path, &new_token)?;
-
-    // Set restrictive permissions (Unix only)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(token_path)?.permissions();
-        perms.set_mode(0o600); // Read/write for owner only
-        fs::set_permissions(token_path, perms)?;
-    }
-
-    if let Some(old) = old_token {
-        info!("Old enrollment token: {}", old);
-    }
-    info!("New enrollment token: {}", new_token);
-    info!("Token saved to: {:?}", token_path);
-    info!("");
-    info!(
-        "Hosts must set MOOR_ENROLLMENT_TOKEN={} or --enrollment-token-file={:?}",
-        new_token, token_path
-    );
-    info!("");
-    info!("Note: Hosts already enrolled with CURVE keys will continue to work.");
-    info!("      Only new hosts need the new token to enroll.");
-
     Ok(())
 }
 
@@ -386,6 +338,7 @@ fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
+    let enrollment_token_path = args.resolved_enrollment_token_path();
 
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
@@ -395,8 +348,7 @@ fn main() -> Result<(), Report> {
 
     // If rotate-enrollment-token flag is provided, rotate token and exit
     if args.rotate_enrollment_token {
-        let token_path = args.resolved_enrollment_token_path();
-        rotate_enrollment_token(&token_path)?;
+        enrollment::rotate_enrollment_token(&enrollment_token_path)?;
         return Ok(());
     }
 
@@ -442,8 +394,7 @@ fn main() -> Result<(), Report> {
     info!("Daemon CURVE keys are initialized");
 
     // Ensure enrollment token exists (or generate it)
-    let _enrollment_token =
-        enrollment::ensure_enrollment_token(&args.resolved_enrollment_token_path())?;
+    let _enrollment_token = enrollment::ensure_enrollment_token(&enrollment_token_path)?;
 
     // Initialize allowed hosts registry
     let allowed_hosts_registry =
@@ -627,6 +578,11 @@ fn main() -> Result<(), Report> {
         event_log.clone(),
         rpc_transport,
         config.clone(),
+        if use_curve {
+            Some(enrollment_token_path.clone())
+        } else {
+            None
+        },
     );
     let rpc_server = Arc::new(rpc_server);
 
@@ -670,7 +626,7 @@ fn main() -> Result<(), Report> {
             kill_switch.clone(),
             daemon_curve_keypair.public.clone(),
             allowed_hosts_registry.clone(),
-            args.resolved_enrollment_token_path(),
+            enrollment_token_path.clone(),
         );
         let enrollment_listen_addr = args.enrollment_listen.clone();
         std::thread::Builder::new()

@@ -1047,9 +1047,10 @@ impl Scheduler {
                 };
 
                 if !matches!(wake_condition, WakeCondition::Immediate(_))
-                    && let Some(sender) = tc.result_sender.as_ref() {
-                        let _ = sender.send((task_id, Ok(TaskNotification::Suspended)));
-                    }
+                    && let Some(sender) = tc.result_sender.as_ref()
+                {
+                    let _ = sender.send((task_id, Ok(TaskNotification::Suspended)));
+                }
 
                 task_q
                     .suspended
@@ -1275,6 +1276,15 @@ impl Scheduler {
                     .map_err(|_| SchedulerError::CouldNotStartTask);
                 if let Err(e) = reply.send(result) {
                     error!(?e, "Could not send new transaction reply to requester");
+                }
+            }
+            TaskControlMsg::RotateEnrollmentToken { reply } => {
+                let result = self.system_control.rotate_enrollment_token();
+                if let Err(e) = reply.send(result) {
+                    error!(
+                        ?e,
+                        "Could not send rotate enrollment token reply to requester"
+                    );
                 }
             }
             TaskControlMsg::ForceGC => {

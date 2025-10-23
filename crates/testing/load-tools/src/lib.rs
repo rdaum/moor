@@ -153,4 +153,8 @@ impl SystemControl for NoopSystemControl {
     fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {
         Ok(())
     }
+
+    fn rotate_enrollment_token(&self) -> Result<String, Error> {
+        Ok(String::new())
+    }
 }

@@ -284,6 +284,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             event_log.clone(),
             transport.clone(),
             config.clone(),
+            None,
         );
 
         // Get the message handler from the RpcServer for direct testing

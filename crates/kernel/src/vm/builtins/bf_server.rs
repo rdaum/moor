@@ -2092,6 +2092,27 @@ fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Rotates the enrollment token used for host enrollment and returns the new token.
+/// MOO: `str rotate_enrollment_token()`
+fn bf_rotate_enrollment_token(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(ErrValue(
+            E_ARGS.msg("rotate_enrollment_token() takes no arguments"),
+        ));
+    }
+
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    match current_task_scheduler_client().rotate_enrollment_token() {
+        Ok(token) => Ok(Ret(v_str(&token))),
+        Err(err) => Err(ErrValue(err)),
+    }
+}
+
 /// Helper function to convert cache statistics to a LambdaMOO-compatible list.
 fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
     // Return a LambdaMOO-compatible list: [hits, negative_hits, misses, generation, histogram]
@@ -2575,4 +2596,5 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("connection_options")] = Box::new(bf_connection_options);
     builtins[offset_for_builtin("connection_option")] = Box::new(bf_connection_option);
     builtins[offset_for_builtin("set_connection_option")] = Box::new(bf_set_connection_option);
+    builtins[offset_for_builtin("rotate_enrollment_token")] = Box::new(bf_rotate_enrollment_token);
 }
