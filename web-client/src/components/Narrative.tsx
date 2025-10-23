@@ -34,6 +34,7 @@ interface NarrativeProps {
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
     playerOid?: string | null;
+    onMessageAppended?: (message: NarrativeMessage) => void;
 }
 
 export interface NarrativeRef {
@@ -68,6 +69,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     isLoadingHistory = false,
     onLinkClick,
     playerOid,
+    onMessageAppended,
 }, ref) => {
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -118,7 +120,10 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         };
 
         setMessages(prev => [...prev, newMessage]);
-    }, []);
+        if (type !== "input_echo") {
+            onMessageAppended?.(newMessage);
+        }
+    }, [onMessageAppended]);
 
     // Handle sending messages
     const handleSendMessage = useCallback((message: string) => {

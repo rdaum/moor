@@ -21,7 +21,7 @@ import { EncryptionPasswordPrompt } from "./components/EncryptionPasswordPrompt"
 import { EncryptionSetupPrompt } from "./components/EncryptionSetupPrompt";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
-import { Narrative, NarrativeRef } from "./components/Narrative";
+import { Narrative, NarrativeMessage, NarrativeRef } from "./components/Narrative";
 import { ObjectBrowser } from "./components/ObjectBrowser";
 import { PropertyEditor } from "./components/PropertyEditor";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -96,6 +96,7 @@ function AppContent({
         const saved = localStorage.getItem("moor-split-ratio");
         return saved ? parseFloat(saved) : 0.6;
     });
+    const [unseenCount, setUnseenCount] = useState(0);
 
     const splitRatioRef = useRef(splitRatio);
     splitRatioRef.current = splitRatio;
@@ -105,6 +106,58 @@ function AppContent({
 
     const toggleSplitMode = useCallback(() => {
         setForceSplitMode(prev => !prev);
+    }, []);
+
+    const handleMessageAppended = useCallback((message: NarrativeMessage) => {
+        if (typeof document === "undefined") {
+            return;
+        }
+
+        if (message.isHistorical) {
+            return;
+        }
+
+        const documentHasFocus = typeof document.hasFocus === "function" ? document.hasFocus() : true;
+
+        if (!document.hidden && documentHasFocus) {
+            return;
+        }
+
+        setUnseenCount(prev => Math.min(prev + 1, 99));
+    }, []);
+
+    useEffect(() => {
+        if (typeof document === "undefined") {
+            return;
+        }
+
+        const baseTitle = systemTitle || "mooR";
+        const title = unseenCount > 0 ? `(${unseenCount}) ${baseTitle}` : baseTitle;
+        document.title = title;
+    }, [systemTitle, unseenCount]);
+
+    useEffect(() => {
+        if (typeof document === "undefined") {
+            return;
+        }
+
+        const resetUnseen = () => {
+            setUnseenCount(0);
+        };
+
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                resetUnseen();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", resetUnseen);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", resetUnseen);
+        };
     }, []);
 
     // Verb editor state (only used in this component for the modal)
@@ -283,6 +336,7 @@ function AppContent({
         if (narrativeRef.current) {
             narrativeRef.current.clearAll();
         }
+        setUnseenCount(0);
         // Just disconnect from auth - the useEffect above will handle all cleanup
         disconnect();
     }, [disconnect, narrativeRef]);
@@ -623,6 +677,12 @@ function AppContent({
     const hasActiveEditor = editorSession || propertyEditorSession;
     const isSplitMode = isConnected && hasActiveEditor && (isMobile || forceSplitMode);
 
+    useEffect(() => {
+        if (!isConnected) {
+            setUnseenCount(0);
+        }
+    }, [isConnected]);
+
     // Add pending historical messages when narrative component becomes available
     useEffect(() => {
         if (narrativeRef.current && pendingHistoricalMessages.length > 0) {
@@ -751,6 +811,7 @@ function AppContent({
                                     isLoadingHistory={isLoadingHistory}
                                     onLinkClick={onLinkClick}
                                     playerOid={authState.player?.oid}
+                                    onMessageAppended={handleMessageAppended}
                                 />
                             </section>
 
