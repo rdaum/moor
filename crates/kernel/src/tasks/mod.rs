@@ -27,6 +27,7 @@ use moor_common::{
 
 pub mod scheduler;
 
+pub(crate) mod checkpoint;
 pub mod convert_task;
 pub(crate) mod gc_thread;
 pub(crate) mod scheduler_client;
