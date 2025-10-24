@@ -53,3 +53,5 @@ being used as the _programmer_.
 Many built-in functions are described below as raising `E_PERM` unless the programmer meets certain specified criteria.
 It is possible to restrict use of any function, however, so that only wizards can use it; see the chapter on server
 assumptions about the database for details.
+
+To query documentation for any builtin function at runtime, use the [`function_help()`](built-in-functions/server.md#function_help) function. This returns documentation extracted directly from the running server's compiled code.

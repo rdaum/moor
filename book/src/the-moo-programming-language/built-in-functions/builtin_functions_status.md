@@ -189,6 +189,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`caller_perms`](server.md#caller_perms)     | &check;  |              |
 | [`callers`](server.md#callers)               | &check;  |              |
 | [`task_stack`](server.md#task_stack)         |          |              |
+| [`function_help`](server.md#function_help)   | &check;  | mooR extension |
 
 ### Network connections
 

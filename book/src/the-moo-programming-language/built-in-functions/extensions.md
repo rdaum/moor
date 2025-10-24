@@ -28,6 +28,7 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `vm_counters` - Performance counters for profiling VM internals
 - `bf_counters` - Performance counters for profiling builtin function performance
 - `db_counters` - Performance counters for profiling DB performance
+- [`function_help`](server.md#function_help) - Returns runtime documentation for builtin functions extracted from compiled code
 
 **Task Management:**
 

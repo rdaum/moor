@@ -577,10 +577,38 @@ connections()
 
 ### `function_info`
 
-**Description:** Returns information about a specified function.  
+**Description:** Returns information about a specified function.
 **Arguments:**
 
 - `function`: The function to get information about
+
+### `function_help`
+
+**Description:** Returns documentation for a specified builtin function.
+**Arguments:**
+
+- `function_name` (str): The name of the builtin function
+
+**Returns:** A list of strings containing the documentation extracted from the builtin's implementation.
+
+**Errors:**
+- `E_INVARG`: Raised if the builtin doesn't exist or has no documentation
+- `E_TYPE`: Raised if the argument is not a string
+- `E_ARGS`: Raised if the wrong number of arguments is provided
+
+**Example:**
+
+```moo
+help = function_help("abs");
+=> {"MOO: `num abs(num x)`", "Returns the absolute value of x."}
+
+help = function_help("min");
+=> {"MOO: `num min(num x, ...)`", "Returns the minimum value among the arguments."}
+```
+
+**Notes:**
+
+Documentation is extracted at compile time from the doc-comments of each builtin's Rust implementation, ensuring it always matches the running program.
 
 ### `wait_task`
 
