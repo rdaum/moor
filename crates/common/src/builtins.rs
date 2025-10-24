@@ -23,8 +23,14 @@ use moor_var::{
 use std::collections::HashMap;
 
 lazy_static! {
-    static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
+    /// The global builtins table which describes the set of builtins available to the mooR runtime.
+    /// Used by:
+    ///   * the compiler to identify which builtins are available at compile time and
+    ///     their static ID / offsets
+    ///   * the VM to access information about the builtin at dispatch time (overrides, names, etc)
+    ///   * the `call_function` and `function_info` builtins
     pub static ref BUILTINS: Builtins = Builtins::new();
+    static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
 }
 pub enum ArgCount {
     Q(usize),
@@ -45,14 +51,6 @@ pub struct Builtin {
     pub types: Vec<ArgType>,
     pub implemented: bool,
 }
-
-// Originally generated using ./generate_bf_list.py
-// TODO: this list is inconsistently used, and falls out of date. It's only used for generating
-//  the list of functions for the `function_info` built-in right now. It could be used for
-//  validating arguments, and could be part of the registration process for the actual builtin
-//  implementations.
-// NOTE: only add new functions to the end of this table or you will throw off function indexes on
-//  existing (binary) databases, causing severe incompatibility.
 
 // Helper function to create a Builtin with automatic bf_override_name generation
 fn mk_builtin(
