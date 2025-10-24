@@ -51,8 +51,12 @@ lazy_static! {
     static ref SCHED_COUNTERS: SchedulerPerfCounters = SchedulerPerfCounters::new();
 }
 
-pub fn sched_counters<'a>() -> &'a SchedulerPerfCounters {
-    &SCHED_COUNTERS
+thread_local! {
+    static SCHED_COUNTERS_TLS: &'static SchedulerPerfCounters = &SCHED_COUNTERS;
+}
+
+pub fn sched_counters() -> &'static SchedulerPerfCounters {
+    SCHED_COUNTERS_TLS.with(|c| *c)
 }
 
 /// Just a handle to a task, with a receiver for the result.

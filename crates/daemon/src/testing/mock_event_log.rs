@@ -355,13 +355,15 @@ impl EventLogOps for MockEventLog {
 
             let event_time = UNIX_EPOCH + Duration::from_nanos(event.timestamp);
             if let Some(since_time) = since
-                && event_time < since_time {
-                    continue;
-                }
+                && event_time < since_time
+            {
+                continue;
+            }
             if let Some(until_time) = until
-                && event_time > until_time {
-                    continue;
-                }
+                && event_time > until_time
+            {
+                continue;
+            }
 
             stats.total_events += 1;
             if stats.earliest.is_none_or(|current| event_time < current) {

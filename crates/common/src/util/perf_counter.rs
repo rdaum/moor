@@ -39,6 +39,18 @@ impl DummyCounter {
 use fast_counter::ConcurrentCounter;
 #[cfg(feature = "perf_counters")]
 use minstant::Instant;
+#[cfg(feature = "perf_counters")]
+use std::{sync::OnceLock, thread};
+
+#[cfg(feature = "perf_counters")]
+fn default_shard_count() -> usize {
+    static SHARD_COUNT: OnceLock<usize> = OnceLock::new();
+    *SHARD_COUNT.get_or_init(|| {
+        thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    })
+}
 
 #[cfg(feature = "perf_counters")]
 pub struct PerfCounter {
@@ -57,8 +69,8 @@ impl PerfCounter {
     pub fn new(name: impl Into<Symbol>) -> Self {
         Self {
             operation: name.into(),
-            invocations: ConcurrentCounter::new(0),
-            cumulative_duration_nanos: ConcurrentCounter::new(0),
+            invocations: ConcurrentCounter::new(default_shard_count()),
+            cumulative_duration_nanos: ConcurrentCounter::new(default_shard_count()),
         }
     }
 

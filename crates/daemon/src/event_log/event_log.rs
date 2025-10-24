@@ -615,13 +615,15 @@ impl EventPersistence {
             let timestamp = event_ref.timestamp()?;
 
             if let Some(since) = since_ns
-                && timestamp < since {
-                    continue;
-                }
+                && timestamp < since
+            {
+                continue;
+            }
             if let Some(until) = until_ns
-                && timestamp > until {
-                    continue;
-                }
+                && timestamp > until
+            {
+                continue;
+            }
 
             stats.total_events += 1;
 

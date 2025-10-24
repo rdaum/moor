@@ -66,6 +66,10 @@ lazy_static! {
     static ref BF_COUNTERS: BfCounters = BfCounters::new();
 }
 
+thread_local! {
+    static BF_COUNTERS_TLS: &'static BfCounters = &BF_COUNTERS;
+}
+
 pub struct BfCounters(Vec<PerfCounter>);
 
 impl Default for BfCounters {
@@ -92,8 +96,8 @@ impl BfCounters {
     }
 }
 
-pub fn bf_perf_counters<'a>() -> &'a BfCounters {
-    &BF_COUNTERS
+pub fn bf_perf_counters() -> &'static BfCounters {
+    BF_COUNTERS_TLS.with(|c| *c)
 }
 
 /// The bundle of builtins are stored here, and passed around globally.
