@@ -40,6 +40,7 @@ import { useTitle } from "./hooks/useTitle";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { OAuth2UserInfo } from "./lib/oauth2";
 import { MoorRemoteObject } from "./lib/rpc";
+import { fetchServerFeatures } from "./lib/rpc-fb";
 import { oidRef } from "./lib/var";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
@@ -97,6 +98,8 @@ function AppContent({
         return saved ? parseFloat(saved) : 0.6;
     });
     const [unseenCount, setUnseenCount] = useState(0);
+    const [eventLogEnabled, setEventLogEnabled] = useState<boolean | null>(null);
+    const [hasShownHistoryUnavailable, setHasShownHistoryUnavailable] = useState(false);
 
     const splitRatioRef = useRef(splitRatio);
     splitRatioRef.current = splitRatio;
@@ -159,6 +162,46 @@ function AppContent({
             window.removeEventListener("focus", resetUnseen);
         };
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetchServerFeatures()
+            .then((features) => {
+                if (cancelled) {
+                    return;
+                }
+                setEventLogEnabled(features.enableEventlog);
+            })
+            .catch((error) => {
+                console.error("Failed to fetch server features:", error);
+                if (!cancelled) {
+                    setEventLogEnabled(true);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!authState.player) {
+            setHasShownHistoryUnavailable(false);
+            return;
+        }
+
+        if (eventLogEnabled === false && !hasShownHistoryUnavailable) {
+            showMessage("Message history is not available on this server", 4);
+            setHasShownHistoryUnavailable(true);
+        }
+    }, [authState.player, eventLogEnabled, hasShownHistoryUnavailable, showMessage]);
+
+    useEffect(() => {
+        if (eventLogEnabled === false) {
+            setShowEncryptionSetup(false);
+            setShowPasswordPrompt(false);
+        }
+    }, [eventLogEnabled]);
 
     // Verb editor state (only used in this component for the modal)
     const {
@@ -459,6 +502,10 @@ function AppContent({
 
     // Check encryption setup after login
     useEffect(() => {
+        if (eventLogEnabled === false) {
+            return;
+        }
+
         if (authState.player && !encryptionState.isChecking && !userSkippedEncryption) {
             const hasLocalKey = !!encryptionState.ageIdentity;
             const backendHasPubkey = encryptionState.hasEncryption;
@@ -507,6 +554,7 @@ function AppContent({
         showPasswordPrompt,
         forgetKey,
         userSkippedEncryption,
+        eventLogEnabled,
     ]);
 
     // Load history and connect WebSocket after authentication
@@ -518,8 +566,28 @@ function AppContent({
             isConnected: wsState.isConnected,
         });
 
+        if (!authState.player || !authState.player.authToken) {
+            return;
+        }
+
+        if (eventLogEnabled === null) {
+            return;
+        }
+
+        if (!historyLoaded && eventLogEnabled === false) {
+            setHistoryLoaded(true);
+            if (!wsState.isConnected) {
+                setTimeout(() => connectWS(loginMode), 100);
+            }
+            return;
+        }
+
+        if (historyLoaded || !encryptionState.hasCheckedOnce) {
+            return;
+        }
+
         // Load history when player is authenticated, encryption status has been checked at least once, and history not yet loaded
-        if (authState.player && authState.player.authToken && !historyLoaded && encryptionState.hasCheckedOnce) {
+        if (eventLogEnabled && authState.player.authToken && !historyLoaded) {
             // Encryption key is ALWAYS required - events cannot be logged or retrieved without it
             if (!encryptionKeyForHistory) {
                 console.error(
@@ -590,6 +658,7 @@ function AppContent({
         fetchInitialHistory,
         fetchCurrentPresentations,
         showMessage,
+        eventLogEnabled,
     ]);
 
     // Track if we were previously connected to distinguish reconnection from initial connection
@@ -693,7 +762,7 @@ function AppContent({
 
     // Handle loading more history for infinite scroll
     const handleLoadMoreHistory = useCallback(async () => {
-        if (!authState.player?.authToken || isLoadingHistory) {
+        if (!authState.player?.authToken || isLoadingHistory || eventLogEnabled === false) {
             return;
         }
 
@@ -707,7 +776,7 @@ function AppContent({
             // History loading failed, but we can continue without it
             console.warn("Failed to load more history:", error);
         }
-    }, [authState.player?.authToken, isLoadingHistory, fetchMoreHistory]);
+    }, [authState.player?.authToken, isLoadingHistory, fetchMoreHistory, eventLogEnabled]);
 
     return (
         <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -758,6 +827,7 @@ function AppContent({
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
                 onLogout={handleLogout}
+                historyAvailable={eventLogEnabled !== false}
             />
 
             {/* Main app layout with narrative interface */}
@@ -807,8 +877,8 @@ function AppContent({
                                     visible={isConnected}
                                     connected={isConnected}
                                     onSendMessage={sendMessage}
-                                    onLoadMoreHistory={handleLoadMoreHistory}
-                                    isLoadingHistory={isLoadingHistory}
+                                    onLoadMoreHistory={eventLogEnabled === false ? undefined : handleLoadMoreHistory}
+                                    isLoadingHistory={eventLogEnabled === false ? false : isLoadingHistory}
                                     onLinkClick={onLinkClick}
                                     playerOid={authState.player?.oid}
                                     onMessageAppended={handleMessageAppended}
@@ -919,7 +989,7 @@ function AppContent({
                 />
             )}
 
-            {showPasswordPrompt && (
+            {eventLogEnabled !== false && showPasswordPrompt && (
                 <EncryptionPasswordPrompt
                     systemTitle={systemTitle}
                     onUnlock={async (password) => {
@@ -941,7 +1011,7 @@ function AppContent({
                 />
             )}
 
-            {showEncryptionSetup && (
+            {eventLogEnabled !== false && showEncryptionSetup && (
                 <EncryptionSetupPrompt
                     systemTitle={systemTitle}
                     onSetup={async (password) => {

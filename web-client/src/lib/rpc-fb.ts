@@ -29,8 +29,10 @@ import { ClientSuccess } from "../generated/moor-rpc/client-success.js";
 import { CommandErrorUnion } from "../generated/moor-rpc/command-error-union.js";
 import { CommandExecutionError } from "../generated/moor-rpc/command-execution-error.js";
 import { CurrentPresentations } from "../generated/moor-rpc/current-presentations.js";
+import { DaemonToHostReplyUnion, unionToDaemonToHostReplyUnion } from "../generated/moor-rpc/daemon-to-host-reply-union.js";
 import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to-client-reply-union.js";
 import { EvalResult } from "../generated/moor-rpc/eval-result.js";
+import { HostSuccess } from "../generated/moor-rpc/host-success.js";
 import { HistoryResponseReply } from "../generated/moor-rpc/history-response-reply.js";
 import { ListObjectsReply } from "../generated/moor-rpc/list-objects-reply.js";
 import { NarrativeEventMessage } from "../generated/moor-rpc/narrative-event-message.js";
@@ -41,6 +43,7 @@ import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc
 import { ReplyResult } from "../generated/moor-rpc/reply-result.js";
 import { SchedulerErrorUnion } from "../generated/moor-rpc/scheduler-error-union.js";
 import { SchedulerError } from "../generated/moor-rpc/scheduler-error.js";
+import { ServerFeatures } from "../generated/moor-rpc/server-features.js";
 import { SysPropValue } from "../generated/moor-rpc/sys-prop-value.js";
 import { SystemMessageEvent } from "../generated/moor-rpc/system-message-event.js";
 import { TaskAbortedLimit } from "../generated/moor-rpc/task-aborted-limit.js";
@@ -62,6 +65,23 @@ import { VerbValue } from "../generated/moor-rpc/verb-value.js";
 import { VerbsReply } from "../generated/moor-rpc/verbs-reply.js";
 import { decryptEventBlob } from "./age-decrypt.js";
 import { MoorVar } from "./MoorVar.js";
+
+export interface ServerFeatureSet {
+    persistentTasks: boolean;
+    richNotify: boolean;
+    lexicalScopes: boolean;
+    typeDispatch: boolean;
+    flyweightType: boolean;
+    listComprehensions: boolean;
+    boolType: boolean;
+    useBooleanReturns: boolean;
+    symbolType: boolean;
+    useSymbolsInBuiltins: boolean;
+    customErrors: boolean;
+    useUuobjids: boolean;
+    enableEventlog: boolean;
+    anonymousObjects: boolean;
+}
 
 /**
  * Evaluates a MOO expression on the server using FlatBuffer protocol
@@ -143,6 +163,69 @@ export async function performEvalFlatBuffer(authToken: string, expr: string): Pr
         console.error("Exception during FlatBuffer eval:", err);
         throw err;
     }
+}
+
+/**
+ * Retrieves server feature flags from the daemon.
+ */
+export async function fetchServerFeatures(): Promise<ServerFeatureSet> {
+    const response = await fetch("/fb/features");
+    if (!response.ok) {
+        throw new Error(`Feature query failed: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    const replyResult = ReplyResult.getRootAsReplyResult(new flatbuffers.ByteBuffer(bytes));
+
+    const resultType = replyResult.resultType();
+    if (resultType !== ReplyResultUnion.HostSuccess) {
+        throw new Error("Unexpected feature reply type");
+    }
+
+    const hostSuccess = unionToReplyResultUnion(
+        resultType,
+        (obj) => replyResult.result(obj),
+    ) as HostSuccess | null;
+    if (!hostSuccess) {
+        throw new Error("Missing host success payload");
+    }
+
+    const daemonReply = hostSuccess.reply();
+    if (!daemonReply) {
+        throw new Error("Missing host reply for features");
+    }
+
+    const replyType = daemonReply.replyType();
+    if (replyType !== DaemonToHostReplyUnion.ServerFeatures) {
+        throw new Error("Unexpected server feature reply union");
+    }
+
+    const features = unionToDaemonToHostReplyUnion(
+        replyType,
+        (obj) => daemonReply.reply(obj),
+    ) as ServerFeatures | null;
+
+    if (!features) {
+        throw new Error("Missing server feature payload");
+    }
+
+    return {
+        persistentTasks: features.persistentTasks(),
+        richNotify: features.richNotify(),
+        lexicalScopes: features.lexicalScopes(),
+        typeDispatch: features.typeDispatch(),
+        flyweightType: features.flyweightType(),
+        listComprehensions: features.listComprehensions(),
+        boolType: features.boolType(),
+        useBooleanReturns: features.useBooleanReturns(),
+        symbolType: features.symbolType(),
+        useSymbolsInBuiltins: features.useSymbolsInBuiltins(),
+        customErrors: features.customErrors(),
+        useUuobjids: features.useUuobjids(),
+        enableEventlog: features.enableEventlog(),
+        anonymousObjects: features.anonymousObjects(),
+    };
 }
 
 /**

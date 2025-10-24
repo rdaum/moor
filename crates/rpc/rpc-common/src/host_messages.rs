@@ -27,6 +27,16 @@ pub fn mk_request_performance_counters_msg() -> rpc::HostToDaemonMessage {
     }
 }
 
+/// Build a GetServerFeatures message
+#[inline]
+pub fn mk_get_server_features_msg() -> rpc::HostToDaemonMessage {
+    rpc::HostToDaemonMessage {
+        message: rpc::HostToDaemonMessageUnion::GetServerFeatures(Box::new(
+            rpc::GetServerFeatures {},
+        )),
+    }
+}
+
 /// Build a RegisterHost message
 #[inline]
 pub fn mk_register_host_msg(

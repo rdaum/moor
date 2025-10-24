@@ -72,27 +72,6 @@ table WakeCondition {
 }
 
 // ============================================================================
-// TaskState - Lifecycle state of the task
-// ============================================================================
-
-union TaskStateUnion {
-    TaskCreated,
-    TaskRunning
-}
-
-table TaskCreated {
-    start: TaskStartUnion (required);
-}
-
-table TaskRunning {
-    start: TaskStartUnion (required);
-}
-
-table TaskState {
-    state: TaskStateUnion (required);
-}
-
-// ============================================================================
 // TaskStart - What initiated this task
 // ============================================================================
 
@@ -147,6 +126,27 @@ table StartEval {
 
 table TaskStart {
     start: TaskStartUnion (required);
+}
+
+// ============================================================================
+// TaskState - Lifecycle state of the task
+// ============================================================================
+
+union TaskStateUnion {
+    TaskCreated,
+    TaskRunning
+}
+
+table TaskCreated {
+    start: TaskStartUnion (required);
+}
+
+table TaskRunning {
+    start: TaskStartUnion (required);
+}
+
+table TaskState {
+    state: TaskStateUnion (required);
 }
 
 // ============================================================================

@@ -353,7 +353,8 @@ union HostToDaemonMessageUnion {
     RegisterHost,
     DetachHost,
     RequestPerformanceCounters,
-    HostPong
+    HostPong,
+    GetServerFeatures
 }
 
 table RegisterHost {
@@ -368,6 +369,9 @@ table DetachHost {
 }
 
 table RequestPerformanceCounters {
+}
+
+table GetServerFeatures {
 }
 
 table HostPong {
@@ -393,7 +397,8 @@ table HostToDaemonMessage {
 union DaemonToHostReplyUnion {
     DaemonToHostAck,
     DaemonToHostReject,
-    DaemonToHostPerfCounters
+    DaemonToHostPerfCounters,
+    ServerFeatures
 }
 
 table DaemonToHostAck {
@@ -417,6 +422,23 @@ table CounterCategory {
 table DaemonToHostPerfCounters {
     timestamp: uint64;  // SystemTime as nanos since epoch
     counters: [CounterCategory] (required);
+}
+
+table ServerFeatures {
+    persistent_tasks: bool = false;
+    rich_notify: bool = false;
+    lexical_scopes: bool = false;
+    type_dispatch: bool = false;
+    flyweight_type: bool = false;
+    list_comprehensions: bool = false;
+    bool_type: bool = false;
+    use_boolean_returns: bool = false;
+    symbol_type: bool = false;
+    use_symbols_in_builtins: bool = false;
+    custom_errors: bool = false;
+    use_uuobjids: bool = false;
+    enable_eventlog: bool = false;
+    anonymous_objects: bool = false;
 }
 
 table DaemonToHostReply {

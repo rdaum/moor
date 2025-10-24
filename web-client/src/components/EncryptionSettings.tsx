@@ -13,7 +13,7 @@
 
 // ! Encryption settings component for settings panel
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuthContext } from "../context/AuthContext";
 import { useEncryptionContext } from "../context/EncryptionContext";
 import { useHistoryExport } from "../hooks/useHistoryExport";
@@ -21,7 +21,11 @@ import { useTitle } from "../hooks/useTitle";
 import { EncryptionPasswordPrompt } from "./EncryptionPasswordPrompt";
 import { EncryptionSetupPrompt } from "./EncryptionSetupPrompt";
 
-export const EncryptionSettings: React.FC = () => {
+interface EncryptionSettingsProps {
+    isAvailable: boolean;
+}
+
+export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvailable }) => {
     const { authState } = useAuthContext();
     const { encryptionState, forgetKey, setupEncryption } = useEncryptionContext();
     const { exportState, startExport, cancelExport, downloadReady, dismissReady } = useHistoryExport();
@@ -31,6 +35,16 @@ export const EncryptionSettings: React.FC = () => {
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    useEffect(() => {
+        if (!isAvailable) {
+            setShowForgetConfirm(false);
+            setShowSetupPrompt(false);
+            setShowPasswordPrompt(false);
+            setShowDeleteConfirm(false);
+            setIsDeleting(false);
+        }
+    }, [isAvailable]);
 
     const handleForgetKey = () => {
         forgetKey();
@@ -106,6 +120,41 @@ export const EncryptionSettings: React.FC = () => {
             alert(`Error downloading history: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
     };
+
+    if (!isAvailable) {
+        return (
+            <div className="settings-item" role="region" aria-labelledby="encryption-settings-label">
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5em", width: "100%" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span id="encryption-settings-label">History Encryption</span>
+                        <span
+                            role="status"
+                            aria-label="History features disabled"
+                            style={{
+                                padding: "0.25em 0.5em",
+                                borderRadius: "var(--radius-md)",
+                                fontSize: "0.85em",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 20%, transparent)",
+                                color: "var(--color-text-primary)",
+                            }}
+                        >
+                            Unavailable
+                        </span>
+                    </div>
+                    <p
+                        style={{
+                            margin: 0,
+                            color: "var(--color-text-secondary)",
+                            fontSize: "0.95em",
+                            lineHeight: "1.4",
+                        }}
+                    >
+                        Message history is not available on this server.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="settings-item" role="region" aria-labelledby="encryption-settings-label">

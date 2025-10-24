@@ -242,6 +242,7 @@ fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Resu
             get(host::system_property_handler),
         )
         .route("/fb/eval", post(host::eval_handler))
+        .route("/fb/features", get(host::features_handler))
         .route(
             "/fb/verbs/{object}/{name}",
             post(host::verb_program_handler),

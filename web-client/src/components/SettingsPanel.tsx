@@ -23,9 +23,10 @@ interface SettingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
     onLogout?: () => void;
+    historyAvailable: boolean;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, onLogout }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, onLogout, historyAvailable }) => {
     if (!isOpen) return null;
 
     return (
@@ -60,7 +61,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, o
 
                     <div className="settings-section">
                         <h3>Security</h3>
-                        <EncryptionSettings />
+                        <EncryptionSettings isAvailable={historyAvailable} />
                     </div>
 
                     <div className="settings-section">

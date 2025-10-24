@@ -28,10 +28,13 @@ use moor_var::{Obj, Symbol};
 use rpc_async_client::{rpc_client::RpcSendClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_connection_establish_msg,
-    mk_detach_msg, mk_eval_msg, mk_request_sys_prop_msg, mk_resolve_msg,
+    mk_detach_host_msg, mk_detach_msg, mk_eval_msg, mk_get_server_features_msg,
+    mk_register_host_msg, mk_request_sys_prop_msg, mk_resolve_msg,
 };
-use std::net::{IpAddr, SocketAddr};
-use std::time::Duration;
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tmq::{request, subscribe};
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
@@ -490,6 +493,157 @@ impl WebHost {
 
         Ok((client_id, rpc_client, client_token))
     }
+
+    pub async fn fetch_server_features(&self) -> Result<Vec<u8>, StatusCode> {
+        let zmq_ctx = self.zmq_context.clone();
+        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
+
+        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
+            socket_builder = match rpc_async_client::configure_curve_client(
+                socket_builder,
+                client_secret,
+                client_public,
+                server_public,
+            ) {
+                Ok(builder) => builder,
+                Err(e) => {
+                    error!("Failed to configure CURVE for feature fetch: {}", e);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            };
+        }
+
+        let rpc_request_sock = match socket_builder.connect(self.rpc_addr.as_str()) {
+            Ok(sock) => sock,
+            Err(e) => {
+                error!("Failed to connect to RPC server for feature fetch: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+        let host_id = Uuid::new_v4();
+        let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos() as u64,
+            Err(e) => {
+                error!("Invalid system time while registering temporary host: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let register_msg = mk_register_host_msg(
+            host_id,
+            timestamp,
+            moor_rpc::HostType::WebSocket,
+            Vec::new(),
+        );
+
+        let register_bytes = match rpc_client.make_host_rpc_call(host_id, register_msg).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Failed to register temporary host for feature fetch: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        use planus::ReadAsRoot;
+        let register_reply = match moor_rpc::ReplyResultRef::read_as_root(&register_bytes) {
+            Ok(reply) => reply,
+            Err(e) => {
+                error!("Failed to parse register reply: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let register_success = match register_reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(success)) => success,
+            Ok(_) => {
+                error!("Unexpected reply while registering temporary host");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            Err(e) => {
+                error!("Missing register result: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let register_reply_body = match register_success.reply() {
+            Ok(reply) => reply,
+            Err(e) => {
+                error!("Missing register reply body: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        match register_reply_body.reply() {
+            Ok(moor_rpc::DaemonToHostReplyUnionRef::DaemonToHostAck(_)) => {}
+            Ok(_) => {
+                error!("Unexpected register reply union");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            Err(e) => {
+                error!("Missing register reply union: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+
+        let request_msg = mk_get_server_features_msg();
+
+        let reply_bytes = match rpc_client.make_host_rpc_call(host_id, request_msg).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Failed to fetch server features: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let reply = match moor_rpc::ReplyResultRef::read_as_root(&reply_bytes) {
+            Ok(reply) => reply,
+            Err(e) => {
+                error!("Failed to parse server feature reply: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let host_success = match reply.result() {
+            Ok(moor_rpc::ReplyResultUnionRef::HostSuccess(host_success)) => host_success,
+            Ok(_) => {
+                error!("Unexpected reply union for server features");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            Err(e) => {
+                error!("Missing result in server features reply: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let daemon_reply = match host_success.reply() {
+            Ok(reply) => reply,
+            Err(e) => {
+                error!("Missing host reply for features: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        match daemon_reply.reply() {
+            Ok(moor_rpc::DaemonToHostReplyUnionRef::ServerFeatures(_)) => {}
+            Ok(_) => {
+                error!("Unexpected host reply variant for features");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            Err(e) => {
+                error!("Missing reply union for features: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+
+        let detach_msg = mk_detach_host_msg(host_id);
+        if let Err(e) = rpc_client.make_host_rpc_call(host_id, detach_msg).await {
+            error!("Failed to detach temporary host after feature fetch: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        Ok(reply_bytes)
+    }
 }
 
 pub(crate) async fn rpc_call(
@@ -507,6 +661,22 @@ pub(crate) async fn rpc_call(
 }
 
 /// FlatBuffer version: Returns raw FlatBuffer bytes instead of JSON
+pub async fn features_handler(State(host): State<WebHost>) -> Response {
+    match host.fetch_server_features().await {
+        Ok(bytes) => {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/x-flatbuffer")
+                .body(Body::from(bytes))
+                .unwrap_or_else(|e| {
+                    error!("Failed to build features response: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                })
+        }
+        Err(status) => status.into_response(),
+    }
+}
+
 pub async fn system_property_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,

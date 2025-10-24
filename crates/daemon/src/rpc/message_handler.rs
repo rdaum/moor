@@ -290,6 +290,29 @@ impl MessageHandler for RpcMessageHandler {
                     )),
                 }
             }
+            moor_rpc::HostToDaemonMessageUnionRef::GetServerFeatures(_) => {
+                let features = self.config.features.as_ref();
+                DaemonToHostReply {
+                    reply: DaemonToHostReplyUnion::ServerFeatures(Box::new(
+                        moor_rpc::ServerFeatures {
+                            persistent_tasks: features.persistent_tasks,
+                            rich_notify: features.rich_notify,
+                            lexical_scopes: features.lexical_scopes,
+                            type_dispatch: features.type_dispatch,
+                            flyweight_type: features.flyweight_type,
+                            list_comprehensions: features.list_comprehensions,
+                            bool_type: features.bool_type,
+                            use_boolean_returns: features.use_boolean_returns,
+                            symbol_type: features.symbol_type,
+                            use_symbols_in_builtins: features.use_symbols_in_builtins,
+                            custom_errors: features.custom_errors,
+                            use_uuobjids: features.use_uuobjids,
+                            enable_eventlog: features.enable_eventlog,
+                            anonymous_objects: features.anonymous_objects,
+                        },
+                    )),
+                }
+            }
             moor_rpc::HostToDaemonMessageUnionRef::DetachHost(_) => {
                 let mut hosts = self.hosts.write().unwrap();
                 hosts.unregister_host(&host_id);
