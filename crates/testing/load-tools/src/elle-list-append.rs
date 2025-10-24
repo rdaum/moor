@@ -21,6 +21,7 @@ use edn_format::{Keyword, Value};
 use moor_common::model::{ObjAttrs, ObjectKind, WorldStateSource};
 use moor_db::{Database, TxDB};
 use moor_var::{Obj, Symbol, v_int, v_list};
+use rand::Rng;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -117,6 +118,7 @@ fn workload_thread(
     let mut counter: i64 = (process_id as i64) * 1_000_000; // Each thread gets its own range
     let mut total_retries = 0;
     let mut skipped_ops = 0;
+    let mut rng = rand::rng();
 
     for iteration in 0..num_iterations {
         // Print progress every 100 iterations
@@ -127,9 +129,9 @@ fn workload_thread(
         }
 
         // Pick random property and operation type once per iteration
-        let prop_idx = rand::random::<usize>() % prop_symbols.len();
+        let prop_idx = rng.random_range(0..prop_symbols.len());
         let prop_sym = prop_symbols[prop_idx];
-        let is_read = rand::random::<bool>();
+        let is_read = rng.random_bool(0.5);
 
         // Retry loop for the same operation on conflict (with max retries to avoid infinite loops)
         let max_retries = 100;
@@ -183,7 +185,7 @@ fn workload_thread(
                 let value = tx.retrieve_property(&obj, &obj, prop_sym)?;
 
                 // Generate a few unique values from this thread's range
-                let num_values = (rand::random::<usize>() % 10) + 1;
+                let num_values = rng.random_range(1..=10);
                 let mut new_values_to_append = Vec::new();
                 for _ in 0..num_values {
                     counter += 1;

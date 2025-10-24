@@ -492,8 +492,8 @@ impl Task {
                     session.rollback().unwrap();
 
                     // Add randomized backoff to prevent retry storms. Base delay is 10-50ms, multiplied by retry count.
-                    let mut rng = rand::thread_rng();
-                    let base_delay_ms = rng.gen_range(10..=50);
+                    let mut rng = rand::rng();
+                    let base_delay_ms = rng.random_range(10..=50);
                     let delay_ms = base_delay_ms * (self.retries + 1) as u64; // +1 since retries will be incremented in scheduler
                     std::thread::sleep(std::time::Duration::from_millis(delay_ms));
 

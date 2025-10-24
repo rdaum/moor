@@ -85,12 +85,12 @@ fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     if bf_args.args.is_empty() {
-        Ok(Ret(v_int(rng.gen_range(1..=2147483647))))
+        Ok(Ret(v_int(rng.random_range(1..=2147483647))))
     } else {
         match &bf_args.args[0].variant() {
-            Variant::Int(i) if *i > 0 => Ok(Ret(v_int(rng.gen_range(1..=*i)))),
+            Variant::Int(i) if *i > 0 => Ok(Ret(v_int(rng.random_range(1..=*i)))),
             Variant::Int(_) => Err(BfErr::Code(E_INVARG)),
             _ => Err(BfErr::Code(E_TYPE)),
         }

@@ -58,7 +58,7 @@ impl ConcurrentCounter {
     /// # Examples
     ///
     /// ```
-    /// use fast_counter::ConcurrentCounter;
+    /// use moor_common::util::ConcurrentCounter;
     ///
     /// let counter = ConcurrentCounter::new(10);
     /// ```
@@ -84,7 +84,7 @@ impl ConcurrentCounter {
     /// # Examples
     ///
     /// ```
-    /// use fast_counter::ConcurrentCounter;
+    /// use moor_common::util::ConcurrentCounter;
     ///
     /// let counter = ConcurrentCounter::new(10);
     /// counter.add(1);
@@ -102,7 +102,7 @@ impl ConcurrentCounter {
     /// # Examples
     ///
     /// ```
-    /// use fast_counter::ConcurrentCounter;
+    /// use moor_common::util::ConcurrentCounter;
     /// use std::sync::atomic::Ordering;
     ///
     /// let counter = ConcurrentCounter::new(10);
@@ -128,7 +128,7 @@ impl ConcurrentCounter {
     /// # Examples
     ///
     /// ```rust
-    /// use fast_counter::ConcurrentCounter;
+    /// use moor_common::util::ConcurrentCounter;
     ///
     /// let counter = ConcurrentCounter::new(10);
     ///
@@ -155,7 +155,7 @@ impl ConcurrentCounter {
     ///
     /// ```rust
     /// use std::sync::atomic::Ordering;
-    /// use fast_counter::ConcurrentCounter;
+    /// use moor_common::util::ConcurrentCounter;
     ///
     /// let counter = ConcurrentCounter::new(10);
     ///

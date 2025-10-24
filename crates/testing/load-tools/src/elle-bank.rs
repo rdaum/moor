@@ -50,7 +50,7 @@ fn workload_thread(
     num_iterations: usize,
     max_transfer: i64,
 ) -> Result<Vec<EdnEvent>, eyre::Error> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut events = Vec::new();
     let mut skipped_ops = 0;
     const MAX_RETRIES: usize = 100;
@@ -62,17 +62,17 @@ fn workload_thread(
             );
         }
 
-        let is_transfer = rng.gen_bool(0.8); // 80% transfers, 20% reads
+        let is_transfer = rng.random_bool(0.8); // 80% transfers, 20% reads
 
         if is_transfer {
             // Transfer operation
-            let from_idx = rng.gen_range(0..account_symbols.len());
-            let mut to_idx = rng.gen_range(0..account_symbols.len());
+            let from_idx = rng.random_range(0..account_symbols.len());
+            let mut to_idx = rng.random_range(0..account_symbols.len());
             // Ensure from != to
             while to_idx == from_idx {
-                to_idx = rng.gen_range(0..account_symbols.len());
+                to_idx = rng.random_range(0..account_symbols.len());
             }
-            let amount = rng.gen_range(1..=max_transfer);
+            let amount = rng.random_range(1..=max_transfer);
 
             let mut retry_count = 0;
             loop {

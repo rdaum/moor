@@ -12,8 +12,8 @@ rust-version.workspace = true
 description = "The set of values, and model/entities used across the system"
 
 [build-dependencies]
-vergen = { version = "9", default-features = false, features = ["cargo"] }
-vergen-gitcl = { version = "1", default-features = false }
+vergen.workspace = true
+vergen-gitcl.workspace = true
 
 [dependencies]
 # Internal Dependencies

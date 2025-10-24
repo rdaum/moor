@@ -18,6 +18,7 @@
 
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
     use moor_common::{
         model::{ObjFlag, ObjectKind, PropFlag, WorldStateSource},
         util::BitEnum,
@@ -39,6 +40,7 @@ mod tests {
         let max_properties = 20;
 
         let mut objects = HashMap::new();
+        let mut rng = rand::rng();
 
         let mut tx = db.new_world_state().unwrap();
 
@@ -53,12 +55,12 @@ mod tests {
                 )
                 .unwrap();
 
-            let num_props = rand::random::<usize>() % max_properties;
+            let num_props = rng.random_range(0..max_properties);
 
             let mut props = HashMap::new();
             for _ in 0..num_props {
-                let prop_name = format!("prop{}", rand::random::<u32>());
-                let prop_value_i = rand::random::<i64>();
+                let prop_name = format!("prop{}", rng.random::<u32>());
+                let prop_value_i = rng.random::<i64>();
                 let prop_value = v_int(prop_value_i);
 
                 tx.define_property(

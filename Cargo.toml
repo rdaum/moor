@@ -134,7 +134,6 @@ tokio-util = { version = "0.7", features = ["full"] }
 age = "0.11"
 argon2 = "0.5"
 base64 = "0.21"
-bech32 = "0.11"
 ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "signature"] }
 hmac = "0.12"
 md-5 = "0.10" # For MOO's "string_hash"
@@ -152,7 +151,7 @@ iana-time-zone = "0.1"
 
 # Text Processing & Regex
 encoding_rs = "0.8"
-onig = { version = "6.4", default-features = false }
+onig = { version = "6.5", default-features = false }
 strsim = "0.11"
 unicase = "2.8"
 
@@ -163,7 +162,7 @@ pest_derive = "2.8"
 # Collections & Data Structures
 ahash = "0.8"
 imbl = { version = "6.1", features = ["triomphe"] }
-indexmap = "2.11"
+indexmap = "2.12"
 itertools = "0.14"
 
 # Error Handling & Logging
@@ -184,12 +183,13 @@ num-traits = "0.2"
 once_cell = { version = "1.21" }
 paste = "1.0"
 perf_event = { package = "perf-event2", version = "0.7" }
-rand = "0.8"
+rand = "0.9"
 semver = "1.0"
-shadow-rs = "1.3"
 strum = { version = "0.27", features = ["derive"] }
 uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
-zerocopy = { version = "0.8.26", features = ["derive"] }
+vergen = { version = "9", default-features = false, features = ["cargo"] }
+vergen-gitcl = { version = "1", default-features = false }
+zerocopy = { version = "0.8", features = ["derive"] }
 
 # Testing & Development
 criterion = { version = "0.6", features = ["async_tokio"] }

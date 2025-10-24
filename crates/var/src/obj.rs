@@ -361,8 +361,8 @@ impl UuObjid {
 
     /// Creates a new UuObjid with current time and random components
     pub fn generate(autoincrement: u16) -> Self {
-        let mut rng = rand::thread_rng();
-        let rng_val = rng.r#gen::<u8>() & 0x3F; // 6 bits
+        let mut rng = rand::rng();
+        let rng_val = rng.random::<u8>() & 0x3F; // 6 bits
 
         // Get current time in milliseconds since Unix epoch
         let now = SystemTime::now()
@@ -432,8 +432,8 @@ impl AnonymousObjid {
 
     /// Creates a new AnonymousObjid with current time and random components
     pub fn generate(autoincrement: u16) -> Self {
-        let mut rng = rand::thread_rng();
-        let rng_val = rng.r#gen::<u8>() & 0x3F; // 6 bits
+        let mut rng = rand::rng();
+        let rng_val = rng.random::<u8>() & 0x3F; // 6 bits
 
         // Get current time in milliseconds since Unix epoch
         let now = SystemTime::now()

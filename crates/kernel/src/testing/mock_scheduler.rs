@@ -323,7 +323,8 @@ impl MockScheduler {
                 rate *= config.degradation_factor.powf(operations / 10.0); // Apply every 10 operations
             }
 
-            rand::thread_rng().r#gen::<f32>() < rate.clamp(0.0, 1.0)
+            let mut rng = rand::rng();
+            rng.random::<f32>() < rate.clamp(0.0, 1.0)
         }
         #[cfg(not(test))]
         {
@@ -339,7 +340,8 @@ impl MockScheduler {
             let config = self.current_scenario.read().unwrap().config();
             let range = config.max_delay.as_millis() - config.base_delay.as_millis();
             if range > 0 {
-                let random_delay = rand::thread_rng().gen_range(0..=range);
+                let mut rng = rand::rng();
+                let random_delay = rng.random_range(0..=range);
                 config.base_delay + Duration::from_millis(random_delay as u64)
             } else {
                 config.base_delay

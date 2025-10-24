@@ -50,7 +50,7 @@ fn workload_thread(
     process_id: usize,
     num_iterations: usize,
 ) -> Result<Vec<EdnEvent>, eyre::Error> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut events = Vec::new();
     let mut skipped_ops = 0;
     const MAX_RETRIES: usize = 100;
@@ -62,9 +62,9 @@ fn workload_thread(
             );
         }
 
-        let register_idx = rng.gen_range(0..register_symbols.len());
+        let register_idx = rng.random_range(0..register_symbols.len());
         let register_sym = register_symbols[register_idx];
-        let is_write = rng.gen_bool(0.5); // 50% reads, 50% writes
+        let is_write = rng.random_bool(0.5); // 50% reads, 50% writes
 
         if is_write {
             let value_to_write = (process_id * 10000 + iteration) as i64;

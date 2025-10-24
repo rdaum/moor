@@ -97,7 +97,8 @@ fn commit_latency(c: &mut Criterion) {
             let mut cumulative_time = Duration::new(0, 0);
             for _ in 0..iters {
                 // pick a prop name from random out of all_props
-                let prop_name = *all_props.choose(&mut rand::thread_rng()).unwrap();
+                let mut rng = rand::rng();
+                let prop_name = *all_props.choose(&mut rng).unwrap();
                 let tx = db.new_world_state().unwrap();
                 for _ in 0..num_tuples {
                     let _ = tx

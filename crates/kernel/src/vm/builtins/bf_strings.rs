@@ -14,13 +14,19 @@
 //! Builtin functions for string manipulation, hashing, and encoding operations.
 
 use argon2::{
-    Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version, password_hash::SaltString,
+    Algorithm,
+    Argon2,
+    Params,
+    PasswordHasher,
+    PasswordVerifier,
+    Version,
+    password_hash::{rand_core::OsRng, SaltString},
 };
 use base64::{Engine, engine::general_purpose};
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_str, v_string};
-use rand::{Rng, distributions::Alphanumeric, thread_rng};
+use rand::{Rng, distr::Alphanumeric};
 use tracing::warn;
 
 use crate::vm::builtins::{
@@ -177,7 +183,7 @@ fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let mut rng_core = thread_rng();
+    let mut rng_core = OsRng;
     let salt = SaltString::generate(&mut rng_core);
     let salt = v_str(salt.as_str());
     Ok(Ret(salt))
@@ -194,7 +200,7 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let salt = if bf_args.args.len() == 1 {
         // Provide a random 2-letter salt.
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut salt = String::new();
 
         salt.push(char::from(rng.sample(Alphanumeric)));

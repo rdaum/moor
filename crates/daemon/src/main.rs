@@ -47,7 +47,7 @@ use moor_kernel::{
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::textdump_load;
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
-use rand::{Rng, rngs::OsRng};
+use rand::Rng;
 use rpc_common::load_keypair;
 use tracing::{debug, error, info, warn};
 
@@ -167,8 +167,9 @@ fn generate_keypair(public_key_path: &PathBuf, private_key_path: &PathBuf) -> Re
     info!("Generating ED25519 keypair...");
 
     // Generate a new signing key
-    let mut rng = OsRng;
-    let secret_key_bytes: [u8; 32] = rng.r#gen();
+    let mut rng = rand::rng();
+    let mut secret_key_bytes = [0u8; 32];
+    rng.fill(&mut secret_key_bytes);
     let signing_key = SigningKey::from_bytes(&secret_key_bytes);
     let verifying_key = signing_key.verifying_key();
 
