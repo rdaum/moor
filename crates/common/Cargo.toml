@@ -52,7 +52,6 @@ moor-bench-utils = { path = "../testing/bench-utils" }
 
 [features]
 default = []
-perf_counters = []
 
 [[bench]]
 name = "verbcasecmp_benches"
