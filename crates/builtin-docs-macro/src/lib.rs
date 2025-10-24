@@ -99,74 +99,117 @@ fn extract_registrations(
     docs_map: &mut HashMap<String, Vec<String>>,
 ) {
     for stmt in stmts {
-        if let Stmt::Expr(Expr::Assign(assign), _) = stmt {
-            if let Expr::Index(ExprIndex { expr, index, .. }) = &*assign.left {
-                if let Expr::Path(path) = &**expr {
-                    if path.path.segments.last().map(|s| s.ident.to_string()) == Some("builtins".to_string()) {
-                        if let Some(builtin_name) = extract_builtin_name_from_index(index) {
-                            if let Some(bf_fn_name) = extract_bf_fn_name(&assign.right) {
-                                if let Some(docs) = fn_docs.get(&bf_fn_name) {
-                                    docs_map.insert(builtin_name, docs.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        let Stmt::Expr(Expr::Assign(assign), _) = stmt else {
+            continue;
+        };
+
+        let Expr::Index(ExprIndex { expr, index, .. }) = &*assign.left else {
+            continue;
+        };
+
+        let Expr::Path(path) = &**expr else {
+            continue;
+        };
+
+        let Some(last_segment) = path.path.segments.last() else {
+            continue;
+        };
+
+        if last_segment.ident != "builtins" {
+            continue;
         }
+
+        let Some(builtin_name) = extract_builtin_name_from_index(index) else {
+            continue;
+        };
+
+        let Some(bf_fn_name) = extract_bf_fn_name(&assign.right) else {
+            continue;
+        };
+
+        let Some(docs) = fn_docs.get(&bf_fn_name) else {
+            continue;
+        };
+
+        docs_map.insert(builtin_name, docs.clone());
     }
 }
 
 fn extract_builtin_name_from_index(index: &Expr) -> Option<String> {
     // Parse: offset_for_builtin("name")
-    if let Expr::Call(call) = index {
-        if let Expr::Path(path) = &*call.func {
-            if path.path.segments.last().map(|s| s.ident.to_string()) == Some("offset_for_builtin".to_string()) {
-                if let Some(Expr::Lit(lit)) = call.args.first() {
-                    if let syn::Lit::Str(s) = &lit.lit {
-                        return Some(s.value());
-                    }
-                }
-            }
-        }
+    let Expr::Call(call) = index else {
+        return None;
+    };
+
+    let Expr::Path(path) = &*call.func else {
+        return None;
+    };
+
+    let Some(last_segment) = path.path.segments.last() else {
+        return None;
+    };
+
+    if last_segment.ident != "offset_for_builtin" {
+        return None;
     }
-    None
+
+    let Some(Expr::Lit(lit)) = call.args.first() else {
+        return None;
+    };
+
+    let syn::Lit::Str(s) = &lit.lit else {
+        return None;
+    };
+
+    Some(s.value())
 }
 
 fn extract_bf_fn_name(expr: &Expr) -> Option<String> {
     // Parse: Box::new(bf_name)
-    if let Expr::Call(call) = expr {
-        if let Expr::Path(path) = &*call.func {
-            // Check if it's Box::new
-            if path.path.segments.len() == 2
-                && path.path.segments[0].ident == "Box"
-                && path.path.segments[1].ident == "new" {
-                // Get the argument to Box::new
-                if let Some(Expr::Path(fn_path)) = call.args.first() {
-                    if let Some(segment) = fn_path.path.segments.last() {
-                        return Some(segment.ident.to_string());
-                    }
-                }
-            }
-        }
+    let Expr::Call(call) = expr else {
+        return None;
+    };
+
+    let Expr::Path(path) = &*call.func else {
+        return None;
+    };
+
+    // Check if it's Box::new
+    if path.path.segments.len() != 2
+        || path.path.segments[0].ident != "Box"
+        || path.path.segments[1].ident != "new" {
+        return None;
     }
-    None
+
+    // Get the argument to Box::new
+    let Some(Expr::Path(fn_path)) = call.args.first() else {
+        return None;
+    };
+
+    fn_path.path.segments.last().map(|s| s.ident.to_string())
 }
 
 fn extract_doc_comments(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
         .filter_map(|attr| {
-            if attr.path().is_ident("doc") {
-                if let Ok(meta) = attr.meta.require_name_value() {
-                    if let syn::Expr::Lit(expr_lit) = &meta.value {
-                        if let syn::Lit::Str(lit_str) = &expr_lit.lit {
-                            return Some(lit_str.value());
-                        }
-                    }
-                }
+            if !attr.path().is_ident("doc") {
+                return None;
             }
-            None
+
+            let Ok(meta) = attr.meta.require_name_value() else {
+                return None;
+            };
+
+            let syn::Expr::Lit(expr_lit) = &meta.value else {
+                return None;
+            };
+
+            let syn::Lit::Str(lit_str) = &expr_lit.lit else {
+                return None;
+            };
+
+            Some(lit_str.value())
         })
         .collect()
 }

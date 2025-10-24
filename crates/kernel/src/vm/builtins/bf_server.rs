@@ -2687,23 +2687,18 @@ fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(ErrValue(E_ARGS.msg("function_help() requires exactly one argument")));
     }
 
-    let Variant::Str(name) = bf_args.args[0].variant() else {
-        return Err(Code(E_TYPE));
-    };
+    let name = bf_args.args[0].as_symbol().map_err(|_| Code(E_TYPE))?;
 
     let docs = &crate::vm::builtins::docs::BUILTIN_DOCS;
 
-    match docs.get(name.as_str()) {
-        Some(lines) => {
-            let doc_list: Vec<Var> = lines.iter().map(|s| v_str(s)).collect();
-            Ok(Ret(v_list_iter(doc_list)))
-        }
-        None => {
-            Err(ErrValue(E_INVARG.msg(format!(
-                "No documentation found for builtin '{}'", name
-            ))))
-        }
-    }
+    let Some(lines) = docs.get(name.as_string().as_str()) else {
+        return Err(ErrValue(E_INVARG.msg(format!(
+            "No documentation found for builtin '{}'", name
+        ))));
+    };
+
+    let doc_list: Vec<Var> = lines.iter().map(|s| v_str(s)).collect();
+    Ok(Ret(v_list_iter(doc_list)))
 }
 
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
