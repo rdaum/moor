@@ -30,7 +30,6 @@ itertools.workspace = true
 binary-layout.workspace = true
 byteview.workspace = true
 enum-primitive-derive.workspace = true
-fast-counter.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true
 num-traits.workspace = true
@@ -43,7 +42,6 @@ eyre.workspace = true
 thiserror.workspace = true
 
 # Tracing & Logging
-tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Text Processing

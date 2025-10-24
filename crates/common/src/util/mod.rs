@@ -14,6 +14,8 @@
 mod bitarray;
 mod bitenum;
 mod bitset;
+mod cache_padded;
+mod counter;
 mod perf_counter;
 mod trace_events;
 mod xdg;
@@ -21,6 +23,8 @@ mod xdg;
 pub use bitarray::BitArray;
 pub use bitenum::BitEnum;
 pub use bitset::*;
+pub use cache_padded::CachePadded;
+pub use counter::ConcurrentCounter;
 pub use perf_counter::{PerfCounter, PerfTimerGuard};
 pub use trace_events::*;
 pub use xdg::*;

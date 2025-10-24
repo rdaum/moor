@@ -21,7 +21,7 @@ command = [
     "--db",
     "development.db",
     "--import",
-    "cores/lambda-moor/src",
+    "cores/torchship",
     "--import-format",
     "objdef",
     "--export",

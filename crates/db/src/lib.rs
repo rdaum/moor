@@ -50,12 +50,11 @@ mod gc;
 pub mod prop_cache;
 mod provider;
 mod tx_management;
-mod utils;
 pub mod verb_cache;
 
 pub use db_worldstate::db_counters;
-use fast_counter::ConcurrentCounter;
 pub use gc::{GCError, GCInterface};
+use moor_common::util::ConcurrentCounter;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
 // Re-export sequence constants for use in VM

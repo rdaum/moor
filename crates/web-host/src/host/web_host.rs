@@ -526,7 +526,10 @@ impl WebHost {
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration.as_nanos() as u64,
             Err(e) => {
-                error!("Invalid system time while registering temporary host: {}", e);
+                error!(
+                    "Invalid system time while registering temporary host: {}",
+                    e
+                );
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
@@ -663,16 +666,14 @@ pub(crate) async fn rpc_call(
 /// FlatBuffer version: Returns raw FlatBuffer bytes instead of JSON
 pub async fn features_handler(State(host): State<WebHost>) -> Response {
     match host.fetch_server_features().await {
-        Ok(bytes) => {
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", "application/x-flatbuffer")
-                .body(Body::from(bytes))
-                .unwrap_or_else(|e| {
-                    error!("Failed to build features response: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                })
-        }
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/x-flatbuffer")
+            .body(Body::from(bytes))
+            .unwrap_or_else(|e| {
+                error!("Failed to build features response: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }),
         Err(status) => status.into_response(),
     }
 }

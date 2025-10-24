@@ -36,7 +36,7 @@ impl DummyCounter {
 }
 
 #[cfg(feature = "perf_counters")]
-use fast_counter::ConcurrentCounter;
+use crate::util::ConcurrentCounter;
 #[cfg(feature = "perf_counters")]
 use minstant::Instant;
 #[cfg(feature = "perf_counters")]

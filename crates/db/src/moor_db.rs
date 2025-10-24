@@ -21,11 +21,21 @@ use crate::{
     },
     verb_cache::{AncestryCache, VerbResolutionCache},
 };
+use crate::{
+    provider::{
+        Migrator,
+        fjall_migration::{self, FjallMigrator},
+        fjall_provider::FjallProvider,
+        fjall_snapshot_loader::FjallSnapshotLoader,
+    },
+    relation_defs::define_relations,
+};
 use arc_swap::ArcSwap;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use flume::Sender;
 use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
+use moor_common::util::CachePadded;
 use moor_common::{
     model::{CommitResult, ObjFlag, PropDefs, PropPerms, VerbDefs},
     util::{BitEnum, PerfTimerGuard},
@@ -42,17 +52,6 @@ use std::{
 };
 use tempfile::TempDir;
 use tracing::{error, warn};
-
-use crate::{
-    provider::{
-        Migrator,
-        fjall_migration::{self, FjallMigrator},
-        fjall_provider::FjallProvider,
-        fjall_snapshot_loader::FjallSnapshotLoader,
-    },
-    relation_defs::define_relations,
-    utils::CachePadded,
-};
 
 define_relations! {
     object_location == Obj, Obj,
