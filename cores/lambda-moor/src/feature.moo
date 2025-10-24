@@ -74,7 +74,7 @@ object FEATURE
     "strings from each of the verbs named in .feature_verbs.";
   endverb
 
-  verb examine_commands_ok (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_commands_ok (this none this) owner: #2 flags: "rxd"
     return this in args[1].features;
   endverb
 
@@ -117,7 +117,7 @@ object FEATURE
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if ($code_utils:verb_location() == this && caller_perms().wizard)
       this.warehouse = $feature_warehouse;
       `delete_property(this, "guest_ok") ! ANY';
@@ -126,15 +126,15 @@ object FEATURE
     endif
   endverb
 
-  verb feature_remove (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb feature_remove (this none this) owner: #2 flags: "rxd"
     "This is just a blank verb definition to encourage others to use this verb name if they care when a user is no longer using that feature.";
   endverb
 
-  verb player_connected (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb player_connected (this none this) owner: #2 flags: "rxd"
     return;
   endverb
 
-  verb has_feature_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb has_feature_verb (this none this) owner: #2 flags: "rxd"
     ":has_feature_verb(verb, dlist, plist, ilist)";
     "If this feature has a feature verb that matches <verb> and whose {dobj, prep, iobj} arguments match the possibilities listed in <dlist>, <plist> and <ilist>, then return the name of that verb, otherwise return false.";
     "Note: Individual FOs may over-ride this the method to redirect particular feature verbs to different verbs on the object. For example, 'sit with <any>' and 'sit on <any>' could be directed to separate :sit_with() and :sit_on() verbs -- which is something that the code below cannot do.";

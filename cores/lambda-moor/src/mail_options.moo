@@ -38,7 +38,7 @@ object MAIL_OPTIONS
     "i want to read mail to me also sent to lists i read",
     "don't send me personal copies of mail also sent to lists i read"
   };
-  property show_no_unsend (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property show_no_unsend (owner: #2, flags: "r") = {
     "People may @unsend unread messages they send to me",
     "No one may @unsend messages they sent to me"
   };
@@ -51,11 +51,11 @@ object MAIL_OPTIONS
     "@resend puts player in From: header (like @forward)"
   };
   property "type_@mail" (owner: HACKER, flags: "rc") = {2, {2}};
-  property "type_@unsend" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {2, {2}};
+  property "type_@unsend" (owner: #2, flags: "r") = {2, {2}};
   property type_expire (owner: HACKER, flags: "rc") = {0};
   property type_manymsgs (owner: HACKER, flags: "rc") = {0};
   property type_replyto (owner: HACKER, flags: "rc") = {1, {1}};
-  property unsend_sequences (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"before", "after", "since", "until", "subject", "body", "last"};
+  property unsend_sequences (owner: #2, flags: "r") = {"before", "after", "since", "until", "subject", "body", "last"};
 
   override _namelist = "!include!noinclude!all!sender!nosubject!expert!enter!sticky!@mail!manymsgs!replyto!netmail!expire!followup!resend_forw!rn_order!no_auto_forward!expert_netfwd!news!no_dupcc!no_unsend!@unsend!";
   override aliases = {"Mail Options"};
@@ -192,7 +192,7 @@ object MAIL_OPTIONS
     endif
   endverb
 
-  verb show_netmail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_netmail (this none this) owner: #2 flags: "rxd"
     if (value = this:get(@args))
       return {value, {"Have MOO-mail automatically forwarded to me at", "my registered email-address."}};
     else
@@ -201,7 +201,7 @@ object MAIL_OPTIONS
     "Last modified Tue Jun  1 02:10:08 1993 EDT by Edison@OpalMOO (#200).";
   endverb
 
-  verb check_netmail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_netmail (this none this) owner: #2 flags: "rxd"
     ":check_netmail(value) => Makes sure the email-address is one that can actually be used by $network:sendmail().";
     "The actual value sent is not checked since it can only be a boolean flag.  The player's email_address property is what is checked.";
     "Possible situations where the address would be unusable are when the address is invalid or we can't connect to the site to send mail.";
@@ -254,7 +254,7 @@ object MAIL_OPTIONS
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb init_for_core (this none this) owner: #2 flags: "rx"
     if (caller_perms().wizard)
       for x in ({"fast_check", "idle_check", "idle_threshold"})
         this:remove_name(x);
@@ -295,7 +295,7 @@ object MAIL_OPTIONS
     endif
   endverb
 
-  verb "parse_@unsend" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "parse_@unsend" (this none this) owner: #2 flags: "rxd"
     {name, value, bleh} = args;
     if (typeof(value) == INT)
       return tostr(name, " is not a boolean option.");
@@ -313,7 +313,7 @@ object MAIL_OPTIONS
     return {name, value};
   endverb
 
-  verb "show_@unsend" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "show_@unsend" (this none this) owner: #2 flags: "rxd"
     if (value = this:get(@args))
       return {"", {tostr("Default message sequence for @unsend:  ", typeof(value) == STR ? value | $string_utils:from_list(value, " "))}};
     else

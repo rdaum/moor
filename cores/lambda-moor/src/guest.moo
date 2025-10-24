@@ -8,9 +8,9 @@ object GUEST
   property default_gender (owner: HACKER, flags: "r") = "neuter";
   property extra_confunc_msg (owner: HACKER, flags: "rc") = "";
   property free_to_use (owner: HACKER, flags: "r") = 1;
-  property request (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
+  property request (owner: #2, flags: "") = 0;
 
-  override aliases (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"Generic Guest"};
+  override aliases (owner: #2, flags: "r") = {"Generic Guest"};
   override description = {"By definition, guests appear nondescript."};
   override features = {PASTING_FEATURE, STAGE_TALK};
   override linelen = 79;
@@ -22,7 +22,7 @@ object GUEST
   override password = 0;
   override size_quota = {0, 0, 0, 0};
 
-  verb boot (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb boot (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return;
     endif
@@ -33,7 +33,7 @@ object GUEST
     "See #0:user_reconnected.";
   endverb
 
-  verb disfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb disfunc (this none this) owner: #2 flags: "rxd"
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this) && cp != this && caller != #0)
       return E_PERM;
     endif
@@ -54,7 +54,7 @@ object GUEST
     endtry
   endverb
 
-  verb defer (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb defer (this none this) owner: #2 flags: "rxd"
     "Called by #0:connect_player when this object is about to be used as the next guest character.  Usually returns `this', but if for some reason some other guest character should be used, that player object is returned instead";
     if (!caller_perms().wizard)
       "...caller is not :do_login_command; doesn't matter what we return...";
@@ -89,7 +89,7 @@ object GUEST
     return candidate;
   endverb
 
-  verb mail_catch_up (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb mail_catch_up (this none this) owner: #2 flags: "rxd"
     return;
   endverb
 
@@ -116,7 +116,7 @@ object GUEST
     endif
   endverb
 
-  verb confunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb confunc (this none this) owner: #2 flags: "rxd"
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this) && cp != this && caller != #0)
       return E_PERM;
     else
@@ -127,7 +127,7 @@ object GUEST
     endif
   endverb
 
-  verb log_disconnect (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb log_disconnect (this none this) owner: #2 flags: "rxd"
     if (caller != this)
       return E_PERM;
     else
@@ -136,13 +136,13 @@ object GUEST
     endif
   endverb
 
-  verb "@last-c*onnection" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@last-c*onnection" (any none none) owner: #2 flags: "rxd"
     if (!valid(caller_perms()))
       player:tell("Sorry, that information is not available.");
     endif
   endverb
 
-  verb my_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb my_huh (this none this) owner: #2 flags: "rxd"
     if (caller_perms() != this)
       return E_PERM;
     else
@@ -159,14 +159,14 @@ object GUEST
     "only for setting permission";
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.extra_confunc_msg = "";
     endif
   endverb
 
-  verb "set_name set_aliases" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "set_name set_aliases" (this none this) owner: #2 flags: "rxd"
     "disallow guests from setting aliases on themselves";
     if ($perm_utils:controls(caller_perms(), this))
       return pass(@args);
@@ -175,11 +175,11 @@ object GUEST
     endif
   endverb
 
-  verb extra_confunc_msg (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb extra_confunc_msg (this none this) owner: #2 flags: "rxd"
     return $string_utils:pronoun_sub(this.(verb));
   endverb
 
-  verb do_reset (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_reset (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -212,7 +212,7 @@ object GUEST
     endif
   endverb
 
-  verb "@request" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@request" (any any any) owner: #2 flags: "rd"
     "Usage:  @request <player-name> for <email-address>";
     if (player != this)
       return player:tell(E_PERM);
@@ -230,7 +230,7 @@ object GUEST
     "Copied from Generic Guest (#5678):@request by Froxx (#49853) Mon Apr  4 10:49:26 1994 PDT";
   endverb
 
-  verb connection_name_hash (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb connection_name_hash (this none this) owner: #2 flags: "rxd"
     "Compute an encrypted hash of the guest's (last) connection, using 'crypt'. Basically, you can't tell where the guest came from, but it is unlikely that two guests will have the same hash";
     "You can use guest:connection_name_hash(seed) as a string to identify whether two guests are from the same place.";
     hash = toint(caller_perms());
@@ -241,7 +241,7 @@ object GUEST
     return crypt(tostr(hash), @args);
   endverb
 
-  verb "@subscribe*-quick @unsubscribed*-quick" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@subscribe*-quick @unsubscribed*-quick" (any any any) owner: #2 flags: "rd"
     if (caller_perms() != $nothing && caller_perms() != player)
       return E_PERM;
     endif
@@ -263,7 +263,7 @@ object GUEST
     "Paragraph (#122534) - Tue Nov 8, 2005 - Added to prevent a silly traceback from occuring, since Guests can't read their own .current_message.";
   endverb
 
-  verb current_folder (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb current_folder (this none this) owner: #2 flags: "rxd"
     if (caller_perms() in {this, this.owner})
       return pass(@args);
     else
@@ -271,7 +271,7 @@ object GUEST
     endif
   endverb
 
-  verb notify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard || caller_perms() in {this, this.owner} || caller == this)
       return pass(@args);
     else

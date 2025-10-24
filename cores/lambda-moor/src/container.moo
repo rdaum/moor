@@ -1,34 +1,34 @@
 object CONTAINER
   name: "generic container"
   parent: THING
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property close_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You close %d.";
-  property dark (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 1;
-  property empty_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "It is empty.";
-  property oclose_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "closes %d.";
-  property oopen_fail_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property oopen_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "opens %d.";
-  property opaque (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 1;
-  property open_fail_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You can't open that.";
-  property open_key (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = 0;
-  property open_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You open %d.";
-  property opened (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property oput_fail_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property oput_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "puts %d in %i.";
-  property oremove_fail_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property oremove_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "removes %d from %i.";
-  property put_fail_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You can't put %d in that.";
-  property put_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You put %d in %i.";
-  property remove_fail_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You can't remove that.";
-  property remove_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You remove %d from %i.";
+  property close_msg (owner: #2, flags: "rc") = "You close %d.";
+  property dark (owner: #2, flags: "r") = 1;
+  property empty_msg (owner: #2, flags: "rc") = "It is empty.";
+  property oclose_msg (owner: #2, flags: "rc") = "closes %d.";
+  property oopen_fail_msg (owner: #2, flags: "rc") = "";
+  property oopen_msg (owner: #2, flags: "rc") = "opens %d.";
+  property opaque (owner: #2, flags: "r") = 1;
+  property open_fail_msg (owner: #2, flags: "rc") = "You can't open that.";
+  property open_key (owner: #2, flags: "c") = 0;
+  property open_msg (owner: #2, flags: "rc") = "You open %d.";
+  property opened (owner: #2, flags: "r") = 0;
+  property oput_fail_msg (owner: #2, flags: "rc") = "";
+  property oput_msg (owner: #2, flags: "rc") = "puts %d in %i.";
+  property oremove_fail_msg (owner: #2, flags: "rc") = "";
+  property oremove_msg (owner: #2, flags: "rc") = "removes %d from %i.";
+  property put_fail_msg (owner: #2, flags: "rc") = "You can't put %d in that.";
+  property put_msg (owner: #2, flags: "rc") = "You put %d in %i.";
+  property remove_fail_msg (owner: #2, flags: "rc") = "You can't remove that.";
+  property remove_msg (owner: #2, flags: "rc") = "You remove %d from %i.";
 
   override aliases = {"generic container"};
   override object_size = {9415, 1084848672};
 
-  verb "p*ut in*sert d*rop" (any in this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "p*ut in*sert d*rop" (any in this) owner: #2 flags: "rxd"
     if (this.location != player && this.location != player.location)
       player:tell("You can't get at ", this.name, ".");
     elseif (dobj == $nothing)
@@ -55,7 +55,7 @@ object CONTAINER
     endif
   endverb
 
-  verb "re*move ta*ke g*et" (any from this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "re*move ta*ke g*et" (any from this) owner: #2 flags: "rxd"
     if (!(this.location in {player, player.location}))
       player:tell("Sorry, you're too far away.");
     elseif (!this.opened)
@@ -93,18 +93,18 @@ object CONTAINER
     endif
   endverb
 
-  verb look_self (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb look_self (this none this) owner: #2 flags: "rxd"
     pass();
     if (!this.dark)
       this:tell_contents();
     endif
   endverb
 
-  verb acceptable (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb acceptable (this none this) owner: #2 flags: "rxd"
     return !is_player(args[1]);
   endverb
 
-  verb open (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb open (this none none) owner: #2 flags: "rxd"
     perms = callers() && caller != this ? caller_perms() | player;
     if (this.opened)
       player:tell("It's already open.");
@@ -123,7 +123,7 @@ object CONTAINER
     endif
   endverb
 
-  verb "@lock_for_open @lock-for-open" (this with any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@lock_for_open @lock-for-open" (this with any) owner: #2 flags: "rd"
     set_task_perms(player);
     key = $lock_utils:parse_keyexp(iobjstr, player);
     if (typeof(key) == STR)
@@ -140,11 +140,11 @@ object CONTAINER
     endif
   endverb
 
-  verb is_openable_by (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_openable_by (this none this) owner: #2 flags: "rxd"
     return this.open_key == 0 || $lock_utils:eval_key(this.open_key, args[1]);
   endverb
 
-  verb close (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb close (this none none) owner: #2 flags: "rxd"
     if (!this.opened)
       player:tell("It's already closed.");
     else
@@ -156,7 +156,7 @@ object CONTAINER
     endif
   endverb
 
-  verb "@unlock_for_open @unlock-for-open" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unlock_for_open @unlock-for-open" (this none none) owner: #2 flags: "rd"
     set_task_perms(player);
     try
       dobj.open_key = 0;
@@ -166,7 +166,7 @@ object CONTAINER
     endtry
   endverb
 
-  verb tell_contents (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_contents (this none this) owner: #2 flags: "rxd"
     if (this.contents)
       player:tell("Contents:");
       for thing in (this:contents())
@@ -177,7 +177,7 @@ object CONTAINER
     endif
   endverb
 
-  verb set_opened (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_opened (this none this) owner: #2 flags: "rxd"
     if (!$perm_utils:controls(caller.owner, this))
       return E_PERM;
     else
@@ -187,7 +187,7 @@ object CONTAINER
     endif
   endverb
 
-  verb "@opacity" (this is any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@opacity" (this is any) owner: #2 flags: "rd"
     if (!$perm_utils:controls(player, this))
       player:tell("Can't set opacity of something you don't own.");
     elseif (iobjstr != "0" && !toint(iobjstr))
@@ -197,7 +197,7 @@ object CONTAINER
     endif
   endverb
 
-  verb set_opaque (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_opaque (this none this) owner: #2 flags: "rxd"
     if (!$perm_utils:controls(caller.owner, this))
       return E_PERM;
     elseif (typeof(number = args[1]) != INT)
@@ -213,7 +213,7 @@ object CONTAINER
     return (msg = `this.(verb) ! ANY') ? $string_utils:pronoun_sub(msg) | "";
   endverb
 
-  verb dark (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dark (this none this) owner: #2 flags: "rxd"
     return this.(verb);
   endverb
 endobject

@@ -1,26 +1,26 @@
 object MAIL_RECIPIENT_CLASS
   name: "Generic Mail Receiving Player"
   parent: PLAYER
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property _mail_task (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property current_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {0, 0};
-  property mail_forward (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property mail_lists (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property mail_notify (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {{}, {}};
-  property mail_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property message_keep_date (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property messages (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
-  property messages_going (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
-  property messages_kept (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
+  property _mail_task (owner: #2, flags: "rc") = 0;
+  property current_message (owner: #2, flags: "c") = {0, 0};
+  property mail_forward (owner: #2, flags: "rc") = {};
+  property mail_lists (owner: #2, flags: "rc") = {};
+  property mail_notify (owner: #2, flags: "r") = {{}, {}};
+  property mail_options (owner: #2, flags: "rc") = {};
+  property message_keep_date (owner: #2, flags: "rc") = 0;
+  property messages (owner: #2, flags: "c") = {};
+  property messages_going (owner: #2, flags: "c") = {};
+  property messages_kept (owner: #2, flags: "rc") = {};
 
   override aliases = {"Generic Mail Receiving Player"};
   override help = MAIL_HELP;
   override object_size = {71323, 1084848672};
 
-  verb mail_forward (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb mail_forward (this none this) owner: #2 flags: "rxd"
     if (typeof(mf = this.(verb)) == STR)
       return $string_utils:pronoun_sub(mf, @args);
     else
@@ -28,7 +28,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb receive_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb receive_message (this none this) owner: #2 flags: "rxd"
     ":receive_message(msg,from)";
     if (!$perm_utils:controls(caller_perms(), this) && caller != this)
       return E_PERM;
@@ -63,14 +63,14 @@ object MAIL_RECIPIENT_CLASS
     return new;
   endverb
 
-  verb display_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_message (this none this) owner: #2 flags: "rxd"
     ":display_message(preamble,msg) --- prints msg to player.";
     vb = this._mail_task == task_id() || caller == $mail_editor ? "notify_lines_suspended" | "tell_lines_suspended";
     preamble = args[1];
     player:(vb)({@typeof(preamble) == LIST ? preamble | {preamble}, @args[2], "--------------------------"});
   endverb
 
-  verb "parse_message_seq from_msg_seq %from_msg_seq to_msg_seq %to_msg_seq subject_msg_seq body_msg_seq kept_msg_seq unkept_msg_seq display_seq_headers display_seq_full messages_in_seq list_rmm new_message_num length_num_le length_date_le length_date_gt length_all_msgs exists_num_eq msg_seq_to_msg_num_list msg_seq_to_msg_num_string rm_message_seq undo_rmm expunge_rmm renumber keep_message_seq" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "parse_message_seq from_msg_seq %from_msg_seq to_msg_seq %to_msg_seq subject_msg_seq body_msg_seq kept_msg_seq unkept_msg_seq display_seq_headers display_seq_full messages_in_seq list_rmm new_message_num length_num_le length_date_le length_date_gt length_all_msgs exists_num_eq msg_seq_to_msg_num_list msg_seq_to_msg_num_string rm_message_seq undo_rmm expunge_rmm renumber keep_message_seq" (this none this) owner: #2 flags: "rxd"
     "parse_message_seq(strings,cur)         => msg_seq";
     "messages_in_seq(msg_seq);              => text of messages in msg_seq";
     "display_seq_headers(msg_seq[,current]) :displays summary lines of those msgs";
@@ -93,7 +93,7 @@ object MAIL_RECIPIENT_CLASS
     return $mail_agent:msg_summary_line(@args);
   endverb
 
-  verb msg_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb msg_text (this none this) owner: #2 flags: "rxd"
     ":msg_text(@msg) => list of strings.";
     "msg is a mail message (in the usual transmission format) being read BY this player.";
     "The default version of recipient:msg_full_text calls this to obtain the actual list of strings to display.  (this is a badly named verb).";
@@ -101,7 +101,7 @@ object MAIL_RECIPIENT_CLASS
     return $mail_agent:to_text(@args);
   endverb
 
-  verb notify_mail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify_mail (this none this) owner: #2 flags: "rxd"
     ":notify_mail(from,recipients[,msgnums])";
     " used by $mail_agent:raw_send to notify this player about mail being sent";
     " from <from> to <recipients>.  <msgnums> if given gives the message number(s) assigned (in the event that the corresponding recipient actually kept the mail)";
@@ -129,7 +129,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb current_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb current_message (this none this) owner: #2 flags: "rxd"
     ":current_message([recipient])";
     " => current message number for the given recipient (defaults to this).";
     " => 0 if we have no record of that recipient";
@@ -146,7 +146,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb get_current_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_current_message (this none this) owner: #2 flags: "rxd"
     ":get_current_message([recipient])";
     " => {msg_num, last_read_date} for the given recipient.";
     " => 0 if we have no record of that recipient.";
@@ -165,7 +165,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb set_current_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_current_message (this none this) owner: #2 flags: "rxd"
     ":set_current_message(recipient[,number[,date]])";
     "Returns the new {number,last-read-date} pair for recipient.";
     if (caller != this && !$perm_utils:controls(caller_perms(), this))
@@ -193,7 +193,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb make_current_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb make_current_message (this none this) owner: #2 flags: "rxd"
     ":make_current_message(recipient[,index])";
     "starts a new current_message record for recipient.";
     "index, if given, indicates where recipient is to be";
@@ -223,7 +223,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb kill_current_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb kill_current_message (this none this) owner: #2 flags: "rxd"
     ":kill_current_message(recipient)";
     "entirely forgets current message for this recipient...";
     "Returns true iff successful.";
@@ -234,18 +234,18 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb current_folder (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb current_folder (this none this) owner: #2 flags: "rxd"
     ":current_folder() => default folder to use, always an object, usually `this'";
     set_task_perms(caller_perms());
     return !this:mail_option("sticky") || this.current_folder && this;
   endverb
 
-  verb set_current_folder (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_current_folder (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return this.current_folder = args[1];
   endverb
 
-  verb parse_folder_spec (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_folder_spec (this none this) owner: #2 flags: "rxd"
     ":parse_folder_spec(verb,args,expected_preposition[,allow_trailing_args_p])";
     " => {folder, msg_seq_args, trailing_args}";
     set_task_perms(caller_perms());
@@ -273,7 +273,7 @@ object MAIL_RECIPIENT_CLASS
     return 0;
   endverb
 
-  verb parse_mailread_cmd (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_mailread_cmd (this none this) owner: #2 flags: "rxd"
     ":parse_mailread_cmd(verb,args,default,prep[,trailer])";
     "  handles anything of the form  `VERB message_seq [PREP folder ...]'";
     "    default is the default msg-seq to use if none given";
@@ -321,7 +321,7 @@ object MAIL_RECIPIENT_CLASS
     return 0;
   endverb
 
-  verb "@mail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@mail" (any any any) owner: #2 flags: "rxd"
     "@mail <msg-sequence>                --- as in help @mail";
     "@mail <msg-sequence> on <recipient> --- shows mail on mailing list or player.";
     set_task_perms(valid(cp = caller_perms()) ? cp | player);
@@ -340,7 +340,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@read @peek" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@read @peek" (any any any) owner: #2 flags: "rxd"
     "@read <msg>...                  -- as in help @read";
     "@read <msg>... on *<recipient>  -- reads messages on recipient.";
     "@peek ...                       -- like @read, but don't set current message";
@@ -361,7 +361,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@next @prev" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@next @prev" (any any any) owner: #2 flags: "rd"
     set_task_perms(player.owner);
     if (dobjstr && !(n = toint(dobjstr)))
       player:notify(tostr("Usage:  ", verb, " [<number>] [on <recipient>]"));
@@ -372,7 +372,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@rmm*ail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rmm*ail" (any any any) owner: #2 flags: "rd"
     "@rmm <message-sequence> [from <recipient>].   Use @unrmm if you screw up.";
     " Beware, though.  @unrmm can only undo the most recent @rmm.";
     set_task_perms(player);
@@ -394,7 +394,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@renumber" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@renumber" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       folder = this:current_folder();
@@ -418,7 +418,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@unrmm*ail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unrmm*ail" (any any any) owner: #2 flags: "rd"
     "@unrmm [on <recipient>]  -- undoes the previous @rmm on that recipient.";
     set_task_perms(player);
     if (!(p = this:parse_folder_spec("@unrmm", args, "on")))
@@ -451,7 +451,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@send" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@send" (any any any) owner: #2 flags: "rxd"
     if (args && args[1] == "to")
       args = listdelete(args, 1);
     endif
@@ -466,7 +466,7 @@ object MAIL_RECIPIENT_CLASS
     $mail_editor:invoke(args, verb, @subject);
   endverb
 
-  verb "@answer @repl*y" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@answer @repl*y" (any any any) owner: #2 flags: "rd"
     "@answer <msg> [on *<recipient>] [<flags>...]";
     set_task_perms(who = valid(caller_perms()) ? caller_perms() | player);
     if (p = this:parse_mailread_cmd(verb, args, "cur", "on", 1))
@@ -481,7 +481,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@forward" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@forward" (any any any) owner: #2 flags: "rxd"
     "@forward <msg> [on *<recipient>] to <recipient> [<recipient>...]";
     set_task_perms(valid(cp = caller_perms()) ? cp | player);
     if (!(p = this:parse_mailread_cmd(verb, args, "", "on", 1)))
@@ -523,11 +523,11 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@gripe" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@gripe" (any any any) owner: #2 flags: "rd"
     $mail_editor:invoke($gripe_recipients, "@gripe", "@gripe: " + argstr);
   endverb
 
-  verb "@typo @bug @suggest*ion @idea @comment" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@typo @bug @suggest*ion @idea @comment" (any any any) owner: #2 flags: "rd"
     subject = tostr($string_utils:capitalize(verb[2..$]), ":  ", (loc = this.location).name, "(", loc, ")");
     if (this != player)
       return E_PERM;
@@ -551,7 +551,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@skip" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@skip" (any any any) owner: #2 flags: "rd"
     "@skip [*<folder/mailing_list>...]";
     "  sets your last-read time for the given lists to now, indicating your";
     "  disinterest in any new messages that might have appeared recently.";
@@ -575,7 +575,7 @@ object MAIL_RECIPIENT_CLASS
     endfor
   endverb
 
-  verb "@subscribe*-quick @unsubscribed*-quick" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@subscribe*-quick @unsubscribed*-quick" (any any any) owner: #2 flags: "rd"
     "@subscribe *<folder/mailing_list> [with notification] [before|after *<folder>]";
     "  causes you to be notified when new mail arrives on this list";
     "@subscribe";
@@ -669,7 +669,7 @@ object MAIL_RECIPIENT_CLASS
     this:set_current_folder(folder);
   endverb
 
-  verb mail_catch_up (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb mail_catch_up (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller == this ? this.owner | caller_perms());
     this:set_current_folder(this);
     dates = new_cm = head = {};
@@ -698,7 +698,7 @@ object MAIL_RECIPIENT_CLASS
     this.current_message = {@head, @$list_utils:reverse(new_cm)};
   endverb
 
-  verb "@rn check_mail_lists @subscribed @rn-full" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@rn check_mail_lists @subscribed @rn-full" (none none none) owner: #2 flags: "rxd"
     set_task_perms(caller == this ? this.owner | caller_perms());
     which = {};
     cm = this.current_message;
@@ -752,7 +752,7 @@ object MAIL_RECIPIENT_CLASS
     return which;
   endverb
 
-  verb mail_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb mail_option (this none this) owner: #2 flags: "rxd"
     ":mail_option(name)";
     "Returns the value of the specified mail option";
     if (caller in {this, $mail_editor, $mail_agent} || $perm_utils:controls(caller_perms(), this))
@@ -762,7 +762,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@unsub*scribe" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unsub*scribe" (any any any) owner: #2 flags: "rd"
     "@unsubscribe [*<folder/mailing_list> ...]";
     "entirely removes the record of your current message for the named folders,";
     "indicating your disinterest in anything that might appear there in the future.";
@@ -812,7 +812,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb send_self_netmail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb send_self_netmail (this none this) owner: #2 flags: "rxd"
     ":send_self_netmail(msg [ ,from ])";
     "return 0 if successful, otherwise error.";
     if (!$perm_utils:controls(caller_perms(), this))
@@ -836,7 +836,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@netforw*ard" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@netforw*ard" (any any any) owner: #2 flags: "rxd"
     "@netforward <msg>...                  -- as in help on @netforward";
     "@netforward <msg>... on *<recipient>  -- netforwards messages on recipient.";
     "This command forwards mail-messages to your registered email-address.";
@@ -865,7 +865,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@@sendmail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@@sendmail" (any any any) owner: #2 flags: "rd"
     "Syntax: @@sendmail";
     "This is intended for use with client editors.  You probably don't want to try using this command manually.";
     "Reads a formatted mail message, extracts recipients, subject line and/or reply-to header and sends message without going to the mailroom.  Example:";
@@ -948,7 +948,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@keep-m*ail @keepm*ail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@keep-m*ail @keepm*ail" (any any any) owner: #2 flags: "rd"
     "@keep-mail [<msg-sequence>|none] [on <recipient>]";
     "marks the indicated messages as `kept'.";
     set_task_perms(valid(cp = caller_perms()) ? cp | player);
@@ -986,7 +986,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb my_match_recipient (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb my_match_recipient (this none this) owner: #2 flags: "rxd"
     ":my_match_recipient(string) => matches string against player's private mailing lists.";
     if (!(string = args[1]))
       return $nothing;
@@ -996,7 +996,7 @@ object MAIL_RECIPIENT_CLASS
     return $string_utils:match(string, this.mail_lists, "aliases");
   endverb
 
-  verb expire_old_messages (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expire_old_messages (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if (!$perm_utils:controls(caller_perms(), this))
       return E_PERM;
@@ -1011,7 +1011,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb msg_full_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb msg_full_text (this none this) owner: #2 flags: "rxd"
     ":msg_full_text(@msg) => list of strings.";
     "msg is a mail message (in the usual transmission format).";
     "display_seq_full calls this to obtain the actual list of strings to display.";
@@ -1019,7 +1019,7 @@ object MAIL_RECIPIENT_CLASS
     "default is to leave it up to the player how s/he wants it to be displayed.";
   endverb
 
-  verb "@resend" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@resend" (any any any) owner: #2 flags: "rd"
     "@resend <msg> [on *<recipient>] to <recipient> [<recipient>...]";
     set_task_perms(valid(caller_perms()) ? caller_perms() | player);
     "...";
@@ -1096,7 +1096,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb expirable_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expirable_msg_seq (this none this) owner: #2 flags: "rxd"
     "Return a sequence indicating the expirable messages for this player.";
     set_task_perms(caller_perms());
     if (!$perm_utils:controls(caller_perms(), this))
@@ -1113,7 +1113,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb format_for_netforward (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb format_for_netforward (this none this) owner: #2 flags: "rxd"
     "Takes a message sequence (the actual messages, not just the sequence describing it) and grovels over it filling text etc.  Returns a two valued list: {formatted message, header for same}";
     set_task_perms(caller_perms());
     {message_seq, folderstr} = args;
@@ -1138,7 +1138,7 @@ object MAIL_RECIPIENT_CLASS
     return {netmail, header};
   endverb
 
-  verb format_for_netforward_debug (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb format_for_netforward_debug (this none this) owner: #2 flags: "rxd"
     "Takes a message sequence (the actual messages, not just the sequence describing it) and grovels over it filling text etc.  Returns a two valued list: {formatted message, header for same}";
     set_task_perms(caller_perms());
     {message_seq, folderstr} = args;
@@ -1163,7 +1163,7 @@ object MAIL_RECIPIENT_CLASS
     return {netmail, header};
   endverb
 
-  verb "@nn" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@nn" (none none none) owner: #2 flags: "rxd"
     "@nn  -- reads the first new message on the first mail_recipient (in .current_message) where new mail exists.";
     set_task_perms(valid(cp = caller_perms()) ? cp | player);
     cm = this.current_message;
@@ -1186,7 +1186,7 @@ object MAIL_RECIPIENT_CLASS
     player:tell("No News (is good news)");
   endverb
 
-  verb "@unread" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unread" (any any any) owner: #2 flags: "rd"
     "@unread <msg> [on *<recipient>]  -- resets last-read-date for recipient to just before the first of the indicated messages.";
     set_task_perms(player);
     if (p = this:parse_mailread_cmd("@unread", args, "cur", "on"))
@@ -1207,7 +1207,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@refile @copym*ail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@refile @copym*ail" (any any any) owner: #2 flags: "rd"
     "@refile/@copym*ail <msg-sequence> [on <recipient>] to <recipient>";
     "@refile will delete the messages from the source folder.  @copym does not.";
     "I'm not happy with this one, yet...";
@@ -1240,7 +1240,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@quickr*eply @qreply" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@quickr*eply @qreply" (any any any) owner: #2 flags: "rd"
     "@qreply <msg> [on *<recipient>] [<flags>...]";
     "like @reply only, as in @qsend, we prompt for the message text using ";
     "$command_utils:read_lines() rather than invoking the $mail_editor.";
@@ -1284,7 +1284,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@mail-all-new*-mail" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@mail-all-new*-mail" (none none none) owner: #2 flags: "rxd"
     "@mail-all-new-mail";
     " Prints headers for all new mail on every mail-recipient mentioned in .current_message.";
     set_task_perms(valid(cp = caller_perms()) ? cp | player);
@@ -1313,7 +1313,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@read-all-new*-mail @ranm" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@read-all-new*-mail @ranm" (any none none) owner: #2 flags: "rxd"
     "@read-all-new-mail [yes]";
     " Prints all new mail on every mail-recipient mentioned in .current_message";
     " Generally this will spam you into next Tuesday.";
@@ -1366,7 +1366,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@quick*send @qsend" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@quick*send @qsend" (any any any) owner: #2 flags: "rd"
     "Syntax: @quicksend <recipients(s)> [subj=<text>] [<message>]";
     "Sends the recipients(s) a quick message, wit{out having to go to the mailroom. If there is more than one recipients, place them all in quotes. If the subj contains spaces, place it in quotes.";
     "To put line breaks in the message, use a caret (^).";
@@ -1429,14 +1429,14 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.mail_options = {};
     endif
   endverb
 
-  verb confunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb confunc (this none this) owner: #2 flags: "rxd"
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this) && caller != #0)
       return E_PERM;
     endif
@@ -1446,7 +1446,7 @@ object MAIL_RECIPIENT_CLASS
     pass(@args);
   endverb
 
-  verb "@add-notify" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@add-notify" (any at any) owner: #2 flags: "rd"
     "Ideally, in order for one person to be notified that another person has new mail, both the mail recipient and the notification recipient should agree that this is an OK transfer of information.";
     "Usage:  @add-notify me to player";
     "    Sends mail to player saying that I want to be added to their mail notification property.";
@@ -1482,7 +1482,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb mail_notify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb mail_notify (this none this) owner: #2 flags: "rxd"
     if (length(this.mail_notify) > 0 && typeof(this.mail_notify[1]) == LIST)
       return this.mail_notify[1];
     else
@@ -1490,7 +1490,7 @@ object MAIL_RECIPIENT_CLASS
     endif
   endverb
 
-  verb "@unsend" (any from any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unsend" (any from any) owner: #2 flags: "rd"
     "USAGE: @unsend [message-sequence] from <player>";
     "Attempts to unsend messages you sent to <player>. Per *B:Unsend, messages may not be unsent if they have been read, have been netforwarded to the player (@mail-option +netmail), or if the player has set emself so that mail may not be unsent from em (@mail-option +no_unsend). In addition, mail sent to multiple players may not be unsent unless it can be unsent from each recipient.";
     "";
@@ -1622,7 +1622,7 @@ object MAIL_RECIPIENT_CLASS
     otherpeople && player:notify(tostr("Message(s) were also removed from ", $string_utils:nn(otherpeople), "."));
   endverb
 
-  verb do_unsend (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_unsend (this none this) owner: #2 flags: "rxd"
     ":do_unsend(seq) -> Remove the specified messages. Used by @unsend. Cannot be overridden by players or player classes; @unsend won't bother to call the verb.";
     if (!caller_perms().wizard)
       return E_PERM;
@@ -1630,7 +1630,7 @@ object MAIL_RECIPIENT_CLASS
     return $mail_agent:rm_message_seq(@args);
   endverb
 
-  verb "@annotate*mail" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@annotate*mail" (any any any) owner: #2 flags: "rd"
     "@annotate <msg-sequence> [on <recipient>] with \"annotation\"";
     "prefix the specified messages with the given annotation.";
     set_task_perms(player);
@@ -1653,11 +1653,11 @@ object MAIL_RECIPIENT_CLASS
     "Copied from annotatetest (#87053):@annotate [verb author Puff (#1449)] at Mon Feb 14 14:45:41 2005 PST";
   endverb
 
-  verb annotate_message_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb annotate_message_seq (this none this) owner: #2 flags: "rxd"
     return "Cannot annotate player messages.";
   endverb
 
-  verb check_mail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_mail (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       nm = this:length_all_msgs() - this:length_date_le(this:get_current_message()[2]);
       if (nm)

@@ -1,28 +1,28 @@
 object ROOM
   name: "generic room"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property blessed_object (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
-  property blessed_task (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property ctype (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 3;
-  property dark (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property ejection_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You expel %d from %i.";
-  property entrances (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
-  property exits (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
-  property free_entry (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property free_home (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property oejection_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%N unceremoniously %{!expels} %d from %i.";
-  property residents (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property victim_ejection_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You have been expelled from %i by %n.";
-  property who_location_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%T";
+  property blessed_object (owner: #2, flags: "rc") = LOCAL;
+  property blessed_task (owner: #2, flags: "rc") = 0;
+  property ctype (owner: #2, flags: "rc") = 3;
+  property dark (owner: #2, flags: "rc") = 0;
+  property ejection_msg (owner: #2, flags: "rc") = "You expel %d from %i.";
+  property entrances (owner: #2, flags: "c") = {};
+  property exits (owner: #2, flags: "c") = {};
+  property free_entry (owner: #2, flags: "rc") = 1;
+  property free_home (owner: #2, flags: "rc") = 0;
+  property oejection_msg (owner: #2, flags: "rc") = "%N unceremoniously %{!expels} %d from %i.";
+  property residents (owner: #2, flags: "rc") = {};
+  property victim_ejection_msg (owner: #2, flags: "rc") = "You have been expelled from %i by %n.";
+  property who_location_msg (owner: #2, flags: "rc") = "%T";
 
   override aliases = {"generic room"};
   override object_size = {28944, 1084848672};
 
-  verb confunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb confunc (this none this) owner: #2 flags: "rxd"
     if ((cp = caller_perms()) == player || $perm_utils:controls(cp, player) || caller == this)
       "Need the first check because guests don't control themselves";
       this:look_self(player.brief);
@@ -30,7 +30,7 @@ object ROOM
     endif
   endverb
 
-  verb disfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb disfunc (this none this) owner: #2 flags: "rxd"
     if ((cp = caller_perms()) == player || $perm_utils:controls(cp, player) || caller == this)
       this:announce($string_utils:pronoun_sub("%N %<has> disconnected.", player));
       "need the first check since guests don't control themselves";
@@ -41,7 +41,7 @@ object ROOM
     endif
   endverb
 
-  verb say (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb say (any any any) owner: #2 flags: "rx"
     try
       player:tell("You say, \"", argstr, "\"");
       this:announce(player.name, " ", $gender_utils:get_conj("says", player), ", \"", argstr, "\"");
@@ -50,7 +50,7 @@ object ROOM
     endtry
   endverb
 
-  verb emote (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb emote (any any any) owner: #2 flags: "rxd"
     if (argstr != "" && argstr[1] == ":")
       this:announce_all(player.name, argstr[2..length(argstr)]);
     else
@@ -58,7 +58,7 @@ object ROOM
     endif
   endverb
 
-  verb announce (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb announce (this none this) owner: #2 flags: "rxd"
     for dude in (setremove(this:contents(), player))
       try
         dude:tell(@args);
@@ -69,7 +69,7 @@ object ROOM
     endfor
   endverb
 
-  verb match_exit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match_exit (this none this) owner: #2 flags: "rxd"
     what = args[1];
     if (what)
       yes = $failed_match;
@@ -88,12 +88,12 @@ object ROOM
     endif
   endverb
 
-  verb add_exit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb add_exit (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return `this.exits = setadd(this.exits, args[1]) ! E_PERM' != E_PERM;
   endverb
 
-  verb tell_contents (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_contents (this none this) owner: #2 flags: "rxd"
     {contents, ctype} = args;
     if (!this.dark && contents != {})
       if (ctype == 0)
@@ -130,7 +130,7 @@ object ROOM
     endif
   endverb
 
-  verb "@exits" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@exits" (none none none) owner: #2 flags: "rxd"
     if (!$perm_utils:controls(valid(caller_perms()) ? caller_perms() | player, this))
       player:tell("Sorry, only the owner of a room may list its exits.");
     elseif (this.exits == {})
@@ -151,7 +151,7 @@ object ROOM
     endif
   endverb
 
-  verb look_self (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb look_self (this none this) owner: #2 flags: "rxd"
     {?brief = 0} = args;
     player:tell(this:title());
     if (!brief)
@@ -160,24 +160,24 @@ object ROOM
     this:tell_contents(setremove(this:contents(), player), this.ctype);
   endverb
 
-  verb acceptable (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb acceptable (this none this) owner: #2 flags: "rxd"
     what = args[1];
     return this:is_unlocked_for(what) && (this:free_entry(@args) || (what == this.blessed_object && task_id() == this.blessed_task) || what.owner == this.owner || (typeof(this.residents) == LIST && (what in this.residents || what.owner in this.residents)));
   endverb
 
-  verb add_entrance (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb add_entrance (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return `this.entrances = setadd(this.entrances, args[1]) ! E_PERM' != E_PERM;
   endverb
 
-  verb bless_for_entry (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb bless_for_entry (this none this) owner: #2 flags: "rxd"
     if (caller in {@this.entrances, this})
       this.blessed_object = args[1];
       this.blessed_task = task_id();
     endif
   endverb
 
-  verb "@entrances" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@entrances" (none none none) owner: #2 flags: "rd"
     if (!$perm_utils:controls(valid(caller_perms()) ? caller_perms() | player, this))
       player:tell("Sorry, only the owner of a room may list its entrances.");
     elseif (this.entrances == {})
@@ -198,7 +198,7 @@ object ROOM
     endif
   endverb
 
-  verb go (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb go (any any any) owner: #2 flags: "rxd"
     if (!args || !(dir = args[1]))
       player:tell("You need to specify a direction.");
       return E_INVARG;
@@ -220,7 +220,7 @@ object ROOM
     endif
   endverb
 
-  verb "l*ook" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "l*ook" (any any any) owner: #2 flags: "rxd"
     if (dobjstr == "" && !prepstr)
       this:look_self();
     elseif (prepstr != "in" && prepstr != "on")
@@ -253,7 +253,7 @@ object ROOM
     endif
   endverb
 
-  verb announce_all (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb announce_all (this none this) owner: #2 flags: "rxd"
     for dude in (this:contents())
       try
         dude:tell(@args);
@@ -264,7 +264,7 @@ object ROOM
     endfor
   endverb
 
-  verb announce_all_but (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb announce_all_but (this none this) owner: #2 flags: "rxd"
     ":announce_all_but(LIST objects to ignore, text)";
     {ignore, @text} = args;
     contents = this:contents();
@@ -281,7 +281,7 @@ object ROOM
     endfor
   endverb
 
-  verb enterfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb enterfunc (this none this) owner: #2 flags: "rxd"
     object = args[1];
     if (is_player(object) && object.location == this)
       player = object;
@@ -292,11 +292,11 @@ object ROOM
     endif
   endverb
 
-  verb exitfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb exitfunc (this none this) owner: #2 flags: "rxd"
     return;
   endverb
 
-  verb remove_exit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb remove_exit (this none this) owner: #2 flags: "rxd"
     exit = args[1];
     if (caller != exit)
       set_task_perms(caller_perms());
@@ -304,7 +304,7 @@ object ROOM
     return `this.exits = setremove(this.exits, exit) ! E_PERM' != E_PERM;
   endverb
 
-  verb remove_entrance (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb remove_entrance (this none this) owner: #2 flags: "rxd"
     exit = args[1];
     if (caller != exit)
       set_task_perms(caller_perms());
@@ -312,7 +312,7 @@ object ROOM
     return `this.entrances = setremove(this.entrances, exit) ! E_PERM' != E_PERM;
   endverb
 
-  verb "@add-exit" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@add-exit" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       player:tell("Usage:  @add-exit <exit-number>");
@@ -355,7 +355,7 @@ object ROOM
     endif
   endverb
 
-  verb "@add-entrance" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@add-entrance" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       player:tell("Usage:  @add-entrance <exit-number>");
@@ -386,7 +386,7 @@ object ROOM
     endif
   endverb
 
-  verb recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb recycle (this none this) owner: #2 flags: "rxd"
     "Make a mild attempt to keep people and objects from ending up in #-1 when people recycle a room";
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       "... first try spilling them out onto the floor of enclosing room if any";
@@ -426,7 +426,7 @@ object ROOM
     endif
   endverb
 
-  verb "e east w west s south n north ne northeast nw northwest se southeast sw southwest u up d down" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "e east w west s south n north ne northeast nw northwest se southeast sw southwest u up d down" (none none none) owner: #2 flags: "rxd"
     set_task_perms(caller_perms() == #-1 ? player | caller_perms());
     exit = this:match_exit(verb);
     if (valid(exit))
@@ -438,7 +438,7 @@ object ROOM
     endif
   endverb
 
-  verb "@eject @eject! @eject!!" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@eject @eject! @eject!!" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       return;
@@ -467,12 +467,12 @@ object ROOM
     return $gender_utils:pronoun_sub(this.(verb));
   endverb
 
-  verb accept_for_abode (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb accept_for_abode (this none this) owner: #2 flags: "rxd"
     who = args[1];
     return this:basic_accept_for_abode(who) && this:acceptable(who);
   endverb
 
-  verb "@resident*s" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@resident*s" (any none none) owner: #2 flags: "rd"
     if (!$perm_utils:controls(player, this))
       player:tell("You must own this room to manipulate the legal residents list.  Try contacting ", this.owner.name, ".");
     else
@@ -521,12 +521,12 @@ object ROOM
     endif
   endverb
 
-  verb match (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match (this none this) owner: #2 flags: "rxd"
     target = {@this:contents(), @this:exits()};
     return $string_utils:match(args[1], target, "name", target, "aliases");
   endverb
 
-  verb "@remove-exit" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@remove-exit" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       player:tell("Usage:  @remove-exit <exit>");
@@ -547,7 +547,7 @@ object ROOM
     endif
   endverb
 
-  verb "@remove-entrance" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@remove-entrance" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       player:tell("Usage:  @remove-entrance <entrance>");
@@ -569,7 +569,7 @@ object ROOM
     endif
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     if (caller in {this, this.owner} || $perm_utils:controls(caller_perms(), this))
       return pass(@args);
     else
@@ -577,11 +577,11 @@ object ROOM
     endif
   endverb
 
-  verb who_location_msg (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb who_location_msg (this none this) owner: #2 flags: "rxd"
     return (msg = `this.(verb) ! ANY') ? $string_utils:pronoun_sub(msg, args[1]) | "";
   endverb
 
-  verb "exits entrances" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "exits entrances" (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       return this.(verb);
     else
@@ -589,7 +589,7 @@ object ROOM
     endif
   endverb
 
-  verb "obvious_exits obvious_entrances" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "obvious_exits obvious_entrances" (this none this) owner: #2 flags: "rxd"
     exits = {};
     for exit in (`verb == "obvious_exits" ? this.exits | this.entrances ! ANY => {}')
       if (`$code_utils:verb_or_property(exit, "obvious") ! ANY')
@@ -599,7 +599,7 @@ object ROOM
     return exits;
   endverb
 
-  verb here_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb here_huh (this none this) owner: #2 flags: "rxd"
     ":here_huh(verb,args)  -- room-specific :huh processing.  This should return 1 if it finds something interesting to do and 0 otherwise; see $command_utils:do_huh.";
     "For the generic room, we check for the case of the caller specifying an exit for which a corresponding verb was never defined.";
     set_task_perms(caller_perms());
@@ -615,15 +615,15 @@ object ROOM
     return 1;
   endverb
 
-  verb "room_announce*_all_but" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "room_announce*_all_but" (this none this) owner: #2 flags: "rxd"
     this:(verb[6..$])(@args);
   endverb
 
-  verb examine_commands_ok (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_commands_ok (this none this) owner: #2 flags: "rxd"
     return this == args[1].location;
   endverb
 
-  verb examine_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_key (this none this) owner: #2 flags: "rxd"
     "examine_key(examiner)";
     "return a list of strings to be told to the player, indicating what the key on this type of object means, and what this object's key is set to.";
     "the default will only tell the key to a wizard or this object's owner.";
@@ -633,7 +633,7 @@ object ROOM
     endif
   endverb
 
-  verb examine_contents (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_contents (this none this) owner: #2 flags: "rxd"
     "examine_contents(who)";
     if (caller == this)
       this:tell_contents(this.contents, this.ctype);
@@ -644,7 +644,7 @@ object ROOM
     return this.free_entry;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       if (this == $player_start)
@@ -656,11 +656,11 @@ object ROOM
     endif
   endverb
 
-  verb dark (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dark (this none this) owner: #2 flags: "rxd"
     return this.(verb);
   endverb
 
-  verb announce_lines_x (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb announce_lines_x (this none this) owner: #2 flags: "rxd"
     "Copied from generic room (#3):announce by Haakon (#2) Thu Oct 24 16:15:01 1996 PDT";
     for dude in (setremove(this:contents(), player))
       try
@@ -670,7 +670,7 @@ object ROOM
     endfor
   endverb
 
-  verb basic_accept_for_abode (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb basic_accept_for_abode (this none this) owner: #2 flags: "rxd"
     who = args[1];
     return valid(who) && (this.free_home || $perm_utils:controls(who, this) || (typeof(residents = this.residents) == LIST ? who in this.residents | who == this.residents));
   endverb

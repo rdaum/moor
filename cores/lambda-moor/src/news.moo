@@ -186,7 +186,7 @@ object NEWS
     return strsub(this.description, "%d", date);
   endverb
 
-  verb is_writable_by (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_writable_by (this none this) owner: #2 flags: "rxd"
     return pass(@args) || args[1] in $list_utils:map_prop($object_utils:descendants($wiz), "mail_identity");
   endverb
 
@@ -255,7 +255,7 @@ object NEWS
     endif
   endverb
 
-  verb news_display_seq_full (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb news_display_seq_full (this none this) owner: #2 flags: "rxd"
     ":news_display_seq_full(msg_seq) => {cur, last-read-date}";
     "Display the given msg_seq as a collection of news items";
     set_task_perms(caller_perms());
@@ -285,7 +285,7 @@ object NEWS
     return {subject, tostr("  by ", by, " on ", ctime), "", @text};
   endverb
 
-  verb check (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if ((player:get_current_message(this) || {0, 0})[2] < this.last_news_time)
       if ((n = player:mail_option("news")) in {0, "all"})
@@ -298,7 +298,7 @@ object NEWS
     endif
   endverb
 
-  verb touch (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb touch (this none none) owner: #2 flags: "rxd"
     if (!this:ok_write(caller, valid(who = caller_perms()) ? who | player))
       player:notify("Permission denied.");
       return;
@@ -313,7 +313,7 @@ object NEWS
     endfork
   endverb
 
-  verb "@addnews" (any at this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@addnews" (any at this) owner: #2 flags: "rxd"
     if (caller_perms() != #-1 && caller_perms() != player)
       raise(E_PERM);
     endif
@@ -333,7 +333,7 @@ object NEWS
     endif
   endverb
 
-  verb "@rmnews" (any from this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@rmnews" (any from this) owner: #2 flags: "rxd"
     if (caller_perms() != #-1 && caller_perms() != player)
       raise(E_PERM);
     endif
@@ -353,7 +353,7 @@ object NEWS
     endif
   endverb
 
-  verb "@setnews" (this at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@setnews" (this at any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!this:is_writable_by(player))
       player:notify("You can't write the news.");
@@ -391,7 +391,7 @@ object NEWS
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.description = "It's the current issue of the News, dated %d.";
@@ -407,7 +407,7 @@ object NEWS
     endif
   endverb
 
-  verb add_news (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb add_news (this none this) owner: #2 flags: "rxd"
     if (!this:ok_write(caller, caller_perms()))
       $error:raise(E_PERM);
     endif
@@ -425,7 +425,7 @@ object NEWS
     return 1;
   endverb
 
-  verb rm_news (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb rm_news (this none this) owner: #2 flags: "rxd"
     if (!this:ok_write(caller, caller_perms()))
       raise(E_PERM);
     endif
@@ -443,12 +443,12 @@ object NEWS
     return 1;
   endverb
 
-  verb "@listnews" (none on this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@listnews" (none on this) owner: #2 flags: "rxd"
     player:notify("The following articles are currently in the newspaper:");
     this:display_seq_headers(this.current_news);
   endverb
 
-  verb "@clearnews" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@clearnews" (this none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (this:is_writable_by(player))
       this:set_current_news({});

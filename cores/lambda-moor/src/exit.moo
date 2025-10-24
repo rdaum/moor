@@ -1,29 +1,29 @@
 object EXIT
   name: "generic exit"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property arrive_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property dest (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
-  property leave_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property nogo_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property oarrive_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property obvious (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property oleave_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property onogo_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property source (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
+  property arrive_msg (owner: #2, flags: "rc") = 0;
+  property dest (owner: #2, flags: "rc") = LOCAL;
+  property leave_msg (owner: #2, flags: "rc") = 0;
+  property nogo_msg (owner: #2, flags: "rc") = 0;
+  property oarrive_msg (owner: #2, flags: "rc") = 0;
+  property obvious (owner: #2, flags: "rc") = 1;
+  property oleave_msg (owner: #2, flags: "rc") = 0;
+  property onogo_msg (owner: #2, flags: "rc") = 0;
+  property source (owner: #2, flags: "rc") = LOCAL;
 
   override aliases = {"generic exit"};
   override object_size = {7191, 1084848672};
 
-  verb invoke (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb invoke (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     this:move(player);
   endverb
 
-  verb move (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb move (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     what = args[1];
     "if ((what.location != this.source) || (!(this in this.source.exits)))";
@@ -63,7 +63,7 @@ object EXIT
     endif
   endverb
 
-  verb recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb recycle (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       try
         this.source:remove_exit(this);
@@ -76,12 +76,12 @@ object EXIT
     endif
   endverb
 
-  verb "leave_msg oleave_msg arrive_msg oarrive_msg nogo_msg onogo_msg" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "leave_msg oleave_msg arrive_msg oarrive_msg nogo_msg onogo_msg" (this none this) owner: #2 flags: "rxd"
     msg = this.(verb);
     return msg ? $string_utils:pronoun_sub(msg, @args) | "";
   endverb
 
-  verb set_name (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_name (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(cp = caller_perms(), this) || (valid(this.source) && this.source.owner == cp))
       return typeof(e = `this.name = args[1] ! ANY') != ERR || e;
     else
@@ -89,7 +89,7 @@ object EXIT
     endif
   endverb
 
-  verb set_aliases (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_aliases (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(cp = caller_perms(), this) || (valid(this.source) && this.source.owner == cp))
       if (typeof(e = `this.aliases = args[1] ! ANY') == ERR)
         return e;
@@ -101,7 +101,7 @@ object EXIT
     endif
   endverb
 
-  verb announce_all_but (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb announce_all_but (this none this) owner: #2 flags: "rxd"
     "This is intended to be called only by exits, for announcing various oxxx messages.  First argument is room to announce in.  Second argument is as in $room:announce_all_but's first arg, who not to announce to.  Rest args are what to say.  If the final arg is a list, prepends all the other rest args to the first line and emits the lines separately.";
     where = args[1];
     whobut = args[2];
@@ -116,7 +116,7 @@ object EXIT
     endif
   endverb
 
-  verb defaulting_oleave_msg (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb defaulting_oleave_msg (this none this) owner: #2 flags: "rxd"
     for k in ({this.name, @this.aliases})
       if (k in {"east", "west", "south", "north", "northeast", "southeast", "southwest", "northwest", "out", "up", "down", "nw", "sw", "ne", "se", "in"})
         return "goes " + k + ".";
@@ -131,7 +131,7 @@ object EXIT
     endif
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     if (caller in {this, this.owner} || $perm_utils:controls(caller_perms(), this))
       return pass(@args);
     else
@@ -139,7 +139,7 @@ object EXIT
     endif
   endverb
 
-  verb examine_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_key (this none this) owner: #2 flags: "rxd"
     "examine_key(examiner)";
     "return a list of strings to be told to the player, indicating what the key on this type of object means, and what this object's key is set to.";
     "the default will only tell the key to a wizard or this object's owner.";
@@ -149,7 +149,7 @@ object EXIT
     endif
   endverb
 
-  verb announce_msg (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb announce_msg (this none this) owner: #2 flags: "rxd"
     ":announce_msg(place, what, msg)";
     "  announce msg in place (except to what). Prepend with what:title if it isn't part of the string";
     msg = args[3];

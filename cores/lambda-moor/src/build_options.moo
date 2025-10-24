@@ -4,8 +4,8 @@ object BUILD_OPTIONS
   owner: HACKER
   readable: true
 
-  property show_audit_bytes (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"@audit/@prospectus shows `<1K'", "@audit/@prospectus shows bytes"};
-  property show_audit_float (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property show_audit_bytes (owner: #2, flags: "r") = {"@audit/@prospectus shows `<1K'", "@audit/@prospectus shows bytes"};
+  property show_audit_float (owner: #2, flags: "r") = {
     "@audit/@prospectus shows integer sizes (1K)",
     "@audit/@prospectus shows floating-point sizes (1.0K)"
   };

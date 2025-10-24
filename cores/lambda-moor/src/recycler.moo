@@ -14,7 +14,7 @@ object RECYCLER
   override description = "Object reuse. Call $recycler:_create() to create an object (semantics the same as create()), $recycler:_recycle() to recycle an object. Will create a new object if nothing available in its contents. Note underscores, to avoid builtin :recycle() verb called when objects are recycled. Uses $building_utils:recreate() to prepare objects.";
   override object_size = {11836, 1084848672};
 
-  verb _recreate (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _recreate (this none this) owner: #2 flags: "rxd"
     "Return a toad (child of #1, owned by $hacker) from this.contents.  Move it to #-1.  Recreate as a child of args[1], or of #1 if no args are given.  Chown to caller_perms() or args[2] if present.";
     {?what = #1, ?who = caller_perms()} = args;
     if (!(caller_perms().wizard || who == caller_perms()))
@@ -32,7 +32,7 @@ object RECYCLER
     return E_NONE;
   endverb
 
-  verb _recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _recycle (this none this) owner: #2 flags: "rxd"
     "Take the object in args[1], and turn it into a child of #1 owned by $hacker.";
     "If the object is a player, decline.";
     item = args[1];
@@ -54,7 +54,7 @@ object RECYCLER
     `move(item, this) ! ANY => 0';
   endverb
 
-  verb _create (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _create (this none this) owner: #2 flags: "rxd"
     e = `set_task_perms(caller_perms()) ! ANY';
     if (typeof(e) == ERR)
       return e;
@@ -64,7 +64,7 @@ object RECYCLER
     endif
   endverb
 
-  verb addhist (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb addhist (this none this) owner: #2 flags: "rxd"
     if (caller == this)
       h = this.history;
       if ((len = length(h)) > this.nhist)
@@ -74,7 +74,7 @@ object RECYCLER
     endif
   endverb
 
-  verb "show*-history" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "show*-history" (this none none) owner: #2 flags: "rxd"
     if ($perm_utils:controls(valid(caller_perms()) ? caller_perms() | player, this))
       for x in (this.history)
         pname = valid(x[1]) ? x[1].name | "A recycled player";
@@ -86,7 +86,7 @@ object RECYCLER
     endif
   endverb
 
-  verb request (any from this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb request (any from this) owner: #2 flags: "rxd"
     "added check that obj is already $garbage - Bits 12/16/5";
     if (!(caller_perms() in {player, #-1}))
       raise(E_PERM);
@@ -118,7 +118,7 @@ object RECYCLER
     endif
   endverb
 
-  verb setup_toad (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb setup_toad (this none this) owner: #2 flags: "rxd"
     "this:setup_toad(objnum,new_owner,parent)";
     "Called by :_create and :request.";
     if (caller != this)
@@ -153,13 +153,13 @@ object RECYCLER
     endif
   endverb
 
-  verb valid (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb valid (this none this) owner: #2 flags: "rxd"
     "Usage:  valid(object)";
     "True if object is valid and not $garbage.";
     return valid(args[1]) && parent(args[1]) != $garbage;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       this.orphans = {};
       this.history = {};
@@ -168,7 +168,7 @@ object RECYCLER
     endif
   endverb
 
-  verb resurrect (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb resurrect (this none this) owner: #2 flags: "rxd"
     who = caller_perms();
     if (!valid(parent = {@args, $garbage}[1]))
       return E_INVARG;
@@ -187,7 +187,7 @@ object RECYCLER
     return o;
   endverb
 
-  verb reclaim_lost_souls (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb reclaim_lost_souls (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       raise(E_PERM);
     endif
@@ -220,7 +220,7 @@ object RECYCLER
     "This code contributed by Mickey.";
   endverb
 
-  verb check_quota_scam (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_quota_scam (this none this) owner: #2 flags: "rxd"
     who = args[1];
     if ($quota_utils.byte_based && (is_clear_property(who, "size_quota") || is_clear_property(who, "owned_objects")))
       raise(E_QUOTA);
@@ -267,7 +267,7 @@ object RECYCLER
     pass(#-1);
   endverb
 
-  verb kill_all_tasks (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb kill_all_tasks (this none this) owner: #2 flags: "rxd"
     "kill_all_tasks ( object being recycled )";
     " -- kill all tasks involving this now-recycled object";
     caller == this || caller == #0 || raise(E_PERM);

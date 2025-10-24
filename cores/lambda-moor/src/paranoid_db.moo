@@ -4,7 +4,7 @@ object PARANOID_DB
   owner: HACKER
   readable: true
 
-  property max_lines (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 30;
+  property max_lines (owner: #2, flags: "r") = 30;
 
   override aliases = {"@paranoid database", "paranoid"};
   override description = {
@@ -149,11 +149,11 @@ object PARANOID_DB
     endfor
   endverb
 
-  verb help_msg (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb help_msg (this none this) owner: #2 flags: "rxd"
     return this:description();
   endverb
 
-  verb semiweeklyish (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb semiweeklyish (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -165,7 +165,7 @@ object PARANOID_DB
     endif
   endverb
 
-  verb is_paranoid (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_paranoid (this none this) owner: #2 flags: "rxd"
     "Some people make their .paranoid !r.  Wizardly verb to retrieve value.";
     return `args[1].paranoid ! ANY';
   endverb

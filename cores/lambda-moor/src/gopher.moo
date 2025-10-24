@@ -1,15 +1,15 @@
 object GOPHER
   name: "Gopher utilities"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property cache_requests (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
-  property cache_timeout (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 900;
-  property cache_times (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
-  property cache_values (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
-  property frozen (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property limit (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 2000;
+  property cache_requests (owner: #2, flags: "r") = {};
+  property cache_timeout (owner: #2, flags: "r") = 900;
+  property cache_times (owner: #2, flags: "r") = {};
+  property cache_values (owner: #2, flags: "r") = {};
+  property frozen (owner: #2, flags: "rc") = 0;
+  property limit (owner: #2, flags: "rc") = 2000;
 
   override aliases = {"Gopher utilities"};
   override description = {
@@ -46,7 +46,7 @@ object GOPHER
   };
   override object_size = {15578, 1084848672};
 
-  verb get_now (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_now (this none this) owner: #2 flags: "rxd"
     "Usage:  get_now(site, port, message)";
     "Returns a list of strings, or an error if we couldn't connect.";
     {host, port, message, ?extra = {0}} = args;
@@ -90,7 +90,7 @@ object GOPHER
     return results;
   endverb
 
-  verb parse (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse (this none this) owner: #2 flags: "rxd"
     "parse gopher result line:";
     "return {host, port, tag, label}";
     "host/port/tag are what you send to the gopher server to get that line";
@@ -114,7 +114,7 @@ object GOPHER
     "ignore extra material after port, if any";
   endverb
 
-  verb show_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_text (this none this) owner: #2 flags: "rxd"
     "$gopher:show_text(who, start, end, ..node..)";
     "like who:notify_lines($gopher:get(..node..)[start..end]), but pipelined";
     if (!caller_perms().wizard)
@@ -148,7 +148,7 @@ object GOPHER
     return sent;
   endverb
 
-  verb type (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb type (this none this) owner: #2 flags: "rxd"
     type = args[1];
     if (type == "1")
       return "menu";
@@ -177,7 +177,7 @@ object GOPHER
     "not done, need to fill out";
   endverb
 
-  verb summary (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb summary (this none this) owner: #2 flags: "rxd"
     "return a 'nice' string showing the information in a gopher node";
     if (typeof(parse = args[1]) == STR)
       parse = this:parse(parse);
@@ -209,7 +209,7 @@ object GOPHER
     return {tostr("[", parse[1], port, "]"), label, parse[3]};
   endverb
 
-  verb get (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get (this none this) owner: #2 flags: "rxd"
     "Usage: get(site, port, selection)";
     "returns a list of strings, or an error if it couldn't connect. Results are cached.";
     if (this.frozen)
@@ -248,7 +248,7 @@ object GOPHER
     return value;
   endverb
 
-  verb clear_cache (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb clear_cache (this none this) owner: #2 flags: "rxd"
     if (!this:trusted(caller_perms()))
       return E_PERM;
     endif
@@ -261,7 +261,7 @@ object GOPHER
     endif
   endverb
 
-  verb unparse (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb unparse (this none this) owner: #2 flags: "rxd"
     "unparse(host, port, tag, label) => string";
     {host, port, tag, label} = args;
     if (tab = index(tag, "\t"))
@@ -271,7 +271,7 @@ object GOPHER
     return tostr(label, "\t", tag, "\t", host, "\t", port);
   endverb
 
-  verb interpret_error (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb interpret_error (this none this) owner: #2 flags: "rxd"
     "return an explanation for a 'false' $gopher:get result";
     value = args[1];
     if (value == E_INVARG)
@@ -285,18 +285,18 @@ object GOPHER
     endif
   endverb
 
-  verb trusted (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb trusted (this none this) owner: #2 flags: "rxd"
     "default -- gopher trusts everybody";
     return 1;
   endverb
 
-  verb _textp (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _textp (this none this) owner: #2 flags: "rxd"
     "_textp(parsed node)";
     "Return true iff the parsed info points to a text node.";
     return index("02", args[1][4][1]);
   endverb
 
-  verb _mail_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _mail_text (this none this) owner: #2 flags: "rxd"
     "_mail_text(parsed node)";
     "Return the text to be mailed out for the given node.";
     where = args[1];
@@ -313,14 +313,14 @@ object GOPHER
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       this:clear_cache();
       pass(@args);
     endif
   endverb
 
-  verb display_cache (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_cache (this none none) owner: #2 flags: "rxd"
     "Just for debugging -- shows what's in the gopher cache";
     req = this.cache_requests;
     tim = this.cache_times;
@@ -348,7 +348,7 @@ object GOPHER
     player:tell("--- end cache display -------------------------------------");
   endverb
 
-  verb get_cache (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_cache (this none this) owner: #2 flags: "rxd"
     "Usage: get_cache(site, port, selection)";
     "return current cache";
     request = args[1..3];
@@ -360,7 +360,7 @@ object GOPHER
     return 0;
   endverb
 
-  verb cache_entry (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb cache_entry (this none this) owner: #2 flags: "rxd"
     if (index = args in this.cache_requests)
       return index;
     else
@@ -371,11 +371,11 @@ object GOPHER
     endif
   endverb
 
-  verb help_msg (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb help_msg (this none this) owner: #2 flags: "rxd"
     return this:description();
   endverb
 
-  verb daily (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb daily (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       day = 24 * 3600;
       hour_of_day_GMT = 10;
@@ -389,7 +389,7 @@ object GOPHER
     endif
   endverb
 
-  verb get_now_EXPERIMENTAL (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_now_EXPERIMENTAL (this none this) owner: #2 flags: "rxd"
     "Copied from Sleeper (#98232):get_now Thu Oct  2 17:15:49 2003 PDT";
     "Copied from Gopher utilities (#15357):get_now by Retired-Wizard-1 (#49853) Thu Oct  2 16:57:12 2003 PDT";
     "Usage:  get_now(site, port, message)";

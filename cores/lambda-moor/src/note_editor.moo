@@ -131,7 +131,7 @@ object NOTE_EDITOR
     return 0;
   endverb
 
-  verb note_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb note_text (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (caller != $note_editor || caller_perms() != $note_editor.owner)
       return E_PERM;
@@ -149,7 +149,7 @@ object NOTE_EDITOR
     endif
   endverb
 
-  verb set_note_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_note_text (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (caller != $note_editor || caller_perms() != $note_editor.owner)
       return E_PERM;

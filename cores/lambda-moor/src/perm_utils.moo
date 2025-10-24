@@ -1,7 +1,7 @@
 object PERM_UTILS
   name: "permissions utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
   override description = {
@@ -27,7 +27,7 @@ object PERM_UTILS
   };
   override object_size = {3491, 1084848672};
 
-  verb controls (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb controls (this none this) owner: #2 flags: "rxd"
     "$perm_utils:controls(who, what)";
     "Is WHO allowed to hack on WHAT?";
     {who, what} = args;
@@ -59,7 +59,7 @@ object PERM_UTILS
     return perms;
   endverb
 
-  verb caller (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb caller (this none this) owner: #2 flags: "rxd"
     ":caller([include line numbers])";
     "  -- returns the first caller in the callers() stack distinct from `this'";
     {?lineno = 0} = args;
@@ -70,7 +70,7 @@ object PERM_UTILS
     return c[stage];
   endverb
 
-  verb "controls_prop*erty controls_verb" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "controls_prop*erty controls_verb" (this none this) owner: #2 flags: "rxd"
     "Syntax:  controls_prop(OBJ who, OBJ what, STR propname)   => 0 | 1";
     "         controls_verb(OBJ who, OBJ what, STR verbname)   => 0 | 1";
     "";

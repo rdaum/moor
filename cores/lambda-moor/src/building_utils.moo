@@ -1,11 +1,11 @@
 object BUILDING_UTILS
   name: "building utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property class_string (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {"p", "R", "E", "N", "C", "T", "F", "M", "H", "D", "U", "O"};
-  property classes (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property class_string (owner: #2, flags: "rc") = {"p", "R", "E", "N", "C", "T", "F", "M", "H", "D", "U", "O"};
+  property classes (owner: #2, flags: "rc") = {
     PLAYER,
     ROOM,
     EXIT,
@@ -41,7 +41,7 @@ object BUILDING_UTILS
   };
   override object_size = {12705, 1084848672};
 
-  verb make_exit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb make_exit (this none this) owner: #2 flags: "rxd"
     "make_exit(spec, source, dest[, use-$recycler-pool [, kind]])";
     "";
     "Uses $recycler by default; supplying fourth arg as 0 suppresses this.";
@@ -81,7 +81,7 @@ object BUILDING_UTILS
     endif
   endverb
 
-  verb set_names (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_names (this none this) owner: #2 flags: "rxd"
     "$building_utils:set_names(object, spec)";
     set_task_perms(caller_perms());
     object = args[1];
@@ -90,7 +90,7 @@ object BUILDING_UTILS
     return object:set_name(name) && object:set_aliases(names[2]);
   endverb
 
-  verb recreate (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb recreate (this none this) owner: #2 flags: "rxd"
     ":recreate(object,newparent) -- effectively recycle and recreate the specified object as a child of parent.  Returns true if successful.";
     {object, parent} = args;
     who = caller_perms();
@@ -136,7 +136,7 @@ object BUILDING_UTILS
     return 1;
   endverb
 
-  verb parse_names (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_names (this none this) owner: #2 flags: "rxd"
     "$building_utils:parse_names(spec)";
     "Return {name, {alias, alias, ...}} from name,alias,alias or name:alias,alias";
     spec = args[1];
@@ -153,7 +153,7 @@ object BUILDING_UTILS
     return {name, $list_utils:map_arg($string_utils, "trim", aliases)};
   endverb
 
-  verb audit_object_category (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb audit_object_category (this none this) owner: #2 flags: "rxd"
     if (is_player(what = args[1]))
       return "P";
     endif
@@ -166,7 +166,7 @@ object BUILDING_UTILS
     return " ";
   endverb
 
-  verb object_audit_string (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb object_audit_string (this none this) owner: #2 flags: "rxd"
     ":object_audit_string(object [,prospectus-style])";
     {o, ?prospectus = 0} = args;
     olen = length(tostr(max_object()));
@@ -260,7 +260,7 @@ object BUILDING_UTILS
     return tostr(vstr, $string_utils:right(o, olen), " ", $string_utils:left((o.name)[1..namelen], name_field_len), loc);
   endverb
 
-  verb "do_audit do_prospectus" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "do_audit do_prospectus" (this none this) owner: #2 flags: "rxd"
     ":do_audit(who, start, end, match)";
     "audit who, with objects from start to end that match 'match'";
     ":do_prospectus(...)";
@@ -305,7 +305,7 @@ object BUILDING_UTILS
     player:tell($string_utils:left(tostr("-- ", count, " object", count == 1 ? "." | "s.", $quota_utils.byte_based ? tostr("  Total bytes: ", $string_utils:group_number(bytes), ".") | ""), player:linelen() - 1, "-"));
   endverb
 
-  verb do_audit_item (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_audit_item (this none this) owner: #2 flags: "rxd"
     ":do_audit_item(object, match-name-string, prospectus-flag)";
     {o, match, pros} = args;
     found = match ? 0 | 1;
@@ -326,7 +326,7 @@ object BUILDING_UTILS
     return 0;
   endverb
 
-  verb size_string (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb size_string (this none this) owner: #2 flags: "rxd"
     "Copied from Roebare (#109000):size_string at Sat Nov 26 18:41:12 2005 PST";
     size = args[1];
     if (typeof(size) != INT)
@@ -407,7 +407,7 @@ object BUILDING_UTILS
     "Byte & float display optional, per Nosredna (#2487), 051120-24";
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.classes = {$player, $room, $exit, $note, $container, $thing, $feature, $mail_recipient, $generic_help, $generic_db, $generic_utils, $generic_options};

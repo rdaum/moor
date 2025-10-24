@@ -418,7 +418,7 @@ object MAIL_RECIPIENT
     endfor
   endverb
 
-  verb __fix (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb __fix (this none this) owner: #2 flags: "rxd"
     if (!this:ok_write(caller, caller_perms()))
       return E_PERM;
     endif
@@ -439,7 +439,7 @@ object MAIL_RECIPIENT
     return 1;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       if (!(this in {$mail_recipient, $big_mail_recipient}))
@@ -456,7 +456,7 @@ object MAIL_RECIPIENT
     endif
   endverb
 
-  verb initialize (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb initialize (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       this.mail_forward = {};
       return pass(@args);
@@ -477,7 +477,7 @@ object MAIL_RECIPIENT
     return names;
   endverb
 
-  verb expire_old_messages (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expire_old_messages (this none this) owner: #2 flags: "rxd"
     if (this:ok_write(caller, caller_perms()))
       if ($network.active)
         "Passed security check...";
@@ -547,7 +547,7 @@ object MAIL_RECIPIENT
     player:tell("Messages will ", time != 0 ? tostr("automatically expire from ", this:mail_name(), " after ", $time_utils:english_time(time)) | tostr("not expire from ", this:mail_name()), ".");
   endverb
 
-  verb "@register @netregister" (this at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@register @netregister" (this at any) owner: #2 flags: "rxd"
     "Syntax:   @register <recipient> to <email-address>";
     "alias     @netregister <recipient> to <email-address>";
     "          @register <recipient> to";
@@ -633,12 +633,12 @@ object MAIL_RECIPIENT
     return pass(name);
   endverb
 
-  verb ok_annotate (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb ok_annotate (this none this) owner: #2 flags: "rxd"
     ":ok_annotate(caller,callerperms) => true iff caller can do annotations";
     return args[1] in {this, $mail_agent} || (args[2].wizard || this:is_annotatable_by(args[2]));
   endverb
 
-  verb annotate_message_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb annotate_message_seq (this none this) owner: #2 flags: "rxd"
     "annotate_message_seq(note, \"append\"|\"prepend\", message_seq) ;";
     "";
     "Prepend or append (default is prepend) note (a list of strings) to each message in message_seq";

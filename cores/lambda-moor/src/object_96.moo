@@ -4,12 +4,12 @@ object #96
   owner: #96
   player: true
 
-  override aliases (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"Editor_Owner"};
+  override aliases (owner: #2, flags: "r") = {"Editor_Owner"};
   override description = "This player owns all editor-related verbs.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override home = LOCAL;
   override last_disconnect_time = 2147483647;
-  override mail_forward = {BYTE_QUOTA_UTILS_WORKING};
+  override mail_forward = {#2};
   override object_size = {2277, 1084848672};
   override owned_objects = {NOTE_EDITOR, VERB_EDITOR, GENERIC_EDITOR, LIST_EDITOR, #96};
   override ownership_quota = -10000;

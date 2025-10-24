@@ -628,7 +628,7 @@ object BIGLIST
     return $perm_utils:controls(caller_perms(), this) ? this:((args[1]))(@listdelete(args, 1)) | E_PERM;
   endverb
 
-  verb _call (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _call (this none this) owner: #2 flags: "rxd"
     ":_call(home,verb,@vargs) calls home:verb(@vargs) with $no_one's perms";
     set_task_perms($no_one);
     if (caller != this)

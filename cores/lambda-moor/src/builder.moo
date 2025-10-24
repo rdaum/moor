@@ -1,11 +1,11 @@
 object BUILDER
   name: "generic builder"
   parent: FRAND_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property build_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
+  property build_options (owner: #2, flags: "rc") = {};
 
   override aliases = {"generic builder"};
   override description = "You see a player who should type '@describe me as ...'.";
@@ -13,7 +13,7 @@ object BUILDER
   override help = BUILDER_HELP;
   override object_size = {36256, 1084848672};
 
-  verb "@quota" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@quota" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (dobjstr == "")
       dobj = player;
@@ -33,7 +33,7 @@ object BUILDER
     endtry
   endverb
 
-  verb "@create" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@create" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     nargs = length(args);
     pos = "named" in args;
@@ -85,7 +85,7 @@ object BUILDER
     player:notify(tostr("You now have ", object.name, aka, " with object number ", object, " and parent ", parent.name, " (", parent, ")."));
   endverb
 
-  verb "@recycle" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@recycle" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     dobj = player:my_match_object(dobjstr);
     if (dobj == $nothing)
@@ -107,7 +107,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@recreate" (any as any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@recreate" (any as any) owner: #2 flags: "rd"
     "@recreate <object> as <parent-class> named [name:]alias,alias,...";
     "  effectively recycles and creates <object> all over again.";
     set_task_perms(player);
@@ -157,7 +157,7 @@ object BUILDER
     player:notify(tostr("Object number ", dobj, " is now ", dobj.name, aka, " with parent ", parent.name, " (", parent, ")."));
   endverb
 
-  verb "@dig" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@dig" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     nargs = length(args);
     if (nargs == 1)
@@ -221,7 +221,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@audit" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@audit" (any any any) owner: #2 flags: "rd"
     "Usage:  @audit [player] [from <start>] [to <end>] [for <matching string>]";
     set_task_perms(player);
     dobj = $string_utils:match_player(dobjstr);
@@ -241,7 +241,7 @@ object BUILDER
     return $building_utils:do_audit(dobj, @parse_result);
   endverb
 
-  verb "@count" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@count" (any none none) owner: #2 flags: "rd"
     if (!dobjstr)
       dobj = player;
     elseif ($command_utils:player_match_result(dobj = $string_utils:match_player(dobjstr), dobjstr)[1])
@@ -259,7 +259,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@countDB" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@countDB" (any none none) owner: #2 flags: "rd"
     if (!dobjstr)
       dobj = player;
     elseif ($command_utils:player_match_result(dobj = $string_utils:match_player(dobjstr), dobjstr)[1])
@@ -279,7 +279,7 @@ object BUILDER
     player:notify(tostr(dobj.name, " currently owns ", count, " object", count == 1 ? "." | "s."));
   endverb
 
-  verb "@sort-owned*-objects" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@sort-owned*-objects" (any none none) owner: #2 flags: "rd"
     "$player:owned_objects -- sorts a players .owned_objects property in ascending";
     "order so it looks nice on @audit.";
     if (player != this)
@@ -304,7 +304,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@add-owned" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@add-owned" (any none none) owner: #2 flags: "rd"
     if (player != this)
       player:tell("Permission Denied");
       return E_PERM;
@@ -321,7 +321,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@verify-owned" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@verify-owned" (none none none) owner: #2 flags: "rd"
     for x in (player.owned_objects)
       if (!valid(x) || x.owner != player)
         player.owned_objects = setremove(player.owned_objects, x);
@@ -336,7 +336,7 @@ object BUILDER
     player:tell(".owned_objects property verified.");
   endverb
 
-  verb "@unlock" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unlock" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     dobj = player:my_match_object(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
@@ -350,7 +350,7 @@ object BUILDER
     endtry
   endverb
 
-  verb "@lock" (any with any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@lock" (any with any) owner: #2 flags: "rd"
     set_task_perms(player);
     dobj = player:my_match_object(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
@@ -371,7 +371,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@newmess*age" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@newmess*age" (any any any) owner: #2 flags: "rd"
     "Usage:  @newmessage <message-name> [<message>] [on <object>]";
     "Add a message property to an object (default is player), and optionally";
     "set its value.  For use by non-programmers, who aren't allowed to add";
@@ -400,7 +400,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@unmess*age" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unmess*age" (any any any) owner: #2 flags: "rd"
     "Usage:  @unmessage <message-name> [from <object>]";
     "Remove a message property from an object (default is player).";
     set_task_perms(player);
@@ -421,7 +421,7 @@ object BUILDER
     endtry
   endverb
 
-  verb _messagify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _messagify (this none this) owner: #2 flags: "rxd"
     "Given any of several formats people are likely to use for a @message";
     "property, return the canonical form (\"foobar_msg\").";
     name = args[1];
@@ -434,7 +434,7 @@ object BUILDER
     return name;
   endverb
 
-  verb "@kids" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@kids" (any none none) owner: #2 flags: "rxd"
     "'@kids <obj>' - List the children of an object. This is handy for seeing whether anybody's actually using your carefully-wrought public objects.";
     thing = player:my_match_object(dobjstr);
     if (!$command_utils:object_match_failed(thing, dobjstr))
@@ -448,7 +448,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@contents" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@contents" (any none none) owner: #2 flags: "rd"
     "'@contents <obj> - list the contents of an object, with object numbers.";
     set_task_perms(player);
     if (!dobjstr)
@@ -468,7 +468,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@par*ents" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@par*ents" (any none none) owner: #2 flags: "rd"
     "'@parents <thing>' - List <thing> and its ancestors, all the way back to the Root Class (#1).";
     if (player != this)
       return player:notify("Permission denied: not a builder.");
@@ -483,7 +483,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@location*s" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@location*s" (any none none) owner: #2 flags: "rd"
     "@locations <thing> - List <thing> and its containers, all the way back to the outermost one.";
     set_task_perms(player);
     if (!dobjstr)
@@ -495,7 +495,7 @@ object BUILDER
     player:notify($string_utils:names_of({what, @$object_utils:locations(what)}));
   endverb
 
-  verb "@cl*asses" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@cl*asses" (any any any) owner: #2 flags: "rd"
     "$class_registry is in the following format:";
     "        { {name, description, members}, ... }";
     "where `name' is the name of a particular class of objects, `description' is a one-sentence description of the membership of the class, and `members' is a list of object numbers, the members of the class.";
@@ -543,7 +543,7 @@ object BUILDER
     endif
   endverb
 
-  verb classes_2 (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb classes_2 (this none this) owner: #2 flags: "rxd"
     {root, indent, members, printed} = args;
     if (root in members)
       player:tell(indent, root.name, " (", root, ")");
@@ -559,7 +559,7 @@ object BUILDER
     endfor
   endverb
 
-  verb _create (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _create (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if (this:build_option("bi_create"))
       return $quota_utils:bi_create(@args);
@@ -568,7 +568,7 @@ object BUILDER
     endif
   endverb
 
-  verb _recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _recycle (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if (this:build_option("bi_create") || is_uuobjid(@args))
       return recycle(@args);
@@ -577,7 +577,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@chparent" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@chparent" (any at any) owner: #2 flags: "rd"
     set_task_perms(player);
     if ($command_utils:object_match_failed(object = player:my_match_object(dobjstr), dobjstr))
       "...bogus object...";
@@ -613,7 +613,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@check-chp*arent" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@check-chp*arent" (any at any) owner: #2 flags: "rd"
     "Copied from generic programmer (#217):@check-chparent by ur-Rog (#6349) Sun Nov  8 22:13:53 1992 PST";
     "@check-chparent object to newparent";
     "checks for property name conflicts that would make @chparent bomb.";
@@ -642,7 +642,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@set*prop" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@set*prop" (any at any) owner: #2 flags: "rd"
     "Syntax:  @set <object>.<prop-name> to <value>";
     "";
     "Changes the value of the specified object's property to the given value.";
@@ -696,7 +696,7 @@ object BUILDER
     endif
   endverb
 
-  verb build_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb build_option (this none this) owner: #2 flags: "rxd"
     ":build_option(name)";
     "Returns the value of the specified builder option";
     if (caller == this || $perm_utils:controls(caller_perms(), this))
@@ -706,7 +706,7 @@ object BUILDER
     endif
   endverb
 
-  verb set_build_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_build_option (this none this) owner: #2 flags: "rxd"
     ":set_build_option(oname,value)";
     "Changes the value of the named option.";
     "Returns a string error if something goes wrong.";
@@ -728,7 +728,7 @@ object BUILDER
     endif
   endverb
 
-  verb "@build-o*ptions @buildo*ptions @builder-o*ptions @buildero*ptions" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@build-o*ptions @buildo*ptions @builder-o*ptions @buildero*ptions" (any any any) owner: #2 flags: "rd"
     "@<what>-option <option> [is] <value>   sets <option> to <value>";
     "@<what>-option <option>=<value>        sets <option> to <value>";
     "@<what>-option +<option>     sets <option>   (usually equiv. to <option>=1";
@@ -883,7 +883,7 @@ object BUILDER
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       if (this == $builder)
         this.build_options = {};

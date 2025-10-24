@@ -43,7 +43,7 @@ object VERB_HELP
     endif
   endverb
 
-  verb get_topic (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_topic (this none this) owner: #2 flags: "rxd"
     "Help facility for verbs that people have bothered to document.  If the argument is a verb specification, this retrieves the code and prints any documentation lines that might be at the beginning.  Returns true if the arg can actually be interpreted as a verb specification, whether or not it is a correct one.";
     set_task_perms(caller_perms());
     if (!(spec = $code_utils:parse_verbref(args[1])))
@@ -66,7 +66,7 @@ object VERB_HELP
     endif
   endverb
 
-  verb dump_topic (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dump_topic (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if (!(spec = $code_utils:parse_verbref(args[1])))
       return E_INVARG;

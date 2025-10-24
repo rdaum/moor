@@ -13114,7 +13114,7 @@ object SPELL
     return this:find_exact(args[1]) != $failed_match || args[1] in player.dict;
   endverb
 
-  verb get_input (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_input (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     source = args[1];
     data = {};
@@ -13392,7 +13392,7 @@ object SPELL
     return this.description;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return;
     endif
@@ -13409,7 +13409,7 @@ object SPELL
     player:tell("$spell.submitted = {};");
   endverb
 
-  verb proxy_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb proxy_for_core (this none this) owner: #2 flags: "rxd"
     return this;
   endverb
 endobject

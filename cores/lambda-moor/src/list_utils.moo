@@ -89,7 +89,7 @@ object LIST_UTILS
     return ret;
   endverb
 
-  verb "map_prop*erty" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "map_prop*erty" (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {objs, prop} = args;
     if (length(objs) > 50)
@@ -102,7 +102,7 @@ object LIST_UTILS
     return strs;
   endverb
 
-  verb map_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb map_verb (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {objs, vrb, @rest} = args;
     if (length(objs) > 50)
@@ -115,7 +115,7 @@ object LIST_UTILS
     return strs;
   endverb
 
-  verb "map_arg*s" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "map_arg*s" (this none this) owner: #2 flags: "rxd"
     "map_arg([n,]object,verb,@args) -- assumes the nth element of args is a list, calls object:verb(@args) with each element of the list substituted in turn, returns the list of results.  n defaults to 1.";
     "map_verb_arg(o,v,{a...},a2,a3,a4,a5)={o:v(a,a2,a3,a4,a5),...}";
     "map_verb_arg(4,o,v,a1,a2,a3,{a...},a5)={o:v(a1,a2,a3,a,a5),...}";
@@ -134,7 +134,7 @@ object LIST_UTILS
     return results;
   endverb
 
-  verb map_builtin (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb map_builtin (this none this) owner: #2 flags: "rxd"
     ":map_builtin(objectlist,func) applies func to each of the objects in turn and returns the corresponding list of results.  This function is mainly here for completeness -- in the vast majority of situations, a simple for loop is better.";
     set_task_perms(caller_perms());
     {objs, builtin} = args;
@@ -266,7 +266,7 @@ object LIST_UTILS
     return sorted_lst || sorted_keys;
   endverb
 
-  verb sort_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb sort_suspended (this none this) owner: #2 flags: "rxd"
     ":sort_suspended(interval,list[,keys]) => sorts keys (assumed to be all numbers or strings) and returns list with the corresponding permutation applied to it.  keys defaults to the list itself.";
     "does suspend(interval) as needed.";
     set_task_perms(caller_perms());
@@ -338,7 +338,7 @@ object LIST_UTILS
     return 0;
   endverb
 
-  verb iassoc_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb iassoc_suspended (this none this) owner: #2 flags: "rxd"
     "Copied from Moo_tilities (#332):iassoc_suspended by Mooshie (#106469) Wed Mar 18 19:27:53 1998 PST";
     "Usage: iassoc_suspended(ANY target, LIST list [, INT index [, INT suspend-for ]]) => Returns the index of the first element of `list' whose own index-th element is target. Index defaults to 1.";
     "Returns 0 if no such element is found.";
@@ -463,7 +463,7 @@ object LIST_UTILS
     return {@right_sublist[1..right_index], left_sublist[1], @merged_list};
   endverb
 
-  verb sort_alist_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb sort_alist_suspended (this none this) owner: #2 flags: "rxd"
     "sort_alist_suspended(interval,alist[,n]) sorts a list of tuples by n-th element.  n defaults to 1.  Calls suspend(interval) as necessary.";
     set_task_perms(caller_perms());
     "... so it can be killed...";
@@ -511,7 +511,7 @@ object LIST_UTILS
     return plist;
   endverb
 
-  verb count (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb count (this none this) owner: #2 flags: "rxd"
     "$list_utils:count(item, list)";
     "Returns the number of occurrences of item in list.";
     {x, xlist} = args;
@@ -575,14 +575,14 @@ object LIST_UTILS
     endif
   endverb
 
-  verb reverse_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb reverse_suspended (this none this) owner: #2 flags: "rxd"
     "reverse(list) => reversed list.  Does suspend(0) as necessary.";
     set_task_perms(caller_perms());
     "^^^For suspend task.";
     return this:_reverse_suspended(@args[1]);
   endverb
 
-  verb _reverse_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _reverse_suspended (this none this) owner: #2 flags: "rxd"
     ":_reverse(@list) => reversed list";
     set_task_perms(caller_perms());
     $command_utils:suspend_if_needed(0);
@@ -596,7 +596,7 @@ object LIST_UTILS
     return l;
   endverb
 
-  verb randomly_permute_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb randomly_permute_suspended (this none this) owner: #2 flags: "rxd"
     ":randomly_permute_suspended(list) => list with its elements randomly permuted";
     "  each of the length(list)! possible permutations is equally likely";
     set_task_perms(caller_perms());
@@ -645,7 +645,7 @@ object LIST_UTILS
     endif
   endverb
 
-  verb assoc_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb assoc_suspended (this none this) owner: #2 flags: "rxd"
     "Copied from Moo_tilities (#332):assoc_suspended by Mooshie (#106469) Wed Mar 18 19:27:54 1998 PST";
     "Usage: assoc_suspended(ANY target, LIST list [, INT index [, INT suspend-for ])) => Returns the first element of `list' whose own index-th element is target.  Index defaults to 1.";
     "Returns {} if no such element is found.";

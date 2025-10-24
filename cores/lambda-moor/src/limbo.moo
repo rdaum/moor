@@ -1,18 +1,18 @@
 object LIMBO
   name: "Limbo"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
   override aliases = {"The Body Bag"};
   override object_size = {2330, 1084848672};
 
-  verb acceptable (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb acceptable (this none this) owner: #2 flags: "rxd"
     what = args[1];
     return is_player(what) && !(what in connected_players());
   endverb
 
-  verb confunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb confunc (this none this) owner: #2 flags: "rxd"
     caller == #0 || raise(E_PERM);
     {who} = args;
     "this:eject(who)";
@@ -43,7 +43,7 @@ object LIMBO
     "Don't go anywhere.";
   endverb
 
-  verb eject (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eject (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(caller_perms(), this))
       if ((what = args[1]).wizard && what.location == this)
         move(what, what.home);

@@ -69,7 +69,7 @@ object CODE_UTILS
     "off"
   };
   property _version (owner: HACKER, flags: "rc") = "1.8.4+toastsoft.51";
-  property builtin_props (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"name", "r", "w", "f", "programmer", "wizard", "owner", "location", "contents"};
+  property builtin_props (owner: #2, flags: "r") = {"name", "r", "w", "f", "programmer", "wizard", "owner", "location", "contents"};
   property error_list (owner: HACKER, flags: "rc") = {
     E_NONE,
     E_TYPE,
@@ -198,7 +198,7 @@ object CODE_UTILS
   };
   override object_size = {59174, 1084848672};
 
-  verb eval_d (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb eval_d (any any any) owner: #2 flags: "rx"
     ":eval_d(code...) => {compiled?,result}";
     "This works exactly like the builtin eval() except that the code is evaluated ";
     "as if the d flag were unset.";
@@ -293,7 +293,7 @@ object CODE_UTILS
     return this.error_names[toint(args[1]) + 1];
   endverb
 
-  verb show_object (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_object (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {object, ?what = {"props", "verbs"}} = args;
     player:notify(tostr("Object ID:  ", object));
@@ -356,7 +356,7 @@ object CODE_UTILS
     endif
   endverb
 
-  verb show_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_property (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {object, pname} = args;
     if (pname in this.builtin_props)
@@ -376,7 +376,7 @@ object CODE_UTILS
     player:notify(tostr("Value:        ", $string_utils:print(object.(pname))));
   endverb
 
-  verb show_verbdef (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_verbdef (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {object, vname} = args;
     if (!(hv = $object_utils:has_verb(object, vname)))
@@ -401,7 +401,7 @@ object CODE_UTILS
     player:notify(tostr("Indirect Object:  ", arg_specs[3]));
   endverb
 
-  verb explain_verb_syntax (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb explain_verb_syntax (this none this) owner: #2 flags: "rxd"
     if (args[4..5] == {"none", "this"})
       return 0;
     endif
@@ -423,7 +423,7 @@ object CODE_UTILS
     return tostr(verb, dobj_part ? " " + dobj_part | "", prep_part ? " " + prep_part | "", iobj_part ? " " + iobj_part | "");
   endverb
 
-  verb "verb_p*erms verb_permi*ssions" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "verb_p*erms verb_permi*ssions" (this none this) owner: #2 flags: "rxd"
     "returns the permissions of the current verb (either the owner or the result of the most recent set_task_perms()).";
     return caller_perms();
   endverb
@@ -433,7 +433,7 @@ object CODE_UTILS
     return callers()[1][4];
   endverb
 
-  verb verb_documentation (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_documentation (this none this) owner: #2 flags: "rxd"
     ":verb_documentation([object,verbname]) => documentation at beginning of verb code, if any";
     "default is the calling verb";
     set_task_perms(caller_perms());
@@ -456,7 +456,7 @@ object CODE_UTILS
     return doc;
   endverb
 
-  verb set_verb_documentation (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_verb_documentation (this none this) owner: #2 flags: "rxd"
     ":set_verb_documentation(object,verbname,text)";
     "  changes documentation at beginning of verb code";
     "  text is either a string or a list of strings";
@@ -486,7 +486,7 @@ object CODE_UTILS
     endif
   endverb
 
-  verb parse_propref (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_propref (this none this) owner: #2 flags: "rxd"
     "$code_utils:parse_propref(string)";
     "Parses string as a MOO-code property reference, returning {object-string, prop-name-string} for a successful parse and false otherwise.  It always returns the right object-string to pass to, for example, this-room:match_object.";
     s = args[1];
@@ -511,7 +511,7 @@ object CODE_UTILS
     return {object, prop};
   endverb
 
-  verb parse_verbref (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_verbref (this none this) owner: #2 flags: "rxd"
     "$code_utils:parse_verbref(string)";
     "Parses string as a MOO-code verb reference, returning {object-string, verb-name-string} for a successful parse and false otherwise.  It always returns the right object-string to pass to, for example, this-room:match_object().";
     s = args[1];
@@ -657,7 +657,7 @@ object CODE_UTILS
     return;
   endverb
 
-  verb find_verb_named (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb find_verb_named (this none this) owner: #2 flags: "rx"
     ":find_verb_named(object,name[,n])";
     "  returns the *number* of the first verb on object matching the given name.";
     "  optional argument n, if given, starts the search with verb n,";
@@ -674,7 +674,7 @@ object CODE_UTILS
     return 0;
   endverb
 
-  verb find_last_verb_named (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb find_last_verb_named (this none this) owner: #2 flags: "rxd"
     ":find_last_verb_named(object,name[,n])";
     "  returns the *number* of the last verb on object matching the given name.";
     "  optional argument n, if given, starts the search with verb n-1,";
@@ -694,7 +694,7 @@ object CODE_UTILS
     return -1;
   endverb
 
-  verb find_callable_verb_named (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb find_callable_verb_named (this none this) owner: #2 flags: "rxd"
     ":find_callable_verb_named(object,name[,n])";
     "  returns the *number* of the first verb on object that matches the given";
     "  name and has the x flag set.";
@@ -731,7 +731,7 @@ object CODE_UTILS
     return 0;
   endverb
 
-  verb "find_verbs_containing find_verbs_matching find_verb_lines_containing find_verb_lines_matching" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "find_verbs_containing find_verbs_matching find_verb_lines_containing find_verb_lines_matching" (this none this) owner: #2 flags: "rxd"
     "$code_utils:find_verbs_containing(pattern[,object|object-list[,casematters]])";
     "$code_utils:find_verbs_matching(pattern[,object|object-list[,casematters]])";
     "$code_utils:find_verb_lines_containing(pattern[,object|object-list[,casematters]])";
@@ -768,7 +768,7 @@ object CODE_UTILS
     player:notify(tostr("Total: ", count, " verb", count != 1 ? "s." | "."));
   endverb
 
-  verb "_find_verbs_containing _find_verbs_matching" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "_find_verbs_containing _find_verbs_matching" (this none this) owner: #2 flags: "rxd"
     ":_find_verbs_containing(pattern,object[,casematters])";
     ":_find_verbs_matching(regexp,object[,casematters])";
     "number of verbs in object with code having a line containing pattern or matching regexp";
@@ -802,7 +802,7 @@ object CODE_UTILS
     return count;
   endverb
 
-  verb _grep_verb_code (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _grep_verb_code (this none this) owner: #2 flags: "rxd"
     ":_grep_verb_code(pattern,object,verbname[,casematters]) => line number or 0";
     "  returns line number on which pattern occurs in code for object:verbname";
     set_task_perms(caller_perms());
@@ -821,7 +821,7 @@ object CODE_UTILS
     endif
   endverb
 
-  verb _egrep_verb_code (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _egrep_verb_code (this none this) owner: #2 flags: "rxd"
     ":_egrep_verb_code(regexp,object,verbname[,casematters]) => 0 or line number";
     "  returns line number of first line matching regexp in object:verbname code";
     set_task_perms(caller_perms());
@@ -870,7 +870,7 @@ object CODE_UTILS
     return fail ? {} | {start, end, match};
   endverb
 
-  verb help_db_list (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb help_db_list (this none this) owner: #2 flags: "rxd"
     ":help_db_list([player]) => list of help dbs";
     "in the order that they are consulted by player";
     {?who = player} = args;
@@ -939,7 +939,7 @@ object CODE_UTILS
     return tostr(object);
   endverb
 
-  verb inside_quotes (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb inside_quotes (this none this) owner: #2 flags: "rxd"
     "See if the end of the string passed as args[1] ends 'inside' a doublequote.  Used by $code_utils:substitute.";
     {string} = args;
     quoted = 0;
@@ -952,7 +952,7 @@ object CODE_UTILS
     return quoted;
   endverb
 
-  verb verb_or_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_or_property (this none this) owner: #2 flags: "rxd"
     "verb_or_property(<obj>, <name> [, @<args>])";
     "Looks for a callable verb or property named <name> on <obj>.";
     "If <obj> has a callable verb named <name> then return <obj>:(<name>)(@<args>).";
@@ -963,7 +963,7 @@ object CODE_UTILS
     return `object:(name)(@rest) ! E_VERBNF, E_INVIND => `object.(name) ! ANY'';
   endverb
 
-  verb task_valid (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb task_valid (this none this) owner: #2 flags: "rxd"
     "task_valid(INT id)";
     "Return true iff there is currently a valid task with the given id.";
     set_task_perms($no_one);
@@ -972,7 +972,7 @@ object CODE_UTILS
     return id == task_id() || id in t || E_PERM == `kill_task(id) ! ANY';
   endverb
 
-  verb task_owner (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb task_owner (this none this) owner: #2 flags: "rxd"
     ":task_owner(INT task_id) => returns the owner of the task belonging to the id.";
     if (a = $list_utils:assoc(args[1], queued_tasks()))
       return a[5];
@@ -981,7 +981,7 @@ object CODE_UTILS
     endif
   endverb
 
-  verb argstr (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb argstr (this none this) owner: #2 flags: "rxd"
     ":argstr(verb,args[,argstr]) => what argstr should have been.  ";
     "Recall that the command line is parsed into a sequence of words; `verb' is";
     "assigned the first word, `args' is assigned the remaining words, and argstr";
@@ -1060,7 +1060,7 @@ object CODE_UTILS
     return s;
   endverb
 
-  verb show_who_listing (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_who_listing (this none this) owner: #2 flags: "rxd"
     ":show_who_listing(players[,more_players])";
     " prints a listing of the indicated players.";
     " For players in the first list, idle/connected times are shown if the player is logged in, otherwise the last_disconnect_time is shown.  For players in the second list, last_disconnect_time is shown, no matter whether the player is logged in.";
@@ -1196,7 +1196,7 @@ object CODE_UTILS
     return total;
   endverb
 
-  verb _egrep_verb_code_all (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _egrep_verb_code_all (this none this) owner: #2 flags: "rxd"
     ":_egrep_verb_code_all(regexp,object,verbname[,casematters]) => list of lines number";
     "  returns list of all lines matching regexp in object:verbname code";
     set_task_perms(caller_perms());
@@ -1210,7 +1210,7 @@ object CODE_UTILS
     return lines;
   endverb
 
-  verb _grep_verb_code_all (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _grep_verb_code_all (this none this) owner: #2 flags: "rxd"
     ":_grep_verb_code_all(pattern,object,verbname[,casematters]) => list of lines";
     "  returns list of lines on which pattern occurs in code for object:verbname";
     set_task_perms(caller_perms());
@@ -1224,7 +1224,7 @@ object CODE_UTILS
     return lines;
   endverb
 
-  verb verb_usage (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_usage (this none this) owner: #2 flags: "rxd"
     ":verb_usage([object,verbname]) => usage string at beginning of verb code, if any";
     "default is the calling verb";
     set_task_perms(caller_perms());
@@ -1277,7 +1277,7 @@ object CODE_UTILS
     return callers();
   endverb
 
-  verb move_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb move_verb (this none this) owner: #2 flags: "rxd"
     ":move_verb(OBJ from, STR verb name, OBJ to, [STR new verb name]) -> Moves the specified verb from one object to another. Returns {OBJ, Full verb name} where the verb now resides if successful, error if not. To succeed, caller_perms() must control both objects and own the verb, unless called with wizard perms. Supplying a fourth argument moves the verb to a new name.";
     "Should handle verbnames with aliases and wildcards correctly.";
     who = caller_perms();
@@ -1319,7 +1319,7 @@ object CODE_UTILS
     endif
   endverb
 
-  verb "move_prop*erty" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "move_prop*erty" (this none this) owner: #2 flags: "rxd"
     ":move_prop(OBJ from, STR prop name, OBJ to, [STR new prop name]) -> Moves the specified property and its contents from one object to another. Returns {OBJ, property name} where the property now resides if successful, error if not. To succeed, caller_perms() must control both objects and own the property, unless called with wizard perms. Supplying a fourth argument gives the property a new name on the new object.";
     who = caller_perms();
     {from, origprop, to, ?destprop = origprop} = args;
@@ -1354,17 +1354,17 @@ object CODE_UTILS
     endif
   endverb
 
-  verb eval_d_util (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb eval_d_util (this none this) owner: #2 flags: "rx"
     "Do not remove this verb!  This is an auxiliary verb for :eval_d().";
   endverb
 
-  verb display_callers (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_callers (this none this) owner: #2 flags: "rxd"
     ":display_callers([callers() style list]) - displays the output of the given argument, assumed to be a callers() output. See `help callers()' for details. Will use callers() explicitly if no argument is passed.";
     call = caller_perms() == player ? "notify_lines" | "tell_lines";
     player:(call)(this:callers_text(@args));
   endverb
 
-  verb callers_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb callers_text (this none this) owner: #2 flags: "rxd"
     ":callers_text([callers() style list]) - returns the output of the given argument, assumed to be a callers() output. See `help callers()' for details. Will use callers() explicitly if no argument is passed.";
     linelen = min(player:linelen(), 200);
     text = {};
@@ -1399,7 +1399,7 @@ object CODE_UTILS
     return text;
   endverb
 
-  verb "set_property_value set_verb_or_property" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb "set_property_value set_verb_or_property" (this none this) owner: #2 flags: "rx"
     ":set_property_value(object, property, value)";
     " set_verb_or_property(same) -- similar to `verb_or_property'";
     "  -- attempts to set <object>.<property> to <value>.  If there exists <object>:set_<property>, then it is called and its returned value is returned.  If not, we try to set the property directly; the result of this is returned.";
@@ -1419,13 +1419,13 @@ object CODE_UTILS
     endif
   endverb
 
-  verb owns_task (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb owns_task (this none this) owner: #2 flags: "rxd"
     "$code_utils:owns_task(task_id, who)";
     "The purpose of this is to be faster than $code_utils:task_owner(task_id) in those cases where you are interested in whether a certain person owns the task rather than in determining the owner of a task where you have no preconceived notion of the owner.";
     return $list_utils:assoc(args[1], $wiz_utils:queued_tasks(args[2]));
   endverb
 
-  verb dflag_on (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dflag_on (this none this) owner: #2 flags: "rxd"
     "Syntax:  $code_utils:dflag_on()   => 0|1";
     "";
     "Returns true if the verb calling the verb that called this verb has the `d' flag set true. Returns false if it is !d. If there aren't that many callers, or the calling verb was a builtin such as eval, assume the debug flag is on for traceback purposes and return true.";
@@ -1446,7 +1446,7 @@ object CODE_UTILS
     return "NONE";
   endverb
 
-  verb dump_properties (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dump_properties (this none this) owner: #2 flags: "rxd"
     ":dump_properties (object, create_flag): returns the list of strings representing the property information for this object and its ancestor objects in @dump format.";
     set_task_perms(caller_perms());
     {dobj, create, ?targname = tostr(dobj)} = args;
@@ -1497,7 +1497,7 @@ object CODE_UTILS
     return result;
   endverb
 
-  verb dump_preamble (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dump_preamble (this none this) owner: #2 flags: "rxd"
     ":dump_preamble(object): produces the @create command necessary to dump this object.";
     dobj = args[1];
     parent = parent(dobj);
@@ -1510,7 +1510,7 @@ object CODE_UTILS
     return tostr("@create ", pstring, " named ", dobj.name, ":", $string_utils:from_list(dobj.aliases, ","));
   endverb
 
-  verb dump_verbs (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dump_verbs (this none this) owner: #2 flags: "rxd"
     ":dump_verbs (object, create_flag): returns the list of strings representing the verb information for this object in @dump format.";
     set_task_perms(caller_perms());
     {dobj, create, ?targname = tostr(dobj)} = args;
@@ -1566,7 +1566,7 @@ object CODE_UTILS
     return result;
   endverb
 
-  verb "_find_verb_lines_containing _find_verb_lines_matching" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "_find_verb_lines_containing _find_verb_lines_matching" (this none this) owner: #2 flags: "rxd"
     ":_find_verb_lines_containing(pattern,object[,casematters])";
     ":_find_verb_lines_matching(regexp,object[,casematters])";
     "number of verbs in object with code having a line containing pattern or matching regexp";

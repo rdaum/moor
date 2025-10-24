@@ -410,7 +410,7 @@ object GENERIC_EDITOR
     player:tell("You'll have to use 'home' or a teleporter.");
   endverb
 
-  verb huh2 (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb huh2 (this none this) owner: #2 flags: "rxd"
     "This catches subst and find commands that don't fit into the usual model, e.g., s/.../.../ without the space after the s, and find commands without the verb `find'.  Still behaves in annoying ways (e.g., loses if the search string contains multiple whitespace), but better than before.";
     set_task_perms(caller_perms());
     if ((c = callers()) && (c[1][1] != this || length(c) > 1))
@@ -828,7 +828,7 @@ object GENERIC_EDITOR
     return who_obj.location == this;
   endverb
 
-  verb new_session (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb new_session (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     {who_obj, from} = args;
     if ($object_utils:isa(from, $generic_editor))
@@ -855,7 +855,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb kill_session (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb kill_session (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (!(fuckup = this:ok(who = args[1])))
       return fuckup;
@@ -867,7 +867,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb reset_session (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb reset_session (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (!(fuckup = this:ok(who = args[1])))
       return fuckup;
@@ -880,7 +880,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb kill_all_sessions (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb kill_all_sessions (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (caller != this && !caller_perms().wizard)
       return E_PERM;
@@ -1008,7 +1008,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this:kill_all_sessions();
@@ -1207,7 +1207,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb match (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match (this none this) owner: #2 flags: "rxd"
     return $failed_match;
   endverb
 
@@ -1227,7 +1227,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb invoke_local_editor (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb invoke_local_editor (this none this) owner: #2 flags: "rxd"
     ":invoke_local_editor(name, text, upload)";
     "Spits out the magic text that invokes the local editor in the player's client.";
     "NAME is a good human-readable name for the local editor to use for this particular piece of text.";
@@ -1247,7 +1247,7 @@ object GENERIC_EDITOR
     endfor
   endverb
 
-  verb _stateprop_length (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _stateprop_length (this none this) owner: #2 flags: "rxd"
     "+c properties on children cannot necessarily be read, so we need this silliness...";
     if (caller != this)
       return E_PERM;
@@ -1256,7 +1256,7 @@ object GENERIC_EDITOR
     endif
   endverb
 
-  verb print (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb print (none none none) owner: #2 flags: "rd"
     txt = this:text(player in this.active);
     if (typeof(txt) == LIST)
       player:tell_lines(txt);
@@ -1270,7 +1270,7 @@ object GENERIC_EDITOR
     return this:acceptable(who_obj = args[1]) && this:new_session(who_obj, who_obj.location);
   endverb
 
-  verb "y*ank" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "y*ank" (any any any) owner: #2 flags: "rd"
     "Usage: yank from <note>";
     "       yank <message-sequence> from <mail-recipient>";
     "       yank from <object>:<verb>";

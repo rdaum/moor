@@ -1,19 +1,19 @@
 object NOTE
   name: "generic note"
   parent: THING
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property encryption_key (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = 0;
-  property text (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
-  property writers (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
+  property encryption_key (owner: #2, flags: "c") = 0;
+  property text (owner: #2, flags: "c") = {};
+  property writers (owner: #2, flags: "rc") = {};
 
   override aliases = {"generic note"};
   override description = "There appears to be some writing on the note ...";
   override object_size = {6265, 1084848672};
 
-  verb "r*ead" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "r*ead" (this none none) owner: #2 flags: "rxd"
     if (!this:is_readable_by(valid(caller_perms()) ? caller_perms() | player))
       player:tell("Sorry, but it seems to be written in some code that you can't read.");
     else
@@ -25,7 +25,7 @@ object NOTE
     endif
   endverb
 
-  verb "er*ase" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "er*ase" (this none none) owner: #2 flags: "rxd"
     if (this:is_writable_by(valid(caller_perms()) ? caller_perms() | player))
       this:set_text({});
       player:tell("Note erased.");
@@ -34,7 +34,7 @@ object NOTE
     endif
   endverb
 
-  verb "wr*ite" (any on this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "wr*ite" (any on this) owner: #2 flags: "rxd"
     if (this:is_writable_by(valid(caller_perms()) ? caller_perms() | player))
       this:set_text({@this.text, dobjstr});
       player:tell("Line added to note.");
@@ -43,7 +43,7 @@ object NOTE
     endif
   endverb
 
-  verb "del*ete rem*ove" (any from this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "del*ete rem*ove" (any from this) owner: #2 flags: "rd"
     if (!this:is_writable_by(player))
       player:tell("You can't modify this note.");
     elseif (!dobjstr)
@@ -62,7 +62,7 @@ object NOTE
     endif
   endverb
 
-  verb encrypt (this with any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb encrypt (this with any) owner: #2 flags: "rd"
     set_task_perms(player);
     key = $lock_utils:parse_keyexp(iobjstr, player);
     if (typeof(key) == STR)
@@ -79,7 +79,7 @@ object NOTE
     endif
   endverb
 
-  verb decrypt (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb decrypt (this none none) owner: #2 flags: "rd"
     set_task_perms(player);
     try
       dobj.encryption_key = 0;
@@ -89,7 +89,7 @@ object NOTE
     endtry
   endverb
 
-  verb text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb text (this none this) owner: #2 flags: "rxd"
     cp = caller_perms();
     if ($perm_utils:controls(cp, this) || this:is_readable_by(cp))
       return this.text;
@@ -98,12 +98,12 @@ object NOTE
     endif
   endverb
 
-  verb is_readable_by (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_readable_by (this none this) owner: #2 flags: "rxd"
     key = this.encryption_key;
     return key == 0 || $lock_utils:eval_key(key, args[1]);
   endverb
 
-  verb set_text (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_text (this none this) owner: #2 flags: "rxd"
     cp = caller_perms();
     newtext = args[1];
     if ($perm_utils:controls(cp, this) || this:is_writable_by(cp))
@@ -117,7 +117,7 @@ object NOTE
     endif
   endverb
 
-  verb is_writable_by (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_writable_by (this none this) owner: #2 flags: "rxd"
     who = args[1];
     wr = this.writers;
     if ($perm_utils:controls(who, this))
@@ -129,7 +129,7 @@ object NOTE
     endif
   endverb
 
-  verb "mailme @mailme" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "mailme @mailme" (this none none) owner: #2 flags: "rd"
     "Usage:  mailme <note>";
     "  uses $network to sends the text of this note to your REAL internet email address.";
     if (!this:is_readable_by(player))

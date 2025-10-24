@@ -1,11 +1,11 @@
 object GENERIC_UTILS
   name: "Generic Utilities Package"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property help_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property help_msg (owner: #2, flags: "rc") = {
     "This is the Generic Utility Object.  One presumes it should have text in it explaining the use of the utility object in question."
   };
 

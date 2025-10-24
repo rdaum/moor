@@ -1,7 +1,7 @@
 object OBJECT_UTILS
   name: "object utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
   override aliases = {"object utilities"};
@@ -57,7 +57,7 @@ object OBJECT_UTILS
   };
   override object_size = {21564, 1084848672};
 
-  verb has_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb has_property (this none this) owner: #2 flags: "rxd"
     "Syntax:  has_property(OBJ, STR) => INT 0|1";
     "";
     "Does object have the specified property? Returns true if it is defined on the object or a parent.";
@@ -76,7 +76,7 @@ object OBJECT_UTILS
     endif
   endverb
 
-  verb "all_properties all_verbs" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "all_properties all_verbs" (this none this) owner: #2 flags: "rxd"
     "Syntax:  all_properties (OBJ what)";
     "         all_verbs      (OBJ what)";
     "";
@@ -93,7 +93,7 @@ object OBJECT_UTILS
     return res;
   endverb
 
-  verb has_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb has_verb (this none this) owner: #2 flags: "rxd"
     ":has_verb(OBJ object, STR verbname)";
     "Find out if an object has a verb matching the given verbname.";
     "Returns {location} if so, 0 if not, where location is the object or the ancestor on which the verb is actually defined.";
@@ -115,7 +115,7 @@ object OBJECT_UTILS
     return vi ? {object} | 0;
   endverb
 
-  verb has_callable_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb has_callable_verb (this none this) owner: #2 flags: "rxd"
     "Usage:  has_callable_verb(object, verb)";
     "See if an object has a verb that can be called by another verb (i.e., that has its x permission bit set).";
     "Return {location}, where location is the object that defines the verb, or 0 if the object doesn't have the verb.";
@@ -130,7 +130,7 @@ object OBJECT_UTILS
     return 0;
   endverb
 
-  verb match_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match_verb (this none this) owner: #2 flags: "rxd"
     ":match_verb(OBJ object, STR verb)";
     "Find out if an object has a given verb, and some information about it.";
     "Returns {OBJ location, STR verb} if matched, 0 if not.";
@@ -206,7 +206,7 @@ object OBJECT_UTILS
     return res;
   endverb
 
-  verb findable_properties (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb findable_properties (this none this) owner: #2 flags: "rxd"
     "findable_properties(object)";
     "Return a list of properties on those members of object's ancestor list that are readable or are owned by the caller (or all properties if the caller is a wizard).";
     what = args[1];
@@ -221,7 +221,7 @@ object OBJECT_UTILS
     return props;
   endverb
 
-  verb owned_properties (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb owned_properties (this none this) owner: #2 flags: "rxd"
     "owned_properties(what[, who])";
     "Return a list of all properties on WHAT owned by WHO.";
     "Only wizardly verbs can specify WHO; mortal verbs can only search for properties owned by their own owners.  For more information, talk to Gary_Severn.";
@@ -239,7 +239,7 @@ object OBJECT_UTILS
     return props;
   endverb
 
-  verb property_conflicts (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb property_conflicts (this none this) owner: #2 flags: "rxd"
     ":property_conflicts(object,newparent)";
     "Looks for propertyname conflicts that would keep chparent(object,newparent)";
     "  from working.";
@@ -273,7 +273,7 @@ object OBJECT_UTILS
     return conflicts;
   endverb
 
-  verb descendants_with_property_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb descendants_with_property_suspended (this none this) owner: #2 flags: "rxd"
     ":descendants_with_property_suspended(object,property)";
     " => list of descendants of object on which property is defined.";
     "calls suspend(0) as needed";
@@ -293,7 +293,7 @@ object OBJECT_UTILS
     endif
   endverb
 
-  verb locations (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb locations (this none this) owner: #2 flags: "rxd"
     "Usage:  locations(object)";
     "Return a listing of the location hierarchy above object.";
     ret = {};
@@ -304,7 +304,7 @@ object OBJECT_UTILS
     return ret;
   endverb
 
-  verb "all_properties_suspended all_verbs_suspended" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "all_properties_suspended all_verbs_suspended" (this none this) owner: #2 flags: "rxd"
     "Syntax:  all_properties_suspended (OBJ what)";
     "         all_verbs_suspended      (OBJ what)";
     "";
@@ -341,7 +341,7 @@ object OBJECT_UTILS
     return 0;
   endverb
 
-  verb defines_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb defines_verb (this none this) owner: #2 flags: "rxd"
     "Returns 1 if the verb is actually *defined* on this object, 0 else.";
     "Use this instead of :has_verb if your aim is to manipulate that verb code or whatever.";
     return `verb_info(@args) ! ANY => 0' && 1;
@@ -350,7 +350,7 @@ object OBJECT_UTILS
     return typeof(info) != ERR;
   endverb
 
-  verb defines_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb defines_property (this none this) owner: #2 flags: "rxd"
     ":defines_property(OBJ object, STR property name) => Returns 1 if the property is actually *defined* on the object given";
     if (!valid(o = args[1]))
       return 0;
@@ -361,13 +361,13 @@ object OBJECT_UTILS
     endif
   endverb
 
-  verb "has_any_verb has_any_property" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "has_any_verb has_any_property" (this none this) owner: #2 flags: "rxd"
     ":has_any_verb(object) / :has_any_property(object)";
     " -- does `object' have any verbs/properties?";
     return !(!`verb == "has_any_verb" ? verbs(args[1]) | properties(args[1]) ! E_INVARG => 0');
   endverb
 
-  verb "has_readable_prop*erty hrp" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "has_readable_prop*erty hrp" (this none this) owner: #2 flags: "rxd"
     ":has_readable_property(OBJ object, STR property name) => 1 if property exists and is publically readable (has the r flag set true).";
     {object, prop} = args;
     try
@@ -420,7 +420,7 @@ object OBJECT_UTILS
     return r;
   endverb
 
-  verb "descendants_suspended descendents_suspended" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "descendants_suspended descendents_suspended" (this none this) owner: #2 flags: "rxd"
     ":descendants_suspended (OBJ object) => {OBJs} all nested children of <object>";
     set_task_perms(caller_perms());
     r = children(args[1]);
@@ -435,7 +435,7 @@ object OBJECT_UTILS
     return r;
   endverb
 
-  verb leaves_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb leaves_suspended (this none this) owner: #2 flags: "rxd"
     ":leaves_suspended (OBJ object) => {OBJs} descendants of <object> that have";
     "                                         no children";
     set_task_perms(caller_perms());
@@ -452,7 +452,7 @@ object OBJECT_UTILS
     return r;
   endverb
 
-  verb branches_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb branches_suspended (this none this) owner: #2 flags: "rxd"
     ":branches_suspended (OBJ object) => {OBJs} all descendants of <object> that";
     "                                           have children.";
     set_task_perms(caller_perms());
@@ -470,7 +470,7 @@ object OBJECT_UTILS
     return r;
   endverb
 
-  verb "disown disinherit" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "disown disinherit" (this none this) owner: #2 flags: "rxd"
     ":disown(object) / :disinherit(object)";
     " => 1 (for a successful disinheritance)";
     " raises E_PERM, E_INVARG, E_ARGS";
@@ -494,7 +494,7 @@ object OBJECT_UTILS
     endif
   endverb
 
-  verb accessible_verbs (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb accessible_verbs (this none this) owner: #2 flags: "rxd"
     "  accessible_verbs(object)   => a list of verb names (or E_PERM) regardless of readability of object";
     {thing} = args;
     valid(thing) || raise(E_INVARG, "Invalid object argument");
@@ -507,7 +507,7 @@ object OBJECT_UTILS
     return verbs;
   endverb
 
-  verb "accessible_prop*erties accessible_props" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "accessible_prop*erties accessible_props" (this none this) owner: #2 flags: "rxd"
     " :accessible_props(object)   => a list of property names (or E_PERM), regardless of the readability of the object.";
     thing = args[1];
     all = properties(thing);

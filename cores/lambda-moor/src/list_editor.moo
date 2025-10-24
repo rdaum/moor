@@ -175,7 +175,7 @@ object LIST_EDITOR
     return 0;
   endverb
 
-  verb property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb property (this none this) owner: #2 flags: "rx"
     "WIZARDLY";
     vl = $code_utils:verb_loc();
     if (caller != vl || caller_perms() != vl.owner)
@@ -185,7 +185,7 @@ object LIST_EDITOR
     return args[1].((args[2]));
   endverb
 
-  verb set_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb set_property (this none this) owner: #2 flags: "rx"
     "WIZARDLY";
     vl = $code_utils:verb_loc();
     if (caller != vl || caller_perms() != vl.owner)

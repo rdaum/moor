@@ -389,7 +389,7 @@ object MAIL_EDITOR
     endif
   endverb
 
-  verb send (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb send (none none none) owner: #2 flags: "rd"
     "WIZARDLY";
     if (!(who = this:loaded(player)))
       player:notify(this:nothing_loaded_msg());

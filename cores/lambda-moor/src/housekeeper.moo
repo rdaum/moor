@@ -15,7 +15,7 @@ object HOUSEKEEPER
   property litter (owner: HOUSEKEEPER, flags: "rc") = {};
   property move_player_task (owner: HOUSEKEEPER, flags: "r") = 0;
   property moveto_task (owner: HOUSEKEEPER, flags: "rc") = 0;
-  property owners (owner: HOUSEKEEPER, flags: "rc") = {BYTE_QUOTA_UTILS_WORKING};
+  property owners (owner: HOUSEKEEPER, flags: "rc") = {#2};
   property player_queue (owner: HOUSEKEEPER, flags: "r") = {};
   property public_places (owner: HOUSEKEEPER, flags: "rc") = {};
   property recycle_bins (owner: HOUSEKEEPER, flags: "rc") = {};
@@ -24,12 +24,12 @@ object HOUSEKEEPER
   property task (owner: HOUSEKEEPER, flags: "rc") = 0;
   property testing (owner: HOUSEKEEPER, flags: "rc") = 0;
 
-  override aliases (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"housekeeper"};
+  override aliases (owner: #2, flags: "r") = {"housekeeper"};
   override description = "A very clean, neat, tidy person who doesn't mind lugging players and their gear all over the place.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override last_disconnect_time = 2147483647;
   override linelen = -80;
-  override mail_forward = {BYTE_QUOTA_UTILS_WORKING};
+  override mail_forward = {#2};
   override object_size = {21397, 1084848672};
   override owned_objects = {HOUSEKEEPER};
   override ownership_quota = -9993;
@@ -328,7 +328,7 @@ object HOUSEKEEPER
     endif
   endverb
 
-  verb moveit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveit (this none this) owner: #2 flags: "rxd"
     "Wizardly verb to move object with requestor's permission";
     if (caller != this)
       return E_PERM;
@@ -338,7 +338,7 @@ object HOUSEKEEPER
     endif
   endverb
 
-  verb ejectit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb ejectit (this none this) owner: #2 flags: "rxd"
     "this:ejectit(object,room): Eject args[1] from args[2].  Callable only by housekeeper's quarters verbs.";
     if (caller == this)
       args[2]:eject(args[1]);
@@ -364,7 +364,7 @@ object HOUSEKEEPER
     return 0;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       this.password = "Impossible password to type";
       this.last_password_time = 0;
@@ -424,11 +424,11 @@ object HOUSEKEEPER
     return max(20 + $login:current_lag(), length(this.clean) ? 3600 / length(this.clean) | 0);
   endverb
 
-  verb acceptable (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb acceptable (this none this) owner: #2 flags: "rxd"
     return caller == this;
   endverb
 
-  verb move_players_home (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb move_players_home (this none this) owner: #2 flags: "rxd"
     if (!$perm_utils:controls(caller_perms(), this))
       "perms don't control the $housekeeper; probably not called by $room:disfunc then. Used to let args[1] call this. No longer.";
       return E_PERM;
@@ -460,7 +460,7 @@ object HOUSEKEEPER
     this.move_player_task = tid;
   endverb
 
-  verb move_em (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb move_em (this none this) owner: #2 flags: "rxd"
     if (caller == this)
       {who, dest} = args;
       set_task_perms(who);

@@ -12,7 +12,7 @@ object GENERIC_HELP
   override description = "A help database of the standard form in need of a description. See `help $generic_help'...";
   override object_size = {9501, 1084848672};
 
-  verb find_topics (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb find_topics (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (args)
       "...check for an exact match first...";
@@ -56,7 +56,7 @@ object GENERIC_HELP
     endif
   endverb
 
-  verb get_topic (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_topic (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     {topic, ?dblist = {}} = args;
     if (`$object_utils:has_property(parent(this), topic) ! ANY')
@@ -181,7 +181,7 @@ object GENERIC_HELP
     return {"", title, su:from_list($list_utils:map_arg(su, "space", su:explode(title), "-"), " "), @this:columnize(@this:sort_topics(this:find_topics()))};
   endverb
 
-  verb initialize (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb initialize (this none this) owner: #2 flags: "rxd"
     pass(@args);
     if ($perm_utils:controls(caller_perms(), this))
       this.r = 1;
@@ -189,7 +189,7 @@ object GENERIC_HELP
     endif
   endverb
 
-  verb verbdoc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verbdoc (this none this) owner: #2 flags: "rxd"
     "{\"*verbdoc*\", \"object\", \"verbname\"}  use documentation for this verb";
     set_task_perms(this.owner);
     if (!valid(object = $string_utils:match_object(args[1][1], player.location)))
@@ -201,7 +201,7 @@ object GENERIC_HELP
     endif
   endverb
 
-  verb dump_topic (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dump_topic (this none this) owner: #2 flags: "rxd"
     try
       text = this.((fulltopic = args[1]));
       return {tostr(";;", $code_utils:corify_object(this), ".(", toliteral(fulltopic), ") = $command_utils:read_lines()"), @$command_utils:dump_lines(text)};

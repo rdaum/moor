@@ -1,26 +1,26 @@
 object NETWORK
   name: "Network Utilities"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property MOO_name (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "YourMOO";
-  property active (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property blank_envelope (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property connect_connections_to (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property debugging (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property envelope_from (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "postmastername@yourhost";
-  property errors_to_address (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "moomailerrors@yourhost";
-  property invalid_userids (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {"", "sysadmin", "root", "postmaster", "system", "operator", "bin"};
-  property large_domains (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
-  property maildrop (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "localhost";
-  property password_postmaster (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "postmastername@yourhost";
-  property port (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 7777;
-  property postmaster (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "postmastername@yourhost";
+  property MOO_name (owner: #2, flags: "rc") = "YourMOO";
+  property active (owner: #2, flags: "rc") = 0;
+  property blank_envelope (owner: #2, flags: "rc") = 0;
+  property connect_connections_to (owner: #2, flags: "") = {};
+  property debugging (owner: #2, flags: "rc") = 0;
+  property envelope_from (owner: #2, flags: "rc") = "postmastername@yourhost";
+  property errors_to_address (owner: #2, flags: "rc") = "moomailerrors@yourhost";
+  property invalid_userids (owner: #2, flags: "rc") = {"", "sysadmin", "root", "postmaster", "system", "operator", "bin"};
+  property large_domains (owner: #2, flags: "r") = {};
+  property maildrop (owner: #2, flags: "rc") = "localhost";
+  property password_postmaster (owner: #2, flags: "rc") = "postmastername@yourhost";
+  property port (owner: #2, flags: "rc") = 7777;
+  property postmaster (owner: #2, flags: "rc") = "postmastername@yourhost";
   property queued_mail (owner: HACKER, flags: "") = {};
   property queued_mail_task (owner: HACKER, flags: "r") = 1076002766;
-  property site (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "yoursite";
-  property suspicious_userids (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property site (owner: #2, flags: "r") = "yoursite";
+  property suspicious_userids (owner: #2, flags: "rc") = {
     "",
     "sysadmin",
     "root",
@@ -35,10 +35,10 @@ object NETWORK
     "sysop",
     "info"
   };
-  property trusts (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {HACKER};
-  property usual_postmaster (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "postmastername@yourhost";
-  property valid_email_regexp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "^[-a-z0-9_!.%+$'=/]*[-a-z0-9_!%+$'=]$";
-  property valid_host_regexp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "^%([-_a-z0-9]+%.%)+%(gov%|edu%|com%|org%|int%|mil%|net%|%nato%|arpa%|name%|info%|[a-z][a-z]%)$";
+  property trusts (owner: #2, flags: "r") = {HACKER};
+  property usual_postmaster (owner: #2, flags: "rc") = "postmastername@yourhost";
+  property valid_email_regexp (owner: #2, flags: "rc") = "^[-a-z0-9_!.%+$'=/]*[-a-z0-9_!%+$'=]$";
+  property valid_host_regexp (owner: #2, flags: "rc") = "^%([-_a-z0-9]+%.%)+%(gov%|edu%|com%|org%|int%|mil%|net%|%nato%|arpa%|name%|info%|[a-z][a-z]%)$";
 
   override aliases = {"Network Utilities"};
   override description = {
@@ -119,7 +119,7 @@ object NETWORK
   };
   override object_size = {22932, 1084848672};
 
-  verb parse_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_address (this none this) owner: #2 flags: "rxd"
     "Given an email address, return {userid, site}.";
     "Valid addresses are of the form `userid[@site]'.";
     "At least for now, if [@site] is left out, site will be returned as blank.";
@@ -128,7 +128,7 @@ object NETWORK
     return (at = index(address, "@")) ? {address[1..at - 1], address[at + 1..$]} | {address, ""};
   endverb
 
-  verb local_domain (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb local_domain (this none this) owner: #2 flags: "rxd"
     "given a site, try to figure out what the `local' domain is.";
     "if site has a @ or a % in it, give up and return E_INVARG.";
     "blank site is returned as is; try this:local_domain(this.localhost) for the answer you probably want.";
@@ -159,7 +159,7 @@ object NETWORK
     endif
   endverb
 
-  verb open (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb open (this none this) owner: #2 flags: "rxd"
     ":open(address, port, [connect-connection-to])";
     "Open a network connection to address/port.  If the connect-connection-to is passed, then the connection will be connected to that object when $login gets ahold of it.  If not, then the connection is just ignored by $login, i.e. not bothered by it with $welcome_message etc.";
     "The object specified by connect-connection-to has to be a player (though it need not be a $player).";
@@ -185,7 +185,7 @@ object NETWORK
     return connection;
   endverb
 
-  verb close (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb close (this none this) owner: #2 flags: "rxd"
     if (!this:trust(caller_perms()))
       return E_PERM;
     endif
@@ -200,7 +200,7 @@ object NETWORK
     return 1;
   endverb
 
-  verb sendmail (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb sendmail (any none none) owner: #2 flags: "rxd"
     "sendmail(to, subject, line1, line2, ...)";
     "  sends mail to internet address 'to', with given subject.";
     "  It fills in various fields, such as date, from (from player), etc.";
@@ -226,11 +226,11 @@ object NETWORK
     return result;
   endverb
 
-  verb trust (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb trust (this none this) owner: #2 flags: "rxd"
     return (who = args[1]).wizard || who in this.trusts;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.active = 0;
@@ -250,7 +250,7 @@ object NETWORK
     endif
   endverb
 
-  verb raw_sendmail (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb raw_sendmail (any none none) owner: #2 flags: "rxd"
     "Copied from sendmail fix (#88079):raw_sendmail by Lineman (#108318) Mon Feb  1 19:29:43 1999 PST";
     "rawsendmail(to, @lines)";
     "sends mail without processing. Returns 0 if successful, or else reason why not.";
@@ -329,7 +329,7 @@ object NETWORK
     return msg;
   endverb
 
-  verb invalid_email_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb invalid_email_address (this none this) owner: #2 flags: "rxd"
     "invalid_email_address(email) -- check to see if email looks like a valid email address. Return reason why not.";
     address = args[1];
     if (!address)
@@ -352,11 +352,11 @@ object NETWORK
     return "";
   endverb
 
-  verb invalid_hostname (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb invalid_hostname (this none this) owner: #2 flags: "rxd"
     return match(args[1], this.valid_host_regexp) ? "" | tostr("'", args[1], "' doesn't look like a valid internet host name");
   endverb
 
-  verb email_will_fail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb email_will_fail (this none this) owner: #2 flags: "rxd"
     ":email_will_fail(email-address[, display?]) => Makes sure the email-address is one that can actually be used by $network:sendmail().";
     {email, ?display = 0} = args;
     reason = this:invalid_email_address(email);
@@ -388,7 +388,7 @@ object NETWORK
     "Last modified Tue Jun 15 00:19:01 1993 EDT by Ranma (#200).";
   endverb
 
-  verb read (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb read (this none this) owner: #2 flags: "rxd"
     "for trusted players, they can read from objects they own or open connections";
     if (!this:trust(caller_perms()))
       return E_PERM;
@@ -408,7 +408,7 @@ object NETWORK
     "Relies on test in idle_seconds, and the error catching";
   endverb
 
-  verb incoming_connection (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb incoming_connection (this none this) owner: #2 flags: "rxd"
     "Peer at an incoming connection.  Decide if it should be connected to something, return that object. If it should be ignored (outbound connection), return 1. Called only by #0:do_login_command";
     if (caller != #0)
       return;
@@ -428,7 +428,7 @@ object NETWORK
     endif
   endverb
 
-  verb return_address_for (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb return_address_for (this none this) owner: #2 flags: "rxd"
     ":return_address_for(player) => string of 'return address'. Currently inbound mail doesn't work, so this is a bogus address.";
     who = args[1];
     if (valid(who) && is_player(who))
@@ -438,7 +438,7 @@ object NETWORK
     endif
   endverb
 
-  verb server_started (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb server_started (this none this) owner: #2 flags: "rxd"
     "called when restarting to clean out state.";
     if (caller != #0)
       return E_PERM;
@@ -446,11 +446,11 @@ object NETWORK
     this.connect_connections_to = {};
   endverb
 
-  verb is_outgoing_connection (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_outgoing_connection (this none this) owner: #2 flags: "rxd"
     return index(`connection_name(args[1]) ! ANY => ""', " to ");
   endverb
 
-  verb notify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify (this none this) owner: #2 flags: "rxd"
     "for trusted players, they can write to connections";
     if (!this:trust(caller_perms()))
       return E_PERM;
@@ -462,7 +462,7 @@ object NETWORK
     return notify(x, args[2]);
   endverb
 
-  verb suspend_if_needed (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb suspend_if_needed (this none this) owner: #2 flags: "rxd"
     "$command_utils:suspend_if_needed but chowned to player";
     if ($command_utils:running_out_of_time())
       set_task_perms(caller_perms().wizard ? player | caller_perms());
@@ -470,7 +470,7 @@ object NETWORK
     endif
   endverb
 
-  verb error (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb error (this none this) owner: #2 flags: "rxd"
     ":error(ERN, host, port) interpret open_network_connection(host, port) error";
     {msg, host, port} = args;
     if (msg == E_PERM)
@@ -489,7 +489,7 @@ object NETWORK
     return this:description();
   endverb
 
-  verb adjust_postmaster_for_password (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb adjust_postmaster_for_password (this none this) owner: #2 flags: "rxd"
     "adjust_postmaster_for_password(enter_or_exit): permits the MOO to have two different postmasters for different kinds of bounces.  If entering password (argument \"enter\"), change to $network.password_postmaster, else (argument \"exit\") change to $network.usual_postmaster.";
     if (args[1] == "enter")
       $network.postmaster = $network.password_postmaster;
@@ -519,7 +519,7 @@ object NETWORK
     endif
   endverb
 
-  verb send_queued_mail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb send_queued_mail (this none this) owner: #2 flags: "rxd"
     "$network:send_queued_mail()";
     "  -- tries to send the mail stored in the .queued_mail property";
     while (queued_mail = this.queued_mail)
@@ -533,7 +533,7 @@ object NETWORK
     endwhile
   endverb
 
-  verb tcp_wait (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tcp_wait (this none this) owner: #2 flags: "rxd"
     "Copied from sendmail fix (#88079):tcp_wait by Lineman (#108318) Mon Feb  1 19:28:18 1999 PST";
     {conn, ?timeout = 0} = args;
     if (!caller_perms().wizard)

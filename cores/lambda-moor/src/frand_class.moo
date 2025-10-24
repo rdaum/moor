@@ -32,7 +32,7 @@ object FRAND_CLASS
   property victim_port_msg (owner: HACKER, flags: "rc") = "teleports you.";
   property whisper_refused_msg (owner: HACKER, flags: "rc") = "%N refuses your whisper.";
 
-  override aliases (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"Frand's player class", "player class"};
+  override aliases (owner: #2, flags: "r") = {"Frand's player class", "player class"};
   override description = "You see a player who should type '@describe me as ...'.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override help = FRAND_HELP;
@@ -90,7 +90,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb teleport (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb teleport (this none this) owner: #2 flags: "rxd"
     "Teleport a player or object. For printing messages, there are three cases: (1) teleport self (2) teleport other player (3) teleport object. There's a spot of complexity for handling the invalid location #-1.";
     set_task_perms(caller == this ? this | $no_one);
     {thing, dest} = args;
@@ -479,7 +479,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb "@spellm*essages @spellp*roperties" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@spellm*essages @spellp*roperties" (any any any) owner: #2 flags: "rd"
     "@spellproperties <object>";
     "@spellmessages <object>";
     "Spell checks the string properties of an object, or the subset of said properties which are suffixed _msg, respectively.";
@@ -669,7 +669,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb confunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb confunc (this none this) owner: #2 flags: "rxd"
     "'confunc ()' - Besides the inherited behavior, notify the player's feature objects that the player has connected.";
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this))
       return E_PERM;
@@ -688,7 +688,7 @@ object FRAND_CLASS
     endfor
   endverb
 
-  verb disfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb disfunc (this none this) owner: #2 flags: "rxd"
     "'disfunc ()' - Besides the inherited behavior, notify the player's feature objects that the player has disconnected.";
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this))
       return E_PERM;
@@ -707,7 +707,7 @@ object FRAND_CLASS
     endfork
   endverb
 
-  verb "@addword @adddict" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@addword @adddict" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (verb == "@adddict" && !(player in $spell.trusted || player.wizard))
       player:tell("You may not add to the master dictionary. The following words will instead by put in a list of words to be approved for later addition to the dictionary. Thanks for your contribution.");
@@ -754,7 +754,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb "@spell @cspell @complete" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@spell @cspell @complete" (any any any) owner: #2 flags: "rd"
     "@spell a word or phrase  -- Spell check a word or phrase.";
     "@spell thing.prop  -- Spell check a property. The value must be a string or a list of strings.";
     "@spell thing:verb  -- Spell check a verb. Only the quoted strings in the verb are checked.";
@@ -822,7 +822,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb "@rmword" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rmword" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (argstr in player.dict)
       player.dict = setremove(player.dict, argstr);
@@ -832,7 +832,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb "@rmdict" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rmdict" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     result = $spell:remove_word(argstr);
     if (result == E_PERM)
@@ -1132,7 +1132,7 @@ object FRAND_CLASS
     return text;
   endverb
 
-  verb player_to_refusal_origin (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb player_to_refusal_origin (this none this) owner: #2 flags: "rxd"
     "'player_to_refusal_origin (<player>)' -> <origin> - Convert a player to a unique identifier called the player's 'refusal origin'. For most players, it's just their object number. For guests, it is a hash of the site they are connecting from. Converting an origin to an origin is a safe no-op--the code relies on this.";
     set_task_perms(caller_perms());
     {who} = args;
@@ -1373,7 +1373,7 @@ object FRAND_CLASS
     return $string_utils:pronoun_sub(this.(verb), this);
   endverb
 
-  verb last_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb last_huh (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if (pass(@args))
       return 1;
@@ -1388,7 +1388,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb ping_features (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb ping_features (this none this) owner: #2 flags: "rxd"
     ":ping_features()";
     " -- cleans up the .features list to remove !valid objects";
     " ==> cleaned-up .features list";
@@ -1401,7 +1401,7 @@ object FRAND_CLASS
     return this.features = features;
   endverb
 
-  verb set_owned_objects (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_owned_objects (this none this) owner: #2 flags: "rxd"
     ":set_owned_objects( LIST owned-objects list )";
     "  -- set your .owned_objects, ordered as you please";
     "  -- no, it will NOT let you set to to anything you want";
@@ -1425,7 +1425,7 @@ object FRAND_CLASS
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       if ($code_utils:verb_location() == this)

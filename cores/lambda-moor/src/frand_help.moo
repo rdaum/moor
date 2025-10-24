@@ -4,9 +4,9 @@ object FRAND_HELP
   owner: HACKER
   readable: true
 
-  property "@adddict" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*forward*", "@addword"};
+  property "@adddict" (owner: #2, flags: "r") = {"*forward*", "@addword"};
   property "@addroom" (owner: HACKER, flags: "rc") = {"*forward*", "@rooms"};
-  property "@addsubmitted" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*forward*", "@submitted"};
+  property "@addsubmitted" (owner: #2, flags: "r") = {"*forward*", "@submitted"};
   property "@addword" (owner: HACKER, flags: "rc") = {
     "Syntax: @addword <word or words>",
     "        @addword object.property",
@@ -158,9 +158,9 @@ object FRAND_HELP
     "The <time> is always a number followed by a unit, like '10 weeks' or '45 seconds'. The possible units are second, minute, hour, day, week,",
     "and month."
   };
-  property "@rmdict" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*forward*", "@rmword"};
+  property "@rmdict" (owner: #2, flags: "r") = {"*forward*", "@rmword"};
   property "@rmroom" (owner: HACKER, flags: "rc") = {"*forward*", "@rooms"};
-  property "@rmsubmitted" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*forward*", "@submitted"};
+  property "@rmsubmitted" (owner: #2, flags: "r") = {"*forward*", "@submitted"};
   property "@rmword" (owner: HACKER, flags: "rc") = {
     "Usage: @rmword <word or words>",
     "",
@@ -196,9 +196,9 @@ object FRAND_HELP
     "Refer to help spelling for general information about the spellchecker."
   };
   property "@spellproperties" (owner: HACKER, flags: "rc") = {"*forward*", "@spellmessages"};
-  property "@spurn" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*verbdoc*", "$frand_class", "@spurn"};
-  property "@spurned" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*verbdoc*", "$frand_class", "@spurned"};
-  property "@submitted" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*verbdoc*", "$frand_class", "@submitted"};
+  property "@spurn" (owner: #2, flags: "r") = {"*verbdoc*", "$frand_class", "@spurn"};
+  property "@spurned" (owner: #2, flags: "r") = {"*verbdoc*", "$frand_class", "@spurned"};
+  property "@submitted" (owner: #2, flags: "r") = {"*verbdoc*", "$frand_class", "@submitted"};
   property "@unrefuse" (owner: HACKER, flags: "rc") = {
     "Syntax:",
     "    @unrefuse <actions> from <player>",

@@ -446,7 +446,7 @@ object PROG_HELP
   property "@program#" (owner: HACKER, flags: "rc") = {"*forward*", "@program"};
   property "@programmer-options" (owner: HACKER, flags: "rc") = {"*forward*", "@prog-options"};
   property "@programmeroptions" (owner: HACKER, flags: "rc") = {"*forward*", "@prog-options"};
-  property "@properties" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*verbdoc*", "$prog", "@properties"};
+  property "@properties" (owner: #2, flags: "r") = {"*verbdoc*", "$prog", "@properties"};
   property "@property" (owner: HACKER, flags: "r") = {
     "Syntax:  @property <object>.<prop-name>",
     "         @property <object>.<prop-name> <initial-value>",
@@ -462,7 +462,7 @@ object PROG_HELP
     "",
     "'@property' can be abbreviated as '@prop'."
   };
-  property "@props" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"*forward*", "@properties"};
+  property "@props" (owner: #2, flags: "r") = {"*forward*", "@properties"};
   property "@prospectus" (owner: HACKER, flags: "rc") = {
     "Usage:  @prospectus player [from number] [to number]",
     "",

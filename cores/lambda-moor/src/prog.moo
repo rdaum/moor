@@ -1,23 +1,23 @@
 object PROG
   name: "generic programmer"
   parent: BUILDER
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
   property eval_env (owner: HACKER, flags: "r") = "here=player.location;me=player";
   property eval_subs (owner: HACKER, flags: "r") = {};
   property eval_ticks (owner: HACKER, flags: "r") = 3;
-  property prog_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
+  property prog_options (owner: #2, flags: "rc") = {};
 
   override aliases = {"generic", "programmer"};
   override description = "You see a player who is too experienced to have any excuse for not having a description.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override help = {PROG_HELP, BUILTIN_FUNCTION_HELP, VERB_HELP, CORE_HELP};
-  override mail_notify (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc");
+  override mail_notify (owner: #2, flags: "rc");
   override object_size = {59612, 1084848672};
 
-  verb "@prop*erty" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@prop*erty" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!player.programmer)
       player:notify("You need to be a programmer to do this.");
@@ -89,7 +89,7 @@ object PROG
     endtry
   endverb
 
-  verb "@chmod*#" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@chmod*#" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     bynumber = verb == "@chmod#";
     if (length(args) != 2)
@@ -188,7 +188,7 @@ object PROG
     $command_utils:object_match_failed(object, what);
   endverb
 
-  verb "@args*#" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@args*#" (any any any) owner: #2 flags: "rd"
     if (player != caller)
       return;
     endif
@@ -242,7 +242,7 @@ object PROG
     endif
   endverb
 
-  verb "eval*-d" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "eval*-d" (any any any) owner: #2 flags: "rd"
     "A MOO-code evaluator.  Type `;CODE' or `eval CODE'.";
     "Calls player:eval_cmd_string to first transform CODE in any way appropriate (e.g., prefixing .eval_env) and then do the actual evaluation.  See documentation for this:eval_cmd_string";
     "If you set your .eval_time property to 1, you find out how many ticks and seconds you used.";
@@ -268,7 +268,7 @@ object PROG
     endif
   endverb
 
-  verb "@rmprop*erty" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rmprop*erty" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (length(args) != 1 || !(spec = $code_utils:parse_propref(args[1])))
       player:notify(tostr("Usage:  ", verb, " <object>.<property>"));
@@ -289,7 +289,7 @@ object PROG
     endtry
   endverb
 
-  verb "@verb" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@verb" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!player.programmer)
       player:notify("You need to be a programmer to do this.");
@@ -352,7 +352,7 @@ object PROG
     endtry
   endverb
 
-  verb "@rmverb*#" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rmverb*#" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
       player:notify(tostr("Usage:  ", verb, " <object>:<verb>"));
@@ -408,7 +408,7 @@ object PROG
     endif
   endverb
 
-  verb "@forked*-verbose" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@forked*-verbose" (any none none) owner: #2 flags: "rd"
     "Syntax:  @forked [player]";
     "         @forked all wizards";
     "";
@@ -458,7 +458,7 @@ object PROG
     endif
   endverb
 
-  verb "@kill @killq*uiet" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@kill @killq*uiet" (any none none) owner: #2 flags: "rd"
     "Kills one or more tasks.";
     "Arguments:";
     "   object:verb -- kills all tasks which were started from that object and verb.";
@@ -593,7 +593,7 @@ object PROG
     endif
   endverb
 
-  verb "@copy @copy-x @copy-move" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@copy @copy-x @copy-move" (any at any) owner: #2 flags: "rd"
     "Usage:  @copy source:verbname to target[:verbname]";
     "  the target verbname, if not given, defaults to that of the source.  If the target verb doesn't already exist, a new verb is installed with the same args, names, code, and permission flags as the source.  Otherwise, the existing target's verb code is overwritten and no other changes are made.";
     "This the poor man's version of multiple inheritance... the main problem is that someone may update the verb you're copying and you'd never know.";
@@ -689,13 +689,13 @@ object PROG
     endif
   endverb
 
-  verb _kill_task_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _kill_task_message (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     task = args[1];
     player:notify(tostr("Killed: ", $string_utils:right(tostr("task ", task[1]), 17), ", verb ", task[6], ":", task[7], ", line ", task[8], task[9] != task[6] ? ", this==" + tostr(task[9]) | ""));
   endverb
 
-  verb "@prog*ram @program#" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@prog*ram @program#" (any any any) owner: #2 flags: "rd"
     "This version of @program deals with multiple verbs having the same name.";
     "... @program <object>:<verbname> <dobj> <prep> <iobj>  picks the right one.";
     if (player != caller)
@@ -804,7 +804,7 @@ object PROG
     endif
   endverb
 
-  verb "@setenv" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@setenv" (any any any) owner: #2 flags: "rd"
     "Usage: @setenv <environment string>";
     "Set your .eval_env property.";
     set_task_perms(player);
@@ -821,7 +821,7 @@ object PROG
     player:notify(tostr(".eval_env set to \"", player.eval_env, "\" (", player.eval_ticks, " ticks)."));
   endverb
 
-  verb "@pros*pectus pros*pectus" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@pros*pectus pros*pectus" (any any any) owner: #2 flags: "rxd"
     "Usage: @prospectus <player> [from <start>] [to <end>]";
     set_task_perms(caller_perms() == $nothing ? player | caller_perms());
     dobj = dobjstr ? $string_utils:match_player(dobjstr) | player;
@@ -839,7 +839,7 @@ object PROG
     return $building_utils:do_prospectus(dobj, @parse_result);
   endverb
 
-  verb "@d*isplay" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@d*isplay" (any none none) owner: #2 flags: "rd"
     "@display <object>[.[property]]*[,[inherited_property]]*[:[verb]]*[;[inherited_verb]]*";
     if (player != this)
       player:notify(tostr("Sorry, you can't use ", this:title(), "'s `", verb, "' command."));
@@ -1041,7 +1041,7 @@ object PROG
     endif
   endverb
 
-  verb "@db*size" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@db*size" (none none none) owner: #2 flags: "rd"
     set_task_perms(player);
     "Let 'em @kill it.";
     count = 0;
@@ -1057,7 +1057,7 @@ object PROG
     player:notify(tostr("There are ", count, " valid objects out of ", toint(max_object()) + 1, " allocated object numbers."));
   endverb
 
-  verb "@gethelp" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@gethelp" (any any any) owner: #2 flags: "rxd"
     "@gethelp [<topic>] [from <db or dblist>]";
     "  Prints the raw text of topic from the appropriate help db.";
     "  With no argument, gets the blank (\"\") topic from wherever it lives";
@@ -1097,7 +1097,7 @@ object PROG
     endif
   endverb
 
-  verb "@grep*all @egrep*all" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@grep*all @egrep*all" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (prepstr == "in")
       pattern = dobjstr;
@@ -1131,7 +1131,7 @@ object PROG
     $code_utils:((all ? egrep ? "find_verb_lines_matching" | "find_verb_lines_containing" | (egrep ? "find_verbs_matching" | "find_verbs_containing")))(pattern, @objlist);
   endverb
 
-  verb "@s*how" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@s*how" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (dobjstr == "")
       player:notify(tostr("Usage:  ", verb, " <object-or-property-or-verb>"));
@@ -1159,7 +1159,7 @@ object PROG
     $command_utils:object_match_failed(object, dobjstr);
   endverb
 
-  verb "@check-p*roperty" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@check-p*roperty" (any none none) owner: #2 flags: "rd"
     "@check-prop object.property";
     "  checks for descendents defining the given property.";
     set_task_perms(player);
@@ -1200,7 +1200,7 @@ object PROG
     endif
   endverb
 
-  verb "@clearp*roperty @clprop*erty" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@clearp*roperty @clprop*erty" (any none none) owner: #2 flags: "rd"
     "@clearproperty <obj>.<prop>";
     "Set the value of <obj>.<prop> to `clear', making it appear to be the same as the property on its parent.";
     set_task_perms(player);
@@ -1223,7 +1223,7 @@ object PROG
     endtry
   endverb
 
-  verb "@disown @disinherit" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@disown @disinherit" (any any any) owner: #2 flags: "rd"
     "Syntax: @disown <object> [from <object>]";
     "This command is used to remove unwanted children of objects you control. If you control an object, and there is a child of that object you do not want, this command will chparent() the object to its grandparent.";
     set_task_perms(player);
@@ -1260,7 +1260,7 @@ object PROG
     endtry
   endverb
 
-  verb eval_cmd_string (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eval_cmd_string (this none this) owner: #2 flags: "rxd"
     ":eval_cmd_string(string[,debug])";
     "Evaluates the string the way this player would normally expect to see it evaluated if it were typed on the command line.  debug (defaults to 1) indicates how the debug flag should be set during the evaluation.";
     " => {@eval_result, ticks, seconds}";
@@ -1285,7 +1285,7 @@ object PROG
     return {@value, ticks, seconds};
   endverb
 
-  verb "@dump" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@dump" (any any any) owner: #2 flags: "rd"
     "@dump something [with [id=...] [noprops] [noverbs] [create]]";
     "This spills out all properties and verbs on an object, calling suspend at appropriate intervals.";
     "   id=#nnn -- specifies an idnumber to use in place of the object's actual id (for porting to another MOO)";
@@ -1334,7 +1334,7 @@ object PROG
     player:notify("\"***finished***");
   endverb
 
-  verb "#*" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "#*" (any any any) owner: #2 flags: "rd"
     "Copied from Player Class hacked with eval that does substitutions and assorted stuff (#8855):# by Geust (#24442) Sun May  9 20:19:05 1993 PDT";
     "#<string>[.<property>|.parent] [exit|player|inventory] [for <code>] returns information about the object (we'll call it <thing>) named by string.  String is matched in the current room unless one of exit|player|inventory is given.";
     "If neither .<property>|.parent nor <code> is specified, just return <thing>.";
@@ -1403,7 +1403,7 @@ object PROG
     endif
   endverb
 
-  verb eval_value_to_string (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eval_value_to_string (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     if (typeof(val = args[1]) == OBJ)
       return tostr("=> ", val, "  ", valid(val) ? "(" + val.name + ")" | ((a = $list_utils:assoc(val, {{#-1, "<$nothing>"}, {#-2, "<$ambiguous_match>"}, {#-3, "<$failed_match>"}})) ? a[2] | "<invalid>"));
@@ -1414,7 +1414,7 @@ object PROG
     endif
   endverb
 
-  verb "@progo*ptions @prog-o*ptions @programmero*ptions @programmer-o*ptions" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@progo*ptions @prog-o*ptions @programmero*ptions @programmer-o*ptions" (any any any) owner: #2 flags: "rd"
     "@<what>-option <option> [is] <value>   sets <option> to <value>";
     "@<what>-option <option>=<value>        sets <option> to <value>";
     "@<what>-option +<option>     sets <option>   (usually equiv. to <option>=1";
@@ -1446,7 +1446,7 @@ object PROG
     endif
   endverb
 
-  verb prog_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prog_option (this none this) owner: #2 flags: "rxd"
     ":prog_option(name)";
     "Returns the value of the specified prog option";
     if (caller == this || $perm_utils:controls(caller_perms(), this))
@@ -1456,7 +1456,7 @@ object PROG
     endif
   endverb
 
-  verb set_prog_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_prog_option (this none this) owner: #2 flags: "rxd"
     ":set_prog_option(oname,value)";
     "Changes the value of the named option.";
     "Returns a string error if something goes wrong.";
@@ -1478,7 +1478,7 @@ object PROG
     endif
   endverb
 
-  verb "@list*#" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@list*#" (any any any) owner: #2 flags: "rd"
     "@list <obj>:<verb> [<dobj> <prep> <iobj>] [with[out] paren|num] [all] [ranges]";
     set_task_perms(player);
     bynumber = verb == "@list#";
@@ -1627,7 +1627,7 @@ object PROG
     endif
   endverb
 
-  verb set_eval_subs (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_eval_subs (none none none) owner: #2 flags: "rxd"
     "Copied from Player Class hacked with eval that does substitutions and assorted stuff (#8855):set_eval_subs by Geust (#24442) Fri Aug  5 13:18:59 1994 PDT";
     if (!$perm_utils:controls(caller_perms(), this))
       return E_PERM;
@@ -1643,7 +1643,7 @@ object PROG
     return `this.eval_subs = subs ! ANY';
   endverb
 
-  verb "@verbs*" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@verbs*" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       try
@@ -1664,7 +1664,7 @@ object PROG
     endif
   endverb
 
-  verb "@old-forked-v*erbose" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@old-forked-v*erbose" (any none none) owner: #2 flags: "rd"
     "Syntax:  @forked-v*erbose [player]";
     "         @forked-v*erbose all wizards";
     "";
@@ -1711,7 +1711,7 @@ object PROG
     endif
   endverb
 
-  verb "@props @properties" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "r"
+  verb "@props @properties" (any any any) owner: #2 flags: "r"
     "Usage: @properties <object>";
     "Alias: @props";
     "Displays all properties defined on <object>. Properties unreadable by you display as `E_PERM'.";

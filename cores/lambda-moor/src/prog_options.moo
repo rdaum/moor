@@ -112,10 +112,10 @@ object PROG_OPTIONS
     endif
   endverb
 
-  verb "check_@prop_flags" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "check_@prop_flags" (this none this) owner: #2 flags: "rxd"
   endverb
 
-  verb "parse_@prop_flags" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "parse_@prop_flags" (this none this) owner: #2 flags: "rxd"
     {oname, raw, data} = args;
     if (typeof(raw) != STR)
       return "Must be a string composed of the characters `rwc'.";

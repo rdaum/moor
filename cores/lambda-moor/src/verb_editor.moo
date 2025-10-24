@@ -221,7 +221,7 @@ object VERB_EDITOR
     return 0;
   endverb
 
-  verb fetch_verb_code (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb fetch_verb_code (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (caller != $verb_editor || caller_perms() != $verb_editor.owner)
       return E_PERM;
@@ -231,7 +231,7 @@ object VERB_EDITOR
     endif
   endverb
 
-  verb set_verb_code (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_verb_code (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (caller != $verb_editor || caller_perms() != $verb_editor.owner)
       return E_PERM;
@@ -241,7 +241,7 @@ object VERB_EDITOR
     endif
   endverb
 
-  verb local_editing_info (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb local_editing_info (this none this) owner: #2 flags: "rxd"
     if (caller == $verb_editor)
       set_task_perms(player);
     endif
@@ -267,7 +267,7 @@ object VERB_EDITOR
     return {name, code, tostr("@program ", object, ":", vname, vargs)};
   endverb
 
-  verb verb_name (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_name (this none this) owner: #2 flags: "rxd"
     "verb_name(object, vname)";
     "Find vname on object and return its full name (quoted).";
     "This is useful for when we're working with verb numbers.";
@@ -286,7 +286,7 @@ object VERB_EDITOR
     endif
   endverb
 
-  verb verb_args (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_args (this none this) owner: #2 flags: "rxd"
     "verb_name(object, vname)";
     "Find vname on object and return its full name (quoted).";
     "This is useful for when we're working with verb numbers.";
@@ -365,7 +365,7 @@ object VERB_EDITOR
     endif
   endverb
 
-  verb fetch_verb_args (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb fetch_verb_args (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (caller != $verb_editor || caller_perms() != $verb_editor.owner)
       raise(E_PERM);

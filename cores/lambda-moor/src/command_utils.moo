@@ -1,11 +1,11 @@
 object COMMAND_UTILS
   name: "command utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
   property feature_task (owner: HACKER, flags: "") = {388912170, "@abort", {}, "", LOCAL, "", "", LOCAL, ""};
-  property lag_samples (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
+  property lag_samples (owner: #2, flags: "r") = {};
 
   override description = {
     "This is the command utilities utility package.  See `help $command_utils' for more details."
@@ -52,7 +52,7 @@ object COMMAND_UTILS
   };
   override object_size = {18931, 1084848672};
 
-  verb object_match_failed (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb object_match_failed (this none this) owner: #2 flags: "rxd"
     "Usage: object_match_failed(object, string)";
     "Prints a message if string does not match object.  Generally used after object is derived from a :match_object(string).";
     {match_result, string} = args;
@@ -77,7 +77,7 @@ object COMMAND_UTILS
     return 1;
   endverb
 
-  verb "player_match_result player_match_failed" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "player_match_result player_match_failed" (this none this) owner: #2 flags: "rxd"
     ":player_match_failed(result,string)";
     "  is exactly like :object_match_failed(result,string)";
     "  except that its messages are more suitable for player searches.";
@@ -130,7 +130,7 @@ object COMMAND_UTILS
     return pmf ? bombed | {bombed, @pset};
   endverb
 
-  verb read (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb read (this none this) owner: #2 flags: "rxd"
     "$command_utils:read() -- read a line of input from the player and return it";
     "Optional argument is a prompt portion to replace `a line of input' in the prompt.";
     "";
@@ -151,7 +151,7 @@ object COMMAND_UTILS
     endtry
   endverb
 
-  verb read_lines (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb read_lines (this none this) owner: #2 flags: "rxd"
     "$command_utils:read_lines([max]) -- read zero or more lines of input";
     "";
     "Returns a list of strings, the (up to MAX, if given) lines typed by the player.  Returns E_PERM if the current task is not a command task that has never called suspend().";
@@ -183,7 +183,7 @@ object COMMAND_UTILS
     endwhile
   endverb
 
-  verb yes_or_no (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb yes_or_no (this none this) owner: #2 flags: "rxd"
     ":yes-or-no([prompt]) -- prompts the player for a yes or no answer and returns a true value iff the player enters a line of input that is some prefix of \"yes\"";
     "";
     "Returns E_NONE if the player enters a blank line, E_INVARG, if the player enters something that isn't a prefix of \"yes\" or \"no\", and E_PERM if the current task is not a command task that has never called suspend().";
@@ -206,7 +206,7 @@ object COMMAND_UTILS
     endtry
   endverb
 
-  verb read_lines_escape (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb read_lines_escape (this none this) owner: #2 flags: "rxd"
     "$command_utils:read_lines_escape(escapes[,help]) -- read zero or more lines of input";
     "";
     "Similar to :read_lines() except that help is available and one may specify other escape sequences to terminate the read.";
@@ -252,7 +252,7 @@ object COMMAND_UTILS
     endwhile
   endverb
 
-  verb suspend (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb suspend (this none this) owner: #2 flags: "rxd"
     "Suspend, using output_delimiters() in case a client needs to keep track";
     "of the output of the current command.";
     "Args are TIME, amount of time to suspend, and optional (misnamed) OUTPUT.";
@@ -310,7 +310,7 @@ object COMMAND_UTILS
     "If this verb is changed make sure to change :suspend_if_needed as well.";
   endverb
 
-  verb suspend_if_needed (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb suspend_if_needed (this none this) owner: #2 flags: "rxd"
     "Usage:  $command_utils:suspend_if_needed(<time>[, @<announcement>])";
     "See if we're running out of ticks or seconds, and if so suspend(<time>) and return true.  If more than one arg is given, print the remainder with player:tell.";
     if (ticks_left() < 4000 || seconds_left() < 2)
@@ -348,7 +348,7 @@ object COMMAND_UTILS
     return {@newtext, @i > lasti ? text[lasti + 1..i] | {}, "."};
   endverb
 
-  verb explain_syntax (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb explain_syntax (this none this) owner: #2 flags: "rxd"
     ":explain_syntax(here,verb,args)";
     verb = args[2];
     for x in ({player, args[1], @valid(dobj) ? {dobj} | {}, @valid(iobj) ? {iobj} | {}})
@@ -369,7 +369,7 @@ object COMMAND_UTILS
     return 0;
   endverb
 
-  verb do_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb do_huh (this none this) owner: #2 flags: "rx"
     ":do_huh(verb,args)  what :huh should do by default.";
     {verb, args} = args;
     if ($perm_utils:controls(caller_perms(), player) || caller_perms() == player)
@@ -402,7 +402,7 @@ object COMMAND_UTILS
     endif
   endverb
 
-  verb task_info (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb task_info (this none this) owner: #2 flags: "rxd"
     "task_info(task id)";
     "Return info (the same info supplied by queued_tasks()) about a given task id, or E_INVARG if there's no such task queued.";
     "WIZARDLY";
@@ -417,7 +417,7 @@ object COMMAND_UTILS
     return E_INVARG;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.lag_samples = {};

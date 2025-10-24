@@ -179,7 +179,7 @@ object CORE_HELP
     "",
     "Note that proxy_for_core is only called once for any given object during the traversal.  The IN_MCD parameter will be true for calls coming from within an actual run of make-core-database and false in all other invocations of $core_objects().  Thus, provided IN_MCD is true, it is safe for proxy_for_core to create an object to return."
   };
-  property "$error" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property "$error" (owner: #2, flags: "r") = {
     "$error",
     "======",
     "",
@@ -982,7 +982,7 @@ object CORE_HELP
     "",
     "While a :load() is in progress the .frozen property is set to 1 to indicate that any results of :find*() are not to be trusted."
   };
-  property "$recycler" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property "$recycler" (owner: #2, flags: "r") = {
     "$recycler",
     "=========",
     "",
@@ -1713,7 +1713,7 @@ object CORE_HELP
     endif
   endverb
 
-  verb dump_topic (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb dump_topic (this none this) owner: #2 flags: "rxd"
     if (E_PROPNF != (text = pass(@args)) || (args[1][1] != "$" || (!((uprop = (args[1])[2..$]) in properties(#0)) || typeof(uobj = #0.(uprop)) != OBJ)))
       return text;
     else

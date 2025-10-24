@@ -1,14 +1,14 @@
 object LOCK_UTILS
   name: "lock utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property index_incremented (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property input_index (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property input_length (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property input_string (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property player (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
+  property index_incremented (owner: #2, flags: "rc") = 0;
+  property input_index (owner: #2, flags: "rc") = 0;
+  property input_length (owner: #2, flags: "rc") = 0;
+  property input_string (owner: #2, flags: "rc") = "";
+  property player (owner: #2, flags: "rc") = 0;
 
   override aliases = {"lock utilities"};
   override description = "This the lock utilities package, used by the MOOwide locking mechanisms. See `help $lock_utils' for more details.";
@@ -29,14 +29,14 @@ object LOCK_UTILS
   };
   override object_size = {9664, 1084848672};
 
-  verb init_scanner (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_scanner (this none this) owner: #2 flags: "rxd"
     this.input_string = args[1];
     this.input_length = length(args[1]);
     this.input_index = 1;
     this.index_incremented = 0;
   endverb
 
-  verb scan_token (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb scan_token (this none this) owner: #2 flags: "rxd"
     string = this.input_string;
     len = this.input_length;
     i = this.input_index;
@@ -73,7 +73,7 @@ object LOCK_UTILS
     endif
   endverb
 
-  verb canonicalize_spaces (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb canonicalize_spaces (this none this) owner: #2 flags: "rxd"
     name = args[1];
     while (index(name, "  "))
       name = strsub(name, "  ", " ");
@@ -81,7 +81,7 @@ object LOCK_UTILS
     return name;
   endverb
 
-  verb parse_keyexp (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_keyexp (this none this) owner: #2 flags: "rxd"
     "parse_keyexp(STRING keyexpression, OBJ player) => returns a list containing the coded key, or a string containing an error message if the attempt failed.";
     "";
     "Grammar for key expressions:";
@@ -98,7 +98,7 @@ object LOCK_UTILS
     return this:parse_E();
   endverb
 
-  verb parse_E (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_E (this none this) owner: #2 flags: "rxd"
     exp = this:parse_A();
     if (typeof(exp) != STR)
       while ((token = this:scan_token()) in {"&&", "||"})
@@ -114,7 +114,7 @@ object LOCK_UTILS
     return exp;
   endverb
 
-  verb parse_A (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_A (this none this) owner: #2 flags: "rxd"
     token = this:scan_token();
     if (token == "(")
       exp = this:parse_E();
@@ -153,7 +153,7 @@ object LOCK_UTILS
     endif
   endverb
 
-  verb eval_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eval_key (this none this) owner: #2 flags: "rxd"
     "eval_key(LIST|OBJ coded key, OBJ testobject) => returns true if testobject will solve the provided key.";
     {key, who} = args;
     type = typeof(key);
@@ -176,7 +176,7 @@ object LOCK_UTILS
     endif
   endverb
 
-  verb match_object (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match_object (this none this) owner: #2 flags: "rxd"
     "used by $lock_utils to unparse a key expression so one can use `here' and `me' as well as doing the regular object matching.";
     token = args[1];
     if (token == "me")
@@ -199,7 +199,7 @@ object LOCK_UTILS
     endif
   endverb
 
-  verb unparse_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb unparse_key (this none this) owner: #2 flags: "rxd"
     ":unparse_key(LIST|OBJ coded key) => returns a string describing the key in english/moo-code terms.";
     "Example:";
     "$lock_utils:unparse_key({\"||\", $hacker, $housekeeper}) => \"#18105[Hacker] || #36830[housekeeper]\"";
@@ -246,7 +246,7 @@ object LOCK_UTILS
     endif
   endverb
 
-  verb eval_key_new (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eval_key_new (this none this) owner: #2 flags: "rxd"
     set_task_perms($no_one);
     {key, who} = args;
     type = typeof(key);
@@ -291,7 +291,7 @@ object LOCK_UTILS
     endif
   endverb
 
-  verb parse_A_new (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_A_new (this none this) owner: #2 flags: "rxd"
     token = this:scan_token();
     if (token == "(")
       exp = this:parse_E();

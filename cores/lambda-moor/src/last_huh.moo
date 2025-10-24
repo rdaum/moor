@@ -1,14 +1,14 @@
 object LAST_HUH
   name: "Player Last_huh Verbs"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
   override aliases = {"Player Last_huh Verbs"};
   override description = "A repository of last-resort player verbs to be called by $player:last_huh";
   override object_size = {4598, 1084848672};
 
-  verb "@*" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@*" (this none this) owner: #2 flags: "rxd"
     "{last_huh}  @<msg_name> <object> is [<text>]";
     "If <text> is given calls <object>:set_message(<msg_name>,<text>),";
     "otherwise prints the value of the specified message property";
@@ -54,7 +54,7 @@ object LAST_HUH
     endif
   endverb
 
-  verb "give hand" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "give hand" (this none this) owner: #2 flags: "rxd"
     "{last_huh}  give any to any";
     "a give \"verb\" that works for non-$things.";
     set_task_perms(caller_perms());
@@ -81,7 +81,7 @@ object LAST_HUH
     endif
   endverb
 
-  verb "get take" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "get take" (this none this) owner: #2 flags: "rxd"
     "{last_huh}  get/take any";
     "a take \"verb\" that works for non-$things.";
     set_task_perms(caller_perms());
@@ -104,7 +104,7 @@ object LAST_HUH
     endif
   endverb
 
-  verb "drop throw" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "drop throw" (this none this) owner: #2 flags: "rxd"
     "{last_huh}  drop/throw any";
     "a drop \"verb\" that works for non-$things.";
     set_task_perms(caller_perms());

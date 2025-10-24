@@ -1,28 +1,28 @@
 object WIZ
   name: "generic wizard"
   parent: PROG
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property advertised (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property mail_identity (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = LOCAL;
-  property newt_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%n @newts %d (%[#d])";
-  property newt_victim_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property programmer_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%d is now a programmer.";
-  property programmer_victim_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You are now a programmer.";
-  property public_identity (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
-  property toad_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%n @toads %d (%[#d])";
-  property toad_victim_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Have a nice life...";
+  property advertised (owner: #2, flags: "rc") = 1;
+  property mail_identity (owner: #2, flags: "c") = LOCAL;
+  property newt_msg (owner: #2, flags: "rc") = "%n @newts %d (%[#d])";
+  property newt_victim_msg (owner: #2, flags: "rc") = "";
+  property programmer_msg (owner: #2, flags: "rc") = "%d is now a programmer.";
+  property programmer_victim_msg (owner: #2, flags: "rc") = "You are now a programmer.";
+  property public_identity (owner: #2, flags: "rc") = LOCAL;
+  property toad_msg (owner: #2, flags: "rc") = "%n @toads %d (%[#d])";
+  property toad_victim_msg (owner: #2, flags: "rc") = "Have a nice life...";
 
   override aliases = {"player"};
   override description = "You see a wizard who chooses not to reveal its true appearance.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override help = WIZ_HELP;
-  override mail_notify (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc");
+  override mail_notify (owner: #2, flags: "rc");
   override object_size = {56607, 1084848672};
   override password = "really impossible password to type";
 
-  verb "@chown*#" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@chown*#" (any any any) owner: #2 flags: "rd"
     if (!player.wizard || player != this)
       player:notify("Sorry.");
       return;
@@ -84,7 +84,7 @@ object WIZ
     endif
   endverb
 
-  verb "@shout" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@shout" (any any any) owner: #2 flags: "rd"
     if (caller != this)
       raise(E_PERM);
     endif
@@ -101,7 +101,7 @@ object WIZ
     player:notify(tostr("You shout, \"", argstr, "\""));
   endverb
 
-  verb "@grant @grants* @transfer" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@grant @grants* @transfer" (any at any) owner: #2 flags: "rd"
     "@grant <object> to <player>";
     "@grants <object> to <player>   --- same as @grant but may suspend.";
     "@transfer <expression> to <player> -- like 'grant', but evalutes a possible list of objects to transfer, and modifies quota.";
@@ -174,7 +174,7 @@ object WIZ
     player:notify(tostr(verb, " complete."));
   endverb
 
-  verb "@programmer" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@programmer" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     dobj = $string_utils:match_player(dobjstr);
     if (dobj == $nothing)
@@ -201,7 +201,7 @@ object WIZ
     endif
   endverb
 
-  verb "make-core-database" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "make-core-database" (any none none) owner: #2 flags: "rd"
     {?core_variant_name = ""} = args;
     if (!player.wizard)
       player:notify("Nice try, but permission denied.");
@@ -361,7 +361,7 @@ object WIZ
     endtry
   endverb
 
-  verb "@shutdown" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@shutdown" (any any any) owner: #2 flags: "rd"
     if (!player.wizard)
       player:notify("Sorry.");
       return;
@@ -413,13 +413,13 @@ object WIZ
     shutdown(argstr);
   endverb
 
-  verb "@dump-d*atabase" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@dump-d*atabase" (none none none) owner: #2 flags: "rd"
     set_task_perms(player);
     dump_database();
     player:notify("Dumping...");
   endverb
 
-  verb "@who-calls" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@who-calls" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (argstr[1] != ":")
       argstr = ":" + argstr;
@@ -429,7 +429,7 @@ object WIZ
     $code_utils:find_verbs_containing(argstr + "(");
   endverb
 
-  verb mcd_2 (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb mcd_2 (none none none) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return;
     elseif (length(connected_players()) > 1)
@@ -562,7 +562,7 @@ object WIZ
     endif
   endverb
 
-  verb "@toad @toad! @toad!!" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@toad @toad! @toad!!" (any any any) owner: #2 flags: "rd"
     "@toad[!][!] <player> [blacklist|redlist|graylist] [commentary]";
     whostr = args[1];
     comment = $string_utils:first_word(argstr)[2];
@@ -620,7 +620,7 @@ object WIZ
     `$local.waitlist:note_reapee(who, tostr("@toaded by ", player.name)) ! ANY';
   endverb
 
-  verb "@untoad @detoad" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@untoad @detoad" (any any any) owner: #2 flags: "rd"
     "@untoad <object> [as namespec]";
     "Turns object into a player.  Anything that isn't a guest is chowned to itself.";
     if (!player.wizard)
@@ -647,7 +647,7 @@ object WIZ
     endif
   endverb
 
-  verb "@quota" (any is any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@quota" (any is any) owner: #2 flags: "rd"
     "@quota <player> is [public] <number> [<reason>]";
     "  changes a player's quota.  sends mail to the wizards.";
     if (player != this)
@@ -691,7 +691,7 @@ object WIZ
     $mail_agent:send_message(player, recipients, tostr("@quota ", dobj.name, " (", dobj, ") ", new, " (from ", old, ")"), tostr("Reason for quota ", new - old < 0 ? "decrease: " | "increase: ", reason, index("?.!", reason[$]) ? "" | "."));
   endverb
 
-  verb "@players" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@players" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     "The time below is Oct. 1, 1990, roughly the birthdate of the LambdaMOO server.";
     start = 654768000;
@@ -808,7 +808,7 @@ object WIZ
     player:notify("");
   endverb
 
-  verb kill_aux_wizard_parse (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb kill_aux_wizard_parse (this none this) owner: #2 flags: "rxd"
     "Auxiliary verb for parsing @kill soon [#-of-seconds] [player | everyone]";
     "Args[1] is either # of seconds or player/everyone.";
     "Args[2], if it exists, is player/everyone, and forces args[1] to have been # of seconds.";
@@ -837,7 +837,7 @@ object WIZ
     return {soon ? soon | 60, everyone ? everyone | player};
   endverb
 
-  verb "@grepcore @egrepcore" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@grepcore @egrepcore" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!args)
       player:notify(tostr("Usage:  ", verb, " <pattern>"));
@@ -850,7 +850,7 @@ object WIZ
     $code_utils:((regexp ? "find_verbs_matching" | "find_verbs_containing"))(pattern, $core_objects());
   endverb
 
-  verb "@net-who @@who" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@net-who @@who" (any any any) owner: #2 flags: "rd"
     "@net-who prints all connected users and hosts.";
     "@net-who player player player prints specified users and current or most recent connected host.";
     "@net-who from hoststring prints all players who have connected from that host or host substring.  Substring can include *'s, e.g. @net-who from *.foo.edu.";
@@ -874,7 +874,7 @@ object WIZ
     endif
   endverb
 
-  verb "@make-player" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@make-player" (any any any) owner: #2 flags: "rd"
     "Creates a player.";
     "Syntax:  @make-player name email-address comments....";
     "Generates a random password for the player.";
@@ -890,7 +890,7 @@ object WIZ
     return $wiz_utils:do_make_player(@args);
   endverb
 
-  verb "@abort-sh*utdown" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@abort-sh*utdown" (any any any) owner: #2 flags: "rd"
     if (!player.wizard)
       player:notify("Sorry.");
     elseif (!$code_utils:task_valid($shutdown_task))
@@ -907,7 +907,7 @@ object WIZ
     endif
   endverb
 
-  verb "toad_msg toad_victim_msg programmer_msg programmer_victim_msg newt_msg newt_victim_msg" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "toad_msg toad_victim_msg programmer_msg programmer_victim_msg newt_msg newt_victim_msg" (this none this) owner: #2 flags: "rxd"
     "This is the canonical doing-something-to-somebody message.";
     "The corresponding property can either be";
     "   string             msg for all occasions";
@@ -922,12 +922,12 @@ object WIZ
     endif
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller in {this, $generic_editor, $verb_editor, $mail_editor, $note_editor} ? this.owner | caller_perms());
     return `move(this, args[1]) ! ANY';
   endverb
 
-  verb "@newt" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@newt" (any any any) owner: #2 flags: "rd"
     "@newt <player> [commentary]";
     "turns a player into a newt.  It can get better...";
     "adds player to $login.newted, they will not be allowed to log in.";
@@ -952,7 +952,7 @@ object WIZ
     endif
   endverb
 
-  verb "@unnewt @denewt @get-better" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@unnewt @denewt @get-better" (any any any) owner: #2 flags: "rd"
     "@denewt <player> [commentary]";
     "Remove the player from $Login.newted";
     "Sends mail to $newt_log with commentary.";
@@ -977,7 +977,7 @@ object WIZ
     endif
   endverb
 
-  verb "@register" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@register" (any any any) owner: #2 flags: "rd"
     "Registers a player.";
     "Syntax:  @register name email-address [additional commentary]";
     "Email-address is stored in $registration_db and on the player object.";
@@ -987,7 +987,7 @@ object WIZ
     $wiz_utils:do_register(@args);
   endverb
 
-  verb "@new-password @newpassword" (any is any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@new-password @newpassword" (any is any) owner: #2 flags: "rd"
     "@newpassword player is [string]";
     "Set's a player's password; omit string to have one randomly generated.";
     "Offer to email the password.";
@@ -1002,7 +1002,7 @@ object WIZ
     endif
   endverb
 
-  verb "@log" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@log" (any any any) owner: #2 flags: "rd"
     "@log [<string>]    enters a comment in the server log.";
     "If no string is given, you are prompted to enter one or more lines for an extended comment.";
     set_task_perms(player);
@@ -1022,7 +1022,7 @@ object WIZ
     endif
   endverb
 
-  verb "@guests" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@guests" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     n = dobjstr == "all" ? 0 | $code_utils:toint(dobjstr || "20");
     if (caller != this)
@@ -1102,7 +1102,7 @@ object WIZ
     endif
   endverb
 
-  verb "@rn mail_catch_up check_mail_lists current_message set_current_message get_current_message make_current_message kill_current_message @nn" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@rn mail_catch_up check_mail_lists current_message set_current_message get_current_message make_current_message kill_current_message @nn" (none none none) owner: #2 flags: "rxd"
     if (caller != this)
       set_task_perms(valid(caller_perms()) ? caller_perms() | player);
     endif
@@ -1114,7 +1114,7 @@ object WIZ
     endif
   endverb
 
-  verb "@blacklist @graylist @redlist @unblacklist @ungraylist @unredlist @spooflist @unspooflist" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@blacklist @graylist @redlist @unblacklist @ungraylist @unredlist @spooflist @unspooflist" (any any any) owner: #2 flags: "rd"
     "@[un]blacklist [<site or subnet>  [for <duration>] [commentary]]";
     "@[un]graylist  [<site or subnet>  [for <duration>] [commentary]]";
     "@[un]redlist   [<site or subnet>  [for <duration>] [commentary]]";
@@ -1290,7 +1290,7 @@ object WIZ
     endif
   endverb
 
-  verb "@corify" (any as any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@corify" (any as any) owner: #2 flags: "rd"
     "Usage:  @corify <object> as <propname>";
     "Adds <object> to the core, as $<propname>";
     "Reminds the wizard to write an :init_for_core verb, if there isn't one already.";
@@ -1322,7 +1322,7 @@ object WIZ
     endif
   endverb
 
-  verb "@make-guest" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@make-guest" (any none none) owner: #2 flags: "rd"
     "Usage:  @make-guest <guestname>";
     "Creates a player called <guestname>_Guest owned by $hacker and a child of $guest. Or, if $local.guest exists, make a child of that, assuming that all other guests are children of it too.";
     if (!player.wizard)
@@ -1372,7 +1372,7 @@ object WIZ
     endif
   endverb
 
-  verb "@temp-newt" (any for any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@temp-newt" (any for any) owner: #2 flags: "rd"
     if (!player.wizard)
       return player:tell("Permission denied.");
     elseif (!valid(who = $string_utils:match_player(dobjstr)))
@@ -1400,7 +1400,7 @@ object WIZ
     endif
   endverb
 
-  verb "@deprog*rammer" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@deprog*rammer" (any any any) owner: #2 flags: "rd"
     "@deprogrammer victim [for <duration>] [reason]";
     "";
     "Removes the prog-bit from victim.  If a duration is specified (see help $time_utils:parse_english_time_interval), then the victim is put into the temporary list. He will be automatically removed the first time he asks for a progbit after the duration expires.  Either with or without the duration you can specify a reason, or you will be prompted for one. However, if you don't have a duration, don't start the reason with the word `For'.";
@@ -1442,7 +1442,7 @@ object WIZ
     endif
   endverb
 
-  verb display_list (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_list (this none this) owner: #2 flags: "rxd"
     if (caller != this && !caller_perms().wizard)
       return E_PERM;
     endif
@@ -1507,7 +1507,7 @@ object WIZ
     endif
   endverb
 
-  verb check_site_entries (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_site_entries (this none this) owner: #2 flags: "rxd"
     "Called by @[un]<color>list to check existence of the target site.";
     "=> {done okay, LIST of sites to remove}";
     if (caller != this)
@@ -1556,7 +1556,7 @@ object WIZ
     return {1, rm};
   endverb
 
-  verb "@lock-login @unlock-login @lock-login!" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@lock-login @unlock-login @lock-login!" (any any any) owner: #2 flags: "rd"
     "Syntax:  @lock-login <message>";
     "         @lock-login! <message>";
     "         @unlock-login";
@@ -1584,7 +1584,7 @@ object WIZ
     endif
   endverb
 
-  verb __fix (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb __fix (this none this) owner: #2 flags: "rxd"
     "...was on $player, now archived here for posterity...";
     "Runs the old->new format conversion on every message in this.messages.";
     " => 1 if successful";
@@ -1611,7 +1611,7 @@ object WIZ
     return 1;
   endverb
 
-  verb toad_cleanup (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb toad_cleanup (this none this) owner: #2 flags: "rxd"
     if (!player.wizard || caller != this)
       raise(E_PERM);
     endif

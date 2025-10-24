@@ -1,15 +1,15 @@
 object GUEST_LOG
   name: "Guest Log"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
 
-  property connections (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property max_entries (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 511;
+  property connections (owner: #2, flags: "") = {};
+  property max_entries (owner: #2, flags: "") = 511;
 
   override aliases = {"Guest Log"};
   override object_size = {3738, 1084848672};
 
-  verb enter (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb enter (this none this) owner: #2 flags: "rxd"
     ":enter(who,islogin,time,site)";
     "adds an entry to the connection log for a given guest (caller).";
     if ($object_utils:isa(caller, $guest))
@@ -19,7 +19,7 @@ object GUEST_LOG
     endif
   endverb
 
-  verb last (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb last (this none this) owner: #2 flags: "rxd"
     ":last([n,[guest_list]])";
     "print list of the last n entries in the guest log";
     " (use n=0 if you want all entries)";
@@ -68,14 +68,14 @@ object GUEST_LOG
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.connections = {};
     endif
   endverb
 
-  verb find (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb find (this none this) owner: #2 flags: "rxd"
     ":find(guest_id,time)";
     " => site name of guest logged in at that time";
     " => 0 if not logged in";

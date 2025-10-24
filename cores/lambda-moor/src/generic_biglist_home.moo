@@ -15,7 +15,7 @@ object GENERIC_BIGLIST_HOME
   };
   override object_size = {3606, 1084848672};
 
-  verb _make (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _make (this none this) owner: #2 flags: "rxd"
     ":_make(...) => new node with value {...}";
     if (!(caller in {this._mgr, this}))
       return E_PERM;
@@ -25,7 +25,7 @@ object GENERIC_BIGLIST_HOME
     return prop;
   endverb
 
-  verb _kill (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _kill (this none this) owner: #2 flags: "rxd"
     ":_kill(node) destroys the given node.";
     if (!(caller in {this, this._mgr}))
       return E_PERM;
@@ -59,7 +59,7 @@ object GENERIC_BIGLIST_HOME
     return args[1][1];
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif

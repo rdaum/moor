@@ -1,14 +1,14 @@
-object BYTE_QUOTA_UTILS_WORKING
+object #2
   name: "Wizard"
   parent: WIZ
   location: PLAYER_START
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   player: true
   wizard: true
   programmer: true
 
   override aliases = {"Wizard"};
-  override current_folder = BYTE_QUOTA_UTILS_WORKING;
+  override current_folder = #2;
   override current_message = {
     0,
     0,
@@ -26,7 +26,7 @@ object BYTE_QUOTA_UTILS_WORKING
   override owned_objects = {
     SYSOBJ,
     ROOT_CLASS,
-    BYTE_QUOTA_UTILS_WORKING,
+    #2,
     ROOM,
     BUILDER,
     THING,

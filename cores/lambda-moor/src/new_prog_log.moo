@@ -2,18 +2,18 @@ object NEW_PROG_LOG
   name: "New-Prog-Log"
   parent: MAIL_RECIPIENT
   location: MAIL_AGENT
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
 
-  property keyword (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "PROGRAMMER";
+  property keyword (owner: #2, flags: "rc") = "PROGRAMMER";
 
   override aliases (owner: HACKER, flags: "r") = {"New-Prog-Log", "New_Prog_Log", "NPL"};
   override description = "Record of who's been made a @programmer.";
   override mail_forward = {};
-  override mail_notify = {BYTE_QUOTA_UTILS_WORKING};
+  override mail_notify = {#2};
   override moderated = 1;
   override object_size = {6043, 1084848672};
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.mail_notify = {player};
@@ -24,7 +24,7 @@ object NEW_PROG_LOG
     endif
   endverb
 
-  verb receive_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb receive_message (this none this) owner: #2 flags: "rxd"
     if (!this:is_writable_by(caller_perms()))
       return E_PERM;
     else
@@ -48,7 +48,7 @@ object NEW_PROG_LOG
     endif
   endverb
 
-  verb "display_seq_headers display_seq_full" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "display_seq_headers display_seq_full" (this none this) owner: #2 flags: "rxd"
     ":display_seq_headers(msg_seq[,cur])";
     ":display_seq_full(msg_seq[,cur]) => {cur}";
     if (!this:ok(caller, caller_perms()))
@@ -81,7 +81,7 @@ object NEW_PROG_LOG
     endif
   endverb
 
-  verb from_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb from_msg_seq (this none this) owner: #2 flags: "rxd"
     ":from_msg_seq(object or list[,mask])";
     " => msg_seq of messages from any of these senders";
     if (!this:ok(caller, caller_perms()))
@@ -108,7 +108,7 @@ object NEW_PROG_LOG
     return fseq || "%f %<has> no messages from " + $string_utils:english_list($list_utils:map_arg(2, $string_utils, "pronoun_sub", "%n (%#)", plist), "no one", " or ");
   endverb
 
-  verb to_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb to_msg_seq (this none this) owner: #2 flags: "rxd"
     ":to_msg_seq(object or list[,mask]) => msg_seq of messages to those people";
     if (!this:ok(caller, caller_perms()))
       return E_PERM;
@@ -134,7 +134,7 @@ object NEW_PROG_LOG
     return fseq || "%f %<has> no messages about @programmer'ing " + $string_utils:english_list(plist, "no one", " or ");
   endverb
 
-  verb "%to_msg_seq subject_msg_seq" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "%to_msg_seq subject_msg_seq" (this none this) owner: #2 flags: "rxd"
     ":%to_msg_seq/subject_msg_seq(string or list of strings[,mask])";
     " => msg_seq of messages containing one of strings in the to line";
     if (!this:ok(caller, caller_perms()))
@@ -161,7 +161,7 @@ object NEW_PROG_LOG
     return fseq || "%f %<has> no messages about @programmer'ing " + $string_utils:english_list(nlist, "no one", " or ");
   endverb
 
-  verb "%from_msg_seq" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "%from_msg_seq" (this none this) owner: #2 flags: "rxd"
     return this.name + " doesn't understand %%from:";
   endverb
 endobject

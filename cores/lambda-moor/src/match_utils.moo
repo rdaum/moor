@@ -89,7 +89,7 @@ object MATCH_UTILS
     return $failed_match;
   endverb
 
-  verb match_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match_verb (this none this) owner: #2 flags: "rxd"
     "$match_utils:match_verb(verbname, object) => Looks for a command-line style verb named <verbname> on <object> with current values of prepstr, dobjstr, dobj, iobjstr, and iobj.  If a match is made, the verb is called with @args[3] as arguments and 1 is returned.  Otherwise, 0 is returned.";
     {vrb, what, rest} = args;
     if (where = $object_utils:has_verb(what, vrb))
@@ -203,7 +203,7 @@ object MATCH_UTILS
     return 1;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.matching_room = $nothing;

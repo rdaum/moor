@@ -6,9 +6,9 @@ object NO_ONE
   programmer: true
   readable: true
 
-  property queued_task_limit (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
+  property queued_task_limit (owner: #2, flags: "r") = 0;
 
-  override aliases (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {"Everyman", "everyone", "no_one", "noone"};
+  override aliases (owner: #2, flags: "r") = {"Everyman", "everyone", "no_one", "noone"};
   override description = "The character used for \"safe\" evals.";
   override home = LOCAL;
   override last_disconnect_time = 2147483647;
@@ -18,7 +18,7 @@ object NO_ONE
   override page_echo_msg = "... no one out there to see it.";
   override size_quota = {0, 0, 1084781037, 0};
 
-  verb eval (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eval (this none this) owner: #2 flags: "rxd"
     "eval(code)";
     "Evaluate code with $no_one's permissions (so you won't damage anything).";
     "If code does not begin with a semicolon, set this = caller (in the code to be evaluated) and return the value of the first `line' of code.  This means that subsequent lines will not be evaluated at all.";
@@ -39,7 +39,7 @@ object NO_ONE
     return 0;
   endverb
 
-  verb eval_d (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb eval_d (this none this) owner: #2 flags: "rxd"
     ":eval_d(code)";
     "exactly like :eval except that the d flag is unset";
     "Evaluate code with $no_one's permissions (so you won't damage anything).";
@@ -57,7 +57,7 @@ object NO_ONE
     endif
   endverb
 
-  verb call_verb (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb call_verb (this none this) owner: #2 flags: "rxd"
     "call_verb(object, verb name, args)";
     "Call verb with $no_one's permissions (so you won't damage anything).";
     "One could do this with $no_one:eval, but ick.";
@@ -65,7 +65,7 @@ object NO_ONE
     return args[1]:((args[2]))(@args[3]);
   endverb
 
-  verb bad_eval (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb bad_eval (this none this) owner: #2 flags: "rxd"
     ":bad_eval(exp)";
     "  Returns 1 if the `exp' is inappropriate for use by $no_one.  In particular, if `exp' contains calls to `eval', `fork', `suspend', or `call_function' it is bad.  Similarly, if `player' is a nonvalid object (or a child of $garbage) the expression is considered `bad' because it is likely an attempt to anonymously spoof.";
     "  At present, the checks for bad builtins are overzealous.  It should check for delimited uses of the above calls, in case someone has a variable called `prevalent'.";

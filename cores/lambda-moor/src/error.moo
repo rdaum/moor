@@ -124,7 +124,7 @@ object ERROR
     parent(#-1);
   endverb
 
-  verb E_QUOTA (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb E_QUOTA (this none this) owner: #2 flags: "rxd"
     set_task_perms($no_one);
     "...raise E_QUOTA ...";
     create($thing);

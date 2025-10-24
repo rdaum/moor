@@ -21,7 +21,7 @@ object OBJECT_QUOTA_UTILS
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -46,7 +46,7 @@ object OBJECT_QUOTA_UTILS
     endif
   endverb
 
-  verb bi_create (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb bi_create (this none this) owner: #2 flags: "rxd"
     "Calls built-in create.";
     set_task_perms(caller_perms());
     return `create(@args) ! ANY';

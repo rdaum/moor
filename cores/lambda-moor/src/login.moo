@@ -1,21 +1,21 @@
 object LOGIN
   name: "Login Commands"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property blacklist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property blank_command (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "welcome";
-  property bogus_command (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "?";
-  property boot_process (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property checkpoint_in_progress (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
+  property blacklist (owner: #2, flags: "") = {{}, {}};
+  property blank_command (owner: #2, flags: "r") = "welcome";
+  property bogus_command (owner: #2, flags: "r") = "?";
+  property boot_process (owner: #2, flags: "rc") = 0;
+  property checkpoint_in_progress (owner: #2, flags: "rc") = 0;
   property connection_limit_msg (owner: HACKER, flags: "r") = "*** The MOO is too busy! The current lag is %l; there are %n connected.  WAIT FIVE MINUTES BEFORE TRYING AGAIN.";
-  property create_enabled (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property current_connections (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {AMBIGUOUS_MATCH};
-  property current_lag (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property current_numcommands (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {1};
-  property downtimes (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {{1529543472, 0}, {1529444307, 0}};
-  property goaway_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property create_enabled (owner: #2, flags: "rc") = 1;
+  property current_connections (owner: #2, flags: "rc") = {AMBIGUOUS_MATCH};
+  property current_lag (owner: #2, flags: "r") = 0;
+  property current_numcommands (owner: #2, flags: "rc") = {1};
+  property downtimes (owner: #2, flags: "rc") = {{1529543472, 0}, {1529444307, 0}};
+  property goaway_message (owner: #2, flags: "rc") = {
     "                          ***************************",
     "                          *  Welcome to LagdaMOO!  *",
     "                          ***************************",
@@ -41,8 +41,8 @@ object LOGIN
     "",
     "For assistance either now or later, type `help'."
   };
-  property graylist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property help_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "# Getting Started
+  property graylist (owner: #2, flags: "") = {{}, {}};
+  property help_message (owner: #2, flags: "rc") = "# Getting Started
 
 To sign in to an existing account, use your **player name** and **password**.
 
@@ -56,32 +56,32 @@ To create a new account, choose a unique player name and password.
 - `quit` - Disconnect from the server
 
 For more detailed help once you're logged in, type `help` after connecting.";
-  property help_message_content_type (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "text/djot";
-  property ignored (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
+  property help_message_content_type (owner: #2, flags: "rc") = "text/djot";
+  property ignored (owner: #2, flags: "rc") = {};
   property intercepted_actions (owner: HACKER, flags: "") = {};
   property intercepted_players (owner: HACKER, flags: "") = {};
-  property lag_cutoff (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 5;
-  property lag_exemptions (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property lag_sample_interval (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 15;
-  property lag_samples (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {0, 0, 0, 0, 0};
-  property last_lag_sample (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
+  property lag_cutoff (owner: #2, flags: "rc") = 5;
+  property lag_exemptions (owner: #2, flags: "rc") = {};
+  property lag_sample_interval (owner: #2, flags: "rc") = 15;
+  property lag_samples (owner: #2, flags: "rc") = {0, 0, 0, 0, 0};
+  property last_lag_sample (owner: #2, flags: "rc") = 0;
   property max_connections (owner: HACKER, flags: "rc") = 99999;
-  property max_numcommands (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 20;
-  property max_player_name (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 40;
-  property newt_registration_string (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Your character is temporarily hosed.";
-  property newted (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property print_lag (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property redlist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property registration_address (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property registration_string (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Character creation is disabled.";
-  property request_enabled (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property spooflist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property temporary_blacklist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property temporary_graylist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property temporary_newts (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = {};
-  property temporary_redlist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property temporary_spooflist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {{}, {}};
-  property welcome_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "# Welcome to the LambdaCore database
+  property max_numcommands (owner: #2, flags: "rc") = 20;
+  property max_player_name (owner: #2, flags: "rc") = 40;
+  property newt_registration_string (owner: #2, flags: "rc") = "Your character is temporarily hosed.";
+  property newted (owner: #2, flags: "") = {};
+  property print_lag (owner: #2, flags: "rc") = 0;
+  property redlist (owner: #2, flags: "") = {{}, {}};
+  property registration_address (owner: #2, flags: "rc") = "";
+  property registration_string (owner: #2, flags: "rc") = "Character creation is disabled.";
+  property request_enabled (owner: #2, flags: "rc") = 0;
+  property spooflist (owner: #2, flags: "") = {{}, {}};
+  property temporary_blacklist (owner: #2, flags: "") = {{}, {}};
+  property temporary_graylist (owner: #2, flags: "") = {{}, {}};
+  property temporary_newts (owner: #2, flags: "c") = {};
+  property temporary_redlist (owner: #2, flags: "") = {{}, {}};
+  property temporary_spooflist (owner: #2, flags: "") = {{}, {}};
+  property welcome_message (owner: #2, flags: "rc") = "# Welcome to the LambdaCore database
 
 To get started, either **sign in** to an existing account or **create a new one**.
 
@@ -90,14 +90,14 @@ For more information, tap the help button or type `help`.
 ---
 
 _Administrators: You may want to customize this text and the help message, which are stored in `$login.welcome_message` and `$login.help_message`._";
-  property welcome_message_content_type (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "text/djot";
-  property who_masks_wizards (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
+  property welcome_message_content_type (owner: #2, flags: "rc") = "text/djot";
+  property who_masks_wizards (owner: #2, flags: "") = 0;
 
   override aliases = {"Login Commands"};
   override description = "This provides everything needed by #0:do_login_command.  See `help $login' on $core_help for details.";
   override object_size = {42064, 1084848672};
 
-  verb "?" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "?" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     else
@@ -117,7 +117,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb "wel*come @wel*come" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "wel*come @wel*come" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     else
@@ -141,7 +141,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb "w*ho @w*ho" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "w*ho @w*ho" (any none any) owner: #2 flags: "rxd"
     masked = $login.who_masks_wizards ? $wiz_utils:connected_wizards() | {};
     if (caller != #0 && caller != this)
       return E_PERM;
@@ -164,7 +164,7 @@ _Administrators: You may want to customize this text and the help message, which
     return 0;
   endverb
 
-  verb "co*nnect @co*nnect" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "co*nnect @co*nnect" (any none any) owner: #2 flags: "rxd"
     "$login:connect(player-name [, password])";
     " => 0 (for failed connections)";
     " => objnum (for successful connections)";
@@ -290,7 +290,7 @@ _Administrators: You may want to customize this text and the help message, which
     endtry
   endverb
 
-  verb "cr*eate @cr*eate" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "cr*eate @cr*eate" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
       "... caller isn't :do_login_command()...";
@@ -341,7 +341,7 @@ _Administrators: You may want to customize this text and the help message, which
     return 0;
   endverb
 
-  verb "q*uit @q*uit" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "q*uit @q*uit" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     else
@@ -350,7 +350,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb oauth2_check (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb oauth2_check (any none any) owner: #2 flags: "rxd"
     "$login:oauth2_check(provider, external_id)";
     " => 0 (for not found)";
     " => objnum (for existing OAuth2 identity)";
@@ -371,7 +371,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb oauth2_create (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb oauth2_create (any none any) owner: #2 flags: "rxd"
     "$login:oauth2_create(provider, external_id, email, name, username, player_name)";
     " => 0 (for failed creation)";
     " => objnum (for successful creation)";
@@ -420,7 +420,7 @@ _Administrators: You may want to customize this text and the help message, which
     return new;
   endverb
 
-  verb oauth2_connect (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb oauth2_connect (any none any) owner: #2 flags: "rxd"
     "$login:oauth2_connect(provider, external_id, email, name, username, existing_name, existing_password)";
     " => 0 (for failed connection)";
     " => objnum (for successful link)";
@@ -480,7 +480,7 @@ _Administrators: You may want to customize this text and the help message, which
     return candidate;
   endverb
 
-  verb "up*time @up*time" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "up*time @up*time" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     else
@@ -489,7 +489,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb "v*ersion @v*ersion" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "v*ersion @v*ersion" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     else
@@ -498,7 +498,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb parse_command (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_command (this none this) owner: #2 flags: "rxd"
     ":parse_command(@args) => {verb, args}";
     "Given the args from #0:do_login_command,";
     "  returns the actual $login verb to call and the args to use.";
@@ -525,7 +525,7 @@ _Administrators: You may want to customize this text and the help message, which
     return {this.bogus_command, @args};
   endverb
 
-  verb check_for_shutdown (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_for_shutdown (this none this) owner: #2 flags: "rxd"
     when = $shutdown_time - time();
     if (when >= 0)
       line = "***************************************************************************";
@@ -546,7 +546,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb check_player_db (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_player_db (this none this) owner: #2 flags: "rxd"
     if ($player_db.frozen)
       line = "***************************************************************************";
       notify(player, "");
@@ -568,7 +568,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb _match_player (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _match_player (this none this) owner: #2 flags: "rxd"
     ":_match_player(name)";
     "This is the matching routine used by @connect.";
     "returns either a valid player corresponding to name or $failed_match.";
@@ -590,7 +590,7 @@ _Administrators: You may want to customize this text and the help message, which
     return $failed_match;
   endverb
 
-  verb find_by_oauth2 (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb find_by_oauth2 (this none this) owner: #2 flags: "rxd"
     ":find_by_oauth2(provider, external_id)";
     "Search all players for matching oauth2_identities entry";
     "Returns player object or $failed_match";
@@ -612,7 +612,7 @@ _Administrators: You may want to customize this text and the help message, which
     return $failed_match;
   endverb
 
-  verb notify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     `notify(player, args[1]) ! ANY';
   endverb
@@ -622,7 +622,7 @@ _Administrators: You may want to customize this text and the help message, which
     return 0;
   endverb
 
-  verb player_creation_enabled (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb player_creation_enabled (this none this) owner: #2 flags: "rxd"
     "Accepts a player object.  If player creation is enabled for that player object, then return true.  Otherwise, return false.";
     "Default implementation checks the player's connecting host via $login:blacklisted to decide.";
     if (caller_perms().wizard)
@@ -632,11 +632,11 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb "newt_registration_string registration_string" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "newt_registration_string registration_string" (this none this) owner: #2 flags: "rxd"
     return $string_utils:subst(this.(verb), {{"%e", this.registration_address}, {"%%", "%"}});
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       this.current_lag = 0;
       this.lag_exemptions = {};
@@ -672,10 +672,10 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb special_action (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "x"
+  verb special_action (this none this) owner: #2 flags: "x"
   endverb
 
-  verb "blacklisted graylisted redlisted spooflisted" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "blacklisted graylisted redlisted spooflisted" (this none this) owner: #2 flags: "rxd"
     ":blacklisted(hostname) => is hostname on the .blacklist";
     ":graylisted(hostname)  => is hostname on the .graylist";
     ":redlisted(hostname)   => is hostname on the .redlist";
@@ -708,7 +708,7 @@ _Administrators: You may want to customize this text and the help message, which
     return this:((verb + "_temp"))(hostname);
   endverb
 
-  verb "blacklist_add*_temp graylist_add*_temp redlist_add*_temp spooflist_add*_temp" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "blacklist_add*_temp graylist_add*_temp redlist_add*_temp spooflist_add*_temp" (this none this) owner: #2 flags: "rxd"
     "To add a temporary entry, only call the `temp' version.";
     "blacklist_add_temp(Site, start time, duration)";
     if (!caller_perms().wizard)
@@ -726,7 +726,7 @@ _Administrators: You may want to customize this text and the help message, which
     return 1;
   endverb
 
-  verb "blacklist_remove*_temp graylist_remove*_temp redlist_remove*_temp spooflist_remove*_temp" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "blacklist_remove*_temp graylist_remove*_temp redlist_remove*_temp spooflist_remove*_temp" (this none this) owner: #2 flags: "rxd"
     "The temp version removes from the temporary property if it exists.";
     if (!caller_perms().wizard)
       return E_PERM;
@@ -750,11 +750,11 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb listname (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb listname (this none this) owner: #2 flags: "rxd"
     return {"???", "blacklist", "graylist", "redlist", "spooflist"}[1 + index("bgrs", (args[1] || "?")[1])];
   endverb
 
-  verb "who(vanilla)" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "who(vanilla)" (this none this) owner: #2 flags: "rxd"
     if (caller != #0)
       return E_PERM;
     elseif (!args)
@@ -766,7 +766,7 @@ _Administrators: You may want to customize this text and the help message, which
     return 0;
   endverb
 
-  verb record_connection (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb record_connection (this none this) owner: #2 flags: "rxd"
     ":record_connection(plyr) update plyr's connection information";
     "to reflect impending login.";
     if (!caller_perms().wizard)
@@ -786,7 +786,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb sample_lag (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb sample_lag (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -813,11 +813,11 @@ _Administrators: You may want to customize this text and the help message, which
     this.last_lag_sample = time();
   endverb
 
-  verb is_lagging (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_lagging (this none this) owner: #2 flags: "rxd"
     return this:current_lag() > this.lag_cutoff;
   endverb
 
-  verb max_connections (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb max_connections (this none this) owner: #2 flags: "rxd"
     max = this.max_connections;
     if (typeof(max) == LIST)
       if (this:is_lagging())
@@ -829,7 +829,7 @@ _Administrators: You may want to customize this text and the help message, which
     return max;
   endverb
 
-  verb request_character (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb request_character (this none this) owner: #2 flags: "rxd"
     "request_character(player, name, address)";
     "return true if succeeded";
     if (!caller_perms().wizard)
@@ -904,7 +904,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb "req*uest @req*uest" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "req*uest @req*uest" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     endif
@@ -920,7 +920,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb "h*elp @h*elp" (any none any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "h*elp @h*elp" (any none any) owner: #2 flags: "rxd"
     if (caller != #0 && caller != this)
       return E_PERM;
     else
@@ -939,7 +939,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb maybe_print_lag (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb maybe_print_lag (this none this) owner: #2 flags: "rxd"
     if (caller == this || caller_perms() == player)
       if (this.print_lag)
         lag = this:current_lag();
@@ -955,11 +955,11 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb current_lag (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb current_lag (this none this) owner: #2 flags: "rxd"
     return this.current_lag;
   endverb
 
-  verb maybe_limit_commands (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb maybe_limit_commands (this none this) owner: #2 flags: "rxd"
     "This limits the number of commands that can be issued from the login prompt to prevent haywire login programs from lagging the MOO.";
     "$login.current_connections has the current player id's of people at the login prompt.";
     "$login.current_numcommands has the number of commands they have issued at the prompt so far.";
@@ -992,7 +992,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb server_started (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb server_started (this none this) owner: #2 flags: "rxd"
     "Called by #0:server_started when the server restarts.";
     if (caller_perms().wizard)
       this.lag_samples = {0, 0, 0, 0, 0};
@@ -1002,7 +1002,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb uptime_since (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb uptime_since (this none this) owner: #2 flags: "rxd"
     "uptime_since(time): How much time has LambdaMOO been up since `time'";
     since = args[1];
     up = time() - since;
@@ -1017,7 +1017,7 @@ _Administrators: You may want to customize this text and the help message, which
     return up;
   endverb
 
-  verb count_bg_players (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb count_bg_players (this none this) owner: #2 flags: "rxd"
     caller_perms().wizard || $error:raise(E_PERM);
     now = time();
     tasks = queued_tasks();
@@ -1032,7 +1032,7 @@ _Administrators: You may want to customize this text and the help message, which
     return count;
   endverb
 
-  verb "blacklisted_temp graylisted_temp redlisted_temp spooflisted_temp" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "blacklisted_temp graylisted_temp redlisted_temp spooflisted_temp" (this none this) owner: #2 flags: "rxd"
     ":blacklisted_temp(hostname) => is hostname on the .blacklist...";
     ":graylisted_temp(hostname)  => is hostname on the .graylist...";
     ":redlisted_temp(hostname)   => is hostname on the .redlist...";
@@ -1071,7 +1071,7 @@ _Administrators: You may want to customize this text and the help message, which
     return 0;
   endverb
 
-  verb templist_expired (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb templist_expired (this none this) owner: #2 flags: "rxd"
     "check to see if duration has expired on temporary_<colorlist>. Removes entry if so, returns true if still <colorlisted>";
     ":(listname, hostname, start time, duration)";
     {lname, hname, start, duration} = args;
@@ -1086,7 +1086,7 @@ _Administrators: You may want to customize this text and the help message, which
     endif
   endverb
 
-  verb temp_newt_registration_string (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb temp_newt_registration_string (this none this) owner: #2 flags: "rxd"
     return "Your character is unavailable for another " + $time_utils:english_time(args[1]) + ".";
   endverb
 
@@ -1118,7 +1118,7 @@ _Administrators: You may want to customize this text and the help message, which
     return (loc = who in this.intercepted_players) ? this.intercepted_actions[loc] | 0;
   endverb
 
-  verb intercepted_password (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb intercepted_password (this none this) owner: #2 flags: "rxd"
     caller == #0 || raise(E_PERM);
     this:delete_interception(player);
     set_connection_option(player, "client-echo", 1);
@@ -1136,7 +1136,7 @@ _Administrators: You may want to customize this text and the help message, which
     return;
   endverb
 
-  verb check_for_checkpoint (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_for_checkpoint (this none this) owner: #2 flags: "rxd"
     if (this.checkpoint_in_progress)
       line = "***************************************************************************";
       notify(player, "");

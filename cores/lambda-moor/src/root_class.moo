@@ -1,15 +1,15 @@
 object ROOT_CLASS
   name: "Root Class"
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property aliases (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property description (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property key (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = 0;
+  property aliases (owner: #2, flags: "rc") = {};
+  property description (owner: #2, flags: "rc") = "";
+  property key (owner: #2, flags: "c") = 0;
   property object_size (owner: HACKER, flags: "r") = {22038, 1084848672};
 
-  verb initialize (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb initialize (this none this) owner: #2 flags: "rxd"
     if (typeof(this.owner.owned_objects) == LIST)
       this.owner.owned_objects = setadd(this.owner.owned_objects, this);
     endif
@@ -24,7 +24,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb recycle (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       try
         if (typeof(this.owner.owned_objects) == LIST && !is_clear_property(this.owner, "owned_objects"))
@@ -40,7 +40,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb set_name (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_name (this none this) owner: #2 flags: "rxd"
     "set_name(newname) attempts to change this.name to newname";
     "  => E_PERM   if you don't own this or aren't its parent, or are a player trying to do an end-run around $player_db...";
     if (!caller_perms().wizard && (is_player(this) || (caller_perms() != this.owner && this != caller)))
@@ -50,15 +50,15 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb title (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb title (this none this) owner: #2 flags: "rxd"
     return this.name;
   endverb
 
-  verb titlec (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb titlec (this none this) owner: #2 flags: "rxd"
     return `this.namec ! E_PROPNF => $string_utils:capitalize(this:title())';
   endverb
 
-  verb set_aliases (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_aliases (this none this) owner: #2 flags: "rxd"
     "set_aliases(alias_list) attempts to change this.aliases to alias_list";
     "  => E_PERM   if you don't own this or aren't its parent";
     "  => E_TYPE   if alias_list is not a list";
@@ -81,18 +81,18 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb match (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match (this none this) owner: #2 flags: "rxd"
     c = this:contents();
     return $string_utils:match(args[1], c, "name", c, "aliases");
   endverb
 
-  verb match_object (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb match_object (this none this) owner: #2 flags: "rxd"
     ":match_object(string [,who])";
     args[2..1] = {this};
     return $string_utils:match_object(@args);
   endverb
 
-  verb set_description (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_description (this none this) owner: #2 flags: "rxd"
     "set_description(newdesc) attempts to change this.description to newdesc";
     "  => E_PERM   if you don't own this or aren't its parent";
     if (!($perm_utils:controls(caller_perms(), this) || this == caller))
@@ -105,11 +105,11 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb description (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb description (this none this) owner: #2 flags: "rxd"
     return this.description;
   endverb
 
-  verb look_self (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb look_self (this none this) owner: #2 flags: "rxd"
     desc = this:description();
     if (desc)
       player:tell_lines(desc);
@@ -118,17 +118,17 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb notify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify (this none this) owner: #2 flags: "rxd"
     if (is_player(this))
       notify(this, @args);
     endif
   endverb
 
-  verb tell (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell (this none this) owner: #2 flags: "rxd"
     this:notify(tostr(@args));
   endverb
 
-  verb tell_lines (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_lines (this none this) owner: #2 flags: "rxd"
     lines = args[1];
     if (typeof(lines) == LIST)
       for line in (lines)
@@ -139,17 +139,17 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb accept (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb accept (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return this:acceptable(@args);
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     set_task_perms(this.owner);
     return `move(this, args[1]) ! ANY';
   endverb
 
-  verb "eject eject_nice eject_basic" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "eject eject_nice eject_basic" (this none this) owner: #2 flags: "rxd"
     "eject(victim) --- usable by the owner of this to remove victim from this.contents.  victim goes to its home if different from here, or $nothing or $player_start according as victim is a player.";
     "eject_basic(victim) --- victim goes to $nothing or $player_start according as victim is a player; victim:moveto is not called.";
     what = args[1];
@@ -173,16 +173,16 @@ object ROOT_CLASS
     return nice ? `what:moveto(where) ! ANY' | `move(what, where) ! ANY';
   endverb
 
-  verb is_unlocked_for (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_unlocked_for (this none this) owner: #2 flags: "rxd"
     return this.key == 0 || $lock_utils:eval_key(this.key, args[1]);
   endverb
 
-  verb huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb huh (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms() != #-1 ? caller_perms() | player);
     $command_utils:do_huh(verb, args);
   endverb
 
-  verb set_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_message (this none this) owner: #2 flags: "rxd"
     ":set_message(msg_name,new_value)";
     "Does the actual dirty work of @<msg_name> object is <new_value>";
     "changing the raw value of the message msg_name to be new_value.";
@@ -198,7 +198,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb do_examine (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_examine (this none this) owner: #2 flags: "rxd"
     "do_examine(examiner)";
     "the guts of examine";
     "call a series of verbs and report their return values to the player";
@@ -221,7 +221,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb examine_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_key (this none this) owner: #2 flags: "rxd"
     "examine_key(examiner)";
     "return a list of strings to be told to the player, indicating what the key on this type of object means, and what this object's key is set to.";
     "the default will only tell the key to a wizard or this object's owner.";
@@ -231,13 +231,13 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb examine_names (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_names (this none this) owner: #2 flags: "rxd"
     "examine_names(examiner)";
     "Return a list of strings to be told to the player, indicating the name and aliases (and, by default, the object number) of this.";
     return {tostr(this.name, " (aka ", $string_utils:english_list({tostr(this), @this.aliases}), ")")};
   endverb
 
-  verb examine_desc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_desc (this none this) owner: #2 flags: "rxd"
     "examine_desc(who) - return the description, probably";
     "who is the player examining";
     "this should probably go away";
@@ -252,7 +252,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb examine_contents (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_contents (this none this) owner: #2 flags: "rxd"
     "examine_contents(examiner)";
     "by default, calls :tell_contents.";
     "Should probably go away.";
@@ -266,7 +266,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb examine_verbs (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_verbs (this none this) owner: #2 flags: "rxd"
     "Return a list of strings to be told to the player.  Standard format says \"Obvious verbs:\" followed by a series of lines explaining syntax for each usable verb.";
     if (caller != this)
       return E_PERM;
@@ -328,7 +328,7 @@ object ROOT_CLASS
     return vrbs && {"Obvious verbs:", @vrbs};
   endverb
 
-  verb get_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_message (this none this) owner: #2 flags: "rxd"
     ":get_message(msg_name)";
     "Use this to obtain a given user-customizable message's raw value, i.e., the value prior to any pronoun-substitution or incorporation of any variant elements --- the value one needs to supply to :set_message().";
     "=> error (use E_PROPNF if msg_name isn't recognized)";
@@ -345,14 +345,14 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb "room_announce*_all_but" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "room_announce*_all_but" (this none this) owner: #2 flags: "rxd"
     try
       this.location:(verb)(@args);
     except (ANY)
     endtry
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       deletes = {};
       for vnum in [1..length(verbs(this))]
@@ -379,7 +379,7 @@ object ROOT_CLASS
     return this.contents;
   endverb
 
-  verb examine_verb_ok (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_verb_ok (this none this) owner: #2 flags: "rxd"
     "examine_verb_ok(loc, index, info, syntax, commands_ok, hidden_verbs)";
     "loc is the object that defines the verb; index is which verb on the object; info is verb_info; syntax is verb_args; commands_ok is determined by this:commands_ok, probably, but passed in so we don't have to calculate it for each verb.";
     "hidden_verbs is passed in for the same reasons.  It should be a list, each of whose entries is either a string with the full verb name to be hidden (e.g., \"d*rop th*row\") or a list of the form {verb location, full verb name, args}.";
@@ -392,12 +392,12 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb is_listening (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_listening (this none this) owner: #2 flags: "rxd"
     "return 1 if the object can hear a :tell, or cares. Useful for active objects that want to stop when nothing is listening.";
     return 0;
   endverb
 
-  verb hidden_verbs (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb hidden_verbs (this none this) owner: #2 flags: "rxd"
     "hidden_verbs(who)";
     "returns a list of verbs on this that should be hidden from examine";
     "the player who's examining is passed in, so objects can hide verbs from specific players";
@@ -420,17 +420,17 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb examine_owner (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_owner (this none this) owner: #2 flags: "rxd"
     "examine_owner(examiner)";
     "Return a list of strings to be told to the player, indicating who owns this.";
     return {tostr("Owned by ", this.owner.name, ".")};
   endverb
 
-  verb "announce*_all_but" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "announce*_all_but" (this none this) owner: #2 flags: "rxd"
     return;
   endverb
 
-  verb tell_lines_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_lines_suspended (this none this) owner: #2 flags: "rxd"
     lines = args[1];
     if (typeof(lines) == LIST)
       for line in (lines)
@@ -442,7 +442,7 @@ object ROOT_CLASS
     endif
   endverb
 
-  verb acceptable (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb acceptable (this none this) owner: #2 flags: "rxd"
     return 0;
     "intended as a 'quiet' way to determine if :accept will succeed. Currently, some objects have a noisy :accept verb since it is the only thing that a builtin move() call is guaranteed to call.";
     "if you want to tell, before trying, whether :accept will fail, use :acceptable instead. Normally, they'll do the same thing.";

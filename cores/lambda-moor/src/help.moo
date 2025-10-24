@@ -280,7 +280,7 @@ object HELP
     "",
     "Sets your current mode to either brief or verbose.  In brief mode, when you enter into a room, you will not see the room's description unless you explicitly type `look'.  Verbose is the default mode."
   };
-  property "@more" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property "@more" (owner: #2, flags: "r") = {
     "*subst*",
     "Syntax:  @more",
     "         @more rest",
@@ -323,7 +323,7 @@ object HELP
     "",
     "Displays the specified object, its object number, and its owner (and its owner's object number)."
   };
-  property "@pagelength" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property "@pagelength" (owner: #2, flags: "r") = {
     "Syntax:  @pagelength <number>",
     "         @pagelength",
     "",
@@ -1152,15 +1152,15 @@ object HELP
   override index_cache = {"gen-index"};
   override object_size = {82127, 1084848672};
 
-  verb player_quota (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb player_quota (this none this) owner: #2 flags: "rxd"
     return $player.ownership_quota;
   endverb
 
-  verb prog_quota (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prog_quota (this none this) owner: #2 flags: "rxd"
     return $prog.ownership_quota;
   endverb
 
-  verb get_topic (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_topic (this none this) owner: #2 flags: "rxd"
     text = pass(@args);
     object = $string_utils:match_object(what = args[1], player.location);
     if (text != E_PROPNF || !valid(object))
@@ -1173,7 +1173,7 @@ object HELP
     endif
   endverb
 
-  verb find_topics (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb find_topics (this none this) owner: #2 flags: "rxd"
     topiclist = pass(@args);
     if (topiclist || !args)
       return topiclist;
@@ -1213,7 +1213,7 @@ object HELP
     return text;
   endverb
 
-  verb wizard_list (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb wizard_list (this none this) owner: #2 flags: "rxd"
     wizzes = {};
     for w in ($object_utils:leaves($wiz))
       if (w.wizard && (w.advertised && is_player(w)))

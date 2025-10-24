@@ -69,7 +69,7 @@ object BIG_MAIL_RECIPIENT
     return " " + (this._genprop = ngp + "a");
   endverb
 
-  verb _make (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _make (this none this) owner: #2 flags: "rxd"
     ":_make(...) => new node with value {...}";
     if (!(caller in {this._mgr, this}))
       return E_PERM;
@@ -79,7 +79,7 @@ object BIG_MAIL_RECIPIENT
     return prop;
   endverb
 
-  verb _kill (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _kill (this none this) owner: #2 flags: "rxd"
     ":_kill(node) destroys the given node.";
     if (!(caller in {this, this._mgr}))
       return E_PERM;
@@ -688,7 +688,7 @@ object BIG_MAIL_RECIPIENT
     return 1;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       this._mgr = $biglist;
       this.mowner = $mail_recipient.owner;
@@ -714,7 +714,7 @@ object BIG_MAIL_RECIPIENT
     endif
   endverb
 
-  verb _repair (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb _repair (this none this) owner: #2 flags: "rx"
     c = callers();
     if (caller != this && !(length(c) > 1 && c[1][1] == $list_utils && c[1][2] == "map_arg" && c[2][1] == this))
       raise(E_PERM);
@@ -864,7 +864,7 @@ object BIG_MAIL_RECIPIENT
     "Last modified Thu Feb 15 23:13:44 1996 MST by Minnie (#123).";
   endverb
 
-  verb repair (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb repair (this none none) owner: #2 flags: "rd"
     "Syntax: repair <biglist>";
     "";
     "This tool makes a last-resort attempt to repair broken biglists (ones whose data structures are out of alignment due to an error such as \"out of ticks\" during some update operation leaving the b-tree in an inconsistent state).  This tool comes with no warranty of any kind.  You should only use it when you have no other choice, and you should make an attempt to @dump or fully copy or otherwise checkpoint your object before attempting to repair it so that you can recover from any failures this might produce.  This operation is NOT undoable.";
@@ -884,7 +884,7 @@ object BIG_MAIL_RECIPIENT
     "Last modified Fri Feb 16 08:36:27 1996 MST by Minnie (#123).";
   endverb
 
-  verb restore_from (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb restore_from (this none this) owner: #2 flags: "rxd"
     ":restore_from(OLD_MAIL_RECIPIENT, LOST_STRING)";
     "This clears all biglist properties from this object, then";
     "scans the properties of OLD_MAIL_RECIPIENT, which must be a descendant";

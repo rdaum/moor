@@ -1,14 +1,14 @@
 object SERVER_OPTIONS
   name: "Server Options"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property bg_ticks (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 80000;
-  property boot_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property connect_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "*** Connected ***";
-  property fg_ticks (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 150000;
-  property help_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property bg_ticks (owner: #2, flags: "rc") = 80000;
+  property boot_msg (owner: #2, flags: "rc") = "";
+  property connect_msg (owner: #2, flags: "rc") = "*** Connected ***";
+  property fg_ticks (owner: #2, flags: "rc") = 150000;
+  property help_msg (owner: #2, flags: "rc") = {
     "                Server Options <$server_options>",
     "                --------------------------------",
     "",
@@ -44,15 +44,15 @@ object SERVER_OPTIONS
     "'protect_...' On every call to a built-in function 'foo', if the property $server_options.protect_foo exists and is true, and the programmer is not a wizard, then the server checks for the existence of #0:bf_<fuction> and calls that. If it doesn't exist then E_PERM is raised, i.e. the built-in function is made wiz-only.",
     "                --------------------------------"
   };
-  property permit_writable_verbs (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property protect_add_property (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property protect_add_verb (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property protect_chparent (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property protect_force_input (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property protect_recycle (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property protect_set_property_info (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 1;
-  property protect_set_verb_info (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property queued_task_limit (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 300;
+  property permit_writable_verbs (owner: #2, flags: "rc") = 0;
+  property protect_add_property (owner: #2, flags: "rc") = 1;
+  property protect_add_verb (owner: #2, flags: "rc") = 1;
+  property protect_chparent (owner: #2, flags: "rc") = 1;
+  property protect_force_input (owner: #2, flags: "rc") = 1;
+  property protect_recycle (owner: #2, flags: "rc") = 1;
+  property protect_set_property_info (owner: #2, flags: "r") = 1;
+  property protect_set_verb_info (owner: #2, flags: "rc") = 1;
+  property queued_task_limit (owner: #2, flags: "rc") = 300;
   property support_numeric_verbname_strings (owner: HACKER, flags: "r") = 0;
 
   override aliases = {"Server Options"};
@@ -81,7 +81,7 @@ object SERVER_OPTIONS
     return {@this.help_msg, @output, @wizonly, "", @etc};
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       raise(E_PERM);
     endif

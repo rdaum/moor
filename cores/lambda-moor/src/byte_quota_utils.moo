@@ -13,12 +13,12 @@ object BYTE_QUOTA_UTILS
   property max_unmeasured (owner: HACKER, flags: "rc") = 10;
   property measurement_task_running (owner: HACKER, flags: "rc") = 0;
   property repeat_cycle (owner: HACKER, flags: "rc") = 0;
-  property report_recipients (owner: HACKER, flags: "rc") = {BYTE_QUOTA_UTILS_WORKING};
+  property report_recipients (owner: HACKER, flags: "rc") = {#2};
   property task_repeat (owner: HACKER, flags: "rc") = 1;
   property task_time_limit (owner: HACKER, flags: "rc") = 500;
   property too_large (owner: HACKER, flags: "rc") = 1000000;
   property unmeasured_multiplier (owner: HACKER, flags: "rc") = 100;
-  property working (owner: HACKER, flags: "rc") = BYTE_QUOTA_UTILS_WORKING;
+  property working (owner: HACKER, flags: "rc") = #2;
 
   override aliases = {"Byte Quota Utilities"};
   override description = {
@@ -103,7 +103,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -123,7 +123,7 @@ object BYTE_QUOTA_UTILS
     return 0;
   endverb
 
-  verb bi_create (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb bi_create (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     who = this:parse_create_args(@args);
     "Because who can be E_INVARG, need to catch E_TYPE. Let $recycler:_create deal with returning E_PERM since that's what's going to happen. Ho_Yan 11/19/96.";
@@ -145,7 +145,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb enable_create (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb enable_create (this none this) owner: #2 flags: "rxd"
     if (caller != this && !caller_perms().wizard)
       return E_PERM;
     else
@@ -153,7 +153,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb disable_create (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb disable_create (this none this) owner: #2 flags: "rxd"
     if (caller != this && !caller_perms().wizard)
       return E_PERM;
     else
@@ -366,7 +366,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb value_bytes (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb value_bytes (this none this) owner: #2 flags: "rxd"
     return value_bytes(args[1]);
     set_task_perms(caller_perms());
     v = args[1];
@@ -385,7 +385,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb "object_bytes object_size" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "object_bytes object_size" (this none this) owner: #2 flags: "rxd"
     "No need for lengthy algorithms to measure an object, we have a builtin now. Ho_Yan 10/31/96";
     set_task_perms($wiz_utils:random_wizard());
     o = args[1];
@@ -487,7 +487,7 @@ object BYTE_QUOTA_UTILS
     return {total, nuncounted, nzeros, oldest, eldest};
   endverb
 
-  verb recent_object_bytes (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb recent_object_bytes (this none this) owner: #2 flags: "rxd"
     ":recent_object_bytes(x, n) -- return object size of x, guaranteed to be no more than n days old.  N defaults to this.cycle_days.";
     {object, ?since = this.cycle_days} = args;
     if (!valid(object))
@@ -500,7 +500,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb measurement_task (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb measurement_task (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -531,7 +531,7 @@ object BYTE_QUOTA_UTILS
     return args[1].wizard;
   endverb
 
-  verb do_breakdown (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_breakdown (this none this) owner: #2 flags: "rxd"
     dobj = args[1];
     who = valid(caller_perms()) ? caller_perms() | player;
     if (!this:can_peek(who, dobj.owner))
@@ -599,18 +599,18 @@ object BYTE_QUOTA_UTILS
     return 13 * 4 + length(object.name) + 1;
   endverb
 
-  verb property_overhead_bytes (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb property_overhead_bytes (this none this) owner: #2 flags: "rxd"
     {o, ?ps = $object_utils:all_properties_suspended(o)} = args;
     return value_bytes(properties(o)) - 4 + length(ps) * 4 * 4;
   endverb
 
-  verb verb_overhead_bytes (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_overhead_bytes (this none this) owner: #2 flags: "rxd"
     o = args[1];
     vs = verbs(o);
     return length(vs) * 5 * 4;
   endverb
 
-  verb add_owned_object (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb add_owned_object (this none this) owner: #2 flags: "rxd"
     ":add_owned_object(who, what) -- adds what to whose .owned_objects.";
     {who, what} = args;
     if (typeof(who.owned_objects) == LIST && what.owner == who)
@@ -618,7 +618,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb measurement_task_nofork (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb measurement_task_nofork (this none this) owner: #2 flags: "rxd"
     "This is a one-shot run of the measurement task, as opposed to :measurement_task, which will fork once per day.";
     if (!caller_perms().wizard)
       return E_PERM;
@@ -628,7 +628,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb measurement_task_body (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb measurement_task_body (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -728,7 +728,7 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb schedule_measurement_task (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb schedule_measurement_task (this none this) owner: #2 flags: "rxd"
     if (caller == this || caller_perms().wizard)
       day = 24 * 3600;
       hour_of_day_GMT = 8;
@@ -741,13 +741,13 @@ object BYTE_QUOTA_UTILS
     endif
   endverb
 
-  verb task_perms (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb task_perms (this none this) owner: #2 flags: "rxd"
     "Put all your wizards in $byte_quota_utils.wizards.  Then various long-running tasks will cycle among the permissions, spreading out the scheduler-induced personal lag.";
     $wiz_utils.old_task_perms_user = setadd($wiz_utils.old_task_perms_user, caller);
     return $wiz_utils:random_wizard();
   endverb
 
-  verb property_exists (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb property_exists (this none this) owner: #2 flags: "rxd"
     "this:property_exists(object, property)";
     " => does the specified property exist?";
     return !(!`property_info(@args) ! ANY');

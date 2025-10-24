@@ -1,20 +1,20 @@
 object WIZ_UTILS
   name: "Wizard Utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property boot_exceptions (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property boot_task (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 585440461;
-  property change_password_restricted (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property chparent_restricted (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property default_player_quota (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 7;
-  property default_programmer_quota (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 7;
-  property expiration_progress (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
-  property expiration_recipient (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {BYTE_QUOTA_UTILS_WORKING};
-  property missed_help_counters (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
-  property missed_help_strings (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
-  property new_core_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property boot_exceptions (owner: #2, flags: "rc") = {};
+  property boot_task (owner: #2, flags: "rc") = 585440461;
+  property change_password_restricted (owner: #2, flags: "") = {};
+  property chparent_restricted (owner: #2, flags: "") = {};
+  property default_player_quota (owner: #2, flags: "rc") = 7;
+  property default_programmer_quota (owner: #2, flags: "rc") = 7;
+  property expiration_progress (owner: #2, flags: "rc") = LOCAL;
+  property expiration_recipient (owner: #2, flags: "rc") = {#2};
+  property missed_help_counters (owner: #2, flags: "r") = {};
+  property missed_help_strings (owner: #2, flags: "r") = {};
+  property new_core_message (owner: #2, flags: "r") = {
     "Getting Started with your LambdaCore MOO",
     "========================================",
     "",
@@ -161,16 +161,16 @@ object WIZ_UTILS
     "The LambdaMOO Wizards",
     "[authored February 15, 1999]"
   };
-  property next_perm_index (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
-  property old_task_perms_user (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {#8060};
-  property programmer_restricted (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property programmer_restricted_temp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property record_missed_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property registration_domain_restricted (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
+  property next_perm_index (owner: #2, flags: "rc") = 1;
+  property old_task_perms_user (owner: #2, flags: "rc") = {#8060};
+  property programmer_restricted (owner: #2, flags: "rc") = {};
+  property programmer_restricted_temp (owner: #2, flags: "rc") = {};
+  property record_missed_help (owner: #2, flags: "rc") = 0;
+  property registration_domain_restricted (owner: #2, flags: "rc") = 0;
   property rename_restricted (owner: HACKER, flags: "") = {};
-  property suicide_string (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You don't *really* want to commit suicide, do you?";
-  property system_chars (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {HACKER, NO_ONE, HOUSEKEEPER};
-  property wizards (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {BYTE_QUOTA_UTILS_WORKING};
+  property suicide_string (owner: #2, flags: "rc") = "You don't *really* want to commit suicide, do you?";
+  property system_chars (owner: #2, flags: "rc") = {HACKER, NO_ONE, HOUSEKEEPER};
+  property wizards (owner: #2, flags: "rc") = {#2};
 
   override aliases = {"Wizard Utilities"};
   override description = {
@@ -216,7 +216,7 @@ object WIZ_UTILS
   };
   override object_size = {55744, 1084848672};
 
-  verb set_programmer (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_programmer (this none this) owner: #2 flags: "rxd"
     ":set_programmer(victim[,mail from])  => 1 or error.";
     "Sets victim.programmer, chparents victim to $prog if necessary, and sends mail to $new_prog_log, mail is from optional second arg or caller_perms().";
     whodunnit = caller_perms();
@@ -249,7 +249,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb set_player (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_player (this none this) owner: #2 flags: "rxd"
     ":set_player(victim[,nochown]) => 1 or error";
     "Set victim's player flag, (maybe) chown to itself, add name and aliases to $player_db.";
     " E_NONE == already a player,";
@@ -291,7 +291,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb set_owner (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_owner (this none this) owner: #2 flags: "rxd"
     ":set_owner(object,newowner[,suspendok])  does object.owner=newowner, taking care of c properties as well.  This should be used anyplace one is contemplating doing object.owner=newowner, since the latter leaves ownership of c properties unchanged.  (--Rog thinks this is a server bug).";
     {object, newowner, ?suspendok = 0} = args;
     if (!valid(object))
@@ -331,7 +331,7 @@ object WIZ_UTILS
     return 1;
   endverb
 
-  verb set_property_owner (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_property_owner (this none this) owner: #2 flags: "rxd"
     ":set_property_owner(object,prop,newowner[,suspendok])  changes the ownership of object.prop to newowner.  If the property is !c, changes the ownership on all of the descendents as well.  Otherwise, we just chown the property on the object itself and give a warning if newowner!=object.owner (--Rog thinks this is a server bug that one is able to do this at all...).";
     {object, pname, newowner, ?suspendok = 0} = args;
     if (!caller_perms().wizard)
@@ -363,7 +363,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb unset_player (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb unset_player (this none this) owner: #2 flags: "rxd"
     ":unset_player(victim[,newowner])  => 1 or error";
     "Reset victim's player flag, chown victim to newowner (if given), remove all of victim's names and aliases from $player_db.";
     {victim, ?newowner = 0} = args;
@@ -397,7 +397,7 @@ object WIZ_UTILS
     "Paragraph (#122534) - Sat Nov 5, 2005 - Remove any shared character registry listings for `victim'.";
   endverb
 
-  verb set_property_flags (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_property_flags (this none this) owner: #2 flags: "rxd"
     ":set_property_flags(object,prop,flags[,suspendok])  changes the permissions on object.prop to flags.  Unlike a mere set_property_info, this changes the flags on all descendant objects as well.  We also change the ownership on the descendent properties where necessary.";
     {object, pname, flags, ?suspendok = 0} = args;
     perms = caller_perms();
@@ -430,7 +430,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb _set_property_flags (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _set_property_flags (this none this) owner: #2 flags: "rxd"
     "_set_property_flags(object, pname, {owner, flags} or something+\"c\", suspendok)";
     "auxiliary to :set_property_flags... don't call this directly.";
     if (caller != this)
@@ -450,7 +450,7 @@ object WIZ_UTILS
     endfor
   endverb
 
-  verb random_password (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb random_password (this none this) owner: #2 flags: "rxd"
     "Generate a random password of length args[1].  Alternates vowels and consonants, for maximum pronounceability.  Uses its own list of consonants which exclude F and C and K to prevent generating obscene sounding passwords.";
     "Capital I and lowercase L are excluded on the basis of looking like each other.";
     vowels = "aeiouyAEUY";
@@ -470,7 +470,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb queued_tasks (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb queued_tasks (this none this) owner: #2 flags: "rxd"
     ":queued_tasks(player) => list of queued tasks for that player.";
     "shouldn't the server builtin should work this way?  oh well";
     set_task_perms(caller_perms());
@@ -489,7 +489,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb isnewt (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb isnewt (this none this) owner: #2 flags: "rxd"
     "Return 1 if args[1] is a newted player.";
     if (!caller_perms().wizard)
       return E_PERM;
@@ -498,7 +498,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb initialize_owned (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb initialize_owned (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -518,7 +518,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb verify_owned_objects (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verify_owned_objects (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -575,7 +575,7 @@ object WIZ_UTILS
     return wlist;
   endverb
 
-  verb rename_all_instances (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb rename_all_instances (this none this) owner: #2 flags: "rxd"
     ":rename_all_instances(object,oldname,newname)";
     "Used to rename all instances of an unwanted verb (like recycle or disfunc)";
     "if said verb is actually defined on the object itself";
@@ -592,7 +592,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb missed_help (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb missed_help (this none this) owner: #2 flags: "rxd"
     if (this.record_missed_help && callers()[1][4] == $player)
       miss = args[1];
       if (!(index = miss in this.missed_help_strings))
@@ -605,7 +605,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb show_missing_help (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_missing_help (this none this) owner: #2 flags: "rxd"
     mhs = this.missed_help_strings;
     cnt = this.missed_help_counters;
     "save values first, so subsequent changes during suspends wont affect it";
@@ -627,7 +627,7 @@ object WIZ_UTILS
     player:tell(" - - - - - - - - -");
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       `delete_property(this, "guest_feature_restricted") ! ANY';
@@ -648,7 +648,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb show_netwho_listing (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_netwho_listing (this none this) owner: #2 flags: "rxd"
     ":show_netwho_listing(tell,player_list)";
     " prints a listing of the indicated players showing connect sites.";
     {who, unsorted} = args;
@@ -727,7 +727,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb show_netwho_from_listing (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb show_netwho_from_listing (this none this) owner: #2 flags: "rxd"
     ":show_netwho_from_listing(tell,site)";
     "@net-who from hoststring prints all players who have connected from that host or host substring.  Substring can include *'s, e.g. @net-who from *.foo.edu.";
     if (!caller_perms().wizard)
@@ -803,7 +803,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb "check_player_request check_reregistration" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "check_player_request check_reregistration" (this none this) owner: #2 flags: "rxd"
     ":check_player_request(name [,email [,connection]])";
     " check if the request for player and email address is valid;";
     " return empty string if it valid, or else a string saying why not.";
@@ -864,7 +864,7 @@ object WIZ_UTILS
     return "";
   endverb
 
-  verb make_player (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb make_player (this none this) owner: #2 flags: "rxd"
     "create a player named NAME with email address ADDRESS; return {object, password}.  Optional third arg is comment to be put in registration db.";
     "assumes $wiz_utils:check_player_request() has been called and it passes.";
     if (!caller_perms().wizard)
@@ -891,7 +891,7 @@ object WIZ_UTILS
     return {new, password};
   endverb
 
-  verb send_new_player_mail (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb send_new_player_mail (this none this) owner: #2 flags: "rxd"
     ":send_new_player_mail(preface, name, address, character#, password)";
     "  used by $wiz:@make-player and $guest:@request";
     if (!caller_perms().wizard)
@@ -906,7 +906,7 @@ object WIZ_UTILS
     return $network:sendmail(address, "Your " + $network.moo_name + " character, " + name, "Reply-to: " + $login.registration_address, @msg);
   endverb
 
-  verb do_make_player (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_make_player (any any any) owner: #2 flags: "rxd"
     "do_maker_player(name,email,[comment])";
     "Common code for @make-player";
     "If no password is given, generates a random password for the player.";
@@ -952,7 +952,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb do_register (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_register (this none this) owner: #2 flags: "rxd"
     "do_register(name, email_address [,comments])";
     "change player's email address.";
     if (!caller_perms().wizard)
@@ -984,7 +984,7 @@ object WIZ_UTILS
     player:notify(tostr(who.name, " (", who, ") formerly ", old ? old | "unregistered", ", registered at ", email, ".", comments ? " [" + comments + "]" | ""));
   endverb
 
-  verb do_new_password (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_new_password (this none this) owner: #2 flags: "rxd"
     "do_new_password(who, [password])";
     if (!caller_perms().wizard)
       return E_PERM;
@@ -1021,7 +1021,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb set_owner_new (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_owner_new (this none this) owner: #2 flags: "rxd"
     ":set_owner(object,newowner[,suspendok])  does object.owner=newowner, taking care of c properties as well.  This should be used anyplace one is contemplating doing object.owner=newowner, since the latter leaves ownership of c properties unchanged.  (--Rog thinks this is a server bug).";
     {object, newowner, ?suspendok = 0} = args;
     if (!valid(object))
@@ -1061,7 +1061,7 @@ object WIZ_UTILS
     return 1;
   endverb
 
-  verb boot_idlers (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb boot_idlers (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -1118,7 +1118,7 @@ object WIZ_UTILS
     "This is set up so that it forks the task first, and this.boot_task is the task_id of whatever is running the idle booter";
   endverb
 
-  verb grant_object (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb grant_object (this none this) owner: #2 flags: "rxd"
     ":grant_object(what, towhom);";
     "Ownership of the object changes as in @chown and :set_owner (i.e., .owner and all c properties change).  In addition all verbs and !c properties owned by the original owner change ownership as well.  Finally, for !c properties, instances on descendant objects change ownership (as in :set_property_owner).";
     if (!caller_perms().wizard)
@@ -1149,7 +1149,7 @@ object WIZ_UTILS
     return same ? "nothing changed" | "grant changed";
   endverb
 
-  verb connection_hash (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb connection_hash (this none this) owner: #2 flags: "rxd"
     "connection_hash(forwhom, host [,seed])";
     "Compute an encrypted hash of the host for 'forwhom', using 'crypt'.";
     {forwhom, host, @seed} = args;
@@ -1160,7 +1160,7 @@ object WIZ_UTILS
     return crypt(tostr(hash), @seed);
   endverb
 
-  verb newt_player (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb newt_player (this none this) owner: #2 flags: "rxd"
     ":newt_player(who [ , commentary] [, temporary])";
     {who, ?comment = "", ?temporary = 0} = args;
     if (!caller_perms().wizard)
@@ -1192,7 +1192,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb unset_programmer (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb unset_programmer (this none this) owner: #2 flags: "rxd"
     ":unset_programmer(victim[,reason[,start time,duration]]) => 1 or error.";
     "Resets victim.programmer, adds victim to .programmer_restricted.";
     "Put into temporary list if 3rd and 4th arguments are given. Which restricts the victim for uptime duration since start time. Must give a reason, though it can be blank, in this case.";
@@ -1232,7 +1232,7 @@ object WIZ_UTILS
     return 0;
   endverb
 
-  verb expire_mail (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expire_mail (none none none) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -1240,7 +1240,7 @@ object WIZ_UTILS
     this:expire_mail_players();
   endverb
 
-  verb expire_mail_weekly (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expire_mail_weekly (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -1250,7 +1250,7 @@ object WIZ_UTILS
     this:expire_mail();
   endverb
 
-  verb check_prog_restricted (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_prog_restricted (this none this) owner: #2 flags: "rxd"
     "Checks to see if args[1] is restricted from programmer either permanently or temporarily. Removes from temporary list if time is up";
     if (caller != this && !$perm_utils:controls(caller_perms(), this))
       return E_PERM;
@@ -1275,7 +1275,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb expire_mail_players (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expire_mail_players (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -1294,7 +1294,7 @@ object WIZ_UTILS
     return s;
   endverb
 
-  verb expire_mail_lists (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb expire_mail_lists (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -1313,7 +1313,7 @@ object WIZ_UTILS
     return sum;
   endverb
 
-  verb flush_editors (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb flush_editors (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     else
@@ -1328,7 +1328,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb random_wizard (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb random_wizard (this none this) owner: #2 flags: "rxd"
     "Put all your wizards in $wiz_utils.wizards.  Then various long-running tasks will cycle among the permissions, spreading out the scheduler-induced personal lag.";
     w = this.wizards;
     i = this.next_perm_index;
@@ -1341,7 +1341,7 @@ object WIZ_UTILS
     return w[i];
   endverb
 
-  verb set_email_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_email_address (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {who, email} = args;
     if (typeof(who.email_address) == LIST)
@@ -1351,7 +1351,7 @@ object WIZ_UTILS
     endif
   endverb
 
-  verb get_email_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_email_address (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     {who} = args;
     if (typeof(who.email_address) == LIST)

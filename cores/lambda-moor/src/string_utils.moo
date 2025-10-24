@@ -1,13 +1,13 @@
 object STRING_UTILS
   name: "string utilities"
   parent: GENERIC_UTILS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property alphabet (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "abcdefghijklmnopqrstuvwxyz";
-  property ascii (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
-  property digits (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "0123456789";
-  property tab (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "\t";
+  property alphabet (owner: #2, flags: "rc") = "abcdefghijklmnopqrstuvwxyz";
+  property ascii (owner: #2, flags: "rc") = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+  property digits (owner: #2, flags: "rc") = "0123456789";
+  property tab (owner: #2, flags: "rc") = "\t";
   property use_article_a (owner: HACKER, flags: "r") = {"unit", "unix", "one", "once", "utility"};
   property use_article_an (owner: HACKER, flags: "r") = {};
 
@@ -779,7 +779,7 @@ object STRING_UTILS
     return nstr + ostr;
   endverb
 
-  verb "substitute_d*elimited" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "substitute_d*elimited" (none none none) owner: #2 flags: "rxd"
     "subst(string,{{redex1,repl1},{redex2,repl2},{redex3,repl3}...}[,case])";
     "Just like :substitute() but it uses index_delimited() instead of index()";
     {ostr, subs, ?case = 0} = args;
@@ -826,7 +826,7 @@ object STRING_UTILS
     return nstr + ostr;
   endverb
 
-  verb _cap_property (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _cap_property (this none this) owner: #2 flags: "rxd"
     "cap_property(what,prop[,ucase]) returns what.(prop) but capitalized if either ucase is true or the prop name specified is capitalized.";
     "If prop is blank, returns what:title().";
     "If prop is bogus or otherwise irretrievable, returns the error.";
@@ -858,7 +858,7 @@ object STRING_UTILS
     return typeof(s) == ERR ? s | tostr(s);
   endverb
 
-  verb pronoun_sub (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb pronoun_sub (this none this) owner: #2 flags: "rxd"
     "Pronoun (and other things) substitution. See 'help pronouns' for details.";
     "syntax:  $string_utils:pronoun_sub(text[,who[,thing[,location[,dobj[,iobj]]]]])";
     "%s,%o,%p,%q,%r    => <who>'s pronouns.  <who> defaults to player.";
@@ -976,7 +976,7 @@ object STRING_UTILS
     endif
   endverb
 
-  verb alt_pronoun_sub (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb alt_pronoun_sub (none none none) owner: #2 flags: "rxd"
     "Pronoun (and other things) substitution. See 'help pronouns' for details.";
     "syntax:  $string_utils:pronoun_sub(text[,who[,thing[,location]]])";
     "%s,%o,%p,%q,%r    => <who>'s pronouns.  <who> defaults to player.";
@@ -1265,7 +1265,7 @@ object STRING_UTILS
     endif
   endverb
 
-  verb parse_command (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_command (this none this) owner: #2 flags: "rxd"
     ":parse_command(cmd_line[,player])";
     " => {verb, {dobj, dobjstr}, {prep, prepstr}, {iobj, iobjstr}, {args, argstr},";
     "     {dobjset, prepset, iobjset}}";
@@ -1308,7 +1308,7 @@ object STRING_UTILS
     return {vrb, {do, ds}, {$code_utils:short_prep(ps), ps}, {io, is}, {y, as}, {dset, pset, iset}};
   endverb
 
-  verb from_value (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb from_value (this none this) owner: #2 flags: "rxd"
     "$string_utils:from_value(value [, quote_strings = 0 [, list_depth = 1]])";
     "Print the given value into a string.";
     {value, ?quote_strings = 0, ?list_depth = 1} = args;
@@ -1424,7 +1424,7 @@ object STRING_UTILS
     return this:connection_hostname_bsd(@args);
   endverb
 
-  verb from_value_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb from_value_suspended (this none this) owner: #2 flags: "rxd"
     "$string_utils:from_value(value [, quote_strings = 0 [, list_depth = 1]])";
     "Print the given value into a string.";
     "This verb suspends as necessary for large values.";

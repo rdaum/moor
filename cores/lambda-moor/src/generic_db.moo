@@ -345,17 +345,17 @@ object GENERIC_DB
     return caller != this ? E_PERM | (this.((" " + args[1])) = listdelete(args, 1));
   endverb
 
-  verb make_node (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb make_node (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     return caller != this ? E_PERM | add_property(this, " " + args[1], listdelete(args, 1), {$generic_db.owner, this.node_perms});
   endverb
 
-  verb kill_node (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb kill_node (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     return caller != this ? E_PERM | delete_property(this, " " + args[1]);
   endverb
 
-  verb clearall (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb clearall (this none this) owner: #2 flags: "rxd"
     "WIZARDLY";
     if (!($perm_utils:controls(caller_perms(), this) || caller == this))
       return E_PERM;
@@ -469,7 +469,7 @@ object GENERIC_DB
     endif
   endverb
 
-  verb proxy_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb proxy_for_core (this none this) owner: #2 flags: "rxd"
     "Create a stand-in for the core-extraction process";
     "  (rather than change the ownership on 80000 properties only to delete them).";
     {core_variant, is_mcd} = args;

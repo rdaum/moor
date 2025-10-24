@@ -1,15 +1,15 @@
 object PASSWORD_VERIFIER
   name: "password verifier"
   parent: THING
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property check_against_dictionary (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property check_against_email (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property check_against_hosts (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property check_against_moo (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property check_against_name (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property check_obscure_stuff (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
+  property check_against_dictionary (owner: #2, flags: "r") = 0;
+  property check_against_email (owner: #2, flags: "r") = 0;
+  property check_against_hosts (owner: #2, flags: "r") = 0;
+  property check_against_moo (owner: #2, flags: "r") = 0;
+  property check_against_name (owner: #2, flags: "r") = 0;
+  property check_obscure_stuff (owner: #2, flags: "r") = 0;
   property help_msg (owner: HACKER, flags: "r") = {
     "Password Verifier",
     "==================",
@@ -20,8 +20,8 @@ object PASSWORD_VERIFIER
     "",
     "The toggle switches for this checking are:"
   };
-  property minimum_password_length (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property require_funky_characters (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
+  property minimum_password_length (owner: #2, flags: "r") = 0;
+  property require_funky_characters (owner: #2, flags: "r") = 0;
 
   override aliases = {"password verifier", "password", "verifier", "pwd"};
   override description = "The password verifier verifies passwords.";
@@ -42,7 +42,7 @@ object PASSWORD_VERIFIER
     return base;
   endverb
 
-  verb reject_password (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb reject_password (this none this) owner: #2 flags: "rxd"
     ":reject_password ( STR password [ , OBJ for-whom ] );";
     "=> string value [if the password is rejected, why?]";
     "=> false value [if the password isn't rejected]";
@@ -90,7 +90,7 @@ object PASSWORD_VERIFIER
     endif
   endverb
 
-  verb check_email (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_email (this none this) owner: #2 flags: "rxd"
     {pwd, who} = args;
     if (!$perm_utils:controls(caller_perms(), who))
       return "Permission denied.";
@@ -105,7 +105,7 @@ object PASSWORD_VERIFIER
     endif
   endverb
 
-  verb check_hosts (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb check_hosts (this none this) owner: #2 flags: "rxd"
     {pwd, who} = args;
     if (!$perm_utils:controls(caller_perms(), who))
       return "Permission denied.";
@@ -193,7 +193,7 @@ object PASSWORD_VERIFIER
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.minimum_password_length = this.check_against_name = this.check_against_email = this.check_against_hosts = this.check_against_dictionary = this.require_funky_characters = this.check_against_moo = this.check_obscure_stuff = 0;

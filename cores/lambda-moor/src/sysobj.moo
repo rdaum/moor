@@ -1,19 +1,19 @@
 object SYSOBJ
   name: "The System Object"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property ambiguous_match (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = AMBIGUOUS_MATCH;
-  property big_mail_recipient (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BIG_MAIL_RECIPIENT;
-  property biglist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BIGLIST;
-  property build_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BUILD_OPTIONS;
-  property builder (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BUILDER;
-  property builder_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = BUILDER_HELP;
-  property building_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BUILDING_UTILS;
-  property builtin_function_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BUILTIN_FUNCTION_HELP;
-  property byte_quota_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BYTE_QUOTA_UTILS;
-  property class_registry (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property ambiguous_match (owner: #2, flags: "rc") = AMBIGUOUS_MATCH;
+  property big_mail_recipient (owner: #2, flags: "rc") = BIG_MAIL_RECIPIENT;
+  property biglist (owner: #2, flags: "rc") = BIGLIST;
+  property build_options (owner: #2, flags: "rc") = BUILD_OPTIONS;
+  property builder (owner: #2, flags: "rc") = BUILDER;
+  property builder_help (owner: #2, flags: "r") = BUILDER_HELP;
+  property building_utils (owner: #2, flags: "rc") = BUILDING_UTILS;
+  property builtin_function_help (owner: #2, flags: "rc") = BUILTIN_FUNCTION_HELP;
+  property byte_quota_utils (owner: #2, flags: "rc") = BYTE_QUOTA_UTILS;
+  property class_registry (owner: #2, flags: "rc") = {
     {
       "generics",
       "Generic objects intended for use as the parents of new objects",
@@ -60,121 +60,121 @@ object SYSOBJ
       }
     }
   };
-  property code_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = CODE_UTILS;
-  property command_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = COMMAND_UTILS;
-  property container (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = CONTAINER;
-  property convert_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = CONVERT_UTILS;
-  property core_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = CORE_HELP;
-  property core_history (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {{"LambdaMOO", "1.8.3+47", 1529447738}};
-  property display_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = DISPLAY_OPTIONS;
-  property dump_interval (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 3600;
-  property edit_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = EDIT_OPTIONS;
-  property editor_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = EDITOR_HELP;
-  property error (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = ERROR;
-  property exit (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = EXIT;
-  property failed_match (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = FAILED_MATCH;
-  property feature (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = FEATURE;
-  property feature_warehouse (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = FEATURE_WAREHOUSE;
-  property force_input_count (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 19398082;
-  property frand_class (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = FRAND_CLASS;
-  property frand_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = FRAND_HELP;
-  property ftp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = FTP;
-  property garbage (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = GARBAGE;
-  property gender_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = GENDER_UTILS;
-  property gendered_object (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = GENDERED_OBJECT;
-  property generic_biglist_home (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = GENERIC_BIGLIST_HOME;
-  property generic_db (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = GENERIC_DB;
-  property generic_editor (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = GENERIC_EDITOR;
-  property generic_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = GENERIC_HELP;
-  property generic_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = GENERIC_OPTIONS;
-  property generic_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = GENERIC_UTILS;
-  property gopher (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = GOPHER;
-  property gripe_recipients (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {BYTE_QUOTA_UTILS_WORKING};
-  property guest (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = GUEST;
-  property guest_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = GUEST_LOG;
-  property hacker (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = HACKER;
-  property help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = HELP;
-  property housekeeper (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = HOUSEKEEPER;
-  property http (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = HTTP;
-  property last_huh (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = LAST_HUH;
-  property last_restart_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1529543472;
-  property letter (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LETTER;
-  property limbo (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LIMBO;
-  property list_editor (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LIST_EDITOR;
-  property list_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LIST_UTILS;
-  property local (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
-  property lock_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCK_UTILS;
-  property login (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = LOGIN;
-  property mail_agent (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MAIL_AGENT;
-  property mail_editor (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MAIL_EDITOR;
-  property mail_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = MAIL_HELP;
-  property mail_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MAIL_OPTIONS;
-  property mail_recipient (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MAIL_RECIPIENT;
-  property mail_recipient_class (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MAIL_RECIPIENT_CLASS;
-  property match_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MATCH_UTILS;
-  property math_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MATH_UTILS;
+  property code_utils (owner: #2, flags: "rc") = CODE_UTILS;
+  property command_utils (owner: #2, flags: "rc") = COMMAND_UTILS;
+  property container (owner: #2, flags: "rc") = CONTAINER;
+  property convert_utils (owner: #2, flags: "rc") = CONVERT_UTILS;
+  property core_help (owner: #2, flags: "rc") = CORE_HELP;
+  property core_history (owner: #2, flags: "r") = {{"LambdaMOO", "1.8.3+47", 1529447738}};
+  property display_options (owner: #2, flags: "rc") = DISPLAY_OPTIONS;
+  property dump_interval (owner: #2, flags: "rc") = 3600;
+  property edit_options (owner: #2, flags: "rc") = EDIT_OPTIONS;
+  property editor_help (owner: #2, flags: "rc") = EDITOR_HELP;
+  property error (owner: #2, flags: "rc") = ERROR;
+  property exit (owner: #2, flags: "rc") = EXIT;
+  property failed_match (owner: #2, flags: "rc") = FAILED_MATCH;
+  property feature (owner: #2, flags: "rc") = FEATURE;
+  property feature_warehouse (owner: #2, flags: "r") = FEATURE_WAREHOUSE;
+  property force_input_count (owner: #2, flags: "rc") = 19398082;
+  property frand_class (owner: #2, flags: "rc") = FRAND_CLASS;
+  property frand_help (owner: #2, flags: "rc") = FRAND_HELP;
+  property ftp (owner: #2, flags: "rc") = FTP;
+  property garbage (owner: #2, flags: "rc") = GARBAGE;
+  property gender_utils (owner: #2, flags: "r") = GENDER_UTILS;
+  property gendered_object (owner: #2, flags: "r") = GENDERED_OBJECT;
+  property generic_biglist_home (owner: #2, flags: "r") = GENERIC_BIGLIST_HOME;
+  property generic_db (owner: #2, flags: "rc") = GENERIC_DB;
+  property generic_editor (owner: #2, flags: "rc") = GENERIC_EDITOR;
+  property generic_help (owner: #2, flags: "rc") = GENERIC_HELP;
+  property generic_options (owner: #2, flags: "rc") = GENERIC_OPTIONS;
+  property generic_utils (owner: #2, flags: "rc") = GENERIC_UTILS;
+  property gopher (owner: #2, flags: "r") = GOPHER;
+  property gripe_recipients (owner: #2, flags: "rc") = {#2};
+  property guest (owner: #2, flags: "r") = GUEST;
+  property guest_log (owner: #2, flags: "r") = GUEST_LOG;
+  property hacker (owner: #2, flags: "rc") = HACKER;
+  property help (owner: #2, flags: "rc") = HELP;
+  property housekeeper (owner: #2, flags: "rc") = HOUSEKEEPER;
+  property http (owner: #2, flags: "rc") = HTTP;
+  property last_huh (owner: #2, flags: "r") = LAST_HUH;
+  property last_restart_time (owner: #2, flags: "rc") = 1529543472;
+  property letter (owner: #2, flags: "rc") = LETTER;
+  property limbo (owner: #2, flags: "rc") = LIMBO;
+  property list_editor (owner: #2, flags: "rc") = LIST_EDITOR;
+  property list_utils (owner: #2, flags: "rc") = LIST_UTILS;
+  property local (owner: #2, flags: "rc") = LOCAL;
+  property lock_utils (owner: #2, flags: "rc") = LOCK_UTILS;
+  property login (owner: #2, flags: "r") = LOGIN;
+  property mail_agent (owner: #2, flags: "rc") = MAIL_AGENT;
+  property mail_editor (owner: #2, flags: "rc") = MAIL_EDITOR;
+  property mail_help (owner: #2, flags: "r") = MAIL_HELP;
+  property mail_options (owner: #2, flags: "rc") = MAIL_OPTIONS;
+  property mail_recipient (owner: #2, flags: "rc") = MAIL_RECIPIENT;
+  property mail_recipient_class (owner: #2, flags: "rc") = MAIL_RECIPIENT_CLASS;
+  property match_utils (owner: #2, flags: "rc") = MATCH_UTILS;
+  property math_utils (owner: #2, flags: "rc") = MATH_UTILS;
   property matrix_utils (owner: HACKER, flags: "r") = MATRIX_UTILS;
-  property max_seconds (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 5;
-  property max_ticks (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 30000;
-  property maxint (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 2147483647;
-  property minint (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = -2147483648;
-  property network (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NETWORK;
-  property new_player_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NEW_PLAYER_LOG;
-  property new_prog_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NEW_PROG_LOG;
-  property news (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NEWS;
-  property newt_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NEWT_LOG;
-  property no_connect_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property no_one (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = NO_ONE;
-  property note (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NOTE;
-  property note_editor (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NOTE_EDITOR;
-  property nothing (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = LOCAL;
-  property object_quota_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = OBJECT_QUOTA_UTILS;
-  property object_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = OBJECT_UTILS;
-  property paranoid_db (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = PARANOID_DB;
-  property password_verifier (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = PASSWORD_VERIFIER;
-  property pasting_feature (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PASTING_FEATURE;
-  property perm_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PERM_UTILS;
-  property player (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PLAYER;
-  property player_class (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MAIL_RECIPIENT_CLASS;
-  property player_db (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = PLAYER_DB;
-  property player_start (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PLAYER_START;
-  property prog (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PROG;
-  property prog_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PROG_HELP;
-  property prog_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PROG_OPTIONS;
-  property quota_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = QUOTA_LOG;
-  property quota_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = BYTE_QUOTA_UTILS;
-  property recycler (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = RECYCLER;
-  property registration_db (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = REGISTRATION_DB;
-  property room (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = ROOM;
-  property root_class (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = ROOT_CLASS;
-  property seq_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = SEQ_UTILS;
-  property server_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = SERVER_OPTIONS;
-  property set_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = SET_UTILS;
-  property shutdown_message (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property shutdown_task (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = E_NONE;
-  property shutdown_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property site_db (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = SITE_DB;
-  property site_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NEWT_LOG;
-  property spell (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = SPELL;
-  property stage_talk (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = STAGE_TALK;
-  property string_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = STRING_UTILS;
-  property sysobj (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = SYSOBJ;
-  property thing (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = THING;
-  property time_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = TIME_UTILS;
-  property toad_log (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = NEWT_LOG;
-  property trig_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = MATH_UTILS;
-  property verb_editor (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = VERB_EDITOR;
-  property verb_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = VERB_HELP;
-  property wiz (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = WIZ;
-  property wiz_help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = WIZ_HELP;
-  property wiz_utils (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = WIZ_UTILS;
+  property max_seconds (owner: #2, flags: "rc") = 5;
+  property max_ticks (owner: #2, flags: "rc") = 30000;
+  property maxint (owner: #2, flags: "rc") = 2147483647;
+  property minint (owner: #2, flags: "rc") = -2147483648;
+  property network (owner: #2, flags: "rc") = NETWORK;
+  property new_player_log (owner: #2, flags: "rc") = NEW_PLAYER_LOG;
+  property new_prog_log (owner: #2, flags: "rc") = NEW_PROG_LOG;
+  property news (owner: #2, flags: "rc") = NEWS;
+  property newt_log (owner: #2, flags: "rc") = NEWT_LOG;
+  property no_connect_message (owner: #2, flags: "rc") = 0;
+  property no_one (owner: #2, flags: "r") = NO_ONE;
+  property note (owner: #2, flags: "rc") = NOTE;
+  property note_editor (owner: #2, flags: "rc") = NOTE_EDITOR;
+  property nothing (owner: #2, flags: "rc") = LOCAL;
+  property object_quota_utils (owner: #2, flags: "rc") = OBJECT_QUOTA_UTILS;
+  property object_utils (owner: #2, flags: "rc") = OBJECT_UTILS;
+  property paranoid_db (owner: #2, flags: "r") = PARANOID_DB;
+  property password_verifier (owner: #2, flags: "r") = PASSWORD_VERIFIER;
+  property pasting_feature (owner: #2, flags: "rc") = PASTING_FEATURE;
+  property perm_utils (owner: #2, flags: "rc") = PERM_UTILS;
+  property player (owner: #2, flags: "rc") = PLAYER;
+  property player_class (owner: #2, flags: "rc") = MAIL_RECIPIENT_CLASS;
+  property player_db (owner: #2, flags: "r") = PLAYER_DB;
+  property player_start (owner: #2, flags: "rc") = PLAYER_START;
+  property prog (owner: #2, flags: "rc") = PROG;
+  property prog_help (owner: #2, flags: "rc") = PROG_HELP;
+  property prog_options (owner: #2, flags: "rc") = PROG_OPTIONS;
+  property quota_log (owner: #2, flags: "rc") = QUOTA_LOG;
+  property quota_utils (owner: #2, flags: "rc") = BYTE_QUOTA_UTILS;
+  property recycler (owner: #2, flags: "rc") = RECYCLER;
+  property registration_db (owner: #2, flags: "rc") = REGISTRATION_DB;
+  property room (owner: #2, flags: "rc") = ROOM;
+  property root_class (owner: #2, flags: "rc") = ROOT_CLASS;
+  property seq_utils (owner: #2, flags: "rc") = SEQ_UTILS;
+  property server_options (owner: #2, flags: "rc") = SERVER_OPTIONS;
+  property set_utils (owner: #2, flags: "rc") = SET_UTILS;
+  property shutdown_message (owner: #2, flags: "rc") = "";
+  property shutdown_task (owner: #2, flags: "rc") = E_NONE;
+  property shutdown_time (owner: #2, flags: "rc") = 0;
+  property site_db (owner: #2, flags: "rc") = SITE_DB;
+  property site_log (owner: #2, flags: "rc") = NEWT_LOG;
+  property spell (owner: #2, flags: "rc") = SPELL;
+  property stage_talk (owner: #2, flags: "rc") = STAGE_TALK;
+  property string_utils (owner: #2, flags: "rc") = STRING_UTILS;
+  property sysobj (owner: #2, flags: "r") = SYSOBJ;
+  property thing (owner: #2, flags: "rc") = THING;
+  property time_utils (owner: #2, flags: "rc") = TIME_UTILS;
+  property toad_log (owner: #2, flags: "rc") = NEWT_LOG;
+  property trig_utils (owner: #2, flags: "rc") = MATH_UTILS;
+  property verb_editor (owner: #2, flags: "rc") = VERB_EDITOR;
+  property verb_help (owner: #2, flags: "rc") = VERB_HELP;
+  property wiz (owner: #2, flags: "rc") = WIZ;
+  property wiz_help (owner: #2, flags: "rc") = WIZ_HELP;
+  property wiz_utils (owner: #2, flags: "rc") = WIZ_UTILS;
   property you (owner: HACKER, flags: "r") = YOU;
 
   override aliases = {"The System Object"};
   override description = "The known universe.";
   override object_size = {23528, 1084848672};
 
-  verb do_login_command (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_login_command (this none this) owner: #2 flags: "rxd"
     "...This code should only be run as a server task...";
     if (callers())
       return E_PERM;
@@ -207,7 +207,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb server_started (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb server_started (this none this) owner: #2 flags: "rxd"
     if (!callers())
       $last_restart_time = time();
       $network:server_started();
@@ -215,7 +215,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb "core_object_info core_objects" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "core_object_info core_objects" (this none this) owner: #2 flags: "rxd"
     set_task_perms($no_one);
     {?core_variant = "Imnotsurewhatthisshouldbeyetdontdependonthis", ?in_mcd = 0} = args;
     if (in_mcd)
@@ -305,7 +305,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       `delete_property(this, "mail_name_db") ! E_PROPNF';
@@ -326,7 +326,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb "user_created user_connected" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "user_created user_connected" (this none this) owner: #2 flags: "rxd"
     "Copied from The System Object (#0):user_connected by Slartibartfast (#4242) Sun May 21 18:14:16 1995 PDT";
     if (callers())
       return;
@@ -345,7 +345,7 @@ object SYSOBJ
     endtry
   endverb
 
-  verb "user_disconnected user_client_disconnected" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "user_disconnected user_client_disconnected" (this none this) owner: #2 flags: "rxd"
     if (callers())
       return;
     endif
@@ -364,7 +364,7 @@ object SYSOBJ
     `user.location:disfunc(user) ! ANY => 0';
   endverb
 
-  verb "bf_chparent chparent" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_chparent chparent" (this none this) owner: #2 flags: "rxd"
     "chparent(object, new-parent) -- see help on the builtin.";
     who = caller_perms();
     {what, papa} = args;
@@ -396,7 +396,7 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb "bf_add_verb add_verb" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_add_verb add_verb" (this none this) owner: #2 flags: "rxd"
     "add_verb() -- see help on the builtin for more information. This verb is called by the server when $server_options.protect_add_verb exists and is true and caller_perms() are not wizardly.";
     who = caller_perms();
     what = args[1];
@@ -426,7 +426,7 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb "bf_add_property add_property" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_add_property add_property" (this none this) owner: #2 flags: "rxd"
     "add_property() -- see help on the builtin for more information. This verb is called by the server when $server_options.protect_add_property exists and is true and caller_perms() are not wizardly.";
     who = caller_perms();
     {what, propname, value, info} = args;
@@ -453,7 +453,7 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb "bf_recycle recycle" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_recycle recycle" (this none this) owner: #2 flags: "rxd"
     "recycle(object) -- see help on the builtin. This verb is called by the server when $server_options.protect_recycle exists and is true and caller_perms() are not wizardly.";
     if (!valid(what = args[1]))
       retval = E_INVARG;
@@ -474,7 +474,7 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb user_reconnected (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb user_reconnected (this none this) owner: #2 flags: "rxd"
     if (callers())
       return;
     endif
@@ -498,7 +498,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb "bf_set_verb_info set_verb_info" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_set_verb_info set_verb_info" (this none this) owner: #2 flags: "rxd"
     "set_verb_info() -- see help on the builtin for more information. This verb is called by the server when $server_options.protect_set_verb_info exists and is true and caller_perms() are not wizardly.";
     {o, v, i} = args;
     if (typeof(vi = `verb_info(o, v) ! ANY') == ERR)
@@ -524,7 +524,7 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb "bf_match match" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_match match" (this none this) owner: #2 flags: "rxd"
     m = `match(@args) ! ANY';
     return typeof(m) == ERR && $code_utils:dflag_on() ? raise(m) | m;
     if (length(args[1]) > 256 && index(args[2], "*"))
@@ -534,7 +534,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb "bf_rmatch rmatch" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_rmatch rmatch" (this none this) owner: #2 flags: "rxd"
     r = `rmatch(@args) ! ANY';
     return typeof(r) == ERR && $code_utils:dflag_on() ? raise(r) | r;
     if (length(args[1]) > 256 && index(args[2], "*"))
@@ -544,14 +544,14 @@ object SYSOBJ
     endif
   endverb
 
-  verb checkpoint_finished (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb checkpoint_finished (this none this) owner: #2 flags: "rxd"
     "Copied from The System Object (#0):checkpoint_finished [verb author Heathcliff (#89987)] at Fri May  7 12:02:22 2004 PDT";
     callers() && raise(E_PERM);
     $login.checkpoint_in_progress = 0;
     `$local.checkpoint_notification:checkpoint_finished(@args) ! ANY';
   endverb
 
-  verb "do_out_of_band_command doobc" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "do_out_of_band_command doobc" (this none this) owner: #2 flags: "rxd"
     "do_out_of_band_command -- a cheap and very dirty do_out_of_band verb.  Forwards to verb on player with same name if it exists, otherwise forwards to $login.  May only be called by the server in response to an out of band command, otherwise E_PERM is returned.";
     if (caller == #-1 && caller_perms() == #-1 && callers() == {})
       if (valid(player) && is_player(player))
@@ -565,7 +565,7 @@ object SYSOBJ
     endif
   endverb
 
-  verb handle_uncaught_error (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb handle_uncaught_error (this none this) owner: #2 flags: "rxd"
     if (!callers())
       {code, msg, value, stack, traceback} = args;
       if (!$object_utils:connected(player))
@@ -577,13 +577,13 @@ object SYSOBJ
     endif
   endverb
 
-  verb checkpoint_started (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb checkpoint_started (this none this) owner: #2 flags: "rxd"
     callers() && raise(E_PERM);
     $login.checkpoint_in_progress = 1;
     `$local.checkpoint_notification:checkpoint_started(@args) ! ANY';
   endverb
 
-  verb bf_force_input (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb bf_force_input (this none this) owner: #2 flags: "rxd"
     "Copied from Jay (#3920):bf_force_input Mon Jun 16 20:55:27 1997 PDT";
     "force_input(conn, line [, at-front])";
     "see help on the builtin for more information. This verb is called by the server when $server_options.protect_force_input exists and is true and caller_perms() are not wizardly.";
@@ -599,12 +599,12 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     "Let's keep bozos from partying.  --Nosredna the partypooper";
     return pass(#-1);
   endverb
 
-  verb "bf_set_property_info set_property_info" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "bf_set_property_info set_property_info" (this none this) owner: #2 flags: "rxd"
     who = caller_perms();
     retval = 0;
     try
@@ -629,11 +629,11 @@ object SYSOBJ
     return typeof(retval) == ERR && $code_utils:dflag_on() ? raise(retval) | retval;
   endverb
 
-  verb include_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb include_for_core (this none this) owner: #2 flags: "rxd"
     return properties(this);
   endverb
 
-  verb handle_task_timeout (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb handle_task_timeout (this none this) owner: #2 flags: "rxd"
     if (!callers())
       {resource, stack, traceback} = args;
       if (!$object_utils:connected(player))

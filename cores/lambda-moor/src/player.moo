@@ -1,62 +1,62 @@
 object PLAYER
   name: "generic player"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property all_connect_places (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property brief (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property current_folder (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = 1;
-  property dict (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property display_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property edit_options (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property email_address (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = "";
+  property all_connect_places (owner: #2, flags: "") = {};
+  property brief (owner: #2, flags: "rc") = 0;
+  property current_folder (owner: #2, flags: "c") = 1;
+  property dict (owner: #2, flags: "rc") = {};
+  property display_options (owner: #2, flags: "rc") = {};
+  property edit_options (owner: #2, flags: "rc") = {};
+  property email_address (owner: #2, flags: "") = "";
   property features (owner: HACKER, flags: "r") = {};
-  property first_connect_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 2147483647;
-  property gaglist (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property gender (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "neuter";
-  property oauth2_identities (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property help (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property home (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = PLAYER_START;
-  property last_connect_attempt (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
-  property last_connect_place (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = "?";
-  property last_connect_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property last_disconnect_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = 0;
-  property last_password_time (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
+  property first_connect_time (owner: #2, flags: "r") = 2147483647;
+  property gaglist (owner: #2, flags: "rc") = {};
+  property gender (owner: #2, flags: "rc") = "neuter";
+  property oauth2_identities (owner: #2, flags: "") = {};
+  property help (owner: #2, flags: "rc") = 0;
+  property home (owner: #2, flags: "rc") = PLAYER_START;
+  property last_connect_attempt (owner: #2, flags: "") = 0;
+  property last_connect_place (owner: #2, flags: "") = "?";
+  property last_connect_time (owner: #2, flags: "r") = 0;
+  property last_disconnect_time (owner: #2, flags: "r") = 0;
+  property last_password_time (owner: #2, flags: "") = 0;
   property linebuffer (owner: HACKER, flags: "") = {};
   property linelen (owner: HACKER, flags: "r") = -79;
-  property lines (owner: BYTE_QUOTA_UTILS_WORKING, flags: "c") = 0;
+  property lines (owner: #2, flags: "c") = 0;
   property linesleft (owner: HACKER, flags: "r") = 0;
   property linetask (owner: HACKER, flags: "r") = {0, 0};
-  property more_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "*** More ***  %n lines left.  Do @more [rest|flush] for more.";
-  property owned_objects (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {};
+  property more_msg (owner: #2, flags: "rc") = "*** More ***  %n lines left.  Do @more [rest|flush] for more.";
+  property owned_objects (owner: #2, flags: "r") = {};
   property ownership_quota (owner: HACKER, flags: "") = 0;
-  property page_absent_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%N is not currently logged in.";
-  property page_echo_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Your message has been sent.";
-  property page_origin_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You sense that %n is looking for you in %l.";
+  property page_absent_msg (owner: #2, flags: "rc") = "%N is not currently logged in.";
+  property page_echo_msg (owner: #2, flags: "rc") = "Your message has been sent.";
+  property page_origin_msg (owner: #2, flags: "rc") = "You sense that %n is looking for you in %l.";
   property pagelen (owner: HACKER, flags: "r") = 0;
-  property paranoid (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property password (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = "impossible password to type";
-  property po (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "it";
-  property poc (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "It";
-  property pp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "its";
-  property ppc (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Its";
-  property pq (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "its";
-  property pqc (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Its";
-  property pr (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "itself";
-  property prc (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "Itself";
-  property previous_connection (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = 0;
-  property ps (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "it";
-  property psc (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "It";
+  property paranoid (owner: #2, flags: "rc") = 0;
+  property password (owner: #2, flags: "") = "impossible password to type";
+  property po (owner: #2, flags: "rc") = "it";
+  property poc (owner: #2, flags: "rc") = "It";
+  property pp (owner: #2, flags: "rc") = "its";
+  property ppc (owner: #2, flags: "rc") = "Its";
+  property pq (owner: #2, flags: "rc") = "its";
+  property pqc (owner: #2, flags: "rc") = "Its";
+  property pr (owner: #2, flags: "rc") = "itself";
+  property prc (owner: #2, flags: "rc") = "Itself";
+  property previous_connection (owner: #2, flags: "") = 0;
+  property ps (owner: #2, flags: "rc") = "it";
+  property psc (owner: #2, flags: "rc") = "It";
   property size_quota (owner: HACKER, flags: "") = {};
-  property verb_subs (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
+  property verb_subs (owner: #2, flags: "rc") = {};
 
   override aliases = {"generic player"};
   override description = "You see a player who should type '@describe me as ...'.";
   override object_size = {97774, 1084848672};
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this.home = this in {$no_one, $hacker, $generic_editor.owner} ? $nothing | $player_start;
@@ -77,7 +77,7 @@ object PLAYER
     endif
   endverb
 
-  verb confunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb confunc (this none this) owner: #2 flags: "rxd"
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this) && caller != #0)
       return E_PERM;
     endif
@@ -85,7 +85,7 @@ object PLAYER
     $news:check();
   endverb
 
-  verb disfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb disfunc (this none this) owner: #2 flags: "rxd"
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this) && caller != #0)
       return E_PERM;
     endif
@@ -95,7 +95,7 @@ object PLAYER
     return;
   endverb
 
-  verb initialize (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb initialize (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       this.help = 0;
       return pass(@args);
@@ -104,11 +104,11 @@ object PLAYER
     endif
   endverb
 
-  verb acceptable (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb acceptable (this none this) owner: #2 flags: "rxd"
     return !is_player(args[1]);
   endverb
 
-  verb my_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb my_huh (this none this) owner: #2 flags: "rxd"
     "Extra parsing of player commands.  Called by $command_utils:do_huh.";
     "This version of my_huh just handles features.";
     permissions = caller == this || $perm_utils:controls(caller_perms(), this) && $command_utils:validate_feature(@args) ? this | $no_one;
@@ -154,7 +154,7 @@ object PLAYER
     endfor
   endverb
 
-  verb last_huh (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb last_huh (this none this) owner: #2 flags: "rxd"
     ":last_huh(verb,args)  final attempt to parse a command...";
     set_task_perms(caller_perms());
     {verb, args} = args;
@@ -171,12 +171,12 @@ object PLAYER
     endif
   endverb
 
-  verb my_match_object (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb my_match_object (this none this) owner: #2 flags: "rxd"
     ":my_match_object(string [,location])";
     return $string_utils:match_object(@{@args, this.location}[1..2], this);
   endverb
 
-  verb tell_contents (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_contents (this none this) owner: #2 flags: "rxd"
     c = args[1];
     if (c)
       longear = {};
@@ -197,11 +197,11 @@ object PLAYER
     endif
   endverb
 
-  verb titlec (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb titlec (this none this) owner: #2 flags: "rxd"
     return `this.namec ! E_PROPNF => this:title()';
   endverb
 
-  verb notify (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify (this none this) owner: #2 flags: "rxd"
     line = args[1];
     if (!(this in connected_players()))
       "...drop it on the floor...";
@@ -265,7 +265,7 @@ object PLAYER
     endif
   endverb
 
-  verb notify_lines (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify_lines (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(caller_perms(), this) || caller == this || caller_perms() == this)
       set_task_perms(caller_perms());
       for line in (typeof(lines = args[1]) != LIST ? {lines} | lines)
@@ -276,7 +276,7 @@ object PLAYER
     endif
   endverb
 
-  verb linesplit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb linesplit (this none this) owner: #2 flags: "rxd"
     ":linesplit(line,len) => list of substrings of line";
     "used by :notify to split up long lines if .linelen>0";
     {line, len} = args;
@@ -297,7 +297,7 @@ object PLAYER
     return abs(this.linelen);
   endverb
 
-  verb "@more" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@more" (any none none) owner: #2 flags: "rd"
     if (player != this)
       "... somebody's being sneaky...";
       "... Can't do set_task_perms(player) since we need to be `this'...";
@@ -381,7 +381,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@pagelen*gth" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@pagelen*gth" (any none none) owner: #2 flags: "rd"
     "@pagelength number  -- sets page buffering to that many lines (or 0 to turn off page buffering)";
     if (player != this)
       "... somebody is being sneaky ...";
@@ -419,7 +419,7 @@ object PLAYER
     endif
   endverb
 
-  verb tell (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell (this none this) owner: #2 flags: "rxd"
     if (this.gaglist || this.paranoid)
       "Check the above first, default case, to save ticks.  Paranoid gaggers are cost an extra three or so ticks by this, probably a net savings.";
       if (this:gag_p())
@@ -435,7 +435,7 @@ object PLAYER
     pass(@args);
   endverb
 
-  verb gag_p (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb gag_p (this none this) owner: #2 flags: "rxd"
     if (player in this.gaglist)
       return 1;
     elseif (gag = this.gaglist)
@@ -462,7 +462,7 @@ object PLAYER
     return 0;
   endverb
 
-  verb set_gaglist (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_gaglist (this none this) owner: #2 flags: "rxd"
     ":set_gaglist(@newlist) => this.gaglist = newlist";
     if (!(caller == this || $perm_utils:controls(caller_perms(), this)))
       return E_PERM;
@@ -471,7 +471,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@gag*!" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@gag*!" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (player != this)
       player:notify("Permission denied.");
@@ -500,7 +500,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@listgag @gaglist @gagged" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@listgag @gaglist @gagged" (any none none) owner: #2 flags: "rxd"
     set_task_perms(valid(caller_perms()) ? caller_perms() | player);
     if (!this.gaglist)
       player:notify(tostr("You are ", callers() ? "no longer gagging anything." | "not gagging anything right now."));
@@ -522,7 +522,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@ungag" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@ungag" (any none none) owner: #2 flags: "rxd"
     if (player != this || (caller != this && !$perm_utils:controls(caller_perms(), this)))
       player:notify("Permission denied.");
     elseif (dobjstr == "")
@@ -549,7 +549,7 @@ object PLAYER
     endif
   endverb
 
-  verb whodunnit (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb whodunnit (this none this) owner: #2 flags: "rxd"
     {record, trust, mistrust} = args;
     s = {this, "???", this};
     for w in (record)
@@ -562,7 +562,7 @@ object PLAYER
     return s;
   endverb
 
-  verb "@ch*eck-full" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@ch*eck-full" (any any any) owner: #2 flags: "rd"
     responsible = $paranoid_db:get_data(this);
     if (length(verb) <= 6)
       "@check, not @check-full";
@@ -627,7 +627,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@paranoid" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@paranoid" (any any any) owner: #2 flags: "rd"
     if (args == {} || (typ = args[1]) == "")
       $paranoid_db:set_kept_lines(this, 10);
       this.paranoid = 1;
@@ -651,7 +651,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@sw*eep" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@sw*eep" (none none none) owner: #2 flags: "rd"
     buggers = 1;
     found_listener = 0;
     here = this.location;
@@ -690,12 +690,12 @@ object PLAYER
     endif
   endverb
 
-  verb "wh*isper" (any at this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "wh*isper" (any at this) owner: #2 flags: "rxd"
     this:tell(player.name, " whispers, \"", dobjstr, "\"");
     player:tell("You whisper, \"", dobjstr, "\" to ", this.name, ".");
   endverb
 
-  verb page (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb page (any any any) owner: #2 flags: "rxd"
     nargs = length(args);
     if (nargs < 1)
       player:notify(tostr("Usage: ", verb, " <player> [with <message>]"));
@@ -731,7 +731,7 @@ object PLAYER
     endif
   endverb
 
-  verb receive_page (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb receive_page (this none this) owner: #2 flags: "rxd"
     "called by $player:page.  Two args, the page header and the text, all pre-processed by the page command.  Could be extended to provide haven abilities, multiline pages, etc.  Indeed, at the moment it just does :tell_lines, so we already do have multiline pages, if someone wants to take advantage of it.";
     "Return codes:";
     "  1:  page was received";
@@ -751,7 +751,7 @@ object PLAYER
     return (msg = `this.(verb) ! ANY') ? $string_utils:pronoun_sub(this.(verb), this) | "";
   endverb
 
-  verb "i inv*entory" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "i inv*entory" (none none none) owner: #2 flags: "rd"
     if (c = player:contents())
       this:tell_contents(c);
     else
@@ -759,7 +759,7 @@ object PLAYER
     endif
   endverb
 
-  verb look_self (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb look_self (this none this) owner: #2 flags: "rxd"
     player:tell(this:titlec());
     pass();
     if (!(this in connected_players()))
@@ -775,7 +775,7 @@ object PLAYER
     endif
   endverb
 
-  verb home (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb home (none none none) owner: #2 flags: "rd"
     start = this.location;
     if (start == this.home)
       player:tell("You're already home!");
@@ -812,7 +812,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@sethome" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@sethome" (none none none) owner: #2 flags: "rd"
     set_task_perms(this);
     here = this.location;
     if (!$perm_utils:controls(player, player))
@@ -827,12 +827,12 @@ object PLAYER
     endif
   endverb
 
-  verb "g*et take" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "g*et take" (this none none) owner: #2 flags: "rxd"
     player:tell("This is not a pick-up joint!");
     this:tell(player.name, " tried to pick you up.");
   endverb
 
-  verb "@move @teleport" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@move @teleport" (any at any) owner: #2 flags: "rxd"
     "'@move <object> to <place>' - Teleport an object. Example: '@move trash to #11' to move trash to the closet.";
     set_task_perms(caller == this ? this | $no_one);
     dobj = this:my_match_object(dobjstr);
@@ -876,7 +876,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@eject @eject! @eject!!" (any from any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@eject @eject! @eject!!" (any from any) owner: #2 flags: "rd"
     set_task_perms(player);
     if (iobjstr == "here")
       iobj = player.location;
@@ -911,7 +911,7 @@ object PLAYER
     iobj:announce_all_but({player, dobj}, $object_utils:has_callable_verb(iobj, "oejection_msg") ? iobj:oejection_msg() | $room:oejection_msg());
   endverb
 
-  verb "where*is @where*is" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "where*is @where*is" (any any any) owner: #2 flags: "rxd"
     if (!args)
       them = connected_players();
     else
@@ -932,7 +932,7 @@ object PLAYER
     endfor
   endverb
 
-  verb "@who" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@who" (any any any) owner: #2 flags: "rxd"
     if (caller != player)
       return E_PERM;
     endif
@@ -946,7 +946,7 @@ object PLAYER
     $code_utils:show_who_listing(plyrs);
   endverb
 
-  verb "@wizards" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@wizards" (any none none) owner: #2 flags: "rxd"
     "@wizards [all]";
     if (caller != player)
       return E_PERM;
@@ -958,7 +958,7 @@ object PLAYER
     endif
   endverb
 
-  verb "?* help info*rmation @help" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "?* help info*rmation @help" (any any any) owner: #2 flags: "rxd"
     set_task_perms(callers() ? caller_perms() | player);
     "...this code explicitly relies on being !d in several places...";
     if (index(verb, "?") != 1 || length(verb) <= 1)
@@ -1008,7 +1008,7 @@ object PLAYER
     endif
   endverb
 
-  verb display_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_option (this none this) owner: #2 flags: "rxd"
     ":display_option(name) => returns the value of the specified @display option";
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       return $display_options:get(this.display_options, args[1]);
@@ -1017,7 +1017,7 @@ object PLAYER
     endif
   endverb
 
-  verb edit_option (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb edit_option (this none this) owner: #2 flags: "rxd"
     ":edit_option(name) => returns the value of the specified edit option";
     if (caller == this || ($object_utils:isa(caller, $generic_editor) || $perm_utils:controls(caller_perms(), this)))
       return $edit_options:get(this.edit_options, args[1]);
@@ -1026,7 +1026,7 @@ object PLAYER
     endif
   endverb
 
-  verb "set_mail_option set_edit_option set_display_option" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "set_mail_option set_edit_option set_display_option" (this none this) owner: #2 flags: "rxd"
     ":set_edit_option(oname,value)";
     ":set_display_option(oname,value)";
     ":set_mail_option(oname,value)";
@@ -1050,7 +1050,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@mailo*ptions @mail-o*ptions @edito*ptions @edit-o*ptions @displayo*ptions @display-o*ptions" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@mailo*ptions @mail-o*ptions @edito*ptions @edit-o*ptions @displayo*ptions @display-o*ptions" (any any any) owner: #2 flags: "rd"
     "@<what>-option <option> [is] <value>   sets <option> to <value>";
     "@<what>-option <option>=<value>        sets <option> to <value>";
     "@<what>-option +<option>     sets <option>   (usually equiv. to <option>=1";
@@ -1082,7 +1082,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_name (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_name (this none this) owner: #2 flags: "rxd"
     "set_name(newname) attempts to change this.name to newname";
     "  => E_PERM   if you don't own this";
     "  => E_INVARG if the name is already taken or prohibited for some reason";
@@ -1112,7 +1112,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_aliases (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_aliases (this none this) owner: #2 flags: "rxd"
     "set_aliases(alias_list)";
     "For changing player aliases, we check to make sure that none of the aliases match existing player names/aliases.  Aliases containing spaces are not entered in the $player_db and so are not subject to this restriction ($string_utils:match_player will not match on them, however, so they only match if used in the immediate room, e.g., with match_object() or somesuch).";
     "Also we make sure that the .name is included in the .alias list.  In any situation where .name and .aliases are both being changed, do the name change first.";
@@ -1158,7 +1158,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@rename*#" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rename*#" (any at any) owner: #2 flags: "rd"
     if (player != caller || player != this)
       return;
     endif
@@ -1253,7 +1253,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@addalias*# @add-alias*#" (any at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@addalias*# @add-alias*#" (any at any) owner: #2 flags: "rd"
     "Syntax: @addalias <alias>[,...,<alias>] to <object>";
     "        @addalias <alias>[,...,<alias>] to <object>:<verb>";
     "";
@@ -1378,7 +1378,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@rmalias*# @rm-alias*#" (any from any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@rmalias*# @rm-alias*#" (any from any) owner: #2 flags: "rd"
     "Syntax: @rmalias <alias>[,...,<alias>] from <object>";
     "        @rmalias <alias>[,...,<alias>] from <object>:<verb>";
     "";
@@ -1482,7 +1482,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@desc*ribe" (any as any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@desc*ribe" (any as any) owner: #2 flags: "rd"
     set_task_perms(player);
     dobj = player:my_match_object(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
@@ -1494,7 +1494,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@mess*ages" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@mess*ages" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (dobjstr == "")
       player:notify(tostr("Usage:  ", verb, " <object>"));
@@ -1538,7 +1538,7 @@ object PLAYER
     $note_editor:invoke(dobjstr, verb);
   endverb
 
-  verb "@last-c*onnection" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@last-c*onnection" (any none none) owner: #2 flags: "rxd"
     "@last-c           reports when and from where you last connected.";
     "@last-c all       adds the 10 most recent places you connected from.";
     "@last-c confunc   is like `@last-c' but is silent on first login.";
@@ -1569,7 +1569,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_gender (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_gender (this none this) owner: #2 flags: "rxd"
     "set_gender(newgender) attempts to change this.gender to newgender";
     "  => E_PERM   if you don't own this or aren't its parent";
     "  => Other return values as from $gender_utils:set.";
@@ -1582,7 +1582,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@gender" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@gender" (any none none) owner: #2 flags: "rd"
     set_task_perms(valid(caller_perms()) ? caller_perms() | player);
     if (!args)
       player:notify(tostr("Your gender is currently ", this.gender, "."));
@@ -1602,7 +1602,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_brief (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_brief (this none this) owner: #2 flags: "rxd"
     "set_brief(value)";
     "set_brief(value, anything)";
     "If <anything> is given, add value to the current value; otherwise, just set the value.";
@@ -1617,7 +1617,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@mode" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@mode" (any any any) owner: #2 flags: "rd"
     "@mode <mode>";
     "Current modes are brief and verbose.";
     "General verb for setting player `modes'.";
@@ -1643,7 +1643,7 @@ object PLAYER
     return 1;
   endverb
 
-  verb "@exam*ine" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@exam*ine" (any none none) owner: #2 flags: "rxd"
     "This verb should probably go away once 'examine' is in place.";
     if (dobjstr == "")
       player:notify(tostr("Usage:  ", verb, " <object>"));
@@ -1751,7 +1751,7 @@ object PLAYER
     endif
   endverb
 
-  verb "exam*ine" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "exam*ine" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     if (!dobjstr)
       player:notify(tostr("Usage:  ", verb, " <object>"));
@@ -1826,7 +1826,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@add-feature @addfeature" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@add-feature @addfeature" (any none none) owner: #2 flags: "rd"
     "Usage:";
     "  @add-feature";
     "  @add-feature <feature object>";
@@ -1862,7 +1862,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@remove-feature @rmfeature" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@remove-feature @rmfeature" (any none none) owner: #2 flags: "rd"
     "Usage:  @remove-feature <feature object>";
     "Remove an object from your .features list.";
     set_task_perms(player);
@@ -1884,7 +1884,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@features" (any for any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@features" (any for any) owner: #2 flags: "rxd"
     "Usage:  @features [<name>] for <player>";
     "List the feature objects matching <name> used by <player>.";
     if (!iobjstr)
@@ -1925,7 +1925,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@features" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@features" (any none none) owner: #2 flags: "rd"
     "Usage:  @features [<name>]";
     "List the feature objects matching <name> used by player.";
     iobjstr = player.name;
@@ -1993,22 +1993,22 @@ object PLAYER
     player:notify(tostr($network.MOO_name, " has been up for ", $time_utils:english_time(time() - $last_restart_time, $last_restart_time), "."));
   endverb
 
-  verb "@quit" (none none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@quit" (none none none) owner: #2 flags: "rd"
     boot_player(player);
     "-- argh, let the player decide; #3:disfunc() takes care of this --Rog";
     "player:moveto(player.home)";
   endverb
 
-  verb examine_commands_ok (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_commands_ok (this none this) owner: #2 flags: "rxd"
     return this == args[1];
   endverb
 
-  verb is_listening (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb is_listening (this none this) owner: #2 flags: "rxd"
     "return true if player is active.";
     return typeof(`idle_seconds(this) ! ANY') != ERR;
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     if (args[1] == #-1)
       return E_INVARG;
       this:notify("You are now in #-1, The Void.  Type `home' to get back.");
@@ -2017,7 +2017,7 @@ object PLAYER
     pass(@args);
   endverb
 
-  verb "announce*_all_but" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "announce*_all_but" (this none this) owner: #2 flags: "rxd"
     return this.location:(verb)(@args);
     "temporarily let player:announce be noisy to player";
     if (verb == "announce_all_but")
@@ -2035,7 +2035,7 @@ object PLAYER
     return this.linelen > 0;
   endverb
 
-  verb "@set-note-string @set-note-text" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@set-note-string @set-note-text" (any none none) owner: #2 flags: "rd"
     "Usage:  @set-note-{string | text} {#xx | #xx.pname}";
     "        ...lines of text...";
     "        .";
@@ -2077,7 +2077,7 @@ object PLAYER
     endif
   endverb
 
-  verb verb_sub (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb verb_sub (this none this) owner: #2 flags: "rxd"
     text = args[1];
     if (a = `$list_utils:assoc(text, this.verb_subs) ! ANY')
       return a[2];
@@ -2086,7 +2086,7 @@ object PLAYER
     endif
   endverb
 
-  verb ownership_quota (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb ownership_quota (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(caller_perms(), this))
       return this.(verb);
     else
@@ -2094,7 +2094,7 @@ object PLAYER
     endif
   endverb
 
-  verb tell_lines (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_lines (this none this) owner: #2 flags: "rxd"
     lines = args[1];
     if (typeof(lines) != LIST)
       lines = {lines};
@@ -2115,7 +2115,7 @@ object PLAYER
     this:notify_lines(lines);
   endverb
 
-  verb "@lastlog" (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "@lastlog" (any none none) owner: #2 flags: "rxd"
     "Copied from generic room (#3):@lastlog by Haakon (#2) Wed Dec 30 13:30:02 1992 PST";
     if (dobjstr != "")
       dobj = $string_utils:match_player(dobjstr);
@@ -2165,7 +2165,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_linelength (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_linelength (this none this) owner: #2 flags: "rxd"
     "Set linelength.  Linelength must be an integer >= 10.";
     "If wrap is currently off (i.e. linelength is less than 0), maintains sign.  That is, this function *takes* an absolute value, and coerces the sign to be appropriate.";
     "If you want to override the dwimming of wrap, pass in a second argument.";
@@ -2183,7 +2183,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_pagelength (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_pagelength (this none this) owner: #2 flags: "rxd"
     "Set pagelength. Must be an integer >= 5, or 0 to turn pagelength off.";
     "Returns E_PERM if you shouldn't be doing this, E_INVARG if it's too low, otherwise, what it got set to.";
     if (caller != this && !$perm_utils:controls(caller_perms(), this))
@@ -2202,7 +2202,7 @@ object PLAYER
     endif
   endverb
 
-  verb set_home (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_home (this none this) owner: #2 flags: "rxd"
     "set_home(newhome) attempts to change this.home to newhome";
     "E_TYPE   if newhome doesn't have a callable :accept_for_abode verb.";
     "E_INVARG if newhome won't accept you as a resident.";
@@ -2224,7 +2224,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@registerme" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@registerme" (any any any) owner: #2 flags: "rd"
     "@registerme as <email-address> -- enter a new email address for player";
     "   will change the database entry, assign a new password, and mail the new password to the player at the given email address.";
     if (player != this)
@@ -2292,7 +2292,7 @@ object PLAYER
     endif
   endverb
 
-  verb ctime (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb ctime (this none this) owner: #2 flags: "rxd"
     ":ctime([INT time]) => STR as the function.";
     "May be hacked by players and player-classes to reflect differences in time-zone.";
     return ctime(@args);
@@ -2331,7 +2331,7 @@ object PLAYER
     endif
   endverb
 
-  verb news (any none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb news (any none none) owner: #2 flags: "rxd"
     "Usage: news [contents] [articles]";
     "";
     "Common uses:";
@@ -2397,7 +2397,7 @@ object PLAYER
     endif
   endverb
 
-  verb erase_paranoid_data (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb erase_paranoid_data (this none this) owner: #2 flags: "rxd"
     if (!($perm_utils:controls(caller_perms(), this) || this == caller))
       return E_PERM;
     else
@@ -2405,7 +2405,7 @@ object PLAYER
     endif
   endverb
 
-  verb "@move-new" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@move-new" (any any any) owner: #2 flags: "rd"
     "'@move <object> to <place>' - Teleport an object. Example: '@move trash to #11' to move trash to the closet.";
     set_task_perms(caller == this ? this | $no_one);
     if (prepstr != "to" || !iobjstr)
@@ -2434,7 +2434,7 @@ object PLAYER
     this:teleport(dobj, iobj);
   endverb
 
-  verb notify_lines_suspended (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb notify_lines_suspended (this none this) owner: #2 flags: "rxd"
     if ($perm_utils:controls(caller_perms(), this) || caller == this || caller_perms() == this)
       set_task_perms(caller_perms());
       for line in (typeof(lines = args[1]) != LIST ? {lines} | lines)
@@ -2446,7 +2446,7 @@ object PLAYER
     endif
   endverb
 
-  verb _chparent (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb _chparent (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return chparent(@args);
   endverb
@@ -2461,7 +2461,7 @@ object PLAYER
     player:tell_lines($string_utils:columnize(dudes, 4, linelen));
   endverb
 
-  verb "@password" (any any any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb "@password" (any any any) owner: #2 flags: "rd"
     if (typeof(player.password) != STR)
       if (length(args) != 1)
         return player:notify(tostr("Usage:  ", verb, " <new-password>"));
@@ -2493,7 +2493,7 @@ object PLAYER
     player:notify("New password set.");
   endverb
 
-  verb recycle (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb recycle (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       pass(@args);
       features = this.features;
@@ -2512,7 +2512,7 @@ object PLAYER
     endif
   endverb
 
-  verb gc_gaglist (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb gc_gaglist (this none this) owner: #2 flags: "rxd"
     caller == this || $perm_utils:controls(caller_perms(), this) || raise(E_PERM);
     if (g = this.gaglist)
       recycler = $recycler;
@@ -2525,17 +2525,17 @@ object PLAYER
     endif
   endverb
 
-  verb email_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb email_address (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return this.email_address;
   endverb
 
-  verb set_email_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_email_address (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     this.email_address = args[1];
   endverb
 
-  verb reconfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb reconfunc (this none this) owner: #2 flags: "rxd"
     if (valid(cp = caller_perms()) && caller != this && !$perm_utils:controls(cp, this) && caller != $sysobj)
       return E_PERM;
     endif

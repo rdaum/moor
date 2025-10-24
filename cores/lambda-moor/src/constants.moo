@@ -1,6 +1,5 @@
 define SYSOBJ = #0;
 define ROOT_CLASS = #1;
-define BYTE_QUOTA_UTILS_WORKING = #2;
 define ROOM = #3;
 define BUILDER = #4;
 define THING = #5;

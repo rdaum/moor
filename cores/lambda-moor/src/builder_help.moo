@@ -165,7 +165,7 @@ object BUILDER_HELP
     "    @dig up,u to #7164",
     "creates an exit leading from the player's current room to #7164, which must be an existing room."
   };
-  property "@dump" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property "@dump" (owner: #2, flags: "r") = {
     "Syntax:  @dump <object> [with [id=#<id>] [noprops] [noverbs] [create]]",
     "",
     "This spills out all the properties and verbs on an object, calling suspend at appropriate intervals.",
@@ -321,7 +321,7 @@ object BUILDER_HELP
     "",
     "Checks that all the objects in your .owned_objects property are actually owned by you, and effects repairs if needed.  See help @audit for more information."
   };
-  property audit_bytes (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property audit_bytes (owner: #2, flags: "r") = {
     "Usage:  @build-option [+|-|!]audit_bytes",
     "Lets you see the actual bytes of small objects in @audit and @prospectus.  Ignored if `audit_float' is turned on.",
     "",
@@ -330,7 +330,7 @@ object BUILDER_HELP
     "",
     "Default: -audit_bytes"
   };
-  property audit_float (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property audit_float (owner: #2, flags: "r") = {
     "Usage: @build-option [+|-|!]audit_float",
     "Lets you see object sizes in @audit and @prospectus as floating point numbers to one decimal place.",
     "",
@@ -348,7 +348,7 @@ object BUILDER_HELP
     "descriptions -- setting the names and descriptive texts for new objects",
     "locking -- controlling use of and access to your objects"
   };
-  property common_quota (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = {
+  property common_quota (owner: #2, flags: "r") = {
     "Syntax:  @quota",
     "",
     "Each player has a limit as to how many objects that player may create, called their 'quota'.  Every object they create lowers the quota by one and every object they recycle increases it by one.  If the quota goes to zero, then that player may not create any more objects (unless, of course, they recycle some first).",
@@ -595,7 +595,7 @@ object BUILDER_HELP
   override index_cache = {"builder-index"};
   override object_size = {39390, 1084848672};
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       raise(E_PERM);
     endif

@@ -125,7 +125,7 @@ object YOU
     return msg;
   endverb
 
-  verb say_action_reflexive (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb say_action_reflexive (this none this) owner: #2 flags: "rx"
     "$you:say_action(message [,who [,thing, [,where [, excluding-whom]]]])";
     "announce 'message' with pronoun substitution as if it were just ";
     "  where:announce_all_but(excluding-whom, ";

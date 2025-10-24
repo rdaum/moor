@@ -7,7 +7,7 @@ object REGISTRATION_DB
   property prune_progress (owner: HACKER, flags: "rc") = "aaa";
   property prune_stop (owner: HACKER, flags: "rc") = "zzz";
   property prune_task (owner: HACKER, flags: "rc") = 0;
-  property registrar (owner: HACKER, flags: "rc") = BYTE_QUOTA_UTILS_WORKING;
+  property registrar (owner: HACKER, flags: "rc") = #2;
   property total_pruned_characters (owner: HACKER, flags: "rc") = 0;
   property total_pruned_people (owner: HACKER, flags: "rc") = 0;
 
@@ -44,7 +44,7 @@ object REGISTRATION_DB
     endif
   endverb
 
-  verb suspicious_address (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb suspicious_address (this none this) owner: #2 flags: "rxd"
     "suspicious(address [,who])";
     "Determine whether an address appears to be another player in disguise.";
     "returns a list of similar addresses.";
@@ -93,7 +93,7 @@ object REGISTRATION_DB
     return others;
   endverb
 
-  verb suspicious_userid (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb suspicious_userid (this none this) owner: #2 flags: "rxd"
     "suspicious_userid(userid)";
     "Return yes if userid is root or postmaster or something like that.";
     if ($object_utils:has_property(#0, "local") && $object_utils:has_property($local, "suspicious_userids"))
@@ -105,7 +105,7 @@ object REGISTRATION_DB
     "Thinking about ruling out hyphenated names, on the grounds that they're probably mailing lists.";
   endverb
 
-  verb describe_registration (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb describe_registration (this none this) owner: #2 flags: "rxd"
     "Returns a list of strings describing the registration data for an email address.  Args[1] should be the result of this:find.";
     set_task_perms(caller_perms());
     result = {};
@@ -117,7 +117,7 @@ object REGISTRATION_DB
     return result;
   endverb
 
-  verb prune (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prune (this none this) owner: #2 flags: "rxd"
     "Carefully loop through the db and delete items associated with reaped objects.  If that results in no objects remaining for a username, delete that username.";
     "Attempt to keep memory usage down by only asking for a small number of items at a time.  Should probably have some arguments to control this.";
     if (!caller_perms().wizard)
@@ -163,7 +163,7 @@ object REGISTRATION_DB
     player:tell("Prune stopped at ", toliteral(this.prune_progress));
   endverb
 
-  verb report_prune_progress (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb report_prune_progress (this none this) owner: #2 flags: "rxd"
     player:tell("Prune is up to ", toliteral(this.prune_progress), ".");
     mine = 0;
     alphalen = length(this.alphabet);
@@ -191,7 +191,7 @@ object REGISTRATION_DB
     endif
   endverb
 
-  verb prune_reset (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prune_reset (this none this) owner: #2 flags: "rxd"
     this:report_prune_progress();
     player:tell("Resetting...");
     this.prune_progress = "aaa";
@@ -201,7 +201,7 @@ object REGISTRATION_DB
     this.prune_task = 0;
   endverb
 
-  verb search (this for any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb search (this for any) owner: #2 flags: "rxd"
     who = caller_perms();
     if (who != #-1 && !(who == player || caller == this) || !(who.wizard || who in $local.registrar_pet_core.members))
       raise(E_PERM);

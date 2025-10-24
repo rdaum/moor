@@ -1,12 +1,12 @@
 object HTTP
   name: "HTTP Server"
   parent: THING
-  location: BYTE_QUOTA_UTILS_WORKING
-  owner: BYTE_QUOTA_UTILS_WORKING
+  location: #2
+  owner: #2
 
-  property alpha (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  property guests (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {};
-  property help_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = {
+  property alpha (owner: #2, flags: "rc") = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  property guests (owner: #2, flags: "rc") = {};
+  property help_msg (owner: #2, flags: "rc") = {
     "HTTP Server",
     "-----------",
     "",
@@ -20,13 +20,13 @@ object HTTP
     "Additionally, your object can call http:tell_key(player). This will generate a special keyed URL for that player, so when your :html() verb is called, the built-in variable PLAYER will be set to the person who was issued the key.",
     "This verb tells the player their custom key directly."
   };
-  property master_key (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "902894a52d08e5cf3c45812a321cac36";
-  property nonalpha (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+  property master_key (owner: #2, flags: "rc") = "902894a52d08e5cf3c45812a321cac36";
+  property nonalpha (owner: #2, flags: "rc") = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
   override aliases = {"HTTP Server"};
   override object_size = {7309, 1529542623};
 
-  verb handle_connection (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb handle_connection (this none this) owner: #2 flags: "rxd"
     "HTTP Server";
     "";
     "This gets called by the #0:do_login_command";
@@ -132,7 +132,7 @@ object HTTP
     return;
   endverb
 
-  verb tell_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb tell_key (this none this) owner: #2 flags: "rxd"
     "This makes a URL key for a specific object and player.";
     "With the keyed URL, the PLAYER will be set correctly when :HTML() is called";
     key = this:gen_key(player, caller);
@@ -140,7 +140,7 @@ object HTTP
     notify(player, "http://" + $network.site + ":" + $network.port + "/" + tostr(caller)[2..$] + "/" + tostr(player)[2..$] + "/" + key + "/");
   endverb
 
-  verb gen_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb gen_key (this none this) owner: #2 flags: "rxd"
     if (caller != this)
       return E_PERM;
     endif

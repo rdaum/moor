@@ -7,7 +7,7 @@ object SITE_DB
     "ocal",
     "",
     {"localdomain", "localhost.localdomain"},
-    {{"localhost"}, {BYTE_QUOTA_UTILS_WORKING}}
+    {{"localhost"}, {#2}}
   };
   property alphabet (owner: HACKER, flags: "rc") = "abcdefghijklmnopqrstuvwxy0123456789_z";
   property domain (owner: HACKER, flags: "r") = "localdomain";
@@ -73,7 +73,7 @@ object SITE_DB
     endif
   endverb
 
-  verb load (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb load (this none this) owner: #2 flags: "rxd"
     ":load([start]) -- reloads site_db with the connection places of all players.";
     "This routine calls suspend() if it runs out of time.";
     "WIZARDLY";
@@ -124,7 +124,7 @@ object SITE_DB
     return match(args[1], "[0-9]+%.[0-9]+%.[0-9]+%.[0-9]+");
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       pass(@args);
       this:clearall();
@@ -133,7 +133,7 @@ object SITE_DB
     endif
   endverb
 
-  verb prune_alpha (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prune_alpha (this none this) owner: #2 flags: "rxd"
     "Carefully loop through the db and delete items associated with !valid and !is_player objects.  If that results in no objects remaining for a site, delete that site.";
     "Attempt to keep memory usage down by only asking for a small number of items at a time.  Should probably have some arguments to control this.";
     "Another thing it should do is be clever about string typed items.  (What did I mean by this?)";
@@ -196,7 +196,7 @@ object SITE_DB
     player:tell("Prune stopped at ", toliteral(this.prune_progress));
   endverb
 
-  verb report_prune_progress (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb report_prune_progress (this none this) owner: #2 flags: "rxd"
     player:tell("Prune is up to ", toliteral(this.prune_progress), ".");
     mine = 0;
     if (typeof(this.prune_progress) == STR)
@@ -224,7 +224,7 @@ object SITE_DB
     endif
   endverb
 
-  verb prune_fixup (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prune_fixup (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       raise(E_PERM);
     endif
@@ -263,7 +263,7 @@ object SITE_DB
     endif
   endverb
 
-  verb prune_numeric (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prune_numeric (this none this) owner: #2 flags: "rxd"
     "Carefully loop through the db and delete items associated with !valid and !is_player objects.  If that results in no objects remaining for a site, delete that site.";
     "Attempt to keep memory usage down by only asking for a small number of items at a time.  Should probably have some arguments to control this.";
     "Another thing it should do is be clever about string typed items.";
@@ -309,7 +309,7 @@ object SITE_DB
     player:tell("Prune stopped at ", toliteral(this.prune_progress));
   endverb
 
-  verb schedule_prune (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb schedule_prune (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       return E_PERM;
     endif
@@ -335,7 +335,7 @@ object SITE_DB
     endfork
   endverb
 
-  verb prune_reset (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb prune_reset (this none this) owner: #2 flags: "rxd"
     if (!caller_perms().wizard)
       raise(E_PERM);
     endif

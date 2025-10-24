@@ -1,17 +1,17 @@
 object FTP
   name: "FTP utilities"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   readable: true
 
-  property connections (owner: BYTE_QUOTA_UTILS_WORKING, flags: "") = {};
-  property port (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 21;
-  property trusted (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 1;
+  property connections (owner: #2, flags: "") = {};
+  property port (owner: #2, flags: "rc") = 21;
+  property trusted (owner: #2, flags: "rc") = 1;
 
   override aliases = {"FTP utilities"};
   override object_size = {9099, 1084848672};
 
-  verb open (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb open (this none this) owner: #2 flags: "rxd"
     if (!this:trusted(caller_perms()))
       return E_PERM;
     endif
@@ -29,7 +29,7 @@ object FTP
     return conn;
   endverb
 
-  verb close (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb close (this none this) owner: #2 flags: "rxd"
     conn = args[1];
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -44,7 +44,7 @@ object FTP
     return info[3];
   endverb
 
-  verb do_command (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_command (this none this) owner: #2 flags: "rxd"
     {conn, cmd, ?nowait = 0} = args;
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -53,7 +53,7 @@ object FTP
     return nowait ? 1 | this:wait_for_response(conn);
   endverb
 
-  verb wait_for_response (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb wait_for_response (this none this) owner: #2 flags: "rxd"
     {conn, ?first_only = 0} = args;
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -79,11 +79,11 @@ object FTP
     endif
   endverb
 
-  verb controls (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb controls (this none this) owner: #2 flags: "rxd"
     return args[1].wizard || {@$list_utils:assoc(args[2], this.connections), 0, 0}[2] == args[1];
   endverb
 
-  verb get_messages (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_messages (this none this) owner: #2 flags: "rxd"
     {conn, ?keep = 0} = args;
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -96,7 +96,7 @@ object FTP
     return messages;
   endverb
 
-  verb open_data (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb open_data (this none this) owner: #2 flags: "rxd"
     conn = args[1];
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -123,7 +123,7 @@ object FTP
     return 1;
   endverb
 
-  verb get_data (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_data (this none this) owner: #2 flags: "rxd"
     {conn, ?nowait = 0} = args;
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -135,7 +135,7 @@ object FTP
     return this.connections[i][5];
   endverb
 
-  verb put_data (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb put_data (this none this) owner: #2 flags: "rxd"
     {conn, data} = args;
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -154,11 +154,11 @@ object FTP
     endif
   endverb
 
-  verb trusted (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb trusted (this none this) owner: #2 flags: "rxd"
     return args[1].wizard || (typeof(this.trusted) == LIST ? args[1] in this.trusted | this.trusted);
   endverb
 
-  verb listen (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb listen (this none this) owner: #2 flags: "rxd"
     if (caller != this)
       return E_PERM;
     endif
@@ -175,7 +175,7 @@ object FTP
     endif
   endverb
 
-  verb close_data (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb close_data (this none this) owner: #2 flags: "rxd"
     conn = args[1];
     if (!this:controls(caller_perms(), conn))
       return E_PERM;
@@ -190,7 +190,7 @@ object FTP
     endif
   endverb
 
-  verb get (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get (this none this) owner: #2 flags: "rxd"
     ":get(host, username, password, filename)";
     if (!this:trusted(caller_perms()))
       return E_PERM;
@@ -204,7 +204,7 @@ object FTP
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     if (caller_perms().wizard)
       this.connections = {};
       this.trusted = 1;
@@ -212,7 +212,7 @@ object FTP
     endif
   endverb
 
-  verb put (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb put (this none this) owner: #2 flags: "rxd"
     ":put(host, username, password, filename, data)";
     if (!this:trusted(caller_perms()))
       return E_PERM;
@@ -226,7 +226,7 @@ object FTP
     endif
   endverb
 
-  verb data_connection (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb data_connection (this none this) owner: #2 flags: "rxd"
     "return the data connection associated with the control connection args[1]";
     conn = args[1];
     i = $list_utils:iassoc(conn, this.connections);

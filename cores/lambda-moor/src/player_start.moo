@@ -7,7 +7,7 @@ object PLAYER_START
   override description = "This is all there is right now.";
   override object_size = {4407, 1084848672};
 
-  verb disfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb disfunc (this none this) owner: #2 flags: "rxd"
     "Copied from The Coat Closet (#11):disfunc by Haakon (#2) Mon May  8 10:41:04 1995 PDT";
     if ((cp = caller_perms()) == (who = args[1]) || $perm_utils:controls(cp, who) || caller == this)
       "need the first check since guests don't control themselves";
@@ -20,7 +20,7 @@ object PLAYER_START
     endif
   endverb
 
-  verb enterfunc (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb enterfunc (this none this) owner: #2 flags: "rxd"
     "Copied from The Coat Closet (#11):enterfunc by Haakon (#2) Mon May  8 10:41:38 1995 PDT";
     who = args[1];
     if ($limbo:acceptable(who))
@@ -43,7 +43,7 @@ object PLAYER_START
     return m;
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb init_for_core (this none this) owner: #2 flags: "rxd"
     "Copied from The Coat Closet (#11):init_for_core by Nosredna (#2487) Mon May  8 10:42:52 1995 PDT";
     if (!caller_perms().wizard)
       return E_PERM;
@@ -69,7 +69,7 @@ object PLAYER_START
     pass(@args);
   endverb
 
-  verb keep_clean (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb keep_clean (this none this) owner: #2 flags: "rxd"
     "Copied from The Coat Closet (#11):keep_clean by Haakon (#2) Mon May  8 10:47:08 1995 PDT";
     if ($perm_utils:controls(caller_perms(), this))
       junk = {};

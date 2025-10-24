@@ -1,14 +1,14 @@
 object LETTER
   name: "generic letter"
   parent: NOTE
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property burn_failed_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%T might be damp.  In any case, %[tps] won't burn.";
-  property burn_succeeded_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "%T burns with a smokeless flame and leaves no ash.";
-  property oburn_failed_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = 0;
-  property oburn_succeeded_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "stares at %t; %[tps] bursts into flame and disappears, leaving no ash.";
+  property burn_failed_msg (owner: #2, flags: "rc") = "%T might be damp.  In any case, %[tps] won't burn.";
+  property burn_succeeded_msg (owner: #2, flags: "rc") = "%T burns with a smokeless flame and leaves no ash.";
+  property oburn_failed_msg (owner: #2, flags: "rc") = 0;
+  property oburn_succeeded_msg (owner: #2, flags: "rc") = "stares at %t; %[tps] bursts into flame and disappears, leaving no ash.";
 
   override aliases (owner: HACKER, flags: "rc") = {"generic letter"};
   override description (owner: HACKER, flags: "rc") = "Some writing on the letter explains that you should 'read letter', and when you've finished, 'burn letter'.";
@@ -20,7 +20,7 @@ object LETTER
   override take_failed_msg (owner: HACKER, flags: "rc") = "This is a private letter.";
   override take_succeeded_msg (owner: HACKER, flags: "rc");
 
-  verb burn (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rd"
+  verb burn (this none none) owner: #2 flags: "rd"
     who = valid(caller_perms()) ? caller_perms() | player;
     if ($perm_utils:controls(who, this) || this:is_readable_by(who))
       result = this:do_burn();
@@ -33,11 +33,11 @@ object LETTER
     endif
   endverb
 
-  verb "burn_succeeded_msg oburn_succeeded_msg burn_failed_msg oburn_failed_msg" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "burn_succeeded_msg oburn_succeeded_msg burn_failed_msg oburn_failed_msg" (this none this) owner: #2 flags: "rxd"
     return (msg = this.(verb)) ? $string_utils:pronoun_sub(msg) | "";
   endverb
 
-  verb do_burn (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb do_burn (this none this) owner: #2 flags: "rxd"
     if (this != $letter && (caller == this || $perm_utils:controls(caller_perms(), this)))
       fork (0)
         $recycler:_recycle(this);

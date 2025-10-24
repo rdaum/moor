@@ -41,7 +41,7 @@ object PLAYER_DB
     "here"
   };
 
-  override " " = {"", "Hen", {"Wizard"}, {BYTE_QUOTA_UTILS_WORKING}};
+  override " " = {"", "Hen", {"Wizard"}, {#2}};
   override aliases = {"player_db", "plyrdb", "pdb"};
   override description = {
     "A database containing all player names and aliases.  ",
@@ -143,7 +143,7 @@ object PLAYER_DB
     endif
   endverb
 
-  verb suspend_restart (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb suspend_restart (this none this) owner: #2 flags: "rxd"
     "used during :load to do the usual out-of-time check.";
     "if someone makes a modification during the suspension (indicated by this.frozen being set to 2), we have to restart the entire load.";
     if (caller != this)
@@ -162,7 +162,7 @@ object PLAYER_DB
     endif
   endverb
 
-  verb why_bad_name (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb why_bad_name (this none this) owner: #2 flags: "rxd"
     ":why_bad_name(player, namespec) => Returns a message explaining why a player name change is invalid.  Stolen from APHiD's #15411:name_okay.";
     who = args[1];
     name = $building_utils:parse_names(args[2])[1];

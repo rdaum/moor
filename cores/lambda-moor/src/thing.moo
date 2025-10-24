@@ -1,23 +1,23 @@
 object THING
   name: "generic thing"
   parent: ROOT_CLASS
-  owner: BYTE_QUOTA_UTILS_WORKING
+  owner: #2
   fertile: true
   readable: true
 
-  property drop_failed_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You can't seem to drop %t here.";
-  property drop_succeeded_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You drop %t.";
-  property odrop_failed_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "tries to drop %t but fails!";
-  property odrop_succeeded_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "drops %t.";
-  property otake_failed_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "";
-  property otake_succeeded_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "picks up %t.";
-  property take_failed_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You can't pick that up.";
-  property take_succeeded_msg (owner: BYTE_QUOTA_UTILS_WORKING, flags: "rc") = "You take %t.";
+  property drop_failed_msg (owner: #2, flags: "rc") = "You can't seem to drop %t here.";
+  property drop_succeeded_msg (owner: #2, flags: "rc") = "You drop %t.";
+  property odrop_failed_msg (owner: #2, flags: "rc") = "tries to drop %t but fails!";
+  property odrop_succeeded_msg (owner: #2, flags: "rc") = "drops %t.";
+  property otake_failed_msg (owner: #2, flags: "rc") = "";
+  property otake_succeeded_msg (owner: #2, flags: "rc") = "picks up %t.";
+  property take_failed_msg (owner: #2, flags: "rc") = "You can't pick that up.";
+  property take_succeeded_msg (owner: #2, flags: "rc") = "You take %t.";
 
   override aliases = {"generic thing"};
   override object_size = {4787, 1084848672};
 
-  verb "g*et t*ake" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "g*et t*ake" (this none none) owner: #2 flags: "rxd"
     set_task_perms(callers() ? caller_perms() | player);
     if (this.location == player)
       player:tell("You already have that!");
@@ -39,7 +39,7 @@ object THING
     endif
   endverb
 
-  verb "d*rop th*row" (this none none) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "d*rop th*row" (this none none) owner: #2 flags: "rxd"
     set_task_perms(callers() ? caller_perms() | player);
     if (this.location != player)
       player:tell("You don't have that.");
@@ -61,7 +61,7 @@ object THING
     endif
   endverb
 
-  verb moveto (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb moveto (this none this) owner: #2 flags: "rxd"
     where = args[1];
     "if (!valid(where) || this:is_unlocked_for(where))";
     if (this:is_unlocked_for(where))
@@ -69,12 +69,12 @@ object THING
     endif
   endverb
 
-  verb "take_failed_msg take_succeeded_msg otake_failed_msg otake_succeeded_msg drop_failed_msg drop_succeeded_msg odrop_failed_msg odrop_succeeded_msg" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "take_failed_msg take_succeeded_msg otake_failed_msg otake_succeeded_msg drop_failed_msg drop_succeeded_msg odrop_failed_msg odrop_succeeded_msg" (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return $string_utils:pronoun_sub(this.(verb));
   endverb
 
-  verb "gi*ve ha*nd" (this at any) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "gi*ve ha*nd" (this at any) owner: #2 flags: "rxd"
     set_task_perms(callers() ? caller_perms() | player);
     if (this.location != player)
       player:tell("You don't have that!");
@@ -96,7 +96,7 @@ object THING
     endif
   endverb
 
-  verb examine_key (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb examine_key (this none this) owner: #2 flags: "rxd"
     "examine_key(examiner)";
     "return a list of strings to be told to the player, indicating what the key on this type of object means, and what this object's key is set to.";
     "the default will only tell the key to a wizard or this object's owner.";

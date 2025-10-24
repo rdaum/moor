@@ -27,7 +27,7 @@ object CONVERT_UTILS
   property are (owner: HACKER, flags: "r") = "100 m2";
   property arpentcan (owner: HACKER, flags: "r") = "27.52 mi";
   property arpentlin (owner: HACKER, flags: "r") = "191.835 ft";
-  property astronomicalunit (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "au";
+  property astronomicalunit (owner: #2, flags: "r") = "au";
   property atm (owner: HACKER, flags: "r") = "atmosphere";
   property atmosphere (owner: HACKER, flags: "r") = "1.01325 bar";
   property atomicmassunit (owner: HACKER, flags: "r") = "amu";
@@ -148,7 +148,7 @@ object CONVERT_UTILS
   property firkin (owner: HACKER, flags: "r") = "72 pint";
   property fldr (owner: HACKER, flags: "r") = "1|32 gill";
   property floz (owner: HACKER, flags: "r") = "1|4 gill";
-  property fluidounce (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "floz";
+  property fluidounce (owner: #2, flags: "r") = "floz";
   property foot (owner: HACKER, flags: "r") = "12 in";
   property footcandle (owner: HACKER, flags: "r") = "lumen/ft2";
   property footlambert (owner: HACKER, flags: "r") = "cd/pi ft2";
@@ -371,7 +371,7 @@ object CONVERT_UTILS
   property stoke (owner: HACKER, flags: "r") = "1 cm2/sec";
   property stone (owner: HACKER, flags: "r") = "14 lb";
   property tablespoon (owner: HACKER, flags: "r") = "4 fldr";
-  property tbsp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "tablespoon";
+  property tbsp (owner: #2, flags: "r") = "tablespoon";
   property teaspoon (owner: HACKER, flags: "r") = "1|3 tablespoon";
   property tesla (owner: HACKER, flags: "r") = "weber/m2";
   property thermie (owner: HACKER, flags: "r") = "1e6 cal";
@@ -381,7 +381,7 @@ object CONVERT_UTILS
   property tonne (owner: HACKER, flags: "r") = "1e6 gram";
   property torr (owner: HACKER, flags: "r") = "mm hg";
   property township (owner: HACKER, flags: "r") = "36 mi2";
-  property tsp (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "teaspoon";
+  property tsp (owner: #2, flags: "r") = "teaspoon";
   property tun (owner: HACKER, flags: "r") = "252 gal";
   property turn (owner: HACKER, flags: "r") = "2 pi radian";
   property us (owner: HACKER, flags: "r") = "microsec";

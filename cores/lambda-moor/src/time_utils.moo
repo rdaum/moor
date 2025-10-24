@@ -516,7 +516,7 @@ object TIME_UTILS
     return toint(time) - toint(current);
   endverb
 
-  verb rfc822_ctime (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb rfc822_ctime (this none this) owner: #2 flags: "rxd"
     "Just like ctime(), but rfc-822 compliant.  I hope.";
     c = $string_utils:Explode(ctime(@args));
     return tostr(c[1], ", ", c[3], " ", c[2], " ", c[5], " ", c[4], " ", c[6]);

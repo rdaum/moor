@@ -197,12 +197,11 @@ fn propname(pname: Symbol) -> String {
 fn extract_system_object_references(
     object_defs: &[ObjectDefinition],
 ) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
-    // Collect all potential constants from direct and nested properties
+    // Collect all potential constants from direct properties
     let mut all_candidates = Vec::new();
-    let mut visited = std::collections::HashSet::new();
 
     if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
-        collect_nested_constants(object_defs, sysobj, &[], &mut all_candidates, &mut visited);
+        collect_top_level_constants(sysobj, &mut all_candidates);
     }
 
     // Group candidates by object to handle multiple constants pointing to same object
@@ -275,33 +274,16 @@ struct ConstantCandidate {
     path_depth: usize,
 }
 
-fn collect_nested_constants(
-    object_defs: &[ObjectDefinition],
-    current_obj: &ObjectDefinition,
-    path: &[String],
+fn collect_top_level_constants(
+    sysobj: &ObjectDefinition,
     candidates: &mut Vec<ConstantCandidate>,
-    visited: &mut std::collections::HashSet<Obj>,
 ) {
-    // Prevent infinite recursion by checking if we've already visited this object
-    if visited.contains(&current_obj.oid) {
-        return;
-    }
-    visited.insert(current_obj.oid);
-
-    for pd in current_obj.property_definitions.iter() {
+    for pd in sysobj.property_definitions.iter() {
         if let Some(value) = pd.value.as_ref()
             && let Some(oid) = value.as_object()
         {
-            // Build the constant name from the path
-            let mut constant_parts = path.to_vec();
-            constant_parts.push(pd.name.to_string());
-
-            let constant_name = constant_parts.join("_").to_ascii_uppercase();
-            let file_name = if path.is_empty() {
-                pd.name.to_string()
-            } else {
-                format!("{}_{}", path.join("_"), pd.name)
-            };
+            let constant_name = pd.name.to_string().to_ascii_uppercase();
+            let file_name = pd.name.to_string();
 
             // Only add non-anonymous objects as constant candidates
             // Anonymous objects shouldn't have constants since they can't be referenced by name
@@ -310,21 +292,11 @@ fn collect_nested_constants(
                     obj: oid,
                     constant_name,
                     file_name,
-                    path_depth: path.len(),
+                    path_depth: 0,
                 });
-            }
-
-            // Recursively traverse nested object properties
-            if let Some(nested_obj) = object_defs.iter().find(|od| od.oid == oid) {
-                let mut new_path = path.to_vec();
-                new_path.push(pd.name.to_string());
-                collect_nested_constants(object_defs, nested_obj, &new_path, candidates, visited);
             }
         }
     }
-
-    // Remove from visited set when done to allow this object to be visited in different paths
-    visited.remove(&current_obj.oid);
 }
 
 fn generate_constants_file(
@@ -356,7 +328,7 @@ pub fn dump_object_definitions(
 ) -> Result<(), ObjectDumpError> {
     // Find #0 in the object_defs, and look at its properties to find $names for certain objects
     // we'll use those for filenames when we can
-    // TODO: this doesn't help with nested values
+    // We intentionally skip nested values to avoid assigning misleading constant names
     let (index_names, file_names) = extract_system_object_references(object_defs);
 
     // Separate anonymous objects from regular objects

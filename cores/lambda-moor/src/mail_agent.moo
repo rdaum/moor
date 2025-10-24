@@ -21,7 +21,7 @@ object MAIL_AGENT
     "replyto"
   };
   property "player_default_@mail" (owner: HACKER, flags: "rc") = "last:15";
-  property "player_default_@unsend" (owner: BYTE_QUOTA_UTILS_WORKING, flags: "r") = "last:1";
+  property "player_default_@unsend" (owner: #2, flags: "r") = "last:1";
   property player_expire_time (owner: HACKER, flags: "rc") = 2592000;
   property reserved_patterns (owner: HACKER, flags: "r") = {};
   property time_collisions (owner: HACKER, flags: "r") = {0, 0};
@@ -146,7 +146,7 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb raw_send (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb raw_send (this none this) owner: #2 flags: "rxd"
     "Copied from Mail Distribution Center (#6418):raw_send by Nosredna (#2487) Mon Feb 24 10:46:26 1997 PST";
     "WIZARDLY";
     "raw_send(text,rcpts,sender) -- does the actual sending of a message.  Assumes that text has already been formatted correctly.  Decides who to send it to and who wants to be notified about it and does so.";
@@ -456,7 +456,7 @@ object MAIL_AGENT
     return objects;
   endverb
 
-  verb display_seq_full (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_seq_full (this none this) owner: #2 flags: "rxd"
     ":display_seq_full(msg_seq[,preamble]) => {cur, last-read-date}";
     "This is the default message display routine.";
     "Prints entire messages on folder (caller) to player.  msg_seq is the handle returned by :parse_message_seq(...) and indicates which messages should be printed.  preamble, if given will precede the output of the message itself, in which case the message number will be substituted for \"%d\".  Returns the number of the final message in the sequence (which can be then used as the new current message number).";
@@ -474,7 +474,7 @@ object MAIL_AGENT
     return {cur, date};
   endverb
 
-  verb display_seq_headers (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb display_seq_headers (this none this) owner: #2 flags: "rxd"
     ":display_seq_headers(msg_seq[,cur[,last_read_date]])";
     "This is the default header display routine.";
     "Prints a list of headers of messages on caller to player.  msg_seq is the handle returned by caller:parse_message_seq(...).  cur is the player's current message.  last_read_date is the date of the last of the already-read messages.";
@@ -498,7 +498,7 @@ object MAIL_AGENT
     player:tell("----+");
   endverb
 
-  verb rm_message_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb rm_message_seq (this none this) owner: #2 flags: "rxd"
     ":rm_message_seq(msg_seq)  removes the given sequence of from folder (caller)";
     "...removed messages are saved in .messages_going for possible restoration.";
     set_task_perms(caller_perms());
@@ -530,7 +530,7 @@ object MAIL_AGENT
     return $seq_utils:tostr(nums);
   endverb
 
-  verb undo_rmm (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb undo_rmm (this none this) owner: #2 flags: "rxd"
     ":undo_rmm()  restores previously deleted messages in .messages_going to .messages.";
     set_task_perms(caller_perms());
     old = caller.messages;
@@ -561,7 +561,7 @@ object MAIL_AGENT
     return seq;
   endverb
 
-  verb "expunge_rmm list_rmm" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "expunge_rmm list_rmm" (this none this) owner: #2 flags: "rxd"
     ":list_rmm()    displays contents of .messages_going.";
     ":expunge_rmm() destroys contents of .messages_going once and for all.";
     "... both return the number of messages in .messages_going.";
@@ -608,7 +608,7 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb renumber (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb renumber (this none this) owner: #2 flags: "rxd"
     ":renumber([cur]) -- assumes caller is a $mail_recipient or a $player.";
     "...renumbers caller.messages, doing a suspend() if necessary.";
     "...returns {number of messages,new cur}.";
@@ -675,7 +675,7 @@ object MAIL_AGENT
     return tostr(date, "   ", $string_utils:left(from, 20), "   ", subject);
   endverb
 
-  verb parse_message_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb parse_message_seq (this none this) owner: #2 flags: "rxd"
     "parse_message_seq(strings,cur[,last_old])";
     "This is the default <message-sequence> parsing routine for those mail commands that refer to sequences of messages (@mail, @read,...) on a folder.";
     "  caller (the folder) is assumed to be a $mail_recipient or a player.";
@@ -896,7 +896,7 @@ object MAIL_AGENT
     return time;
   endverb
 
-  verb new_message_num (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb new_message_num (this none this) owner: #2 flags: "rxd"
     ":new_message_num() => number that the next incoming message will receive.";
     set_task_perms(caller_perms());
     new = (msgs = caller.messages) ? msgs[$][1] + 1 | 1;
@@ -911,12 +911,12 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb length_all_msgs (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb length_all_msgs (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return length(caller.messages);
   endverb
 
-  verb length_date_le (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb length_date_le (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     date = args[1];
     msgs = caller.messages;
@@ -940,7 +940,7 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb length_date_gt (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb length_date_gt (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     date = args[1];
     msgs = caller.messages;
@@ -965,19 +965,19 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb length_num_le (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb length_num_le (this none this) owner: #2 flags: "rxd"
     ":length_num_le(num) => number of messages in folder numbered <= num";
     set_task_perms(caller_perms());
     return $list_utils:iassoc_sorted(args[1], caller.messages);
   endverb
 
-  verb exists_num_eq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb exists_num_eq (this none this) owner: #2 flags: "rxd"
     ":exists_num_eq(num) => index of message in folder numbered == num";
     set_task_perms(caller_perms());
     return (i = $list_utils:iassoc_sorted(args[1], caller.messages)) && (caller.messages[i][1] == args[1] && i);
   endverb
 
-  verb from_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb from_msg_seq (this none this) owner: #2 flags: "rxd"
     ":from_msg_seq(object or list[,mask])";
     " => msg_seq of messages from any of these senders";
     set_task_perms(caller_perms());
@@ -1005,7 +1005,7 @@ object MAIL_AGENT
     return fseq || "%f %<has> no messages from " + $string_utils:english_list($list_utils:map_arg(2, $string_utils, "pronoun_sub", "%n (%#)", plist), "no one", " or ");
   endverb
 
-  verb "%from_msg_seq" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "%from_msg_seq" (this none this) owner: #2 flags: "rxd"
     ":%from_msg_seq(string or list of strings[,mask])";
     " => msg_seq of messages with one of these strings in the from line";
     set_task_perms(caller_perms());
@@ -1033,7 +1033,7 @@ object MAIL_AGENT
     return fseq || "%f %<has> no messages from " + $string_utils:english_list($list_utils:map_arg($string_utils, "print", nlist), "no one", " or ");
   endverb
 
-  verb to_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb to_msg_seq (this none this) owner: #2 flags: "rxd"
     ":to_msg_seq(object or list[,mask]) => msg_seq of messages to those people";
     set_task_perms(caller_perms());
     {plist, ?mask = {1}} = args;
@@ -1060,7 +1060,7 @@ object MAIL_AGENT
     return seq || "%f %<has> no messages to " + $string_utils:english_list($list_utils:map_arg(2, $string_utils, "pronoun_sub", "%n (%#)", plist), "no one", " or ");
   endverb
 
-  verb "%to_msg_seq" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "%to_msg_seq" (this none this) owner: #2 flags: "rxd"
     ":%to_msg_seq(string or list of strings[,mask])";
     " => msg_seq of messages containing one of strings in the to line";
     set_task_perms(caller_perms());
@@ -1088,7 +1088,7 @@ object MAIL_AGENT
     return seq || "%f %<has> no messages to " + $string_utils:english_list($list_utils:map_arg($string_utils, "print", nlist), "no one", " or ");
   endverb
 
-  verb subject_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb subject_msg_seq (this none this) owner: #2 flags: "rxd"
     ":subject_msg_seq(target) => msg_seq of messages with target in the Subject:";
     set_task_perms(caller_perms());
     {target, ?mask = {1}} = args;
@@ -1110,7 +1110,7 @@ object MAIL_AGENT
     return seq || "%f %<has> no messages with subjects containing `" + target + "'";
   endverb
 
-  verb body_msg_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb body_msg_seq (this none this) owner: #2 flags: "rxd"
     ":body_msg_seq(target[,mask]) => msg_seq of messages with target in the body";
     set_task_perms(caller_perms());
     {target, ?mask = {1}} = args;
@@ -1137,7 +1137,7 @@ object MAIL_AGENT
     return seq || tostr("%f %<has> no messages containing `", target, "' in the body.");
   endverb
 
-  verb messages_in_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb messages_in_seq (this none this) owner: #2 flags: "rxd"
     ":messages_in_seq(msg_seq) => list of messages in msg_seq on folder (caller)";
     set_task_perms(caller_perms());
     if (typeof(msgs = args[1]) != LIST)
@@ -1149,7 +1149,7 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb __convert_new (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb __convert_new (this none this) owner: #2 flags: "rxd"
     ":__convert_new(@msg) => msg in new format (if it isn't already)";
     "               ^ don't forget the @ here.";
     "If the msg is already in the new format it passes through unchanged.";
@@ -1232,7 +1232,7 @@ object MAIL_AGENT
     return valid(what = args[1]) && ($mail_recipient_class in (ances = $object_utils:ancestors(what)) || $mail_recipient in ances);
   endverb
 
-  verb keep_message_seq (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb keep_message_seq (this none this) owner: #2 flags: "rxd"
     ":keep_message_seq(msg_seq)";
     "...If msg_seq nonempty {}, this marks the indicated messages on this folder (caller)";
     "...as immune from expiration.";
@@ -1258,7 +1258,7 @@ object MAIL_AGENT
     return $seq_utils:tostr(nums);
   endverb
 
-  verb "kept_msg_seq unkept_msg_seq" (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb "kept_msg_seq unkept_msg_seq" (this none this) owner: #2 flags: "rxd"
     ":kept_msg_seq([mask])";
     " => msg_seq of messages that are marked kept";
     ":unkept_msg_seq([mask])";
@@ -1273,13 +1273,13 @@ object MAIL_AGENT
     return kseq;
   endverb
 
-  verb msg_seq_to_msg_num_string (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb msg_seq_to_msg_num_string (this none this) owner: #2 flags: "rxd"
     ":msg_seq_to_msg_num_string(msg_seq) => string giving the corresponding message numbers";
     set_task_perms(caller_perms());
     return $seq_utils:tostr($seq_utils:from_list($list_utils:slice(caller:messages_in_seq(args[1]))));
   endverb
 
-  verb msg_seq_to_msg_num_list (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb msg_seq_to_msg_num_list (this none this) owner: #2 flags: "rxd"
     ":msg_seq_to_msg_num_list(msg_seq) => list of corresponding message numbers";
     set_task_perms(caller_perms());
     return $list_utils:slice(caller:messages_in_seq(args[1]));
@@ -1333,7 +1333,7 @@ object MAIL_AGENT
     return {heads, bogus, extract_texts, msgtxt[bstart + 1..$]};
   endverb
 
-  verb resend_message (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb resend_message (this none this) owner: #2 flags: "rxd"
     "resend_message(new_sender,new_rcpts,from,to,hdrs,body)";
     " -- reformats and resends a previously sent message to new recipients.";
     "msg is the previous message";
@@ -1355,7 +1355,7 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb init_for_core (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rx"
+  verb init_for_core (this none this) owner: #2 flags: "rx"
     if (caller_perms().wizard)
       this.reserved_patterns = {};
       this.last_mail_time = 0;
@@ -1381,7 +1381,7 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb set_message_body_by_index (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb set_message_body_by_index (this none this) owner: #2 flags: "rxd"
     ":set_message_body_by_index(i,newbody)";
     "Replaces the body of the i-th message on the (caller) recipient.";
     "i must be a message index (not a message number) in the range 1 .. number of messages,";
@@ -1396,10 +1396,10 @@ object MAIL_AGENT
     endif
   endverb
 
-  verb get_message_body_by_index (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb get_message_body_by_index (this none this) owner: #2 flags: "rxd"
   endverb
 
-  verb message_body_by_index (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb message_body_by_index (this none this) owner: #2 flags: "rxd"
     ":message_body_by_index(i)";
     "Return the body of the i-th message on the (caller) recipient.";
     "i must be a message index (not a message number) in the range 1 .. number of messages,";

@@ -115,7 +115,7 @@ object SEQ_UTILS
     return e + (len % 2 ? separator | "");
   endverb
 
-  verb for (this none this) owner: BYTE_QUOTA_UTILS_WORKING flags: "rxd"
+  verb for (this none this) owner: #2 flags: "rxd"
     ":for([n,]seq,obj,verb,@args) => for s in (seq) obj:verb(s,@args); endfor";
     set_task_perms(caller_perms());
     if (typeof(n = args[1]) == INT)
