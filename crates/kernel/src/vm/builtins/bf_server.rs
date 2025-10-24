@@ -2678,6 +2678,34 @@ fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
     Ok(Ret(v_int(0)))
 }
 
+/// Returns documentation for a builtin function.
+/// MOO: `list function_help(str builtin_name)`
+/// Returns a list of strings containing the documentation for the specified builtin function.
+/// Raises E_INVARG if the builtin doesn't exist or has no documentation.
+fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(ErrValue(E_ARGS.msg("function_help() requires exactly one argument")));
+    }
+
+    let Variant::Str(name) = bf_args.args[0].variant() else {
+        return Err(Code(E_TYPE));
+    };
+
+    let docs = &crate::vm::builtins::docs::BUILTIN_DOCS;
+
+    match docs.get(name.as_str()) {
+        Some(lines) => {
+            let doc_list: Vec<Var> = lines.iter().map(|s| v_str(s)).collect();
+            Ok(Ret(v_list_iter(doc_list)))
+        }
+        None => {
+            Err(ErrValue(E_INVARG.msg(format!(
+                "No documentation found for builtin '{}'", name
+            ))))
+        }
+    }
+}
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
     builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
@@ -2707,6 +2735,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("call_function")] = Box::new(bf_call_function);
     builtins[offset_for_builtin("server_log")] = Box::new(bf_server_log);
     builtins[offset_for_builtin("function_info")] = Box::new(bf_function_info);
+    builtins[offset_for_builtin("function_help")] = Box::new(bf_function_help);
     builtins[offset_for_builtin("listeners")] = Box::new(bf_listeners);
     builtins[offset_for_builtin("listen")] = Box::new(bf_listen);
     builtins[offset_for_builtin("unlisten")] = Box::new(bf_unlisten);

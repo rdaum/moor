@@ -640,6 +640,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_OBJ), Any, Any],
             true,
         ),
+        mk_builtin("function_help", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
     ]
 }
 

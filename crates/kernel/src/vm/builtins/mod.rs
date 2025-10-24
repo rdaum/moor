@@ -61,6 +61,11 @@ pub mod bf_server;
 mod bf_strings;
 mod bf_values;
 mod bf_verbs;
+mod docs;
+
+#[cfg(test)]
+#[path = "test_function_help.rs"]
+mod test_function_help;
 
 lazy_static! {
     static ref BF_COUNTERS: BfCounters = BfCounters::new();

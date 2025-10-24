@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/builtin-docs-macro",
     "crates/common",
     "crates/compiler",
     "crates/curl-worker",
@@ -39,8 +40,8 @@ default-members = [
     "crates/testing/moot",
     "crates/testing/load-tools",
     "crates/curl-worker",
-    "tools/moorc",
     "tools/moor-emh",
+    "tools/moorc",
 ]
 
 [workspace.package]

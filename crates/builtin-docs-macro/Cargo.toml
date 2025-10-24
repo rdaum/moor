@@ -1,0 +1,17 @@
+[package]
+name = "moor-builtin-docs-macro"
+version = "0.9.0-alpha"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Proc macro for extracting builtin function documentation at compile time"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "parsing", "visit"] }
+quote = "1.0"
+proc-macro2 = "1.0"
