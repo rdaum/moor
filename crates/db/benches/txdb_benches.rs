@@ -20,7 +20,7 @@ use moor_common::{
 };
 use moor_db::{DatabaseConfig, TxDB};
 use moor_var::{NOTHING, SYSTEM_OBJECT, Symbol, v_int, v_list_iter};
-use rand::prelude::SliceRandom;
+use rand::prelude::IndexedRandom;
 use std::time::Duration;
 
 fn create_db() -> TxDB {
