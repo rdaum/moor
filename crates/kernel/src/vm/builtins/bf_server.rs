@@ -2684,7 +2684,9 @@ fn bf_set_connection_option(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
 /// Raises E_INVARG if the builtin doesn't exist or has no documentation.
 fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(ErrValue(E_ARGS.msg("function_help() requires exactly one argument")));
+        return Err(ErrValue(
+            E_ARGS.msg("function_help() requires exactly one argument"),
+        ));
     }
 
     let name = bf_args.args[0].as_symbol().map_err(|_| Code(E_TYPE))?;
@@ -2692,9 +2694,9 @@ fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let docs = &crate::vm::builtins::docs::BUILTIN_DOCS;
 
     let Some(lines) = docs.get(name.as_string().as_str()) else {
-        return Err(ErrValue(E_INVARG.msg(format!(
-            "No documentation found for builtin '{}'", name
-        ))));
+        return Err(ErrValue(
+            E_INVARG.msg(format!("No documentation found for builtin '{}'", name)),
+        ));
     };
 
     let doc_list: Vec<Var> = lines.iter().map(|s| v_str(s)).collect();

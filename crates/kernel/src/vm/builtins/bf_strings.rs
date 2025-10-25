@@ -14,13 +14,8 @@
 //! Builtin functions for string manipulation, hashing, and encoding operations.
 
 use argon2::{
-    Algorithm,
-    Argon2,
-    Params,
-    PasswordHasher,
-    PasswordVerifier,
-    Version,
-    password_hash::{rand_core::OsRng, SaltString},
+    Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version,
+    password_hash::{SaltString, rand_core::OsRng},
 };
 use base64::{Engine, engine::general_purpose};
 use md5::Digest;

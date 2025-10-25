@@ -1,3 +1,16 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
@@ -12,17 +25,14 @@ use syn::{Attribute, Expr, ExprIndex, Item, ItemFn, Stmt};
 /// This ensures only actually-registered builtins are documented.
 #[proc_macro]
 pub fn generate_builtin_docs(_input: TokenStream) -> TokenStream {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR not set");
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
 
-    let builtins_dir = PathBuf::from(&manifest_dir)
-        .join("src/vm/builtins");
+    let builtins_dir = PathBuf::from(&manifest_dir).join("src/vm/builtins");
 
     let mut docs_map: HashMap<String, Vec<String>> = HashMap::new();
 
     // Find all bf_*.rs files
-    let entries = fs::read_dir(&builtins_dir)
-        .expect("Failed to read builtins directory");
+    let entries = fs::read_dir(&builtins_dir).expect("Failed to read builtins directory");
 
     for entry in entries {
         let entry = entry.expect("Failed to read directory entry");
@@ -177,7 +187,8 @@ fn extract_bf_fn_name(expr: &Expr) -> Option<String> {
     // Check if it's Box::new
     if path.path.segments.len() != 2
         || path.path.segments[0].ident != "Box"
-        || path.path.segments[1].ident != "new" {
+        || path.path.segments[1].ident != "new"
+    {
         return None;
     }
 

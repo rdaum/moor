@@ -18,13 +18,13 @@
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
     use moor_common::{
         model::{ObjFlag, ObjectKind, PropFlag, WorldStateSource},
         util::BitEnum,
     };
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
+    use rand::Rng;
     use std::{collections::HashMap, path::Path, sync::Arc};
 
     fn test_db(path: &Path) -> Arc<TxDB> {

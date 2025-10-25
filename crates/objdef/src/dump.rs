@@ -274,10 +274,7 @@ struct ConstantCandidate {
     path_depth: usize,
 }
 
-fn collect_top_level_constants(
-    sysobj: &ObjectDefinition,
-    candidates: &mut Vec<ConstantCandidate>,
-) {
+fn collect_top_level_constants(sysobj: &ObjectDefinition, candidates: &mut Vec<ConstantCandidate>) {
     for pd in sysobj.property_definitions.iter() {
         if let Some(value) = pd.value.as_ref()
             && let Some(oid) = value.as_object()
