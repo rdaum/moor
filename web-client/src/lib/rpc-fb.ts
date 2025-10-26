@@ -668,7 +668,16 @@ export function handleClientEventFlatBuffer(
 
                         // Get content type
                         const contentTypeSym = notify.contentType();
-                        const contentType = contentTypeSym ? contentTypeSym.value() : "text/plain";
+                        let contentType = contentTypeSym ? contentTypeSym.value() : "text/plain";
+
+                        // Normalize alternative content type formats
+                        if (contentType === "text_djot" || contentType === "text/djot") {
+                            contentType = "text/djot";
+                        } else if (contentType === "text_html" || contentType === "text/html") {
+                            contentType = "text/html";
+                        } else {
+                            contentType = "text/plain";
+                        }
 
                         const noNewline = notify.noNewline();
 
@@ -693,10 +702,21 @@ export function handleClientEventFlatBuffer(
 
                         if (onPresentMessage && presentation) {
                             // Convert presentation to plain JS object
+                            let contentType = presentation.contentType() || "text/plain";
+
+                            // Normalize alternative content type formats
+                            if (contentType === "text_djot" || contentType === "text/djot") {
+                                contentType = "text/djot";
+                            } else if (contentType === "text_html" || contentType === "text/html") {
+                                contentType = "text/html";
+                            } else {
+                                contentType = "text/plain";
+                            }
+
                             const presentData = {
                                 id: presentation.id(),
                                 content: presentation.content(),
-                                content_type: presentation.contentType() || "text/plain",
+                                content_type: contentType,
                                 target: presentation.target(),
                                 // TODO: Add attributes if needed
                             };

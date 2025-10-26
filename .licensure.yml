@@ -89,6 +89,7 @@ excludes:
   - Dockerfile
   - core
   - cores/*
+  - cores/cowbell/*
   - book/*
   - lambdamoo/*
   - __pycache__/*

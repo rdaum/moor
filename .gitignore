@@ -47,3 +47,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# Cowbell repository (cloned locally, not a submodule)
+cores/cowbell/
