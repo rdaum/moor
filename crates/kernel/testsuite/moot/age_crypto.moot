@@ -1,0 +1,98 @@
+// Tests for age encryption builtins
+// Note: BINARY type constant = 17 (not yet exposed as global constant)
+
+@programmer
+
+// Test age_generate_keypair() returns strings by default
+; kp = age_generate_keypair();
+> return typeof(kp[1]) == STR && typeof(kp[2]) == STR;
+1
+
+// Test age_generate_keypair(false) returns strings
+; kp = age_generate_keypair(false);
+> return typeof(kp[1]) == STR && typeof(kp[2]) == STR;
+1
+
+// Test age_generate_keypair(true) returns bytes (BINARY = 17)
+; kp = age_generate_keypair(true);
+> return typeof(kp[1]) == 17 && typeof(kp[2]) == 17;
+1
+
+// Test age_generate_keypair(0) returns strings
+; kp = age_generate_keypair(0);
+> return typeof(kp[1]) == STR && typeof(kp[2]) == STR;
+1
+
+// Test age_generate_keypair(1) returns bytes (BINARY = 17)
+; kp = age_generate_keypair(1);
+> return typeof(kp[1]) == 17 && typeof(kp[2]) == 17;
+1
+
+// Test that keypair generation returns a list of length 2
+; kp = age_generate_keypair();
+> return length(kp) == 2;
+1
+
+// Test age_generate_keypair with too many arguments
+; age_generate_keypair(1, 2);
+E_ARGS
+
+// Test age_generate_keypair with invalid argument type
+; age_generate_keypair("invalid");
+E_TYPE
+
+// Test age_generate_keypair with invalid integer value
+; age_generate_keypair(5);
+E_INVARG
+
+// Test age_encrypt returns bytes (BINARY = 17)
+; kp = age_generate_keypair();
+> encrypted = age_encrypt("test message", {kp[1]});
+> return typeof(encrypted) == 17;
+1
+
+// Test age_encrypt with empty recipient list
+; age_encrypt("test", {});
+E_INVARG
+
+// Test age_encrypt with invalid recipient type
+; kp = age_generate_keypair();
+> age_encrypt("test", {123});
+E_TYPE
+
+// Test age_decrypt with empty key list
+; kp = age_generate_keypair();
+> encrypted = age_encrypt("test", {kp[1]});
+> age_decrypt(encrypted, {});
+E_INVARG
+
+// Test age_encrypt and age_decrypt round trip with string keys
+; kp = age_generate_keypair();
+> encrypted = age_encrypt("secret data", {kp[1]});
+> decrypted = age_decrypt(encrypted, {kp[2]});
+> return decrypted == "secret data";
+1
+
+// Test age_encrypt and age_decrypt round trip with bytes keys
+; kp = age_generate_keypair(true);
+> encrypted = age_encrypt("secret data", {kp[1]});
+> decrypted = age_decrypt(encrypted, {kp[2]});
+> return decrypted == "secret data";
+1
+
+// Test age_decrypt accepts base64 string for backwards compatibility
+; kp = age_generate_keypair();
+> encrypted = age_encrypt("test data", {kp[1]});
+> b64_encrypted = encode_base64(encrypted);
+> decrypted = age_decrypt(b64_encrypted, {kp[2]});
+> return decrypted == "test data";
+1
+
+// Test age_encrypt with multiple recipients
+; kp1 = age_generate_keypair();
+> kp2 = age_generate_keypair();
+> encrypted = age_encrypt("multi recipient", {kp1[1], kp2[1]});
+> decrypted1 = age_decrypt(encrypted, {kp1[2]});
+> decrypted2 = age_decrypt(encrypted, {kp2[2]});
+> return decrypted1 == "multi recipient" && decrypted2 == "multi recipient";
+1
