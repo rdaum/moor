@@ -76,14 +76,14 @@ fn print_sample_docs() {
     if let Some(docs) = BUILTIN_DOCS.get("abs") {
         println!("\nfunction_help(\"abs\") returns:");
         for line in docs {
-            println!("  {}", line);
+            println!("  {line}");
         }
     }
 
     if let Some(docs) = BUILTIN_DOCS.get("min") {
         println!("\nfunction_help(\"min\") returns:");
         for line in docs {
-            println!("  {}", line);
+            println!("  {line}");
         }
     }
 

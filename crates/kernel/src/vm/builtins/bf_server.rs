@@ -2695,7 +2695,7 @@ fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let Some(lines) = docs.get(name.as_string().as_str()) else {
         return Err(ErrValue(
-            E_INVARG.msg(format!("No documentation found for builtin '{}'", name)),
+            E_INVARG.msg(format!("No documentation found for builtin '{name}'")),
         ));
     };
 

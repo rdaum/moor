@@ -22,6 +22,7 @@ use syn::{Attribute, Expr, ExprIndex, Item, ItemFn, Stmt};
 /// 1. Finding all `register_bf_*` functions in bf_*.rs files
 /// 2. Parsing which `bf_*` functions they register
 /// 3. Extracting doc comments only from registered functions
+///
 /// This ensures only actually-registered builtins are documented.
 #[proc_macro]
 pub fn generate_builtin_docs(_input: TokenStream) -> TokenStream {
@@ -38,10 +39,11 @@ pub fn generate_builtin_docs(_input: TokenStream) -> TokenStream {
         let entry = entry.expect("Failed to read directory entry");
         let path = entry.path();
 
-        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-            if filename.starts_with("bf_") && filename.ends_with(".rs") {
-                extract_docs_from_file(&path, &mut docs_map);
-            }
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str())
+            && filename.starts_with("bf_")
+            && filename.ends_with(".rs")
+        {
+            extract_docs_from_file(&path, &mut docs_map);
         }
     }
 
@@ -69,11 +71,11 @@ pub fn generate_builtin_docs(_input: TokenStream) -> TokenStream {
 }
 
 fn extract_docs_from_file(path: &PathBuf, docs_map: &mut HashMap<String, Vec<String>>) {
-    let content = fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read file {:?}: {}", path, e));
+    let content =
+        fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read file {path:?}: {e}"));
 
-    let ast = syn::parse_file(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse file {:?}: {}", path, e));
+    let ast =
+        syn::parse_file(&content).unwrap_or_else(|e| panic!("Failed to parse file {path:?}: {e}"));
 
     // Build a map of all bf_* functions and their doc comments
     let mut fn_docs: HashMap<String, Vec<String>> = HashMap::new();
@@ -155,9 +157,7 @@ fn extract_builtin_name_from_index(index: &Expr) -> Option<String> {
         return None;
     };
 
-    let Some(last_segment) = path.path.segments.last() else {
-        return None;
-    };
+    let last_segment = path.path.segments.last()?;
 
     if last_segment.ident != "offset_for_builtin" {
         return None;
