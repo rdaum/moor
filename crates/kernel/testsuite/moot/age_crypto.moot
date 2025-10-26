@@ -41,9 +41,10 @@ E_ARGS
 ; age_generate_keypair("invalid");
 E_TYPE
 
-// Test age_generate_keypair with invalid integer value
-; age_generate_keypair(5);
-E_INVARG
+// Test age_generate_keypair with integer value 5 (truthy, returns bytes)
+; kp = age_generate_keypair(5);
+> return typeof(kp[1]) == 17 && typeof(kp[2]) == 17;
+1
 
 // Test age_encrypt returns bytes (BINARY = 17)
 ; kp = age_generate_keypair();

@@ -52,22 +52,13 @@ fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     let as_bytes = if bf_args.args.is_empty() {
         false
     } else {
+        // Validate type before using is_true()
         match bf_args.args[0].variant() {
-            Variant::Int(0) => false,
-            Variant::Int(1) => true,
-            Variant::Int(i) => {
-                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
-                    format!(
-                        "age_generate_keypair() integer argument must be 0 or 1 (or use a bool), was {}",
-                        i
-                    )
-                })));
-            }
-            Variant::Bool(b) => *b,
+            Variant::Int(_) | Variant::Bool(_) => bf_args.args[0].is_true(),
             _ => {
                 return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                     format!(
-                        "age_generate_keypair() argument must be a boolean, was {}",
+                        "age_generate_keypair() argument must be a boolean or integer, was {}",
                         bf_args.args[0].type_code().to_literal()
                     )
                 })));
