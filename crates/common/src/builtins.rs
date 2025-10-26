@@ -641,6 +641,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("function_help", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin(
+            "parse_command",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_BOOL)],
+            true,
+        ),
+        mk_builtin(
+            "find_command_verb",
+            Q(2),
+            Q(2),
+            vec![Typed(TYPE_MAP), Typed(TYPE_LIST)],
+            true,
+        ),
     ]
 }
 

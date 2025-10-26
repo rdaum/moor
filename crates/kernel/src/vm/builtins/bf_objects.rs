@@ -14,16 +14,20 @@
 //! Built-in functions for object manipulation and hierarchy management.
 
 use lazy_static::lazy_static;
+use std::collections::HashMap;
 use tracing::{debug, error, trace};
 
+use moor_common::matching::{CommandParser, DefaultParseCommand, ObjectNameMatcher, Preposition};
+use moor_common::model::{ObjSet, PrepSpec, verb_perms_string};
 use moor_common::{
     model::{Named, ObjFlag, ObjectKind, ValSet, WorldStateError},
     util::BitEnum,
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
-    E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, List, NOTHING, Obj, Sequence, Symbol, Variant,
-    v_arc_string, v_bool, v_int, v_list, v_list_iter, v_obj, v_sym,
+    Associative, E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, List, NOTHING, Obj, Sequence, Symbol,
+    Variant, v_arc_string, v_bool, v_int, v_list, v_list_iter, v_map_iter, v_obj, v_str, v_string,
+    v_sym,
 };
 
 use crate::{
@@ -1281,6 +1285,406 @@ fn bf_is_uuobjid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_bool(obj.is_uuobjid())))
 }
 
+/// Parse a command string and return its components as a map.
+/// MOO: `map parse_command(str command, list environment, [bool complex])`
+///
+/// The environment is a list of objects and/or {object, names ... } entries to search for object name matching.
+/// For example: `parse_command("look frobozicon", {player, player.location, {#666, "frob", "frobozzicon"}})`
+/// returns `=> ["args" -> {"frobozicon"}, "argstr" -> "frobozicon", "dobj" -> #666,
+///              "dobjstr" -> "frobozicon", "iobj" -> #-1, "iobjstr" -> "",
+///              "prep" -> -1, "prepstr" -> "", "verb" -> "look"]`
+///
+/// Returns a map with the following keys:
+/// - `verb`: The verb symbol (e.g., "look")
+/// - `argstr`: The full argument string after the verb
+/// - `args`: List of individual argument strings
+/// - `dobjstr`: The direct object string that was matched (or empty string)
+/// - `dobj`: The direct object found (or #-1 if none)
+/// - `prepstr`: The preposition string (or empty string)
+/// - `prep`: Integer representing the preposition (-2=any, -1=none, 0-14=specific prepositions)
+/// - `iobjstr`: The indirect object string (or empty string)
+/// - `iobj`: The indirect object found (or #-1 if none)
+///
+/// The third `complex` argument enables advanced matching features:
+/// - When true, uses fuzzy matching (Levenshtein distance) for object names
+/// - Handles ordinal descriptors ("first", "second", "third") to differentiate multiple matching objects
+/// - Provides more flexible and forgiving object name matching
+fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("parse_command() takes 2 or 3 arguments"),
+        ));
+    }
+
+    let Some(command_str) = bf_args.args[0].as_string() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("parse_command() first argument must be a string"),
+        ));
+    };
+
+    let Some(environment_list) = bf_args.args[1].as_list() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("parse_command() second argument must be a list"),
+        ));
+    };
+
+    let complex_match = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
+    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
+    let mk_sym_or_str = |s: Symbol| {
+        if use_symbols {
+            v_sym(s)
+        } else {
+            v_str(s.as_arc_str().as_ref())
+        }
+    };
+    let use_sym_or_str = |sym| {
+        if use_symbols { v_sym(sym) } else { v_str(sym) }
+    };
+
+    struct DelegatingObjectMatcher(Box<dyn ObjectNameMatcher>);
+    impl ObjectNameMatcher for DelegatingObjectMatcher {
+        fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError> {
+            self.0.match_object(name)
+        }
+    }
+
+    // Create a custom MatchEnvironment that uses the provided environment list
+    struct ListMatchEnvironment {
+        who: Obj,
+        name_map: std::collections::HashMap<Obj, Vec<String>>,
+    }
+
+    impl ListMatchEnvironment {
+        pub fn new(who: Obj, name_map: HashMap<Obj, Vec<String>>) -> Result<Self, WorldStateError> {
+            Ok(Self { who, name_map })
+        }
+    }
+
+    impl moor_common::matching::MatchEnvironment for ListMatchEnvironment {
+        fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError> {
+            // Check if the object is in our name map (which means it's in our environment)
+            Ok(self.name_map.contains_key(oid))
+        }
+
+        fn get_names(&self, oid: &Obj) -> Result<Vec<String>, WorldStateError> {
+            // Check if we have custom names for this object
+            if let Some(custom_names) = self.name_map.get(oid)
+                && !custom_names.is_empty()
+            {
+                return Ok(custom_names.clone());
+            }
+
+            // Fall back to getting names from world state
+            let names =
+                with_current_transaction(|world_state| world_state.names_of(&self.who, oid))?;
+            let mut result = vec![names.0];
+            result.extend(names.1);
+            Ok(result)
+        }
+
+        fn get_surroundings(&self, _player: &Obj) -> Result<ObjSet, WorldStateError> {
+            // For our environment, return all objects from our name map
+            let mut surroundings = ObjSet::default();
+            for obj in self.name_map.keys() {
+                surroundings = surroundings.with_inserted(*obj);
+            }
+            Ok(surroundings)
+        }
+
+        fn location_of(&self, _player: &Obj) -> Result<Obj, WorldStateError> {
+            // We don't have a real location in this environment, return #-1
+            Ok(NOTHING)
+        }
+    }
+
+    // Process the environment list to build the name mapping
+    let mut name_map = HashMap::new();
+    for env_entry in environment_list.iter() {
+        // Handle simple object entries
+        if let Some(obj) = env_entry.as_object() {
+            name_map.insert(obj, Vec::new());
+            continue;
+        }
+
+        // Handle list entries: {obj: object, names: list_of_names}
+        let Some(names) = env_entry.as_list() else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("invalid {obj, names ... } name entry"),
+            ));
+        };
+
+        let Ok(obj) = names.index(0) else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("invalid {obj, names ... } name entry"),
+            ));
+        };
+
+        let Some(obj) = obj.as_object() else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("invalid {obj, names ... } name entry"),
+            ));
+        };
+
+        let Ok(obj_names) = names.remove_at(0) else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("invalid {obj, names ... } name entry"),
+            ));
+        };
+
+        let Some(names_list) = obj_names.as_list() else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("invalid {obj, names ... } name entry"),
+            ));
+        };
+
+        let mut names = vec![];
+        for name_var in names_list.iter() {
+            let Some(name_str) = name_var.as_string() else {
+                continue;
+            };
+            names.push(name_str.to_string());
+        }
+
+        name_map.insert(obj, names);
+    }
+    let env = ListMatchEnvironment::new(bf_args.task_perms_who(), name_map).map_err(|e| {
+        BfErr::ErrValue(
+            E_INVARG.with_msg(|| format!("parse_command() error creating environment: {e}")),
+        )
+    })?;
+
+    // Use the DefaultObjectNameMatcher with our custom environment
+    let matcher: Box<dyn ObjectNameMatcher> = if complex_match {
+        Box::new(moor_common::matching::ComplexObjectNameMatcher {
+            env,
+            player: bf_args.task_perms_who(),
+        })
+    } else {
+        Box::new(moor_common::matching::DefaultObjectNameMatcher {
+            env,
+            player: bf_args.task_perms_who(),
+        })
+    };
+
+    let matcher = DelegatingObjectMatcher(matcher);
+    let parser = DefaultParseCommand::new();
+    let parsed = parser.parse_command(command_str, &matcher).map_err(|e| {
+        BfErr::ErrValue(E_INVARG.with_msg(|| format!("parse_command() error: {e}")))
+    })?;
+
+    // Convert the parsed command to a map
+    let mut result_map = vec![];
+
+    result_map.push((use_sym_or_str("verb"), mk_sym_or_str(parsed.verb)));
+    result_map.push((v_str("argstr"), use_sym_or_str(&parsed.argstr)));
+    result_map.push((use_sym_or_str("args"), v_list(&parsed.args)));
+
+    // dobjstr: string or ""
+    result_map.push((
+        use_sym_or_str("dobjstr"),
+        if let Some(ref s) = parsed.dobjstr {
+            v_str(s)
+        } else {
+            v_str("")
+        },
+    ));
+
+    // dobj: object or #-1
+    result_map.push((
+        use_sym_or_str("dobj"),
+        if let Some(obj) = parsed.dobj {
+            v_obj(obj)
+        } else {
+            v_obj(NOTHING)
+        },
+    ));
+
+    // prepstr: string or ""
+    result_map.push((
+        use_sym_or_str("prepstr"),
+        if let Some(ref s) = parsed.prepstr {
+            v_str(s)
+        } else {
+            v_str("")
+        },
+    ));
+
+    // prep: integer (0=none, 1=at/to, 2=in front of, 3=into/in, 4=on top of/on, 5=out of, 6=over, 7=through, 8=under, 9=behind, 10=beside, 11=for/about, 12=is, 13=as, 14=off/off of)
+    let prep_value = match parsed.prep {
+        PrepSpec::Any => -2,
+        PrepSpec::None => -1,
+        PrepSpec::Other(p) => p as i64,
+    };
+    result_map.push((v_str("prep"), v_int(prep_value)));
+
+    // iobjstr: string or 0
+    result_map.push((
+        use_sym_or_str("iobjstr"),
+        if let Some(ref s) = parsed.iobjstr {
+            v_str(s)
+        } else {
+            v_str("")
+        },
+    ));
+
+    // iobj: object or #-1
+    result_map.push((
+        use_sym_or_str("iobj"),
+        if let Some(obj) = parsed.iobj {
+            v_obj(obj)
+        } else {
+            v_obj(NOTHING)
+        },
+    ));
+
+    Ok(Ret(v_map_iter(result_map.iter())))
+}
+
+/// Finds command verbs matching the parsed command specification (as returned from parse_command)
+/// on the given environmental targets.
+/// MOO: `list find_command_verb(map parsed_command_spec, list targets_to_search)`
+///
+/// This function searches for command verbs on the specified targets that match the parsed command
+/// specification. It returns a list of [target_object, verb_info] pairs where:
+/// - `target_object` is the object where the matching verb was found
+/// - `verb_info` is a list [owner, permissions, verb_names] describing the verb
+///
+/// When used together with `parse_command`, these two functions emulate the behavior of the
+/// built-in MOO command parser:
+/// 1. First call `parse_command` to parse the command string into a specification
+/// 2. Then call `find_command_verb` with the specification and target objects
+/// 3. Dispatch to the found verb (if any) to execute the command
+///
+/// This allows custom command parsing and dispatching while maintaining compatibility with
+/// the standard MOO command parsing logic.
+fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("find_command_verb() takes 2 arguments"),
+        ));
+    }
+
+    let Some(parsed_command_spec) = bf_args.args[0].as_map() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("find_command_verb() first argument must be a map"),
+        ));
+    };
+
+    let Some(targets_to_search) = bf_args.args[1].as_list() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("find_command_verb() second argument must be a list"),
+        ));
+    };
+
+    // Extract parsed command components from the map
+    let verb_sym = match parsed_command_spec.get(&v_str("verb")) {
+        Ok(verb_var) => verb_var.as_symbol().map_err(|_| {
+            BfErr::ErrValue(
+                E_TYPE.msg("find_command_verb() parsed_command_spec.verb must be a symbol"),
+            )
+        })?,
+        _ => {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("find_command_verb() parsed_command_spec missing 'verb' key"),
+            ));
+        }
+    };
+    let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
+    let sym_or_str = |sym| {
+        if use_symbols { v_sym(sym) } else { v_str(sym) }
+    };
+    let dobj = parsed_command_spec
+        .get(&sym_or_str("dobj"))
+        .ok()
+        .and_then(|dobj_var| dobj_var.as_object())
+        .unwrap_or(NOTHING);
+
+    let prep = parsed_command_spec
+        .get(&sym_or_str("prep"))
+        .ok()
+        .and_then(|prep_var| prep_var.as_integer())
+        .map(|prep_int| {
+            // Convert back from the integer representation used in parse_command
+            match prep_int {
+                -2 => PrepSpec::Any,
+                -1 => PrepSpec::None,
+                p => PrepSpec::Other(
+                    Preposition::from_repr(p as u16).unwrap_or(Preposition::WithUsing),
+                ),
+            }
+        })
+        .unwrap_or(PrepSpec::None);
+
+    let iobj = parsed_command_spec
+        .get(&sym_or_str("iobj"))
+        .ok()
+        .and_then(|iobj_var| iobj_var.as_object())
+        .unwrap_or(NOTHING);
+
+    let mut matches = Vec::new();
+
+    // Search for command verbs on each target
+    for target_var in targets_to_search.iter() {
+        let Some(target) = target_var.as_object() else {
+            continue; // Skip non-object entries
+        };
+
+        // Check if target is valid
+        if !with_current_transaction(|world_state| world_state.valid(&target))
+            .map_err(world_state_bf_err)?
+        {
+            continue; // Skip invalid objects
+        }
+
+        // Look for command verb on this target
+        let match_result = with_current_transaction(|world_state| {
+            world_state.find_command_verb_on(
+                &bf_args.task_perms_who(),
+                &target,
+                verb_sym,
+                &dobj,
+                prep,
+                &iobj,
+            )
+        });
+
+        match match_result {
+            Ok(Some((_, verbdef))) => {
+                let owner = verbdef.owner();
+                let perms = verbdef.flags();
+                let names = verbdef.names();
+
+                let perms_string = verb_perms_string(perms);
+
+                // Join names into a single string, this is how MOO presents it.
+                let verb_names = names
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+
+                let verb_info =
+                    v_list(&[v_obj(owner), v_string(perms_string), v_string(verb_names)]);
+                matches.push(v_list(&[v_obj(target), verb_info]));
+            }
+            Ok(None) => {
+                // No match on this target, continue
+            }
+            Err(WorldStateError::VerbPermissionDenied)
+            | Err(WorldStateError::ObjectPermissionDenied)
+            | Err(WorldStateError::PropertyPermissionDenied) => {
+                // Permission denied, skip this target
+            }
+            Err(e) => {
+                error!("Error finding command verb: {:?}", e);
+                // Continue with other targets
+            }
+        }
+    }
+
+    Ok(Ret(v_list(&matches)))
+}
+
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
     builtins[offset_for_builtin("create_at")] = Box::new(bf_create_at);
@@ -1304,4 +1708,6 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("renumber")] = Box::new(bf_renumber);
     builtins[offset_for_builtin("is_anonymous")] = Box::new(bf_is_anonymous);
     builtins[offset_for_builtin("is_uuobjid")] = Box::new(bf_is_uuobjid);
+    builtins[offset_for_builtin("parse_command")] = Box::new(bf_parse_command);
+    builtins[offset_for_builtin("find_command_verb")] = Box::new(bf_find_command_verb);
 }
