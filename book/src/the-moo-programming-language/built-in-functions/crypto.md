@@ -4,9 +4,9 @@
 ### `age_generate_keypair`
 
 ```
-{STR public_key, STR private_key} = age_generate_keypair()
+{STR public_key, STR private_key} = age_generate_keypair([BOOL as_bytes])
 ```
-Generates a new x25519 keypair for encrypting and decrypting data with [Age](https://age-encryption.org).
+Generates a new x25519 keypair for encrypting and decrypting data with [Age](https://age-encryption.org). By default, returns Bech32-encoded strings. If `as_bytes` is true, returns the keys as bytes.
 
 **Example:**
 ```
@@ -17,29 +17,27 @@ Generates a new x25519 keypair for encrypting and decrypting data with [Age](htt
 ### `age_encrypt`
 
 ```
-STR base-64 encoded message = age_encrypt(STR message, {pubkey...})
+BYTES encrypted_message = age_encrypt(STR message, {pubkey...})
 ```
-Encrypts the given message to the public ssh or age keys specified. Raises an error if the arguments don't match the spec above, the list is empty or one of the provided pubkeys is invalid.
-Returns the message base-64 encoded.
+Encrypts the given message to the public ssh or age keys specified. Public keys can be provided as strings or bytes. Raises an error if the arguments don't match the spec above, the list is empty or one of the provided pubkeys is invalid.
+Returns the encrypted message as bytes.
 
 **Example:**
 ```
 ;age_encrypt("secret data", {"age1ac64qtuxuu0acqgsuxdf9kwjgwpxrys4uxtnjclahj8g2y5yv3qswfyfff"})
-=> "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpSnpKdWV2ZmY2STlla1JVSkVzemtSQUowbmZCeElJb0ZWbmV1ZVNSUm1FClNPYzkxRnFIMWN4UGdOV0N1c1E2WWEwd0g1NEQ4em9EYnRkOElkeGFlMzQKLT4gVi1ncmVhc2UgRHcgVigoICh9YSBnPm0
-KWkVIaGNvaDhOb1ZVSGNPY29NMVAvQnM2MFEKLS0tIC9YaU9tUG45TlJKV1pZeG9JTi8xL0IwYUJlOFRnTDE2VXhBbG44OEJsVzAKy+j0sHiugXI/N8hk9FTg9Gt+JtWgP/LwUbFR6CROjndmhN+Z2TyWsy6/eQ=="
+=> b"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpSnpKdWV2ZmY2STlla1JVSkVzemtSQUowbmZCeElJb0ZWbmV1ZVNSUm1FClNPYzkxRnFIMWN4UGdOV0N1c1E2WWEwd0g1NEQ4em9EYnRkOElkeGFlMzQKLT4gVi1ncmVhc2UgRHcgVigoICh9YSBnPm0KWkVIaGNvaDhOb1ZVSGNPY29NMVAvQnM2MFEKLS0tIC9YaU9tUG45TlJKV1pZeG9JTi8xL0IwYUJlOFRnTDE2VXhBbG44OEJsVzAKy+j0sHiugXI/N8hk9FTg9Kt+JtWgP/LwUbFR6CROjndmhN+Z2TyWsy6/eQ=="
 ```
 
 ### `age_decrypt`
 
 ```
-STR data = age_decrypt(STR base-64 encoded encrypted data, {private-key...})
+STR data = age_decrypt(BYTES|STR encrypted_data, {private-key...})
 ```
-Given an encrypted message base-64 encoded (such as from age_encrypt) and one or more private keys, attempt decryption of the data.
+Given an encrypted message as bytes (such as from age_encrypt) or base-64 encoded string, and one or more private keys, attempt decryption of the data. Private keys can be provided as strings or bytes.
 
 **Example:**
 ```
-;age_decrypt("YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpSnpKdWV2ZmY2STlla1JVSkVzemtSQUowbmZCeElJb0ZWbmV1ZVNSUm1FClNPYzkxRnFIMWN4UGdOV0N1c1E2WWEwd0g1NEQ4em9EYnRkOElkeGFlMzQKLT4gVi1ncmVhc2UgRHcgVigoICh9YSBnPm0KWkVIaGNvaDhOb1ZVSGNPY29NMVAvQnM2MFEKLS0tIC9YaU9tUG45TlJKV1pZeG9JTi8xL0IwYUJlOFRnTDE2VXhBbG44OEJsVzAKy+j0sHiugXI/N8hk9FTg9Gt+JtWgP/LwUbFR6CROjndmhN+Z2TyWsy6/eQ==", {"AGE-SECRET-KEY-1TFKKCGX
-2549ZR7NP2598805NR48Y6GLSA7AZS6X25FSA8U5V5ZES8TU5QM"})
+;age_decrypt(b"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpSnpKdWV2ZmY2STlla1JVSkVzemtSQUowbmZCeElJb0ZWbmV1ZVNSUm1FClNPYzkxRnFIMWN4UGdOV0N1c1E2WWEwd0g1NEQ4em9EYnRkOElkeGFlMzQKLT4gVi1ncmVhc2UgRHcgVigoICh9YSBnPm0KWkVIaGNvaDhOb1ZVSGNPY29NMVAvQnM2MFEKLS0tIC9YaU9tUG45TlJKV1pZeG9JTi8xL0IwYUJlOFRnTDE2VXhBbG44OEJsVzAKy+j0sHiugXI/N8hk9FTg9Kt+JtWgP/LwUbFR6CROjndmhN+Z2TyWsy6/eQ==", {"AGE-SECRET-KEY-1TFKKCGX2549ZR7NP2598805NR48Y6GLSA7AZS6X25FSA8U5V5ZES8TU5QM"})
 => "secret data"
 ```
 

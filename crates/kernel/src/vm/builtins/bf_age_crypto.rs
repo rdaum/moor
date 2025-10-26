@@ -29,15 +29,15 @@ use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err,
 };
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_list, v_string};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_list, v_string};
 
-/// MOO: `list age_generate_keypair()`
+/// MOO: `list age_generate_keypair([bool as_bytes])`
 /// Generates a new X25519 keypair for age encryption. Programmer-only function.
-/// Returns {public_key, private_key} as Bech32-encoded strings.
+/// If as_bytes is true, returns {public_key, private_key} as bytes. Otherwise returns Bech32-encoded strings.
 fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if !bf_args.args.is_empty() {
+    if bf_args.args.len() > 1 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("age_generate_keypair() does not take any arguments"),
+            E_ARGS.msg("age_generate_keypair() takes at most one argument"),
         ));
     }
 
@@ -48,17 +48,53 @@ fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
         .check_programmer()
         .map_err(world_state_bf_err)?;
 
+    // Get the optional as_bytes argument (defaults to false)
+    let as_bytes = if bf_args.args.is_empty() {
+        false
+    } else {
+        match bf_args.args[0].variant() {
+            Variant::Int(0) => false,
+            Variant::Int(1) => true,
+            Variant::Int(i) => {
+                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                    format!(
+                        "age_generate_keypair() integer argument must be 0 or 1 (or use a bool), was {}",
+                        i
+                    )
+                })));
+            }
+            Variant::Bool(b) => *b,
+            _ => {
+                return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                    format!(
+                        "age_generate_keypair() argument must be a boolean, was {}",
+                        bf_args.args[0].type_code().to_literal()
+                    )
+                })));
+            }
+        }
+    };
+
     // Generate a new X25519 identity (keypair)
     let identity = Identity::generate();
     let public_key = identity.to_public().to_string();
     let private_key = identity.to_string().expose_secret().to_string();
 
-    Ok(Ret(v_list(&[v_string(public_key), v_string(private_key)])))
+    if as_bytes {
+        // Return as bytes
+        Ok(Ret(v_list(&[
+            v_binary(public_key.into_bytes()),
+            v_binary(private_key.into_bytes()),
+        ])))
+    } else {
+        // Return as strings (default)
+        Ok(Ret(v_list(&[v_string(public_key), v_string(private_key)])))
+    }
 }
 
-/// MOO: `str age_encrypt(str message, list recipients)`
+/// MOO: `bytes age_encrypt(str message, list recipients)`
 /// Encrypts message using age encryption for one or more recipients. Programmer-only function.
-/// Recipients can be age X25519 keys or SSH public keys. Returns base64-encoded encrypted data.
+/// Recipients can be age X25519 keys or SSH public keys (strings or bytes). Returns encrypted data as bytes.
 fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -105,15 +141,25 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    // Process each recipient
+    // Process each recipient - accept both strings and bytes
     let mut recipients = Vec::new();
     for recipient_var in recipients_list.iter() {
         let recipient_str = match recipient_var.variant() {
-            Variant::Str(s) => s.as_str(),
+            Variant::Str(s) => s.as_str().to_string(),
+            Variant::Binary(b) => {
+                // Convert bytes to string for key parsing
+                let Some(s) = std::str::from_utf8(b.as_bytes()).ok() else {
+                    warn!("Invalid UTF-8 in binary recipient key");
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.msg("age_encrypt() binary recipient key must be UTF-8 encoded text (Bech32 or OpenSSH format)"),
+                    ));
+                };
+                s.to_string()
+            }
             _ => {
                 return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                     format!(
-                        "age_encrypt() recipient must be a string, was {}",
+                        "age_encrypt() recipient must be a string or bytes, was {}",
                         recipient_var.type_code().to_literal()
                     )
                 })));
@@ -124,7 +170,7 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             recipients.push(Box::new(x25519_recipient) as Box<dyn AgeRecipient>);
             continue;
         }
-        let ssh_key = PublicKey::from_openssh(recipient_str).map_err(|_| {
+        let ssh_key = PublicKey::from_openssh(&recipient_str).map_err(|_| {
             warn!("Failed to parse SSH key");
             BfErr::ErrValue(E_INVARG.msg("age_encrypt() failed to parse SSH key"))
         })?;
@@ -160,15 +206,13 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             BfErr::ErrValue(E_INVARG.msg("age_encrypt() failed to write message for encryption"))
         })?;
 
-    // Base64 encode the encrypted data
-    let encoded = BASE64.encode(&encrypted);
-
-    Ok(Ret(v_string(encoded)))
+    // Return the encrypted data as bytes
+    Ok(Ret(v_binary(encrypted)))
 }
 
-/// MOO: `str age_decrypt(str encrypted_message, list private_keys)`
+/// MOO: `str age_decrypt(bytes|str encrypted_message, list private_keys)`
 /// Decrypts age-encrypted message using one or more private keys. Programmer-only function.
-/// Encrypted message should be base64-encoded. Returns decrypted plaintext string.
+/// Encrypted message can be bytes or base64-encoded string. Private keys can be strings or bytes. Returns decrypted plaintext string.
 fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
@@ -183,27 +227,25 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_programmer()
         .map_err(world_state_bf_err)?;
 
-    // Get the encrypted message
-    let encrypted_b64 = match bf_args.args[0].variant() {
-        Variant::Str(s) => s.as_str(),
+    // Get the encrypted message - accept both bytes and base64 string for compatibility
+    let encrypted = match bf_args.args[0].variant() {
+        Variant::Binary(b) => b.as_bytes().to_vec(),
+        Variant::Str(s) => {
+            let Some(data) = BASE64.decode(s.as_str()).ok() else {
+                warn!("Invalid base64 data for decryption");
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("age_decrypt() failed to decode base64 data"),
+                ));
+            };
+            data
+        }
         _ => {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                 format!(
-                    "age_decrypt() first argument must be a string, was {}",
+                    "age_decrypt() first argument must be bytes or string, was {}",
                     bf_args.args[0].type_code().to_literal()
                 )
             })));
-        }
-    };
-
-    // Decode the base64 message
-    let encrypted = match BASE64.decode(encrypted_b64) {
-        Ok(data) => data,
-        Err(_) => {
-            warn!("Invalid base64 data for decryption");
-            return Err(BfErr::ErrValue(
-                E_INVARG.msg("age_decrypt() failed to decode base64 data"),
-            ));
         }
     };
 
@@ -226,15 +268,25 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     }
 
-    // Process each private key
+    // Process each private key - accept both strings and bytes
     let mut identities = Vec::new();
     for key_var in private_keys_list.iter() {
         let key_str = match key_var.variant() {
-            Variant::Str(s) => s.as_str(),
+            Variant::Str(s) => s.as_str().to_string(),
+            Variant::Binary(b) => {
+                // Convert bytes to string for key parsing
+                let Some(s) = std::str::from_utf8(b.as_bytes()).ok() else {
+                    warn!("Invalid UTF-8 in binary private key");
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.msg("age_decrypt() binary private key must be UTF-8 encoded text (Bech32 or OpenSSH format)"),
+                    ));
+                };
+                s.to_string()
+            }
             _ => {
                 return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                     format!(
-                        "age_decrypt() private key must be a string, was {}",
+                        "age_decrypt() private key must be a string or bytes, was {}",
                         key_var.type_code().to_literal()
                     )
                 })));
@@ -248,7 +300,7 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
             Err(_) => {
                 // Try to parse as an SSH private key
-                match ssh_key::PrivateKey::from_openssh(key_str) {
+                match ssh_key::PrivateKey::from_openssh(&key_str) {
                     Ok(ssh_key) => {
                         // Convert to OpenSSH format string
                         let ssh_key_str = ssh_key
