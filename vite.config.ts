@@ -74,6 +74,7 @@ export default defineConfig({
             "/objects": process.env.MOOR_API_URL || "http://localhost:8080",
             "/system_property": process.env.MOOR_API_URL || "http://localhost:8080",
             "/fb": process.env.MOOR_API_URL || "http://localhost:8080",
+            "/webhooks": process.env.MOOR_API_URL || "http://localhost:8080",
         },
     },
 });

@@ -72,6 +72,7 @@ union SchedulerErrorUnion {
     CommandExecutionError,
     TaskAbortedLimit,
     TaskAbortedError,
+    TaskAbortedVerbNotFound,
     TaskAbortedException,
     TaskAbortedCancelled,
     VerbProgramFailed,
@@ -112,6 +113,11 @@ table TaskAbortedError {
 
 table TaskAbortedException {
     exception: MoorCommon.Exception (required);
+}
+
+table TaskAbortedVerbNotFound {
+    where: MoorVar.Var (required);
+    what: MoorCommon.Symbol (required);
 }
 
 table TaskAbortedCancelled {
@@ -504,7 +510,8 @@ union HostClientToDaemonMessageUnion {
     SetEventLogPublicKey,
     DeleteEventLogHistory,
     ListObjects,
-    UpdateProperty
+    UpdateProperty,
+    InvokeSystemHandler
 }
 
 table ConnectionEstablish {
@@ -675,6 +682,13 @@ table UpdateProperty {
     value: MoorVar.Var (required);
 }
 
+table InvokeSystemHandler {
+    host_id: MoorCommon.Uuid (required);
+    handler_type: string (required);
+    args: [MoorVar.Var] (required);
+    auth_token: AuthToken;
+}
+
 table HostClientToDaemonMessage {
     message: HostClientToDaemonMessageUnion (required);
 }
@@ -706,7 +720,8 @@ union DaemonToClientReplyUnion {
     EventLogPublicKey,
     EventLogHistoryDeleted,
     ListObjectsReply,
-    PropertyUpdated
+    PropertyUpdated,
+    SystemHandlerResponseReply
 }
 
 table NewConnection {
@@ -816,6 +831,23 @@ table ListObjectsReply {
 }
 
 table PropertyUpdated {
+}
+
+union SystemHandlerResponseUnion {
+    SystemHandlerSuccess,
+    SystemHandlerError
+}
+
+table SystemHandlerSuccess {
+    result: MoorVar.Var (required);
+}
+
+table SystemHandlerError {
+    error: SchedulerError (required);
+}
+
+table SystemHandlerResponseReply {
+    response: SystemHandlerResponseUnion (required);
 }
 
 table DaemonToClientReply {

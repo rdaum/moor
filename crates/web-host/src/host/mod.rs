@@ -19,6 +19,7 @@ mod objects;
 mod props;
 mod verbs;
 pub mod web_host;
+mod webhooks;
 mod ws_connection;
 
 pub use auth::{connect_auth_handler, create_auth_handler};
@@ -38,6 +39,8 @@ pub use web_host::{
     WebHost, eval_handler, features_handler, resolve_objref_handler, system_property_handler,
     ws_connect_attach_handler, ws_create_attach_handler,
 };
+
+pub use webhooks::web_hook_handler;
 
 // Not used yet
 #[allow(dead_code)]

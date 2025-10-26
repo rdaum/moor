@@ -55,6 +55,8 @@ pub enum SchedulerError {
     TaskAbortedLimit(AbortLimitReason),
     #[error("Task aborted due to error.")]
     TaskAbortedError,
+    #[error("Task aborted due to verb not found for dispatch.")]
+    TaskAbortedVerbNotFound(Var, Symbol),
     #[error("Task aborted due to exception")]
     TaskAbortedException(#[source] Exception),
     #[error("Task aborted due to cancellation.")]

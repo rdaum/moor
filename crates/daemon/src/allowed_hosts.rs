@@ -39,19 +39,16 @@ impl AllowedHostsRegistry {
     /// Creates the allowed-hosts directory if it doesn't exist, initializes cache, and loads entries.
     pub fn from_dir(hosts_dir: &Path) -> Result<Self> {
         fs::create_dir_all(hosts_dir).with_context(|| {
-            format!(
-                "Failed to create allowed-hosts directory at {:?}",
-                hosts_dir
-            )
+            format!("Failed to create allowed-hosts directory at {hosts_dir:?}")
         })?;
         #[cfg(unix)]
         {
             let mut perms = fs::metadata(hosts_dir)
-                .with_context(|| format!("Failed to stat allowed-hosts dir {:?}", hosts_dir))?
+                .with_context(|| format!("Failed to stat allowed-hosts dir {hosts_dir:?}"))?
                 .permissions();
             perms.set_mode(0o700); // owner rwx only
             fs::set_permissions(hosts_dir, perms)
-                .with_context(|| format!("Failed to set permissions on {:?}", hosts_dir))?;
+                .with_context(|| format!("Failed to set permissions on {hosts_dir:?}"))?;
             let mode = fs::metadata(hosts_dir)?.permissions().mode() & 0o777;
             if mode & 0o077 != 0 {
                 warn!(
@@ -80,8 +77,8 @@ impl AllowedHostsRegistry {
 
         let entries = fs::read_dir(&self.hosts_dir).with_context(|| {
             format!(
-                "Failed to read allowed-hosts directory {:?}",
-                self.hosts_dir
+                "Failed to read allowed-hosts directory {hosts_dir:?}",
+                hosts_dir = self.hosts_dir
             )
         })?;
 
@@ -160,15 +157,15 @@ impl AllowedHostsRegistry {
         );
 
         fs::write(&file_path, content)
-            .with_context(|| format!("Failed to write host public key to {:?}", file_path))?;
+            .with_context(|| format!("Failed to write host public key to {file_path:?}"))?;
         #[cfg(unix)]
         {
             let mut perms = fs::metadata(&file_path)
-                .with_context(|| format!("Failed to stat host key file {:?}", file_path))?
+                .with_context(|| format!("Failed to stat host key file {file_path:?}"))?
                 .permissions();
             perms.set_mode(0o600); // owner rw only
             fs::set_permissions(&file_path, perms)
-                .with_context(|| format!("Failed to set permissions on {:?}", file_path))?;
+                .with_context(|| format!("Failed to set permissions on {file_path:?}"))?;
             let mode = fs::metadata(&file_path)?.permissions().mode() & 0o777;
             if mode & 0o177 != 0 {
                 warn!(
@@ -196,7 +193,7 @@ impl AllowedHostsRegistry {
         // Remove from disk
         if file_path.exists() {
             fs::remove_file(&file_path)
-                .with_context(|| format!("Failed to remove host file {:?}", file_path))?;
+                .with_context(|| format!("Failed to remove host file {file_path:?}"))?;
         }
 
         // Remove from cache
@@ -226,7 +223,7 @@ impl AllowedHostsRegistry {
 /// ```
 fn load_host_public_key(path: &Path) -> Result<String> {
     let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read host public key from {:?}", path))?;
+        .with_context(|| format!("Failed to read host public key from {path:?}"))?;
 
     for line in content.lines() {
         let line = line.trim();

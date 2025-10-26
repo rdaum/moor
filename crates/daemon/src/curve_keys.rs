@@ -66,10 +66,10 @@ pub fn load_or_generate_daemon_keypair(data_dir: &Path) -> Result<CurveKeyPair> 
 /// Load a keypair from separate secret and public key files
 fn load_keypair(secret_path: &Path, public_path: &Path) -> Result<CurveKeyPair> {
     let secret_content = fs::read_to_string(secret_path)
-        .with_context(|| format!("Failed to read secret key from {:?}", secret_path))?;
+        .with_context(|| format!("Failed to read secret key from {secret_path:?}"))?;
 
     let public_content = fs::read_to_string(public_path)
-        .with_context(|| format!("Failed to read public key from {:?}", public_path))?;
+        .with_context(|| format!("Failed to read public key from {public_path:?}"))?;
 
     // Parse files - they have format "secret=<key>" or "public=<key>"
     let secret = parse_key_file(&secret_content, "secret")?;
@@ -97,10 +97,10 @@ fn save_keypair(keypair: &CurveKeyPair, secret_path: &Path, public_path: &Path) 
     );
 
     fs::write(secret_path, secret_content)
-        .with_context(|| format!("Failed to write secret key to {:?}", secret_path))?;
+        .with_context(|| format!("Failed to write secret key to {secret_path:?}"))?;
 
     fs::write(public_path, public_content)
-        .with_context(|| format!("Failed to write public key to {:?}", public_path))?;
+        .with_context(|| format!("Failed to write public key to {public_path:?}"))?;
 
     // Restrict permissions on secret key (Unix only)
     #[cfg(unix)]

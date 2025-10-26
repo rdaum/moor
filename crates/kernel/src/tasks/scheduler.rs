@@ -67,8 +67,8 @@ use moor_common::{
 };
 use moor_objdef::{collect_object, dump_object};
 use moor_var::{
-    E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, Obj, SYSTEM_OBJECT, Symbol,
-    Var, Variant, v_bool_int, v_err, v_int, v_obj, v_string,
+    E_EXEC, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, List, NOTHING, Obj, SYSTEM_OBJECT,
+    Symbol, Var, Variant, v_bool_int, v_err, v_int, v_obj, v_string,
 };
 use std::collections::HashMap;
 
@@ -788,6 +788,61 @@ impl Scheduler {
                 // Start blocking sweep phase
                 let _ = self.run_blocking_sweep_phase(unreachable_objects);
             }
+            SchedulerClientMsg::SubmitSystemHandlerTask {
+                player,
+                handler_type,
+                args,
+                session,
+                reply,
+            } => {
+                // If no provided (auth'd) player, we use #0 itself
+                let player = if player == NOTHING {
+                    SYSTEM_OBJECT
+                } else {
+                    player
+                };
+                debug!(
+                    "Processing system handler task: handler_type={}, player={}, args_count={}",
+                    handler_type,
+                    player,
+                    args.len()
+                );
+
+                // Construct specific verb name: invoke_<handler_type>_handler
+                let verb_name = format!("invoke_{}_handler", handler_type);
+                let invoke_handler_sym = Symbol::mk(&verb_name);
+
+                // Prepare arguments: [args...] (handler_type is now encoded in the verb name)
+                let handler_args = args;
+
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+                debug!("Created system handler task with id={}", task_id);
+
+                let task_start = TaskStart::StartVerb {
+                    player,
+                    vloc: v_obj(SYSTEM_OBJECT),
+                    verb: invoke_handler_sym,
+                    args: List::mk_list(&handler_args),
+                    argstr: "".to_string(),
+                };
+
+                let result = task_q.submit_new_task(
+                    task_id,
+                    &player,
+                    &player, // Use the same player as permissions object
+                    task_start,
+                    None,
+                    session,
+                    &self.server_options,
+                    self.config.features.anonymous_objects
+                        && (self.gc_sweep_in_progress || self.gc_force_collect),
+                );
+                debug!("System handler task submission result: {:?}", result);
+                reply
+                    .send(result)
+                    .expect("Could not send task handle reply");
+            }
             SchedulerClientMsg::ExecuteWorldStateActions {
                 actions,
                 rollback,
@@ -884,8 +939,11 @@ impl Scheduler {
                     self.server_options.max_task_retries,
                 );
             }
-            TaskControlMsg::TaskVerbNotFound(..) => {
-                task_q.send_task_result(task_id, Err(TaskAbortedError));
+            TaskControlMsg::TaskVerbNotFound(who, what) => {
+                task_q.send_task_result(
+                    task_id,
+                    Err(SchedulerError::TaskAbortedVerbNotFound(who, what)),
+                );
             }
             TaskControlMsg::TaskCommandError(parse_command_error) => {
                 // This is a common occurrence, so we don't want to log it at warn level.

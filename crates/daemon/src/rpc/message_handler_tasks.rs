@@ -23,7 +23,7 @@ use moor_common::{model::ObjectRef, util::parse_into_words};
 use moor_kernel::{SchedulerClient, tasks::TaskNotification};
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_obj};
-use rpc_common::RpcMessageError;
+use rpc_common::{RpcMessageError, scheduler_error_to_flatbuffer_struct};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
@@ -354,5 +354,108 @@ impl RpcMessageHandler {
                 },
             )),
         })
+    }
+
+    pub(crate) fn submit_invoke_system_handler_task(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        player: &Obj,
+        handler_type: String,
+        args: Vec<Var>,
+    ) -> Result<moor_rpc::DaemonToClientReply, RpcMessageError> {
+        debug!(
+            "Submitting system handler task: handler_type={}, player={}, args_count={}",
+            handler_type,
+            player,
+            args.len()
+        );
+
+        // Get the connection object for session management
+        let connection = self
+            .connections
+            .connection_object_for_client(client_id)
+            .ok_or(RpcMessageError::InternalError(
+                "Connection not found".to_string(),
+            ))?;
+
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            connection,
+            self.event_log.clone(),
+            self.mailbox_sender.clone(),
+        ));
+
+        // Submit the task using the new system handler method
+        let task_handle =
+            match scheduler_client.submit_system_handler_task(player, handler_type, args, session) {
+                Ok(t) => {
+                    debug!(
+                        "System handler task submitted successfully, task_id={}",
+                        t.task_id()
+                    );
+                    t
+                }
+                Err(e) => {
+                    error!(error = ?e, "Error submitting system handler task");
+                    return Err(RpcMessageError::InternalError(e.to_string()));
+                }
+            };
+
+        // Wait for task completion like eval does
+        let receiver = task_handle.into_receiver();
+        loop {
+            match receiver.recv() {
+                Ok((_, Ok(TaskNotification::Result(v)))) => {
+                    let result_fb = var_to_flatbuffer(&v).map_err(|e| {
+                        error!("Failed to encode result: {e}");
+                        RpcMessageError::InternalError(format!("Failed to encode result: {e}"))
+                    })?;
+                    break Ok(moor_rpc::DaemonToClientReply {
+                        reply: moor_rpc::DaemonToClientReplyUnion::SystemHandlerResponseReply(
+                            Box::new(moor_rpc::SystemHandlerResponseReply {
+                                response:
+                                    moor_rpc::SystemHandlerResponseUnion::SystemHandlerSuccess(
+                                        Box::new(moor_rpc::SystemHandlerSuccess {
+                                            result: Box::new(result_fb),
+                                        }),
+                                    ),
+                            }),
+                        ),
+                    });
+                }
+                Ok((_, Ok(TaskNotification::Suspended))) => continue,
+                Ok((_, Err(e))) => {
+                    error!(error = ?e, "Submitting system handler failed");
+                    // Convert scheduler error to FlatBuffer and return as SystemHandlerError
+                    let scheduler_error_fb = match scheduler_error_to_flatbuffer_struct(&e) {
+                        Ok(fb) => fb,
+                        Err(encode_err) => {
+                            error!("Failed to encode scheduler error: {}", encode_err);
+                            break Err(RpcMessageError::InternalError(format!(
+                                "Failed to encode scheduler error: {}",
+                                encode_err
+                            )));
+                        }
+                    };
+                    break Ok(moor_rpc::DaemonToClientReply {
+                        reply: moor_rpc::DaemonToClientReplyUnion::SystemHandlerResponseReply(
+                            Box::new(moor_rpc::SystemHandlerResponseReply {
+                                response: moor_rpc::SystemHandlerResponseUnion::SystemHandlerError(
+                                    Box::new(moor_rpc::SystemHandlerError {
+                                        error: Box::new(scheduler_error_fb),
+                                    }),
+                                ),
+                            }),
+                        ),
+                    });
+                }
+                Err(e) => {
+                    error!(error = ?e, "Error processing system handler task");
+
+                    break Err(RpcMessageError::InternalError(e.to_string()));
+                }
+            }
+        }
     }
 }

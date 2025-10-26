@@ -74,7 +74,7 @@ impl EnrollmentServer {
 
         socket
             .bind(endpoint)
-            .with_context(|| format!("Failed to bind enrollment socket to {}", endpoint))?;
+            .with_context(|| format!("Failed to bind enrollment socket to {endpoint}"))?;
 
         info!("Enrollment server listening on {}", endpoint);
 
@@ -124,7 +124,7 @@ impl EnrollmentServer {
             Ok(r) => r,
             Err(e) => {
                 warn!(error = ?e, "Invalid enrollment request");
-                return mk_enrollment_response_failure(format!("Invalid request format: {}", e));
+                return mk_enrollment_response_failure(format!("Invalid request format: {e}"));
             }
         };
 
@@ -194,10 +194,7 @@ impl EnrollmentServer {
                 .add_host(service_uuid, curve_public_key, service_type, hostname)
         {
             error!(error = ?e, "Failed to save host public key");
-            return mk_enrollment_response_failure(format!(
-                "Failed to save host public key: {}",
-                e
-            ));
+            return mk_enrollment_response_failure(format!("Failed to save host public key: {e}"));
         }
 
         mk_enrollment_response_success(
@@ -210,7 +207,7 @@ impl EnrollmentServer {
     fn validate_enrollment_token(&self, provided_token: &str) -> Result<(), String> {
         let current_token = self
             .load_current_enrollment_token()
-            .map_err(|e| format!("No enrollment token available: {}", e))?;
+            .map_err(|e| format!("No enrollment token available: {e}"))?;
 
         if provided_token != current_token {
             return Err("Invalid enrollment token".to_string());
@@ -232,7 +229,7 @@ impl EnrollmentServer {
 pub fn ensure_enrollment_token(token_path: &std::path::Path) -> Result<String> {
     if token_path.exists() {
         let token = fs::read_to_string(token_path)
-            .with_context(|| format!("Failed to read enrollment token from {:?}", token_path))?
+            .with_context(|| format!("Failed to read enrollment token from {token_path:?}"))?
             .trim()
             .to_string();
         info!("Using enrollment token from {:?}", token_path);
@@ -253,7 +250,7 @@ pub fn ensure_enrollment_token(token_path: &std::path::Path) -> Result<String> {
     } else {
         let token = Uuid::new_v4().to_string();
         fs::write(token_path, &token)
-            .with_context(|| format!("Failed to write enrollment token to {:?}", token_path))?;
+            .with_context(|| format!("Failed to write enrollment token to {token_path:?}"))?;
 
         // Restrict permissions (Unix only)
         #[cfg(unix)]
@@ -289,7 +286,7 @@ pub fn rotate_enrollment_token(token_path: &Path) -> Result<String> {
     let old_token = if token_path.exists() {
         Some(
             fs::read_to_string(token_path)
-                .with_context(|| format!("Failed to read existing token from {:?}", token_path))?
+                .with_context(|| format!("Failed to read existing token from {token_path:?}"))?
                 .trim()
                 .to_string(),
         )
@@ -299,11 +296,11 @@ pub fn rotate_enrollment_token(token_path: &Path) -> Result<String> {
 
     if let Some(parent) = token_path.parent() {
         fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory {:?}", parent))?;
+            .with_context(|| format!("Failed to create directory {parent:?}"))?;
     }
 
     fs::write(token_path, &new_token)
-        .with_context(|| format!("Failed to write new enrollment token to {:?}", token_path))?;
+        .with_context(|| format!("Failed to write new enrollment token to {token_path:?}"))?;
 
     #[cfg(unix)]
     {

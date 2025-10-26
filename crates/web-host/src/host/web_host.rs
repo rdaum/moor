@@ -133,6 +133,7 @@ pub struct WebHost {
     pub(crate) handler_object: Obj,
     local_port: u16,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
+    pub(crate) host_id: Uuid,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -150,6 +151,7 @@ impl WebHost {
         handler_object: Obj,
         local_port: u16,
         curve_keys: Option<(String, String, String)>,
+        host_id: Uuid,
     ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
@@ -159,6 +161,7 @@ impl WebHost {
             handler_object,
             local_port,
             curve_keys,
+            host_id,
         }
     }
 }
@@ -522,7 +525,6 @@ impl WebHost {
         };
 
         let mut rpc_client = RpcSendClient::new(rpc_request_sock);
-        let host_id = Uuid::new_v4();
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration.as_nanos() as u64,
             Err(e) => {
@@ -535,13 +537,16 @@ impl WebHost {
         };
 
         let register_msg = mk_register_host_msg(
-            host_id,
+            self.host_id,
             timestamp,
             moor_rpc::HostType::WebSocket,
             Vec::new(),
         );
 
-        let register_bytes = match rpc_client.make_host_rpc_call(host_id, register_msg).await {
+        let register_bytes = match rpc_client
+            .make_host_rpc_call(self.host_id, register_msg)
+            .await
+        {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("Failed to register temporary host for feature fetch: {}", e);
@@ -592,7 +597,10 @@ impl WebHost {
 
         let request_msg = mk_get_server_features_msg();
 
-        let reply_bytes = match rpc_client.make_host_rpc_call(host_id, request_msg).await {
+        let reply_bytes = match rpc_client
+            .make_host_rpc_call(self.host_id, request_msg)
+            .await
+        {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("Failed to fetch server features: {}", e);
@@ -640,8 +648,11 @@ impl WebHost {
             }
         }
 
-        let detach_msg = mk_detach_host_msg(host_id);
-        if let Err(e) = rpc_client.make_host_rpc_call(host_id, detach_msg).await {
+        let detach_msg = mk_detach_host_msg(self.host_id);
+        if let Err(e) = rpc_client
+            .make_host_rpc_call(self.host_id, detach_msg)
+            .await
+        {
             error!("Failed to detach temporary host after feature fetch: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }

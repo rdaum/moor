@@ -492,6 +492,32 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
+    /// Submit a system handler task with proper permissions lookup.
+    /// This method looks up the #0.invoke_handler_perms property and uses that user
+    /// as the permissions object for the verb invocation.
+    pub fn submit_system_handler_task(
+        &self,
+        player: &Obj,
+        handler_type: String,
+        args: Vec<Var>,
+        session: Arc<dyn Session>,
+    ) -> Result<TaskHandle, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::SubmitSystemHandlerTask {
+                player: *player,
+                handler_type,
+                args,
+                session,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
     /// Reload an existing object from objdef text, completely replacing its contents.
     pub fn reload_object(
         &self,
@@ -671,6 +697,14 @@ pub enum SchedulerClientMsg {
         constants: Option<moor_objdef::Constants>,
         target_obj: Option<Obj>,
         reply: oneshot::Sender<Result<moor_objdef::ObjDefLoaderResults, SchedulerError>>,
+    },
+    /// Submit a system handler task with proper permissions lookup
+    SubmitSystemHandlerTask {
+        player: Obj,
+        handler_type: String,
+        args: Vec<Var>,
+        session: Arc<dyn Session>,
+        reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },
     /// Internal message from GC thread when mark phase completes
     GCMarkPhaseComplete {

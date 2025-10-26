@@ -33,6 +33,7 @@ use tokio::{
     signal::unix::{SignalKind, signal},
 };
 use tracing::{error, info};
+use uuid::Uuid;
 
 mod connection;
 mod connection_codec;
@@ -129,6 +130,7 @@ async fn main() -> Result<(), eyre::Error> {
         }
     };
 
+    let host_id = Uuid::new_v4();
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
@@ -149,6 +151,7 @@ async fn main() -> Result<(), eyre::Error> {
         });
 
     let (rpc_client, host_id) = match start_host_session(
+        host_id,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),

@@ -618,3 +618,7 @@ The `workers()` function is particularly useful for:
 
 **Note**: The average response time field is currently not implemented and always returns 0.0. This may be implemented
 in future versions to provide more detailed performance metrics.
+
+## Webhooks
+
+For handling incoming HTTP requests and serving dynamic content from MOO code, see the [Webhooks](../the-moo-programming-language/webhooks.md) documentation. Webhooks allow the MOO to function as a web application server, serving HTML pages, JSON APIs, and other HTTP content directly through the `#0:invoke_http_handler` verb.

@@ -3492,6 +3492,7 @@ dependencies = [
  "tmq",
  "tokio",
  "tracing",
+ "url",
  "urlencoding",
  "uuid 1.18.1",
 ]

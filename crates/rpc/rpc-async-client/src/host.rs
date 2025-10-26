@@ -31,15 +31,13 @@ use uuid::Uuid;
 /// Start the host session with the daemon, and return the RPC client and host_id to use for further
 /// communication.
 pub async fn start_host_session(
+    host_id: Uuid,
     zmq_ctx: tmq::Context,
     rpc_address: String,
     kill_switch: Arc<AtomicBool>,
     listeners: ListenersClient,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
 ) -> Result<(RpcSendClient, Uuid), RpcError> {
-    // Generate a unique host ID for this session
-    let host_id = Uuid::new_v4();
-
     // Establish the initial connection to the daemon, and send the host_id and our initial
     // listener list.
     let rpc_client = loop {

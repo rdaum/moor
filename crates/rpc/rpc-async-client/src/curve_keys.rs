@@ -62,8 +62,8 @@ pub fn generate_keypair() -> Result<CurveKeyPair> {
 /// Looks for keys at ~/.moor/{service_type}-curve.{key,pub}
 /// If not found, generates new keys and saves them
 pub fn load_or_generate_keypair(data_dir: &Path, service_type: &str) -> Result<CurveKeyPair> {
-    let secret_path = data_dir.join(format!("{}-curve.key", service_type));
-    let public_path = data_dir.join(format!("{}-curve.pub", service_type));
+    let secret_path = data_dir.join(format!("{service_type}-curve.key"));
+    let public_path = data_dir.join(format!("{service_type}-curve.pub"));
 
     if secret_path.exists() && public_path.exists() {
         info!(
@@ -87,17 +87,17 @@ pub fn load_or_generate_keypair(data_dir: &Path, service_type: &str) -> Result<C
 ///
 /// Returns None if identity file doesn't exist (host not yet enrolled)
 pub fn load_identity(data_dir: &Path, service_type: &str) -> Result<Option<HostIdentity>> {
-    let identity_path = data_dir.join(format!("{}-identity.json", service_type));
+    let identity_path = data_dir.join(format!("{service_type}-identity.json"));
 
     if !identity_path.exists() {
         return Ok(None);
     }
 
     let content = fs::read_to_string(&identity_path)
-        .with_context(|| format!("Failed to read identity from {:?}", identity_path))?;
+        .with_context(|| format!("Failed to read identity from {identity_path:?}"))?;
 
     let identity: HostIdentity = serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse identity from {:?}", identity_path))?;
+        .with_context(|| format!("Failed to parse identity from {identity_path:?}"))?;
 
     Ok(Some(identity))
 }
@@ -112,9 +112,9 @@ pub fn save_identity(
 ) -> Result<()> {
     // Ensure data directory exists
     fs::create_dir_all(data_dir)
-        .with_context(|| format!("Failed to create directory {:?}", data_dir))?;
+        .with_context(|| format!("Failed to create directory {data_dir:?}"))?;
 
-    let identity_path = data_dir.join(format!("{}-identity.json", service_type));
+    let identity_path = data_dir.join(format!("{service_type}-identity.json"));
 
     let identity = HostIdentity {
         service_uuid: service_uuid.to_string(),
@@ -128,7 +128,7 @@ pub fn save_identity(
         serde_json::to_string_pretty(&identity).context("Failed to serialize host identity")?;
 
     fs::write(&identity_path, content)
-        .with_context(|| format!("Failed to write identity to {:?}", identity_path))?;
+        .with_context(|| format!("Failed to write identity to {identity_path:?}"))?;
 
     info!(
         "Saved {} identity (UUID: {}) to {:?}",
@@ -141,10 +141,10 @@ pub fn save_identity(
 /// Load a keypair from separate secret and public key files
 fn load_keypair(secret_path: &Path, public_path: &Path) -> Result<CurveKeyPair> {
     let secret_content = fs::read_to_string(secret_path)
-        .with_context(|| format!("Failed to read secret key from {:?}", secret_path))?;
+        .with_context(|| format!("Failed to read secret key from {secret_path:?}"))?;
 
     let public_content = fs::read_to_string(public_path)
-        .with_context(|| format!("Failed to read public key from {:?}", public_path))?;
+        .with_context(|| format!("Failed to read public key from {public_path:?}"))?;
 
     // Parse files - they have format "secret=<key>" or "public=<key>"
     let secret = parse_key_file(&secret_content, "secret")?;
@@ -163,7 +163,7 @@ fn save_keypair(
     // Ensure parent directory exists
     if let Some(parent) = secret_path.parent() {
         fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory {:?}", parent))?;
+            .with_context(|| format!("Failed to create directory {parent:?}"))?;
     }
 
     let secret_content = format!(
@@ -185,10 +185,10 @@ fn save_keypair(
     );
 
     fs::write(secret_path, secret_content)
-        .with_context(|| format!("Failed to write secret key to {:?}", secret_path))?;
+        .with_context(|| format!("Failed to write secret key to {secret_path:?}"))?;
 
     fs::write(public_path, public_content)
-        .with_context(|| format!("Failed to write public key to {:?}", public_path))?;
+        .with_context(|| format!("Failed to write public key to {public_path:?}"))?;
 
     // Restrict permissions on secret key (Unix only)
     #[cfg(unix)]

@@ -777,8 +777,10 @@ async fn main() -> Result<(), eyre::Error> {
 
     let (listeners, _ljh) = setup::noop_listeners_loop().await;
 
+    let host_id = Uuid::new_v4();
     let rpc_address = args.client_args.rpc_address.clone();
     let (_rpc_client, host_id) = start_host_session(
+        host_id,
         zmq_ctx.clone(),
         rpc_address.clone(),
         kill_switch.clone(),

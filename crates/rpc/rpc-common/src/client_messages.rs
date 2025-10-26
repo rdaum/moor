@@ -487,3 +487,29 @@ pub fn mk_update_property_msg(
         )),
     })
 }
+
+/// Build an InvokeSystemHandler message
+#[inline]
+pub fn mk_invoke_system_handler_msg(
+    host_id: &Uuid,
+    handler_type: &str,
+    args: Vec<&Var>,
+    auth_token: Option<&AuthToken>,
+) -> Option<rpc::HostClientToDaemonMessage> {
+    let args_fb: Vec<var::Var> = args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
+
+    if args_fb.len() != args.len() {
+        return None;
+    }
+
+    Some(rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::InvokeSystemHandler(Box::new(
+            rpc::InvokeSystemHandler {
+                host_id: uuid_fb(*host_id),
+                handler_type: handler_type.to_string(),
+                args: args_fb,
+                auth_token: auth_token.map(auth_token_fb),
+            },
+        )),
+    })
+}

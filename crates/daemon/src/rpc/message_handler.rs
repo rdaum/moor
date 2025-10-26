@@ -408,6 +408,9 @@ impl MessageHandler for RpcMessageHandler {
             HostClientToDaemonMessageUnionRef::UpdateProperty(req) => {
                 self.handle_update_property(scheduler_client, client_id, req)
             }
+            HostClientToDaemonMessageUnionRef::InvokeSystemHandler(invoke) => {
+                self.handle_invoke_system_handler(scheduler_client, client_id, invoke)
+            }
         }
     }
 
@@ -1875,6 +1878,51 @@ impl RpcMessageHandler {
                 },
             )),
         })
+    }
+
+    fn handle_invoke_system_handler(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        invoke: moor_rpc::InvokeSystemHandlerRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Extract host_id for accountability (currently unused but available for logging/auditing)
+        let _host_id = extract_uuid_rpc(&invoke, "host_id", |i| i.host_id())?;
+
+        // Extract handler_type for routing to #0:invoke_<handler_type>_handler
+        let handler_type = extract_string_rpc(&invoke, "handler_type", |i| i.handler_type())?;
+
+        // Extract args for passing to the handler
+        let args_vec = invoke
+            .args()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let args: Vec<Var> = args_vec
+            .iter()
+            .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))
+            .collect();
+
+        // Handle authentication - auth_token is optional for system handlers
+        let player = match invoke.auth_token() {
+            Ok(Some(auth_token_ref)) => {
+                // If auth token is provided, validate it and use that player
+                let auth_token = auth_token_from_ref(auth_token_ref)
+                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+                self.validate_auth_token(auth_token, None)?
+            }
+            Ok(None) | Err(_) => {
+                // If no auth token provided or error, use the system object (#0)
+                SYSTEM_OBJECT
+            }
+        };
+
+        // Submit the system handler task - will call #0:invoke_<handler_type>_handler
+        self.submit_invoke_system_handler_task(
+            scheduler_client,
+            client_id,
+            &player,
+            handler_type,
+            args,
+        )
     }
 
     fn handle_update_property(

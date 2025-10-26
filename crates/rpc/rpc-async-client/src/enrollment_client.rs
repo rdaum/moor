@@ -53,10 +53,7 @@ pub fn enroll_with_daemon(
 
     // Connect to enrollment endpoint
     socket.connect(enrollment_endpoint).with_context(|| {
-        format!(
-            "Failed to connect to enrollment endpoint: {}",
-            enrollment_endpoint
-        )
+        format!("Failed to connect to enrollment endpoint: {enrollment_endpoint}")
     })?;
 
     // Build enrollment request

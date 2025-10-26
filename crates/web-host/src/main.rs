@@ -41,6 +41,7 @@ use tokio::{
     signal::unix::{SignalKind, signal},
 };
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 #[derive(Parser, Debug, Serialize, Deserialize)]
 struct Args {
@@ -64,9 +65,13 @@ struct Args {
     #[serde(default)]
     #[arg(skip)]
     pub oauth2: OAuth2Config,
+
+    #[arg(long, help = "Enable webhooks", default_value = "true")]
+    pub enable_webhooks: bool,
 }
 
 struct Listeners {
+    host_id: Uuid,
     listeners: HashMap<SocketAddr, Listener>,
     zmq_ctx: tmq::Context,
     rpc_address: String,
@@ -74,16 +79,20 @@ struct Listeners {
     kill_switch: Arc<AtomicBool>,
     oauth2_manager: Option<Arc<OAuth2Manager>>,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
+    enable_webhooks: bool,
 }
 
 impl Listeners {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        host_id: Uuid,
         zmq_ctx: tmq::Context,
         rpc_address: String,
         events_address: String,
         kill_switch: Arc<AtomicBool>,
         oauth2_manager: Option<Arc<OAuth2Manager>>,
         curve_keys: Option<(String, String, String)>,
+        enable_webhooks: bool,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -91,6 +100,7 @@ impl Listeners {
     ) {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let listeners = Self {
+            host_id,
             listeners: HashMap::new(),
             zmq_ctx,
             rpc_address,
@@ -98,6 +108,7 @@ impl Listeners {
             kill_switch,
             oauth2_manager,
             curve_keys,
+            enable_webhooks,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
@@ -141,6 +152,7 @@ impl Listeners {
                         handler,
                         local_addr.port(),
                         self.curve_keys.clone(),
+                        self.host_id,
                     );
 
                     // Create OAuth2State if OAuth2 is enabled
@@ -149,7 +161,7 @@ impl Listeners {
                         web_host: ws_host.clone(),
                     });
 
-                    let main_router = match mk_routes(ws_host, oauth2_state) {
+                    let main_router = match mk_routes(ws_host, oauth2_state, self.enable_webhooks) {
                         Ok(mr) => mr,
                         Err(e) => {
                             warn!(?e, "Unable to create main router");
@@ -225,7 +237,11 @@ impl Listener {
     }
 }
 
-fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Result<Router> {
+fn mk_routes(
+    web_host: WebHost,
+    oauth2_state: Option<OAuth2State>,
+    enable_webhooks: bool,
+) -> eyre::Result<Router> {
     let mut webhost_router = Router::new()
         .route(
             "/ws/attach/connect/{token}",
@@ -279,7 +295,7 @@ fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Resu
             "/api/event-log/history",
             axum::routing::delete(host::delete_history_handler),
         )
-        .with_state(web_host);
+        .with_state(web_host.clone());
 
     // Add OAuth2 routes if OAuth2 is enabled
     if let Some(oauth2_state) = oauth2_state {
@@ -300,6 +316,17 @@ fn mk_routes(web_host: WebHost, oauth2_state: Option<OAuth2State>) -> eyre::Resu
             .with_state(oauth2_state);
 
         webhost_router = webhost_router.merge(oauth2_router);
+    }
+
+    // Add webhook routes only if enabled
+    if enable_webhooks {
+        let webhook_router = Router::new()
+            .route(
+                "/webhooks/{*path}",
+                axum::routing::any(host::web_hook_handler),
+            )
+            .with_state(web_host.clone());
+        webhost_router = webhost_router.merge(webhook_router);
     }
 
     Ok(webhost_router)
@@ -376,13 +403,16 @@ async fn main() -> Result<(), eyre::Error> {
         None
     };
 
+    let host_id = Uuid::new_v4();
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
+        host_id,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         args.client_args.events_address.clone(),
         kill_switch.clone(),
         oauth2_manager,
         curve_keys.clone(),
+        args.enable_webhooks,
     );
     let listeners_thread = tokio::spawn(async move {
         listeners_server.run(listeners_channel).await;
@@ -390,6 +420,7 @@ async fn main() -> Result<(), eyre::Error> {
 
     info!("Serving out of CWD {:?}", std::env::current_dir()?);
     let (rpc_client, host_id) = match start_host_session(
+        host_id,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),

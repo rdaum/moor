@@ -15,6 +15,7 @@ use moor_common::{
     model::WorldStateError,
     tasks::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError, WorkerError},
 };
+use moor_schema::convert::{symbol_from_ref, var_from_ref};
 use moor_schema::{
     common,
     convert::{
@@ -314,6 +315,13 @@ pub fn scheduler_error_from_ref(
             Ok(SchedulerError::TaskAbortedLimit(abort_reason))
         }
         rpc::SchedulerErrorUnionRef::TaskAbortedError(_) => Ok(SchedulerError::TaskAbortedError),
+        rpc::SchedulerErrorUnionRef::TaskAbortedVerbNotFound(verbnf) => {
+            let where_ = var_from_ref(verbnf.where_().map_err(|_| "Missing verb `where`")?)
+                .map_err(|_| "Missing verb `where`")?;
+            let what = symbol_from_ref(verbnf.what().map_err(|_| "Missing verb `what`")?)
+                .map_err(|_| "Missing verb `where`")?;
+            Ok(SchedulerError::TaskAbortedVerbNotFound(where_, what))
+        }
         rpc::SchedulerErrorUnionRef::TaskAbortedException(task_aborted) => {
             let exception_ref = task_aborted.exception().map_err(|_| "Missing exception")?;
             let exception = exception_from_ref(exception_ref)?;
@@ -495,6 +503,21 @@ pub fn scheduler_error_to_flatbuffer_struct(
         }
         SchedulerError::TaskAbortedCancelled => {
             rpc::SchedulerErrorUnion::TaskAbortedCancelled(Box::new(rpc::TaskAbortedCancelled {}))
+        }
+        SchedulerError::TaskAbortedVerbNotFound(who, what) => {
+            let where_ = var_to_flatbuffer(who);
+            let where_ = where_.map_err(|e| {
+                moor_var::EncodingError::CouldNotEncode(format!(
+                    "Failed to encode verbnf `where`: {e}"
+                ))
+            })?;
+            let what = symbol_to_flatbuffer_struct(what);
+            rpc::SchedulerErrorUnion::TaskAbortedVerbNotFound(Box::new(
+                rpc::TaskAbortedVerbNotFound {
+                    where_: Box::new(where_),
+                    what: Box::new(what),
+                },
+            ))
         }
         SchedulerError::VerbProgramFailed(verb_error) => {
             let verb_error_fb = verb_program_error_to_flatbuffer_struct(verb_error)

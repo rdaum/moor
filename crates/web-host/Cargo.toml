@@ -69,5 +69,6 @@ tracing.workspace = true
 
 # Utilities & Helpers
 planus.workspace = true
+url = "2.5"
 urlencoding = "2.1"
 uuid.workspace = true
