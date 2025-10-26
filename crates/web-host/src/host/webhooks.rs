@@ -49,7 +49,7 @@ pub struct WebHookRequest {
     pub method: String,
     pub path: String,
     pub query_params: HashMap<String, String>,
-    pub headers: HashMap<String, String>,
+    pub headers: Vec<(String, String)>,
     pub body: Option<Bytes>,
     pub client_ip: String,
 }
@@ -71,7 +71,7 @@ impl WebHookRequest {
             })
             .unwrap_or_default();
 
-        let headers_map = headers
+        let headers_vec = headers
             .iter()
             .map(|(name, value)| {
                 (
@@ -85,16 +85,14 @@ impl WebHookRequest {
             method: method.as_str().to_string(),
             path: uri.path().to_string(),
             query_params,
-            headers: headers_map,
+            headers: headers_vec,
             body,
             client_ip: client_ip.to_string(),
         }
     }
 
-    /// Helper function to convert a HashMap to a MOO list of [key, value] pairs
-    fn hashmap_to_moo_list(map: &HashMap<String, String>) -> Var {
-        use moor_var::Var;
-
+    /// Helper function to convert a HashMap to a MOO alist of [key, value] pairs
+    fn hashmap_to_alist(map: &HashMap<String, String>) -> Var {
         let pairs: Vec<Var> = map
             .iter()
             .map(|(k, v)| {
@@ -105,17 +103,27 @@ impl WebHookRequest {
         Var::from(List::mk_list(&pairs))
     }
 
-    pub fn to_moo_args(&self) -> Vec<moor_var::Var> {
-        use moor_var::Var;
+    /// Helper function to convert a vector of (key, value) pairs to a MOO alist of [key, value] pairs
+    fn vec_to_alist(pairs: &[(String, String)]) -> Var {
+        let moo_pairs: Vec<Var> = pairs
+            .iter()
+            .map(|(k, v)| {
+                let pair = List::mk_list(&[Var::from(k.clone()), Var::from(v.clone())]);
+                Var::from(pair)
+            })
+            .collect();
+        Var::from(List::mk_list(&moo_pairs))
+    }
 
+    pub fn to_moo_args(&self) -> Vec<Var> {
         let method_var = Var::from(self.method.clone());
         let path_var = Var::from(self.path.clone());
 
-        // Convert query params to MOO list of [key, value] pairs
-        let query_var = Self::hashmap_to_moo_list(&self.query_params);
+        // Convert query params to MOO alist of [key, value] pairs
+        let query_var = Self::hashmap_to_alist(&self.query_params);
 
-        // Convert headers to MOO list of [key, value] pairs
-        let headers_var = Self::hashmap_to_moo_list(&self.headers);
+        // Convert headers to MOO alist of [key, value] pairs
+        let headers_var = Self::vec_to_alist(&self.headers);
 
         // Convert body to MOO string or binary
         let body_var = match &self.body {
@@ -149,7 +157,7 @@ pub async fn web_hook_handler(
     method: Method,
     uri: Uri,
     headers: HeaderMap,
-    body: axum::body::Bytes,
+    body: Bytes,
 ) -> Response {
     debug!("Webhook request received: {} {}", method, uri);
 
@@ -176,7 +184,7 @@ pub async fn web_hook_handler(
         };
 
     // Prepare system handler invocation
-    let args_refs: Vec<&moor_var::Var> = args.iter().collect();
+    let args_refs: Vec<&Var> = args.iter().collect();
     debug!(
         "Preparing system handler invocation for webhook with {} args",
         args_refs.len()

@@ -252,6 +252,8 @@ type_constant = @{ (^"int"| ^"num" | ^"float"
                   | ^"map"
                   | ^"bool"
                   | ^"flyweight"
+                  | ^"binary"
+                  | ^"lambda"
                   | ^"sym") ~ !(ident_continue) }
 
 ident = @{
