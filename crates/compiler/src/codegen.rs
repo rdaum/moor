@@ -32,7 +32,7 @@ use crate::{
 };
 use moor_common::{
     builtins::BUILTINS,
-    model::{CompileContext, CompileError, CompileError::InvalidAssignemnt},
+    model::{CompileContext, CompileError, CompileError::InvalidAssignmentTarget},
 };
 use moor_var::program::{
     labels::{JumpLabel, Label, Offset},
@@ -389,8 +389,14 @@ impl CodegenState {
                     self.push_stack(1);
                 }
             }
+            Expr::TypeConstant(c) => {
+                return Err(InvalidTypeLiteralAssignment(
+                    c.to_literal().to_string(),
+                    CompileContext::new(self.current_line_col),
+                ));
+            }
             _ => {
-                return Err(InvalidAssignemnt(CompileContext::new(
+                return Err(InvalidAssignmentTarget(CompileContext::new(
                     self.current_line_col,
                 )));
             }
@@ -573,7 +579,7 @@ impl CodegenState {
                     CallTarget::Expr(expr) => {
                         // New lambda call logic
                         self.generate_expr(expr.as_ref())?; // Evaluate callable expression
-                        self.generate_arg_list(args)?; // Push args list  
+                        self.generate_arg_list(args)?; // Push args list
                         self.emit(Op::CallLambda); // Runtime dispatch
                         self.pop_stack(1); // Pop callable, leave result
                     }
@@ -1440,6 +1446,7 @@ pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Progra
 }
 
 use crate::ast::AstVisitor;
+use moor_common::model::CompileError::InvalidTypeLiteralAssignment;
 use std::collections::HashSet;
 
 /// A visitor that finds all variable references in lambda bodies for capture analysis

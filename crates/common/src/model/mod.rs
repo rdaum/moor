@@ -103,7 +103,9 @@ pub enum CompileError {
     #[error("Bad slot name on flyweight @ {0}: {1}")]
     BadSlotName(CompileContext, String),
     #[error("Invalid l-value for assignment @ {0}")]
-    InvalidAssignemnt(CompileContext),
+    InvalidAssignmentTarget(CompileContext),
+    #[error("Cannot assign to type constant literal `{0}` @ {1}")]
+    InvalidTypeLiteralAssignment(String, CompileContext),
 }
 
 impl CompileError {

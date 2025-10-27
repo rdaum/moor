@@ -152,9 +152,12 @@ fn describe_compile_error(compile_error: CompileError) -> String {
         CompileError::BadSlotName(_, bs) => {
             format!("Bad slot name in flyweight: {bs}")
         }
-        CompileError::InvalidAssignemnt(_) => "Invalid l-value for assignment".to_string(),
+        CompileError::InvalidAssignmentTarget(_) => "Invalid l-value for assignment".to_string(),
         CompileError::UnknownTypeConstant(_, t) => {
             format!("Unknown type constant: {t}")
+        }
+        CompileError::InvalidTypeLiteralAssignment(t, _) => {
+            format!("Illegal type literal `{t}` as assignment target")
         }
     }
 }

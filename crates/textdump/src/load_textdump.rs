@@ -16,6 +16,7 @@ use crate::{
     VF_ASPEC_THIS, VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ,
     VF_WRITE, read::TextdumpReaderError,
 };
+use moor_common::model::CompileError;
 use moor_common::{
     matching::Preposition,
     model::{
@@ -262,13 +263,26 @@ pub fn read_textdump<T: io::Read>(
                 .map_err(|e| {
                     let names: Vec<_> = names.iter().map(|s| s.to_string()).collect();
                     let names = names.join(" ");
-                    TextdumpReaderError::VerbCompileError(
-                        format!(
-                            "Compiling verb {objid}/{vn} ({names}) starting at line {}",
-                            verb.start_line
-                        ),
-                        e.clone(),
-                    )
+                    match &e {
+                        CompileError::InvalidTypeLiteralAssignment(t, _) => {
+                            TextdumpReaderError::VerbCompileError(
+                                format!(
+                                    "Compiling verb {objid}/{vn} ({names}) starting at line {}; \
+                                    (*Note*: assignment to type literal {t} is valid in LambdaMOO/ToastStunt, \
+                                    but not in mooR. Manual intervention is required)",
+                                    verb.start_line
+                                ),
+                                e.clone(),
+                            )
+                        }
+                        _ => TextdumpReaderError::VerbCompileError(
+                            format!(
+                                "Compiling verb {objid}/{vn} ({names}) starting at line {}",
+                                verb.start_line
+                            ),
+                            e.clone(),
+                        )
+                    }
                 })?,
                 // If the verb program is missing, then it's an empty program, and we'll put in
                 // an empty binary.

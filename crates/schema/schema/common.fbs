@@ -223,6 +223,11 @@ table InvalidAssignment {
     context: CompileContext (required);
 }
 
+table InvalidTypeLiteralAssignment {
+    context: CompileContext (required);
+    literal: string (required);
+}
+
 union CompileErrorUnion {
     StringLexError,
     ParseError,
@@ -233,7 +238,8 @@ union CompileErrorUnion {
     AssignToConst,
     DisabledFeature,
     BadSlotName,
-    InvalidAssignment
+    InvalidAssignment,
+    InvalidTypeLiteralAssignment
 }
 
 table CompileError {

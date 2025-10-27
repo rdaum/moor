@@ -331,7 +331,16 @@ pub fn compilation_error_from_ref(
                 ctx_ref.line().map_err(|_| "Missing line")? as usize,
                 ctx_ref.col().map_err(|_| "Missing col")? as usize,
             ));
-            Ok(CompileError::InvalidAssignemnt(ctx))
+            Ok(CompileError::InvalidAssignmentTarget(ctx))
+        }
+        CompileErrorUnionRef::InvalidTypeLiteralAssignment(e) => {
+            let ctx_ref = e.context().map_err(|_| "Missing context")?;
+            let ctx = CompileContext::new((
+                ctx_ref.line().map_err(|_| "Missing line")? as usize,
+                ctx_ref.col().map_err(|_| "Missing col")? as usize,
+            ));
+            let literal = e.literal().map_err(|_| "Missing literal")?.to_string();
+            Ok(CompileError::InvalidTypeLiteralAssignment(literal, ctx))
         }
     }
 }
@@ -431,13 +440,24 @@ pub fn compilation_error_to_flatbuffer_struct(
                 slot: slot.clone(),
             }))
         }
-        CompileError::InvalidAssignemnt(ctx) => {
+        CompileError::InvalidAssignmentTarget(ctx) => {
             common::CompileErrorUnion::InvalidAssignment(Box::new(common::InvalidAssignment {
                 context: Box::new(common::CompileContext {
                     line: ctx.line_col.0 as u64,
                     col: ctx.line_col.1 as u64,
                 }),
             }))
+        }
+        CompileError::InvalidTypeLiteralAssignment(literal, ctx) => {
+            common::CompileErrorUnion::InvalidTypeLiteralAssignment(Box::new(
+                common::InvalidTypeLiteralAssignment {
+                    context: Box::new(common::CompileContext {
+                        line: ctx.line_col.0 as u64,
+                        col: ctx.line_col.1 as u64,
+                    }),
+                    literal: literal.clone(),
+                },
+            ))
         }
     };
 
