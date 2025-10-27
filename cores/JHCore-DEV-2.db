@@ -125458,13 +125458,13 @@ endif
 if (typeof(d_c = this:_get_info(conn, "data-conn")) != OBJ)
 raise(this.error, "Data connection not opened.");
 endif
-if (binary = this:_get_info(conn, "binary"))
+if (binval = this:_get_info(conn, "binval"))
 data = "";
 else
 data = {};
 endif
 while (typeof(`result = read(d_c) ! ANY') != ERR)
-if (binary)
+if (binval)
 data = data + result;
 else
 data = {@data, result};
@@ -125492,12 +125492,12 @@ endif
 conn = -1;
 try
 if (verb == "get_binary")
-binary = 1;
+binval = 1;
 else
-binary = 0;
+binval = 0;
 endif
 conn = this:open(host, port, user, pass);
-if (binary)
+if (binval)
 this:_set_info(conn, "binary", 1);
 this:send_TYPE(conn, "I");
 endif
@@ -125537,12 +125537,12 @@ endif
 conn = -1;
 try
 if (verb == "put_binary")
-binary = 1;
+binval = 1;
 else
-binary = 0;
+binval = 0;
 endif
 conn = this:open(host, port, user, pass);
-if (binary)
+if (binval)
 this:_set_info(conn, "binary", 1);
 this:send_TYPE(conn, "I");
 endif
@@ -125624,12 +125624,12 @@ conn = -1;
 ok = 0;
 try
 if (verb == "begin_put_binary")
-binary = 1;
+binval = 1;
 else
-binary = 0;
+binval = 0;
 endif
 conn = this:open(host, port, user, pass);
-if (binary)
+if (binval)
 this:_set_info(conn, "binary", 1);
 this:send_TYPE(conn, "I");
 endif
@@ -125684,12 +125684,12 @@ conn = -1;
 ok = 0;
 try
 if (verb == "begin_gut_binary")
-binary = 1;
+binval = 1;
 else
-binary = 0;
+binval = 0;
 endif
 conn = this:open(host, port, user, pass);
-if (binary)
+if (binval)
 this:_set_info(conn, "binary", 1);
 this:send_TYPE(conn, "I");
 endif
