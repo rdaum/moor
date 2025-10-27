@@ -101,44 +101,10 @@ export const useWelcomeMessage = () => {
         const fetchWelcome = async (): Promise<boolean> => {
             try {
                 // Import FlatBuffer function
-                const { getSystemPropertyFlatBuffer } = await import("../lib/rpc-fb");
+                const { invokeWelcomeMessageFlatBuffer } = await import("../lib/rpc-fb");
 
-                // Fetch welcome message using FlatBuffer protocol
-                const welcomeValue = await getSystemPropertyFlatBuffer(["login"], "welcome_message");
-
-                if (welcomeValue === null) {
-                    // Server not ready yet, return false to retry
-                    console.log("Server not ready, retrying...");
-                    return false;
-                }
-
-                let welcomeText = "";
-                if (Array.isArray(welcomeValue)) {
-                    welcomeText = welcomeValue.join("\n");
-                } else if (typeof welcomeValue === "string") {
-                    welcomeText = welcomeValue;
-                } else {
-                    console.warn("Unexpected welcome message format:", welcomeValue);
-                    welcomeText = "Welcome to mooR";
-                }
-
-                // Fetch content type using FlatBuffer protocol
-                let contentTypeValue: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
-                try {
-                    const typeValue = await getSystemPropertyFlatBuffer(["login"], "welcome_message_content_type");
-                    if (typeof typeValue === "string") {
-                        // Validate the content type
-                        if (
-                            typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain"
-                            || typeValue === "text/traceback"
-                        ) {
-                            contentTypeValue = typeValue;
-                        }
-                    }
-                    // If 404 or invalid value, default to text/plain (already set)
-                } catch (error) {
-                    console.log("Content type not available, defaulting to text/plain:", error);
-                }
+                // Invoke welcome message system verb using FlatBuffer protocol
+                const { welcomeMessage: welcomeText, contentType: contentTypeValue } = await invokeWelcomeMessageFlatBuffer();
 
                 if (isComponentMounted) {
                     setWelcomeMessage(welcomeText);

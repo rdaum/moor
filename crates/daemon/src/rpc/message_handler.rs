@@ -35,7 +35,10 @@ use std::{
 };
 use uuid::Uuid;
 
-use super::{hosts::Hosts, session::SessionActions, transport::Transport};
+use super::{
+    hosts::Hosts, output_capture_session::OutputCaptureSession, session::SessionActions,
+    transport::Transport,
+};
 use crate::{
     connections::{ConnectionRegistry, NewConnectionParams},
     event_log::EventLogOps,
@@ -50,24 +53,28 @@ use moor_common::{
 };
 use moor_db::db_counters;
 use moor_kernel::{
-    SchedulerClient, config::Config, tasks::sched_counters, vm::builtins::bf_perf_counters,
+    SchedulerClient,
+    config::Config,
+    tasks::{TaskNotification, sched_counters},
+    vm::builtins::bf_perf_counters,
 };
 
 use moor_schema::convert::{
-    obj_from_ref, obj_to_flatbuffer_struct, presentation_to_flatbuffer_struct,
-    uuid_to_flatbuffer_struct, var_from_ref,
+    narrative_event_to_flatbuffer_struct, obj_from_ref, obj_to_flatbuffer_struct,
+    presentation_to_flatbuffer_struct, uuid_to_flatbuffer_struct, var_from_ref, var_to_flatbuffer,
 };
-use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
     AuthToken, ClientToken, HostType, RpcMessageError, auth_token_from_ref, client_token_from_ref,
     extract_field_rpc, extract_host_type, extract_obj_rpc, extract_object_ref_rpc,
     extract_string_list_rpc, extract_string_rpc, extract_symbol_rpc, extract_uuid_rpc,
     extract_var_rpc, mk_client_attribute_set_reply, mk_daemon_to_host_ack, mk_disconnected_reply,
     mk_new_connection_reply, mk_presentation_dismissed_reply, mk_thanks_pong_reply,
-    var_to_flatbuffer_rpc, verb_program_error_to_flatbuffer_struct,
+    scheduler_error_to_flatbuffer_struct, var_to_flatbuffer_rpc,
+    verb_program_error_to_flatbuffer_struct,
 };
 use rusty_paseto::prelude::Key;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 lazy_static! {
     pub(crate) static ref USER_CONNECTED_SYM: Symbol = Symbol::mk("user_connected");
@@ -410,6 +417,9 @@ impl MessageHandler for RpcMessageHandler {
             }
             HostClientToDaemonMessageUnionRef::InvokeSystemHandler(invoke) => {
                 self.handle_invoke_system_handler(scheduler_client, client_id, invoke)
+            }
+            HostClientToDaemonMessageUnionRef::CallSystemVerb(call) => {
+                self.handle_call_system_verb(scheduler_client, client_id, call)
             }
         }
     }
@@ -1955,6 +1965,142 @@ impl RpcMessageHandler {
                 moor_rpc::PropertyUpdated {},
             )),
         })
+    }
+
+    fn handle_call_system_verb(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        call: moor_rpc::CallSystemVerbRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Only validate client token (no auth token required for system verbs)
+        let _connection = self.extract_client_token(&call, client_id, |c| c.client_token())?;
+
+        let verb = extract_symbol_rpc(&call, "verb", |c| c.verb())?;
+
+        let args_vec = call
+            .args()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+        let args: Vec<Var> = args_vec
+            .iter()
+            .filter_map(|v| v.ok().and_then(|v| var_from_ref(v).ok()))
+            .collect();
+
+        // Use output capture session for system verb calls
+        self.submit_system_verb_task(
+            scheduler_client,
+            client_id,
+            &SYSTEM_OBJECT,                // Execute as system object
+            &ObjectRef::Id(SYSTEM_OBJECT), // Target system object
+            verb,
+            args,
+        )
+    }
+
+    fn submit_system_verb_task(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        player: &Obj,
+        object: &ObjectRef,
+        verb: Symbol,
+        args: Vec<Var>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Create output capture session instead of regular RpcSession
+        let session = Arc::new(OutputCaptureSession::new(client_id, *player));
+
+        let task_handle = match scheduler_client.submit_verb_task(
+            player,
+            object,
+            verb,
+            List::mk_list(&args),
+            "".to_string(),
+            &SYSTEM_OBJECT,
+            session.clone(),
+        ) {
+            Ok(t) => t,
+            Err(e) => {
+                error!(error = ?e, "Error submitting system verb task");
+                return Err(RpcMessageError::InternalError(e.to_string()));
+            }
+        };
+
+        // Wait for task completion like eval and system handler tasks do
+        let receiver = task_handle.into_receiver();
+        loop {
+            match receiver.recv() {
+                Ok((_, Ok(TaskNotification::Result(v)))) => {
+                    // Get captured output from the session
+                    let captured_events = session.take_captured_events();
+
+                    let result_fb = var_to_flatbuffer(&v).map_err(|e| {
+                        RpcMessageError::InternalError(format!("Failed to encode result: {e}"))
+                    })?;
+
+                    // Convert captured events to FlatBuffer format
+                    debug!(
+                        "System verb task completed, captured {} events",
+                        captured_events.len()
+                    );
+                    let output_fb: Vec<moor_rpc::NarrativeEvent> = captured_events
+                        .into_iter()
+                        .filter_map(|(_player, event)| {
+                            match narrative_event_to_flatbuffer_struct(&event) {
+                                Ok(fb_event) => Some(fb_event),
+                                Err(e) => {
+                                    error!("Failed to convert narrative event to FlatBuffer: {e}");
+                                    None
+                                }
+                            }
+                        })
+                        .collect();
+                    debug!(
+                        "Successfully converted {} events to FlatBuffer",
+                        output_fb.len()
+                    );
+
+                    break Ok(moor_rpc::DaemonToClientReply {
+                        reply: moor_rpc::DaemonToClientReplyUnion::SystemVerbResponseReply(
+                            Box::new(moor_rpc::SystemVerbResponseReply {
+                                response: moor_rpc::SystemVerbResponseUnion::SystemVerbSuccess(
+                                    Box::new(moor_rpc::SystemVerbSuccess {
+                                        result: Box::new(result_fb),
+                                        output: output_fb,
+                                    }),
+                                ),
+                            }),
+                        ),
+                    });
+                }
+                Ok((_, Ok(TaskNotification::Suspended))) => continue,
+                Ok((_, Err(e))) => {
+                    // Convert scheduler error to FlatBuffer and return as SystemVerbError
+                    let scheduler_error_fb = match scheduler_error_to_flatbuffer_struct(&e) {
+                        Ok(fb) => fb,
+                        Err(encode_err) => {
+                            break Err(RpcMessageError::InternalError(format!(
+                                "Failed to encode scheduler error: {}",
+                                encode_err
+                            )));
+                        }
+                    };
+                    break Ok(moor_rpc::DaemonToClientReply {
+                        reply: moor_rpc::DaemonToClientReplyUnion::SystemVerbResponseReply(
+                            Box::new(moor_rpc::SystemVerbResponseReply {
+                                response: moor_rpc::SystemVerbResponseUnion::SystemVerbError(
+                                    Box::new(moor_rpc::SystemVerbError {
+                                        error: Box::new(scheduler_error_fb),
+                                    }),
+                                ),
+                            }),
+                        ),
+                    });
+                }
+                Err(e) => {
+                    break Err(RpcMessageError::InternalError(e.to_string()));
+                }
+            }
+        }
     }
 }
 

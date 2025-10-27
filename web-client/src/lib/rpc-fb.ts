@@ -16,7 +16,7 @@
 
 import * as flatbuffers from "flatbuffers";
 import { CompileError } from "../generated/moor-common/compile-error.js";
-import { EventUnion } from "../generated/moor-common/event-union.js";
+import { EventUnion, unionToEventUnion } from "../generated/moor-common/event-union.js";
 import { NarrativeEvent } from "../generated/moor-common/narrative-event.js";
 import { NotifyEvent } from "../generated/moor-common/notify-event.js";
 import { PresentEvent } from "../generated/moor-common/present-event.js";
@@ -49,6 +49,9 @@ import { SchedulerError } from "../generated/moor-rpc/scheduler-error.js";
 import { ServerFeatures } from "../generated/moor-rpc/server-features.js";
 import { SysPropValue } from "../generated/moor-rpc/sys-prop-value.js";
 import { SystemMessageEvent } from "../generated/moor-rpc/system-message-event.js";
+import { SystemVerbResponseReply } from "../generated/moor-rpc/system-verb-response-reply.js";
+import { SystemVerbSuccess } from "../generated/moor-rpc/system-verb-success.js";
+import { unionToSystemVerbResponseUnion } from "../generated/moor-rpc/system-verb-response-union.js";
 import { TaskAbortedLimit } from "../generated/moor-rpc/task-aborted-limit.js";
 import { TaskErrorEvent } from "../generated/moor-rpc/task-error-event.js";
 import { TaskSuccessEvent } from "../generated/moor-rpc/task-success-event.js";
@@ -1370,6 +1373,220 @@ export async function compileVerbFlatBuffer(
         return { success: false, error: "Compilation failed" };
     } else {
         throw new Error(`Unexpected VerbProgramResponse type: ${responseType}`);
+    }
+}
+
+/**
+ * Convert a FlatBuffer NarrativeEvent to a JavaScript object
+ */
+function narrativeEventToJS(narrativeEvent: any): any {
+    if (!narrativeEvent) return null;
+
+    // Get the Event object from the NarrativeEvent
+    const eventObj = narrativeEvent.event();
+    if (!eventObj) return null;
+
+    // Get the event type from the Event object
+    const eventType = eventObj.eventType();
+
+    // Use the correct union pattern to get the event union
+    const eventUnion = unionToEventUnion(
+        eventType,
+        (obj: any) => eventObj.event(obj)
+    );
+
+    if (!eventUnion) return null;
+
+    // Handle different event types
+    switch (eventType) {
+        case 1: // NotifyEvent
+            const notifyEvent = eventUnion as any;
+            const value = notifyEvent.value();
+            const contentTypeSym = notifyEvent.contentType();
+
+            // Convert the Var to JavaScript value using the same pattern as WebSocket handler
+            const content = value ? new MoorVar(value).toJS() : "";
+
+            // Get content type
+            let contentType = contentTypeSym ? contentTypeSym.value() : "text/plain";
+
+            // Normalize alternative content type formats
+            if (contentType === "text_djot" || contentType === "text/djot") {
+                contentType = "text/djot";
+            } else if (contentType === "text_html" || contentType === "text/html") {
+                contentType = "text/html";
+            } else {
+                contentType = "text/plain";
+            }
+
+            return {
+                eventType: "NotifyEvent",
+                event: {
+                    value: content,
+                    contentType: contentType,
+                },
+            };
+        case 2: // PresentEvent
+            const presentEvent = eventUnion as any;
+            return {
+                eventType: "PresentEvent",
+                event: {
+                    object: presentEvent.object(),
+                },
+            };
+        case 3: // UnpresentEvent
+            const unpresentEvent = eventUnion as any;
+            return {
+                eventType: "UnpresentEvent",
+                event: {
+                    object: unpresentEvent.object(),
+                },
+            };
+        case 4: // TracebackEvent
+            const tracebackEvent = eventUnion as any;
+            return {
+                eventType: "TracebackEvent",
+                event: {
+                    traceback: tracebackEvent.traceback(),
+                },
+            };
+        default:
+            return null;
+    }
+}
+
+/**
+ * Invoke the welcome message system verb using FlatBuffer protocol
+ *
+ * This calls #0:do_login_command and returns the narrative event output
+ * @returns Promise resolving to object with welcome message and content type
+ */
+export async function invokeWelcomeMessageFlatBuffer(): Promise<{
+    welcomeMessage: string;
+    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
+}> {
+    try {
+        const response = await fetch(`/fb/invoke_welcome_message`, {
+            method: "GET",
+        });
+
+        if (!response.ok) {
+            throw new Error(`Welcome message invocation failed: ${response.status} ${response.statusText}`);
+        }
+
+        // Get the response as an ArrayBuffer
+        const arrayBuffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+        // Parse the FlatBuffer response
+        const replyResult = ReplyResult.getRootAsReplyResult(
+            new flatbuffers.ByteBuffer(bytes),
+        );
+
+        // Navigate the union structure
+        const resultType = replyResult.resultType();
+
+        if (resultType === ReplyResultUnion.NONE) {
+            throw new Error("Empty or invalid FlatBuffer response");
+        }
+
+        if (resultType === ReplyResultUnion.Failure) {
+            console.error("[FB] Server returned failure");
+            throw new Error("Server returned failure response");
+        }
+
+        if (resultType !== ReplyResultUnion.ClientSuccess) {
+            throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
+        }
+
+        const clientSuccess = unionToReplyResultUnion(
+            resultType,
+            (obj) => replyResult.result(obj),
+        ) as ClientSuccess | null;
+
+        if (!clientSuccess) {
+            throw new Error("Failed to parse ClientSuccess");
+        }
+
+        const daemonReply = clientSuccess.reply();
+        if (!daemonReply) {
+            throw new Error("Missing daemon reply");
+        }
+
+        const replyType = daemonReply.replyType();
+        const replyUnion = unionToDaemonToClientReplyUnion(
+            replyType,
+            (obj: any) => daemonReply.reply(obj),
+        );
+
+        if (!replyUnion) {
+            throw new Error("Failed to parse reply union");
+        }
+
+        // Check if it's a SystemVerbResponseReply
+        if (!(replyUnion instanceof SystemVerbResponseReply)) {
+            throw new Error(`Unexpected reply type: ${replyUnion.constructor.name}`);
+        }
+
+        const systemVerbReply = replyUnion as SystemVerbResponseReply;
+        const responseType = systemVerbReply.responseType();
+        const responseUnion = unionToSystemVerbResponseUnion(
+            responseType,
+            (obj: any) => systemVerbReply.response(obj),
+        );
+
+        if (!responseUnion) {
+            throw new Error("Failed to parse system verb response union");
+        }
+
+        // Check if it's a SystemVerbSuccess
+        if (!(responseUnion instanceof SystemVerbSuccess)) {
+            throw new Error(`Unexpected system verb response type: ${responseUnion.constructor.name}`);
+        }
+
+        const systemVerbSuccess = responseUnion as SystemVerbSuccess;
+
+        // Get the output (narrative events) directly from the SystemVerbSuccess
+        const outputCount = systemVerbSuccess.outputLength();
+
+        // Extract welcome message from narrative events
+        let welcomeMessage = "";
+        let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
+
+        for (let i = 0; i < outputCount; i++) {
+            const narrativeEvent = systemVerbSuccess.output(i, new NarrativeEvent());
+            if (narrativeEvent) {
+                // Convert the narrative event to JavaScript object
+                const eventObj = narrativeEventToJS(narrativeEvent);
+
+                if (eventObj && eventObj.eventType === "NotifyEvent" && eventObj.event) {
+                    const notifyEvent = eventObj.event;
+                    if (notifyEvent.value) {
+                        // Extract the message content
+                        const content = notifyEvent.value;
+                        if (typeof content === "string") {
+                            welcomeMessage = content;
+                        } else if (Array.isArray(content)) {
+                            welcomeMessage = content.join("\n");
+                        }
+
+                        // Extract content type
+                        if (notifyEvent.contentType) {
+                            const ct = notifyEvent.contentType;
+                            if (ct === "text/html" || ct === "text/djot" || ct === "text/plain" || ct === "text/traceback") {
+                                contentType = ct;
+                            }
+                        }
+                        break; // Use the first notify event
+                    }
+                }
+            }
+        }
+
+        return { welcomeMessage, contentType };
+    } catch (err) {
+        console.error("Exception during welcome message invocation:", err);
+        throw err;
     }
 }
 

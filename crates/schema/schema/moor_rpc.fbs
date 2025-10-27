@@ -511,7 +511,8 @@ union HostClientToDaemonMessageUnion {
     DeleteEventLogHistory,
     ListObjects,
     UpdateProperty,
-    InvokeSystemHandler
+    InvokeSystemHandler,
+    CallSystemVerb
 }
 
 table ConnectionEstablish {
@@ -689,6 +690,12 @@ table InvokeSystemHandler {
     auth_token: AuthToken;
 }
 
+table CallSystemVerb {
+    client_token: ClientToken (required);
+    verb: MoorCommon.Symbol (required);
+    args: [MoorVar.Var] (required);
+}
+
 table HostClientToDaemonMessage {
     message: HostClientToDaemonMessageUnion (required);
 }
@@ -721,7 +728,8 @@ union DaemonToClientReplyUnion {
     EventLogHistoryDeleted,
     ListObjectsReply,
     PropertyUpdated,
-    SystemHandlerResponseReply
+    SystemHandlerResponseReply,
+    SystemVerbResponseReply
 }
 
 table NewConnection {
@@ -848,6 +856,24 @@ table SystemHandlerError {
 
 table SystemHandlerResponseReply {
     response: SystemHandlerResponseUnion (required);
+}
+
+union SystemVerbResponseUnion {
+    SystemVerbSuccess,
+    SystemVerbError
+}
+
+table SystemVerbSuccess {
+    result: MoorVar.Var (required);
+    output: [MoorCommon.NarrativeEvent] (required);
+}
+
+table SystemVerbError {
+    error: SchedulerError (required);
+}
+
+table SystemVerbResponseReply {
+    response: SystemVerbResponseUnion (required);
 }
 
 table DaemonToClientReply {

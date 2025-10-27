@@ -27,9 +27,9 @@ use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use rpc_async_client::{rpc_client::RpcSendClient, zmq};
 use rpc_common::{
-    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_connection_establish_msg,
-    mk_detach_host_msg, mk_detach_msg, mk_eval_msg, mk_get_server_features_msg,
-    mk_register_host_msg, mk_request_sys_prop_msg, mk_resolve_msg,
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_call_system_verb_msg,
+    mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_eval_msg,
+    mk_get_server_features_msg, mk_register_host_msg, mk_request_sys_prop_msg, mk_resolve_msg,
 };
 use std::{
     net::{IpAddr, SocketAddr},
@@ -717,7 +717,7 @@ pub async fn system_property_handler(
 
     let sysprop_msg = mk_request_sys_prop_msg(
         &client_token,
-        &moor_common::model::ObjectRef::SysObj(obj_path),
+        &ObjectRef::SysObj(obj_path),
         &Symbol::mk(property_name),
     );
 
@@ -910,6 +910,55 @@ pub async fn eval_handler(
     let eval_msg = mk_eval_msg(&client_token, &auth_token, expression);
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, eval_msg).await {
+        Ok(bytes) => bytes,
+        Err(status) => return status.into_response(),
+    };
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/x-flatbuffer")
+        .body(Body::from(reply_bytes))
+        .unwrap();
+
+    let detach_msg = moor_rpc::HostClientToDaemonMessage {
+        message: mk_detach_msg(&client_token, false).message,
+    };
+    let _ = rpc_client
+        .make_client_rpc_call(client_id, detach_msg)
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+/// FlatBuffer version: GET /fb/invoke_welcome_message - invoke #0:do_login_command
+pub async fn invoke_welcome_message_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    let (client_id, mut rpc_client, client_token) =
+        match host.establish_client_connection(addr).await {
+            Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
+            Err(WsHostError::AuthenticationFailed) => return StatusCode::FORBIDDEN.into_response(),
+            Err(e) => {
+                error!("Unable to establish connection: {}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+    // Create the system verb call for #0:do_login_command
+    let verb = Symbol::mk("do_login_command");
+    let args: Vec<&moor_var::Var> = vec![]; // No arguments for do_login_command
+
+    let call_system_verb_msg = match mk_call_system_verb_msg(&client_token, &verb, args) {
+        Some(msg) => msg,
+        None => {
+            error!("Failed to create CallSystemVerb message");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let reply_bytes = match rpc_call(client_id, &mut rpc_client, call_system_verb_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };

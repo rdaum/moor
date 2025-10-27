@@ -73,3 +73,14 @@ When you modify any `.fbs` schema file, regenerate using:
 ```shell
 planus rust -o ./crates/schema/src/schemas_generated.rs ./crates/schema/schema/all_schemas.fbs
 ```
+
+For TypeScript bindings (used by the web client), regenerate using:
+
+```shell
+flatc --ts --gen-all -o web-client/src/generated crates/schema/schema/all_schemas.fbs
+```
+
+**Note for CallSystemVerb implementation:** When adding new RPC messages like `CallSystemVerb`, make sure to:
+1. Regenerate both Rust bindings with `planus rust`
+2. Regenerate TypeScript bindings with `flatc --ts --gen-all`
+3. Update both Rust and TypeScript code to handle the new message types

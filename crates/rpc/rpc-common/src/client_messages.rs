@@ -513,3 +513,27 @@ pub fn mk_invoke_system_handler_msg(
         )),
     })
 }
+
+/// Build a CallSystemVerb message
+#[inline]
+pub fn mk_call_system_verb_msg(
+    client_token: &ClientToken,
+    verb: &Symbol,
+    args: Vec<&Var>,
+) -> Option<rpc::HostClientToDaemonMessage> {
+    let args_fb: Vec<var::Var> = args.iter().filter_map(|v| var_fb(v).map(|b| *b)).collect();
+
+    if args_fb.len() != args.len() {
+        return None;
+    }
+
+    Some(rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::CallSystemVerb(Box::new(
+            rpc::CallSystemVerb {
+                client_token: client_token_fb(client_token),
+                verb: symbol_fb(verb),
+                args: args_fb,
+            },
+        )),
+    })
+}
