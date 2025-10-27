@@ -264,13 +264,13 @@ pub fn read_textdump<T: io::Read>(
                     let names: Vec<_> = names.iter().map(|s| s.to_string()).collect();
                     let names = names.join(" ");
                     match &e {
-                        CompileError::InvalidTypeLiteralAssignment(t, _) => {
+                        CompileError::InvalidTypeLiteralAssignment(t, c) => {
                             TextdumpReaderError::VerbCompileError(
                                 format!(
                                     "Compiling verb {objid}/{vn} ({names}) starting at line {}; \
                                     (*Note*: assignment to type literal {t} is valid in LambdaMOO/ToastStunt, \
                                     but not in mooR. Manual intervention is required)",
-                                    verb.start_line
+                                    verb.start_line + c.line_col.0
                                 ),
                                 e.clone(),
                             )
@@ -278,7 +278,7 @@ pub fn read_textdump<T: io::Read>(
                         _ => TextdumpReaderError::VerbCompileError(
                             format!(
                                 "Compiling verb {objid}/{vn} ({names}) starting at line {}",
-                                verb.start_line
+                                verb.start_line + e.context().line_col.0,
                             ),
                             e.clone(),
                         )

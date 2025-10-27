@@ -114,4 +114,21 @@ impl CompileError {
     pub fn to_error_list(&self) -> Vec<String> {
         vec![self.to_string()]
     }
+
+    /// Get the CompileContext from any CompileError variant
+    pub fn context(&self) -> &CompileContext {
+        match self {
+            CompileError::StringLexError(context, _) => context,
+            CompileError::ParseError { error_position, .. } => error_position,
+            CompileError::UnknownBuiltinFunction(context, _) => context,
+            CompileError::UnknownTypeConstant(context, _) => context,
+            CompileError::UnknownLoopLabel(context, _) => context,
+            CompileError::DuplicateVariable(context, _) => context,
+            CompileError::AssignToConst(context, _) => context,
+            CompileError::DisabledFeature(context, _) => context,
+            CompileError::BadSlotName(context, _) => context,
+            CompileError::InvalidAssignmentTarget(context) => context,
+            CompileError::InvalidTypeLiteralAssignment(_, context) => context,
+        }
+    }
 }
