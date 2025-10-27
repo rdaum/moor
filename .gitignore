@@ -17,6 +17,7 @@ perf.data
 mise.toml
 
 development-export/
+export/
 node_modules/
 dist/
 
@@ -26,8 +27,6 @@ CLAUDE.sessions.md
 sessions/
 /.claude/
 
-connections.db/
-development.db/
 moor-data/
 
 # OAuth2 config files with secrets
