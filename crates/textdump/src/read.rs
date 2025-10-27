@@ -647,6 +647,9 @@ impl<R: Read> TextdumpReader<R> {
             }
         };
 
+        // Capture the starting line number before reading the program
+        let start_line = self.line_num;
+
         // Collect lines
         let program_lines = self.read_program()?;
         let program = program_lines.join("\n");
@@ -654,6 +657,7 @@ impl<R: Read> TextdumpReader<R> {
             objid: Obj::mk_id(oid),
             verbnum,
             program: Some(program),
+            start_line,
         })
     }
 

@@ -193,6 +193,7 @@ pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
                     objid: *objid,
                     verbnum,
                     program: prgstr,
+                    start_line: 0, // Line numbers are only relevant for import errors
                 },
             );
         }

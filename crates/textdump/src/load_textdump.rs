@@ -260,8 +260,13 @@ pub fn read_textdump<T: io::Read>(
                     compile_options.clone(),
                 )
                 .map_err(|e| {
+                    let names: Vec<_> = names.iter().map(|s| s.to_string()).collect();
+                    let names = names.join(" ");
                     TextdumpReaderError::VerbCompileError(
-                        format!("compiling verb #{objid}/{vn} ({names:?})"),
+                        format!(
+                            "Compiling verb {objid}/{vn} ({names}) starting at line {}",
+                            verb.start_line
+                        ),
                         e.clone(),
                     )
                 })?,

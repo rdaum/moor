@@ -210,6 +210,7 @@ pub struct Verb {
     pub objid: Obj,
     pub verbnum: usize,
     pub program: Option<String>,
+    pub start_line: usize,
 }
 
 pub struct Textdump {

@@ -387,20 +387,24 @@ impl RpcMessageHandler {
         ));
 
         // Submit the task using the new system handler method
-        let task_handle =
-            match scheduler_client.submit_system_handler_task(player, handler_type, args, session) {
-                Ok(t) => {
-                    debug!(
-                        "System handler task submitted successfully, task_id={}",
-                        t.task_id()
-                    );
-                    t
-                }
-                Err(e) => {
-                    error!(error = ?e, "Error submitting system handler task");
-                    return Err(RpcMessageError::InternalError(e.to_string()));
-                }
-            };
+        let task_handle = match scheduler_client.submit_system_handler_task(
+            player,
+            handler_type,
+            args,
+            session,
+        ) {
+            Ok(t) => {
+                debug!(
+                    "System handler task submitted successfully, task_id={}",
+                    t.task_id()
+                );
+                t
+            }
+            Err(e) => {
+                error!(error = ?e, "Error submitting system handler task");
+                return Err(RpcMessageError::InternalError(e.to_string()));
+            }
+        };
 
         // Wait for task completion like eval does
         let receiver = task_handle.into_receiver();
