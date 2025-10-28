@@ -16,6 +16,58 @@ import { AnsiUp } from "ansi_up";
 import DOMPurify from "dompurify";
 import React, { useMemo } from "react";
 
+/**
+ * Validates a URL to prevent XSS attacks.
+ * Only allows safe protocols and blocks javascript: data: and other dangerous schemes.
+ */
+function isSafeUrl(url: string): boolean {
+    if (!url || typeof url !== "string") {
+        return false;
+    }
+
+    // Trim whitespace
+    url = url.trim();
+
+    // Block empty URLs
+    if (!url) {
+        return false;
+    }
+
+    // Block javascript: protocol
+    if (url.toLowerCase().startsWith("javascript:")) {
+        return false;
+    }
+
+    // Block data: URIs
+    if (url.toLowerCase().startsWith("data:")) {
+        return false;
+    }
+
+    // Block vbscript: protocol
+    if (url.toLowerCase().startsWith("vbscript:")) {
+        return false;
+    }
+
+    // Block file: protocol
+    if (url.toLowerCase().startsWith("file:")) {
+        return false;
+    }
+
+    // Allow relative URLs (starting with /, ./, ../, #, or ?)
+    if (/^[/#?]|^\.\.?\//.test(url)) {
+        return true;
+    }
+
+    // Allow http and https protocols only
+    try {
+        const urlObj = new URL(url);
+        return urlObj.protocol === "http:" || urlObj.protocol === "https:";
+    } catch {
+        // If URL parsing fails, it's likely malformed - block it
+        return false;
+    }
+}
+
 interface ContentRendererProps {
     content: string | string[];
     contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
@@ -51,6 +103,14 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         // Convert links to moo-link spans (same as djot does)
                         const href = element.getAttribute("href") || "";
                         const linkText = element.textContent || href;
+
+                        // Validate URL before using it
+                        if (!isSafeUrl(href)) {
+                            // Replace unsafe links with plain text
+                            const textNode = document.createTextNode(linkText);
+                            element.parentNode?.replaceChild(textNode, element);
+                            return;
+                        }
 
                         // Create a span element to replace the link
                         const span = document.createElement("span");
@@ -122,8 +182,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                         "height",
                         "data-url",
                     ],
-                    ALLOWED_URI_REGEXP:
-                        /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+                    ALLOWED_URI_REGEXP: /^(https?|mailto|tel|callto|cid|xmpp):/i,
                 });
 
                 // Remove the hook after use to avoid affecting other calls
@@ -178,6 +237,12 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                 // Only fall back to URL if we truly have no text
                                 if (!linkText.trim()) {
                                     linkText = href;
+                                }
+
+                                // Validate URL before creating the link
+                                if (!isSafeUrl(href)) {
+                                    // Return plain text for unsafe URLs
+                                    return linkText;
                                 }
 
                                 // Convert ALL links to moo-link spans that will call #0:handle_client_url
