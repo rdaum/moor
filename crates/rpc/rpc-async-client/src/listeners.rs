@@ -13,6 +13,7 @@
 
 use moor_var::Obj;
 use std::net::SocketAddr;
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ListenersError {
@@ -27,17 +28,17 @@ pub enum ListenersError {
 /// A client for talking to a host-specific backend for managing the set of listeners.
 #[derive(Clone)]
 pub struct ListenersClient {
-    listeners_channel: tokio::sync::mpsc::Sender<ListenersMessage>,
+    listeners_channel: mpsc::Sender<ListenersMessage>,
 }
 
 pub enum ListenersMessage {
-    AddListener(Obj, SocketAddr),
-    RemoveListener(SocketAddr),
-    GetListeners(tokio::sync::oneshot::Sender<Vec<(Obj, SocketAddr)>>),
+    AddListener(Obj, SocketAddr, oneshot::Sender<Result<(), ListenersError>>),
+    RemoveListener(SocketAddr, oneshot::Sender<Result<(), ListenersError>>),
+    GetListeners(oneshot::Sender<Vec<(Obj, SocketAddr)>>),
 }
 
 impl ListenersClient {
-    pub fn new(listeners_channel: tokio::sync::mpsc::Sender<ListenersMessage>) -> Self {
+    pub fn new(listeners_channel: mpsc::Sender<ListenersMessage>) -> Self {
         Self { listeners_channel }
     }
 
@@ -46,23 +47,27 @@ impl ListenersClient {
         handler: &Obj,
         addr: SocketAddr,
     ) -> Result<(), ListenersError> {
+        let (tx, rx) = oneshot::channel();
         self.listeners_channel
-            .send(ListenersMessage::AddListener(*handler, addr))
+            .send(ListenersMessage::AddListener(*handler, addr, tx))
             .await
             .map_err(|_| ListenersError::AddListenerFailed(*handler, addr))?;
-        Ok(())
+        rx.await
+            .map_err(|_| ListenersError::AddListenerFailed(*handler, addr))?
     }
 
     pub async fn remove_listener(&self, addr: SocketAddr) -> Result<(), ListenersError> {
+        let (tx, rx) = oneshot::channel();
         self.listeners_channel
-            .send(ListenersMessage::RemoveListener(addr))
+            .send(ListenersMessage::RemoveListener(addr, tx))
             .await
             .map_err(|_| ListenersError::RemoveListenerFailed(addr))?;
-        Ok(())
+        rx.await
+            .map_err(|_| ListenersError::RemoveListenerFailed(addr))?
     }
 
     pub async fn get_listeners(&self) -> Result<Vec<(Obj, SocketAddr)>, ListenersError> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (tx, rx) = oneshot::channel();
         self.listeners_channel
             .send(ListenersMessage::GetListeners(tx))
             .await

@@ -241,9 +241,7 @@ pub async fn web_hook_handler(
     let result = match reply.result() {
         Ok(result) => result,
         Err(e) => {
-            return internal_server_error(&format!(
-                "Failed to get result from webhook reply: {e}"
-            ));
+            return internal_server_error(&format!("Failed to get result from webhook reply: {e}"));
         }
     };
 

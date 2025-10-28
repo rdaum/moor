@@ -17,7 +17,9 @@ use futures_util::StreamExt;
 use hickory_resolver::TokioResolver;
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
-use rpc_async_client::{ListenersClient, ListenersMessage, rpc_client::RpcSendClient, zmq};
+use rpc_async_client::{
+    ListenersClient, ListenersError, ListenersMessage, rpc_client::RpcSendClient, zmq,
+};
 use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg};
 use std::{
     collections::HashMap,
@@ -30,7 +32,7 @@ use tokio::{
     select,
 };
 use tokio_util::codec::Framed;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Perform async reverse DNS lookup for an IP address
@@ -115,10 +117,16 @@ impl Listeners {
             }
 
             match listeners_channel.recv().await {
-                Some(ListenersMessage::AddListener(handler, addr)) => {
-                    let listener = TcpListener::bind(addr)
-                        .await
-                        .expect("Unable to bind listener");
+                Some(ListenersMessage::AddListener(handler, addr, reply)) => {
+                    let listener = match TcpListener::bind(addr).await {
+                        Ok(listener) => listener,
+                        Err(e) => {
+                            let _ =
+                                reply.send(Err(ListenersError::AddListenerFailed(handler, addr)));
+                            error!(?addr, "Unable to bind listener: {}", e);
+                            continue;
+                        }
+                    };
                     let (terminate_send, terminate_receive) = tokio::sync::watch::channel(false);
                     self.listeners
                         .insert(addr, Listener::new(terminate_send, handler));
@@ -129,6 +137,9 @@ impl Listeners {
                     let events_address = self.events_address.clone();
                     let kill_switch = self.kill_switch.clone();
                     let curve_keys = self.curve_keys.clone();
+
+                    // Signal that the listener is successfully bound
+                    let _ = reply.send(Ok(()));
 
                     // One task per listener.
                     tokio::spawn(async move {
@@ -173,7 +184,7 @@ impl Listeners {
                         }
                     });
                 }
-                Some(ListenersMessage::RemoveListener(addr)) => {
+                Some(ListenersMessage::RemoveListener(addr, reply)) => {
                     let listener = self.listeners.remove(&addr);
                     info!(?addr, "Removing listener");
                     if let Some(listener) = listener {
@@ -181,6 +192,9 @@ impl Listeners {
                             .terminate
                             .send(true)
                             .expect("Unable to send terminate message");
+                        let _ = reply.send(Ok(()));
+                    } else {
+                        let _ = reply.send(Err(ListenersError::RemoveListenerFailed(addr)));
                     }
                 }
                 Some(ListenersMessage::GetListeners(tx)) => {

@@ -138,6 +138,7 @@ async fn main() -> Result<(), eyre::Error> {
         kill_switch.clone(),
         curve_keys.clone(),
     );
+
     let listeners_thread = tokio::spawn(async move {
         listeners_server.run(listeners_channel).await;
     });
@@ -149,6 +150,8 @@ async fn main() -> Result<(), eyre::Error> {
             error!("Unable to start default listener: {}", e);
             std::process::exit(1);
         });
+
+    info!("Starting host session...");
 
     let (rpc_client, host_id) = match start_host_session(
         host_id,

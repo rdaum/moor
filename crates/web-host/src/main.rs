@@ -30,7 +30,7 @@ use figment::{
 };
 use moor_var::{Obj, SYSTEM_OBJECT};
 use rpc_async_client::{
-    ListenersClient, ListenersMessage, process_hosts_events, start_host_session,
+    ListenersClient, ListenersError, ListenersMessage, process_hosts_events, start_host_session,
 };
 use rpc_common::{HostType, client_args::RpcClientArgs};
 use serde_derive::{Deserialize, Serialize};
@@ -129,12 +129,14 @@ impl Listeners {
             }
 
             match listeners_channel.recv().await {
-                Some(ListenersMessage::AddListener(handler, addr)) => {
+                Some(ListenersMessage::AddListener(handler, addr, reply)) => {
                     let listener = match TcpListener::bind(addr).await {
                         Ok(listener) => listener,
                         Err(e) => {
+                            let _ =
+                                reply.send(Err(ListenersError::AddListenerFailed(handler, addr)));
                             error!(?addr, "Unable to bind listener: {}", e);
-                            return;
+                            continue;
                         }
                     };
 
@@ -172,6 +174,9 @@ impl Listeners {
                     self.listeners
                         .insert(addr, Listener::new(terminate_send, handler));
 
+                    // Signal that the listener is successfully bound
+                    let _ = reply.send(Ok(()));
+
                     // One task per listener.
                     tokio::spawn(async move {
                         let mut term_receive = terminate_receive.clone();
@@ -185,7 +190,7 @@ impl Listeners {
                         }
                     });
                 }
-                Some(ListenersMessage::RemoveListener(addr)) => {
+                Some(ListenersMessage::RemoveListener(addr, reply)) => {
                     let listener = self.listeners.remove(&addr);
                     info!(?addr, "Removing listener");
                     if let Some(listener) = listener {
@@ -193,6 +198,9 @@ impl Listeners {
                             .terminate
                             .send(true)
                             .expect("Unable to send terminate message");
+                        let _ = reply.send(Ok(()));
+                    } else {
+                        let _ = reply.send(Err(ListenersError::RemoveListenerFailed(addr)));
                     }
                 }
                 Some(ListenersMessage::GetListeners(tx)) => {
@@ -418,28 +426,10 @@ async fn main() -> Result<(), eyre::Error> {
         curve_keys.clone(),
         args.enable_webhooks,
     );
+    info!("Starting up listener thread...");
     let listeners_thread = tokio::spawn(async move {
         listeners_server.run(listeners_channel).await;
     });
-
-    info!("Serving out of CWD {:?}", std::env::current_dir()?);
-    let (rpc_client, host_id) = match start_host_session(
-        host_id,
-        zmq_ctx.clone(),
-        args.client_args.rpc_address.clone(),
-        kill_switch.clone(),
-        listeners.clone(),
-        curve_keys.clone(),
-    )
-    .await
-    {
-        Ok((client, id)) => (client, id),
-        Err(e) => {
-            error!("Unable to establish initial host session: {}", e);
-            std::process::exit(1);
-        }
-    };
-
     listeners
         .add_listener(
             &SYSTEM_OBJECT,
@@ -459,6 +449,24 @@ async fn main() -> Result<(), eyre::Error> {
             error!("Unable to start default listener: {}", e);
             std::process::exit(1);
         });
+
+    info!("Starting host session....");
+    let (rpc_client, host_id) = match start_host_session(
+        host_id,
+        zmq_ctx.clone(),
+        args.client_args.rpc_address.clone(),
+        kill_switch.clone(),
+        listeners.clone(),
+        curve_keys.clone(),
+    )
+    .await
+    {
+        Ok((client, id)) => (client, id),
+        Err(e) => {
+            error!("Unable to establish initial host session: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let host_listen_loop = process_hosts_events(
         rpc_client,
