@@ -2079,8 +2079,7 @@ impl RpcMessageHandler {
                         Ok(fb) => fb,
                         Err(encode_err) => {
                             break Err(RpcMessageError::InternalError(format!(
-                                "Failed to encode scheduler error: {}",
-                                encode_err
+                                "Failed to encode scheduler error: {encode_err}"
                             )));
                         }
                     };

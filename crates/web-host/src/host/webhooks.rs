@@ -177,8 +177,7 @@ pub async fn web_hook_handler(
             Ok(connection) => connection,
             Err(e) => {
                 return internal_server_error(&format!(
-                    "Failed to establish connection for web hook: {}",
-                    e
+                    "Failed to establish connection for web hook: {e}"
                 ));
             }
         };
@@ -234,7 +233,7 @@ pub async fn web_hook_handler(
     let reply = match ReplyResultRef::read_as_root(&reply_bytes) {
         Ok(reply) => reply,
         Err(e) => {
-            return internal_server_error(&format!("Failed to parse web hook reply: {}", e));
+            return internal_server_error(&format!("Failed to parse web hook reply: {e}"));
         }
     };
 
@@ -243,8 +242,7 @@ pub async fn web_hook_handler(
         Ok(result) => result,
         Err(e) => {
             return internal_server_error(&format!(
-                "Failed to get result from webhook reply: {}",
-                e
+                "Failed to get result from webhook reply: {e}"
             ));
         }
     };
@@ -320,8 +318,7 @@ fn handle_system_handler_response(reply: moor_rpc::SystemHandlerResponseReplyRef
                 Ok(var) => var,
                 Err(e) => {
                     return internal_server_error(&format!(
-                        "Failed to convert FlatBuffer reference: {}",
-                        e
+                        "Failed to convert FlatBuffer reference: {e}"
                     ));
                 }
             };
@@ -330,8 +327,7 @@ fn handle_system_handler_response(reply: moor_rpc::SystemHandlerResponseReplyRef
                 Ok(var) => var,
                 Err(e) => {
                     return internal_server_error(&format!(
-                        "Failed to convert FlatBuffer Var: {}",
-                        e
+                        "Failed to convert FlatBuffer Var: {e}"
                     ));
                 }
             };
@@ -393,8 +389,7 @@ fn handle_system_handler_error(error: moor_rpc::SystemHandlerErrorRef<'_>) -> Re
             status_code.into_response()
         }
         Err(e) => internal_server_error(&format!(
-            "Failed to parse scheduler error for web hook: {}",
-            e
+            "Failed to parse scheduler error for web hook: {e}"
         )),
     }
 }
@@ -423,8 +418,7 @@ fn handle_failure_response(failure: moor_rpc::FailureRef<'_>) -> Response {
         }
         Err(e) => {
             return internal_server_error(&format!(
-                "Failed to get error message from failure: {}",
-                e
+                "Failed to get error message from failure: {e}"
             ));
         }
     };
@@ -451,7 +445,7 @@ fn handle_webhook_result(result: &Var) -> Result<Response, Box<dyn std::error::E
                 .status(StatusCode::OK)
                 .header("content-type", "application/octet-stream")
                 .body(axum::body::Body::from(b.as_bytes().to_vec()))
-                .map_err(|e| format!("Failed to build response: {}", e))?;
+                .map_err(|e| format!("Failed to build response: {e}"))?;
             Ok(response)
         }
         Variant::List(l) => {
@@ -479,7 +473,7 @@ fn handle_webhook_result(result: &Var) -> Result<Response, Box<dyn std::error::E
             // Build response builder
             let mut response_builder = axum::response::Response::builder().status(
                 StatusCode::from_u16(*response_code as u16)
-                    .map_err(|e| format!("Invalid status code {}: {}", response_code, e))?,
+                    .map_err(|e| format!("Invalid status code {response_code}: {e}"))?,
             );
 
             // Handle content type (third element, optional)
@@ -524,7 +518,7 @@ fn handle_webhook_result(result: &Var) -> Result<Response, Box<dyn std::error::E
 
             let response = response_builder
                 .body(axum::body::Body::from(body_bytes))
-                .map_err(|e| format!("Failed to build response: {}", e))?;
+                .map_err(|e| format!("Failed to build response: {e}"))?;
             Ok(response)
         }
         _ => Err(format!("Unsupported result variant: {:?}", result.variant()).into()),

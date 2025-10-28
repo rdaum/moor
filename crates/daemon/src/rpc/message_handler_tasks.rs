@@ -437,8 +437,7 @@ impl RpcMessageHandler {
                         Err(encode_err) => {
                             error!("Failed to encode scheduler error: {}", encode_err);
                             break Err(RpcMessageError::InternalError(format!(
-                                "Failed to encode scheduler error: {}",
-                                encode_err
+                                "Failed to encode scheduler error: {encode_err}"
                             )));
                         }
                     };
