@@ -809,7 +809,7 @@ impl Scheduler {
                 );
 
                 // Construct specific verb name: invoke_<handler_type>_handler
-                let verb_name = format!("invoke_{}_handler", handler_type);
+                let verb_name = format!("invoke_{handler_type}_handler");
                 let invoke_handler_sym = Symbol::mk(&verb_name);
 
                 // Prepare arguments: [args...] (handler_type is now encoded in the verb name)

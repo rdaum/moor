@@ -104,7 +104,8 @@ export const useWelcomeMessage = () => {
                 const { invokeWelcomeMessageFlatBuffer } = await import("../lib/rpc-fb");
 
                 // Invoke welcome message system verb using FlatBuffer protocol
-                const { welcomeMessage: welcomeText, contentType: contentTypeValue } = await invokeWelcomeMessageFlatBuffer();
+                const { welcomeMessage: welcomeText, contentType: contentTypeValue } =
+                    await invokeWelcomeMessageFlatBuffer();
 
                 if (isComponentMounted) {
                     setWelcomeMessage(welcomeText);

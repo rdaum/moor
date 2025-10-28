@@ -18,6 +18,7 @@
  * including object reference handling, remote method invocation, and
  * data transformation between JSON and MOO formats.
  */
+import { EvalResult } from "../generated/moor-rpc/eval-result.js";
 import { MoorVar } from "./MoorVar";
 import {
     compileVerbFlatBuffer,
@@ -71,7 +72,7 @@ export class MoorRemoteObject {
         );
 
         // Extract result from FlatBuffer EvalResult
-        const resultVar = evalResult.result();
+        const resultVar = (evalResult as EvalResult).result();
         if (!resultVar) {
             throw new Error(`No result from verb ${verbName}`);
         }

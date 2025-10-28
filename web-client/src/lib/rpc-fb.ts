@@ -50,8 +50,8 @@ import { ServerFeatures } from "../generated/moor-rpc/server-features.js";
 import { SysPropValue } from "../generated/moor-rpc/sys-prop-value.js";
 import { SystemMessageEvent } from "../generated/moor-rpc/system-message-event.js";
 import { SystemVerbResponseReply } from "../generated/moor-rpc/system-verb-response-reply.js";
-import { SystemVerbSuccess } from "../generated/moor-rpc/system-verb-success.js";
 import { unionToSystemVerbResponseUnion } from "../generated/moor-rpc/system-verb-response-union.js";
+import { SystemVerbSuccess } from "../generated/moor-rpc/system-verb-success.js";
 import { TaskAbortedLimit } from "../generated/moor-rpc/task-aborted-limit.js";
 import { TaskErrorEvent } from "../generated/moor-rpc/task-error-event.js";
 import { TaskSuccessEvent } from "../generated/moor-rpc/task-success-event.js";
@@ -1392,14 +1392,14 @@ function narrativeEventToJS(narrativeEvent: any): any {
     // Use the correct union pattern to get the event union
     const eventUnion = unionToEventUnion(
         eventType,
-        (obj: any) => eventObj.event(obj)
+        (obj: any) => eventObj.event(obj),
     );
 
     if (!eventUnion) return null;
 
     // Handle different event types
     switch (eventType) {
-        case 1: // NotifyEvent
+        case 1: { // NotifyEvent
             const notifyEvent = eventUnion as any;
             const value = notifyEvent.value();
             const contentTypeSym = notifyEvent.contentType();
@@ -1426,7 +1426,8 @@ function narrativeEventToJS(narrativeEvent: any): any {
                     contentType: contentType,
                 },
             };
-        case 2: // PresentEvent
+        }
+        case 2: { // PresentEvent
             const presentEvent = eventUnion as any;
             return {
                 eventType: "PresentEvent",
@@ -1434,7 +1435,8 @@ function narrativeEventToJS(narrativeEvent: any): any {
                     object: presentEvent.object(),
                 },
             };
-        case 3: // UnpresentEvent
+        }
+        case 3: { // UnpresentEvent
             const unpresentEvent = eventUnion as any;
             return {
                 eventType: "UnpresentEvent",
@@ -1442,7 +1444,8 @@ function narrativeEventToJS(narrativeEvent: any): any {
                     object: unpresentEvent.object(),
                 },
             };
-        case 4: // TracebackEvent
+        }
+        case 4: { // TracebackEvent
             const tracebackEvent = eventUnion as any;
             return {
                 eventType: "TracebackEvent",
@@ -1450,6 +1453,7 @@ function narrativeEventToJS(narrativeEvent: any): any {
                     traceback: tracebackEvent.traceback(),
                 },
             };
+        }
         default:
             return null;
     }
@@ -1573,7 +1577,10 @@ export async function invokeWelcomeMessageFlatBuffer(): Promise<{
                         // Extract content type
                         if (notifyEvent.contentType) {
                             const ct = notifyEvent.contentType;
-                            if (ct === "text/html" || ct === "text/djot" || ct === "text/plain" || ct === "text/traceback") {
+                            if (
+                                ct === "text/html" || ct === "text/djot" || ct === "text/plain"
+                                || ct === "text/traceback"
+                            ) {
                                 contentType = ct;
                             }
                         }

@@ -270,7 +270,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
 
             // Convert events to narrative messages
             const narrativeMessages: NarrativeMessage[] = [];
-            for (const event of events) {
+            for (const event of events as HistoricalEvent[]) {
                 const message = convertHistoricalEvent(event);
                 if (message) {
                     narrativeMessages.push(message);
@@ -282,7 +282,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
 
             // Update earliest event ID for pagination
             if (events.length > 0) {
-                setEarliestHistoryEventId(events[0].event_id);
+                setEarliestHistoryEventId((events[0] as HistoricalEvent).event_id);
             }
 
             return filteredMessages;
