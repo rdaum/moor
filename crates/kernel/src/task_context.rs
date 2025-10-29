@@ -93,9 +93,12 @@ impl Drop for TaskGuard {
         // Emergency cleanup - rollback any remaining transaction
         CURRENT_CONTEXT.with(|ctx| {
             if let Some(task_ctx) = ctx.borrow_mut().take() {
-                tracing::warn!(
-                    "Task context dropped without explicit commit/rollback, rolling back"
-                );
+                // Only warn if we're not already panicking (which would trigger this drop)
+                if !std::thread::panicking() {
+                    tracing::warn!(
+                        "Task context dropped without explicit commit/rollback, rolling back"
+                    );
+                }
 
                 #[cfg(feature = "trace_events")]
                 {

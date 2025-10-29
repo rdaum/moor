@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::backtrace::Backtrace;
 use std::time::{Duration, SystemTime};
 
 use flume::Sender;
@@ -459,6 +460,8 @@ pub enum TaskControlMsg {
     TaskRequestFork(Box<Fork>, oneshot::Sender<TaskId>),
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
+    /// The task thread panicked with the given message.
+    TaskAbortPanicked(String, Backtrace),
     /// The task is letting us know that it has reached its abort limits.
     TaskAbortLimitsReached(AbortLimitReason, Var, Symbol, usize),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)

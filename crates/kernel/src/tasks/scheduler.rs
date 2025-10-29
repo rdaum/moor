@@ -973,6 +973,12 @@ impl Scheduler {
                 };
                 task_q.send_task_result(task_id, Err(TaskAbortedCancelled));
             }
+            TaskControlMsg::TaskAbortPanicked(panic_msg, _backtrace) => {
+                warn!(?task_id, ?panic_msg, "Task thread panicked");
+
+                // Task already dead, can't access session. Just send error result directly.
+                task_q.send_task_result(task_id, Err(TaskAbortedError));
+            }
             TaskControlMsg::TaskAbortLimitsReached(limit_reason, this, verb, line_number) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
@@ -2057,48 +2063,78 @@ impl TaskQ {
         let is_created = matches!(task.state, crate::tasks::task::TaskState::Pending(_));
 
         self.thread_pool.spawn(move || {
-            // Set up transaction context for this thread
-            let _tx_guard = TaskGuard::new(
-                world_state,
-                task_scheduler_client.clone(),
-                task_id,
-                player,
-                session.clone(),
-            );
+            let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // Set up transaction context for this thread
+                let _tx_guard = TaskGuard::new(
+                    world_state,
+                    task_scheduler_client.clone(),
+                    task_id,
+                    player,
+                    session.clone(),
+                );
 
-            if is_created {
-                // Brand new task - call setup_task_start and transition to Running
-                let setup_success = task.setup_task_start(&control_sender);
-                if !setup_success {
-                    // Setup failed (e.g., verb not found)
-                    return;
-                }
-
-                // Transition to Running state
-                if let crate::tasks::task::TaskState::Pending(start) = &task.state {
-                    task.state = crate::tasks::task::TaskState::Prepared(start.clone());
-                }
-
-                task.retry_state = task.vm_host.snapshot_state();
-            } else {
-                // Resuming an existing task - handle the resume action
-                match resume_action {
-                    ResumeAction::Return(value) => {
-                        task.vm_host.resume_execution(value);
+                if is_created {
+                    // Brand new task - call setup_task_start and transition to Running
+                    let setup_success = task.setup_task_start(&control_sender);
+                    if !setup_success {
+                        // Setup failed (e.g., verb not found)
+                        return;
                     }
-                    ResumeAction::Raise(error) => {
-                        task.vm_host.resume_with_error(error);
+
+                    // Transition to Running state
+                    if let crate::tasks::task::TaskState::Pending(start) = &task.state {
+                        task.state = crate::tasks::task::TaskState::Prepared(start.clone());
+                    }
+
+                    task.retry_state = task.vm_host.snapshot_state();
+                } else {
+                    // Resuming an existing task - handle the resume action
+                    match resume_action {
+                        ResumeAction::Return(value) => {
+                            task.vm_host.resume_execution(value);
+                        }
+                        ResumeAction::Raise(error) => {
+                            task.vm_host.resume_with_error(error);
+                        }
                     }
                 }
+
+                Task::run_task_loop(
+                    task,
+                    &task_scheduler_client,
+                    session,
+                    builtin_registry,
+                    config,
+                );
+            }));
+
+            if let Err(panic_payload) = panic_result {
+                // Task thread panicked - extract panic message and log it
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Task panicked with unknown payload".to_string()
+                };
+
+                let backtrace = std::backtrace::Backtrace::capture();
+                error!(
+                    task_id,
+                    ?player,
+                    panic_msg,
+                    ?backtrace,
+                    "Task thread panicked"
+                );
+
+                // Send panic abort to scheduler
+                control_sender
+                    .send((
+                        task_id,
+                        TaskControlMsg::TaskAbortPanicked(panic_msg, backtrace),
+                    ))
+                    .ok(); // Ignore send errors - scheduler might be shutting down
             }
-
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                session,
-                builtin_registry,
-                config,
-            );
         });
 
         Ok(())
@@ -2192,24 +2228,58 @@ impl TaskQ {
             }
         };
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
+        let player = task.player; // Capture for panic logging
         self.thread_pool.spawn(move || {
-            // Set up transaction context for this thread
-            let _tx_guard = TaskGuard::new(
-                world_state,
-                task_scheduler_client.clone(),
-                task_id,
-                task.player,
-                new_session.clone(),
-            );
+            let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // Set up transaction context for this thread
+                let _tx_guard = TaskGuard::new(
+                    world_state,
+                    task_scheduler_client.clone(),
+                    task_id,
+                    task.player,
+                    new_session.clone(),
+                );
 
-            info!(?task.task_id, "Restarting retry task");
-            Task::run_task_loop(
-                task,
-                &task_scheduler_client,
-                new_session,
-                builtin_registry,
-                config,
-            );
+                info!(?task.task_id, "Restarting retry task");
+                Task::run_task_loop(
+                    task,
+                    &task_scheduler_client,
+                    new_session,
+                    builtin_registry,
+                    config,
+                );
+            }));
+
+            if let Err(panic_payload) = panic_result {
+                // Task thread panicked - extract panic message and log it
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Task panicked with unknown payload".to_string()
+                };
+
+                let backtrace = std::backtrace::Backtrace::capture();
+                error!(
+                    task_id,
+                    ?player,
+                    panic_msg,
+                    ?backtrace,
+                    "Task thread panicked"
+                );
+
+                // Note: TaskGuard drop handler already rolled back the transaction during unwind
+                // (silently, since std::thread::panicking() returns true during panic cleanup)
+
+                // Send panic abort to scheduler
+                control_sender
+                    .send((
+                        task_id,
+                        TaskControlMsg::TaskAbortPanicked(panic_msg, backtrace),
+                    ))
+                    .ok(); // Ignore send errors - scheduler might be shutting down
+            }
         });
     }
 

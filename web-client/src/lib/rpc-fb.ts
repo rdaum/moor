@@ -477,14 +477,19 @@ export async function fetchHistoryFlatBuffer(
 
 /**
  * Handle task errors by converting SchedulerError to user-friendly messages
- * Equivalent to server's handle_task_error in ws_connection.rs:400-524
+ * Sends output to narrative like exception tracebacks do
  */
 function handleTaskError(
     schedulerError: SchedulerError,
-    onSystemMessage?: (message: string, duration?: number) => void,
+    onNarrativeMessage?: (
+        content: string | string[],
+        timestamp?: string,
+        contentType?: string,
+        isHistorical?: boolean,
+        noNewline?: boolean,
+    ) => void,
 ): void {
     const errorType = schedulerError.errorType();
-
     let message: string | null = null;
     let description: string[] | null = null;
 
@@ -578,9 +583,10 @@ function handleTaskError(
             return;
     }
 
-    if (message && onSystemMessage) {
+    if (message && onNarrativeMessage) {
         const fullMessage = description ? `${message}\n${description.join("\n")}` : message;
-        onSystemMessage(fullMessage, 5);
+        // Send to narrative output styled like exception tracebacks (red)
+        onNarrativeMessage(fullMessage, new Date().toISOString(), "text/traceback", false, false);
     }
 }
 
@@ -814,8 +820,8 @@ export function handleClientEventFlatBuffer(
                     return;
                 }
 
-                // Handle the error using our error handler
-                handleTaskError(error, onSystemMessage);
+                // Handle the error using our error handler - send to narrative like exceptions
+                handleTaskError(error, onNarrativeMessage);
                 break;
             }
 
