@@ -78,7 +78,10 @@ By participating in this project, you are expected to uphold our community stand
 
 ### Prerequisites
 
-- **Rust**: Version 1.88.0 or later
+- **Rust**: Version 1.90.0 or later
+    - We generally avoid nightly/unstable features in production code
+    - We aim to keep up with stable Rust releases as they become available
+    - The nightly toolchain is only used for formatting (rustfmt features)
 - **Node.js**: For web client development
 - **Docker**: For containerized development and testing
 - **Git**: For version control
@@ -197,8 +200,19 @@ mooR is organized as a Rust workspace with multiple crates:
 - **Edition**: Rust 2024
 - **Formatting**: Use the project's specific formatting rules:
   ```bash
+  # Use the provided script (recommended)
+  ./format-rust.sh
+
+  # Or manually with nightly toolchain
   cargo +nightly fmt -- --config reorder_imports=true,imports_indent=Block,imports_layout=Mixed
   ```
+
+  **Why nightly?** We use nightly rustfmt features for consistent import organization:
+    - `reorder_imports=true`: Groups and sorts imports consistently
+    - `imports_indent=Block`: Uses block-style indentation for imports
+    - `imports_layout=Mixed`: Allows mixed import styles (single vs multi-line)
+
+  **Note**: This is the only place we use nightly features - all production code runs on stable Rust.
 - **Naming**:
     - Modules: `snake_case`
     - Types: `PascalCase`
@@ -208,8 +222,84 @@ mooR is organized as a Rust workspace with multiple crates:
       pattern names unless they add clarity
 - **Imports**: All `use` statements at top of file/module (avoid per-function imports -- P.S. some LLMs like to do this
   and it's annoying)
-- **Early Returns**: _Strongly_ preferred over deep nesting. Let-else is your friend. Avoid `else` branches on if
-  statements generally.
+- **Avoid deep nesting**: Rust code -- with its extensive use of matching over ADT -- can trend towards deeply nested
+  code that becomes increasingly difficult to read. To avoid this there are a number of techniques:
+    - **Early Returns**: Short-circuit out of your function on _negative_ conditions, leaving the _positive_ case for
+      last. This helps the reader understand the codeflow and emphasizes the function's overall purpose.
+        - Handle error cases and invalid conditions first
+        - Return early with `?` operator for `Result`/`Option` types
+        - Makes the "happy path" clear and uncluttered
+    - **Let-else statements**: Use `let else` for conditional binding with early returns on failure
+    - **Avoid `else` branches**: Generally prefer early returns over `else` branches on `if` statements
+    - **Factor out into separate functions**: Break complicated deeply nested blocks into smaller, focused functions
+
+#### Example: Transforming Nested Code to Early Returns
+
+**Before (Deeply Nested):**
+
+```rust
+fn process_user_input(input: &str) -> Result<User, Error> {
+    if !input.is_empty() {
+        let trimmed = input.trim();
+        if trimmed.len() >= 3 {
+            if let Ok(user) = User::parse(trimmed) {
+                if user.is_valid() {
+                    Ok(user)
+                } else {
+                    Err(Error::InvalidUser)
+                }
+            } else {
+                Err(Error::ParseFailed)
+            }
+        } else {
+            Err(Error::TooShort)
+        }
+    } else {
+        Err(Error::EmptyInput)
+    }
+}
+```
+
+**After (Early Returns):**
+
+```rust
+fn process_user_input(input: &str) -> Result<User, Error> {
+    if input.is_empty() {
+        return Err(Error::EmptyInput);
+    }
+
+    let trimmed = input.trim();
+    if trimmed.len() < 3 {
+        return Err(Error::TooShort);
+    }
+
+    let user = User::parse(trimmed)?;
+
+    if !user.is_valid() {
+        return Err(Error::InvalidUser);
+    }
+
+    Ok(user)
+}
+```
+
+**Using let-else:**
+
+```rust
+fn process_user_input(input: &str) -> Result<User, Error> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(Error::EmptyInput);
+    }
+
+    let Ok(user) = User::parse(trimmed) else {
+        return Err(Error::ParseFailed);
+    };
+
+    user.is_valid().then_some(user).ok_or(Error::InvalidUser)
+}
+```
+
 - **Comments**: Describe what code does NOW, not historical context or implementation details
 
 ### Performance Considerations
@@ -309,7 +399,9 @@ cargo test -p moor-kernel js_execute::tests::test_simple_js_execution
 
 1. **Ensure tests pass**: `cargo test --workspace`
 2. **Run linters**: `cargo clippy --workspace --all-targets --all-features` (ALL RUST CODE MUST BE CLIPPY CLEAN)
-3. **Format code**: Run `dprint fmt` for all TypeScript, JSON, and Markdown files
+3. **Format code**:
+    - Rust: Run `./format-rust.sh` or ensure formatting is correct with `./format-rust.sh --check`
+    - TypeScript/JSON/Markdown: Run `dprint fmt`
 4. **Check license headers**: Ensure all source files have GPLv3 headers (use `.licensure.yml` tool)
 5. **Update documentation**: If your changes affect user-facing behavior
 
@@ -334,7 +426,8 @@ When creating a pull request, include the following information:
 - **Testing**: Describe what testing was performed, including:
     - Results of `cargo test --workspace`
     - Confirmation that all Rust code passes clippy checks
-    - Verification that files are formatted with `dprint fmt`
+    - Verification that Rust files are formatted with `./format-rust.sh --check`
+    - Verification that TypeScript/JSON/Markdown files are formatted with `dprint fmt`
     - Manual testing scenarios if applicable
 - **Related Issues**: Links to any relevant issues or discussions
 
@@ -442,6 +535,15 @@ All contributors are recognized in the project's:
 
 By contributing to mooR, you agree that your contributions will be licensed under the same [GPL-3.0 license](LICENSE)
 that covers the project.
+
+### Important Licensing Notes
+
+- **Core Database Files**: The files in the `cores/` directory (including JHCore and other MOO databases)
+  have complex licensing situations and are NOT covered by the project's GPL-3.0 license. See the
+  `cores/LICENSING.md` file for detailed information about the historical licensing complexities.
+
+- **Documentation**: The contents of the `book/` directory are licensed separately under the terms specified in
+  `book/src/legal.md`.
 
 ---
 
