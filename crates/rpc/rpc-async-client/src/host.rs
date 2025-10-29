@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcSendClient};
+use crate::{ListenersClient, pubsub_client::hosts_events_recv, rpc_client::RpcClient};
 use moor_schema::{
     convert::{obj_from_flatbuffer_struct, obj_to_flatbuffer_struct},
     rpc as moor_rpc,
@@ -24,7 +24,6 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::SystemTime,
 };
-use tmq::request;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -37,32 +36,24 @@ pub async fn start_host_session(
     kill_switch: Arc<AtomicBool>,
     listeners: ListenersClient,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
-) -> Result<(RpcSendClient, Uuid), RpcError> {
+) -> Result<(RpcClient, Uuid), RpcError> {
     // Establish the initial connection to the daemon, and send the host_id and our initial
     // listener list.
     let rpc_client = loop {
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
-
-        // Configure CURVE encryption if keys provided
-        if let Some((client_secret, client_public, server_public)) = &curve_keys {
-            socket_builder = crate::configure_curve_client(
-                socket_builder,
-                client_secret,
-                client_public,
-                server_public,
-            )
-            .map_err(RpcError::CouldNotInitiateSession)?;
-
-            info!("CURVE encryption enabled for host connection");
-        }
-
-        let rpc_request_sock = socket_builder
-            .connect(rpc_address.as_str())
-            .expect("Unable to bind RPC server for connection");
-
-        // And let the RPC server know we're here, and it should start sending events on the
-        // narrative subscription.
-        let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+        // Create managed RPC client with connection pooling and cancellation safety
+        let rpc_client = RpcClient::new_with_defaults(
+            std::sync::Arc::new(zmq_ctx.clone()),
+            rpc_address.clone(),
+            curve_keys
+                .as_ref()
+                .map(|(client_secret, client_public, server_public)| {
+                    crate::rpc_client::CurveKeys {
+                        client_secret: client_secret.clone(),
+                        client_public: client_public.clone(),
+                        server_public: server_public.clone(),
+                    }
+                }),
+        );
 
         info!("Registering host with daemon via {}...", rpc_address);
         let timestamp = SystemTime::now()
@@ -157,7 +148,7 @@ pub async fn start_host_session(
 }
 
 pub async fn process_hosts_events(
-    mut rpc_client: RpcSendClient,
+    rpc_client: RpcClient,
     host_id: Uuid,
     zmq_ctx: tmq::Context,
     events_zmq_address: String,

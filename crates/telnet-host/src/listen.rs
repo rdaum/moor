@@ -18,7 +18,7 @@ use hickory_resolver::TokioResolver;
 use moor_schema::{convert::var_to_flatbuffer, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
 use rpc_async_client::{
-    ListenersClient, ListenersError, ListenersMessage, rpc_client::RpcSendClient, zmq,
+    ListenersClient, ListenersError, ListenersMessage, rpc_client::RpcClient, zmq,
 };
 use rpc_common::{CLIENT_BROADCAST_TOPIC, extract_obj, mk_connection_establish_msg};
 use std::{
@@ -26,7 +26,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     sync::{Arc, atomic::AtomicBool},
 };
-use tmq::{request, subscribe};
+use tmq::subscribe;
 use tokio::{
     net::{TcpListener, TcpStream},
     select,
@@ -248,26 +248,19 @@ impl Listener {
                 "Accepted connection for listener"
             );
 
-            let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
-
-            // Configure CURVE encryption if keys provided
-            if let Some((client_secret, client_public, server_public)) = &curve_keys {
-                socket_builder = rpc_async_client::configure_curve_client(
-                    socket_builder,
-                    client_secret,
-                    client_public,
-                    server_public,
-                )
-                .expect("Failed to configure CURVE encryption");
-            }
-
-            let rpc_request_sock = socket_builder
-                .connect(rpc_address.as_str())
-                .expect("Unable to bind RPC server for connection");
-
-            // And let the RPC server know we're here, and it should start sending events on the
-            // narrative subscription.
-            let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+            let rpc_client = RpcClient::new_with_defaults(
+                std::sync::Arc::new(zmq_ctx.clone()),
+                rpc_address.clone(),
+                curve_keys
+                    .as_ref()
+                    .map(|(client_secret, client_public, server_public)| {
+                        rpc_async_client::rpc_client::CurveKeys {
+                            client_secret: client_secret.clone(),
+                            client_public: client_public.clone(),
+                            server_public: server_public.clone(),
+                        }
+                    }),
+            );
 
             // Initialize basic connection attributes for telnet
             let mut connection_attributes = std::collections::HashMap::new();

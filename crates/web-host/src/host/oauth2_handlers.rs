@@ -150,7 +150,7 @@ pub async fn oauth2_callback_handler(
 
     // Check if this OAuth2 identity already exists in the system
     // We do this by calling the daemon with oauth2_check mode
-    let (client_id, mut rpc_client, client_token) = match oauth2_state
+    let (client_id, rpc_client, client_token) = match oauth2_state
         .web_host
         .establish_client_connection(addr)
         .await
@@ -334,7 +334,7 @@ pub async fn oauth2_account_choice_handler(
     };
 
     // Establish RPC connection
-    let (client_id, mut rpc_client, client_token) = match oauth2_state
+    let (client_id, rpc_client, client_token) = match oauth2_state
         .web_host
         .establish_client_connection(addr)
         .await

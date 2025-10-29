@@ -37,7 +37,7 @@ use moor_var::{Obj, Symbol, Var, Variant, v_str};
 use planus::ReadAsRoot;
 use rpc_async_client::{
     pubsub_client::{broadcast_recv, events_recv},
-    rpc_client::RpcSendClient,
+    rpc_client::RpcClient,
 };
 use rpc_common::{
     AuthToken, ClientToken, extract_obj, extract_symbol, extract_var, mk_client_pong_msg,
@@ -82,7 +82,7 @@ pub(crate) struct TelnetConnection {
     pub(crate) broadcast_sub: Subscribe,
     pub(crate) narrative_sub: Subscribe,
     pub(crate) auth_token: Option<AuthToken>,
-    pub(crate) rpc_client: RpcSendClient,
+    pub(crate) rpc_client: RpcClient,
     pub(crate) pending_task: Option<PendingTask>,
 
     /// Output prefix for command-output delimiters

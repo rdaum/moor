@@ -28,7 +28,7 @@ use moor_common::model::ObjectRef;
 use moor_schema::rpc as moor_rpc;
 use moor_var::{Obj, Symbol, Var, v_int};
 use planus::ReadAsRoot;
-use rpc_async_client::{rpc_client::RpcSendClient, start_host_session};
+use rpc_async_client::{rpc_client::RpcClient, start_host_session};
 use rpc_common::{
     AuthToken, ClientToken, client_args::RpcClientArgs, mk_invoke_verb_msg,
     mk_request_performance_counters_msg,
@@ -39,7 +39,6 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::{Duration, Instant},
 };
-use tmq::request;
 use tokio::sync::{Mutex, Notify};
 use tracing::info;
 use uuid::Uuid;
@@ -156,12 +155,12 @@ async fn continuous_workload(
     task_results: TaskResults,
     stop_time: Instant,
 ) -> Result<(Duration, usize), eyre::Error> {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(5000)
-        .set_sndtimeo(5000)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+    // Create managed RPC client with connection pooling and cancellation safety
+    let rpc_client = RpcClient::new_with_defaults(
+        std::sync::Arc::new(zmq_ctx.clone()),
+        rpc_address.clone(),
+        None, // No CURVE encryption for load testing
+    );
     let start_time = Instant::now();
     let mut request_count = 0;
 
@@ -242,12 +241,12 @@ async fn workload(
     client_id: Uuid,
     task_results: TaskResults,
 ) -> Result<Duration, eyre::Error> {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(5000)
-        .set_sndtimeo(5000)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+    // Create managed RPC client with connection pooling and cancellation safety
+    let rpc_client = RpcClient::new_with_defaults(
+        std::sync::Arc::new(zmq_ctx.clone()),
+        rpc_address.clone(),
+        None, // No CURVE encryption for load testing
+    );
     let start_time = Instant::now();
     for _ in 0..args.num_verb_invocations {
         let num_iterations = v_int(args.num_verb_iterations as i64);
@@ -317,12 +316,12 @@ async fn request_counters(
     rpc_address: String,
     host_id: Uuid,
 ) -> Result<HashMap<Symbol, HashMap<Symbol, (isize, isize)>>, eyre::Error> {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(5000)
-        .set_sndtimeo(5000)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+    // Create managed RPC client with connection pooling and cancellation safety
+    let rpc_client = RpcClient::new_with_defaults(
+        std::sync::Arc::new(zmq_ctx.clone()),
+        rpc_address.clone(),
+        None, // No CURVE encryption for load testing
+    );
 
     let request_msg = mk_request_performance_counters_msg();
     let reply_bytes = rpc_client

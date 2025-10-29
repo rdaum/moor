@@ -23,7 +23,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moor_schema::rpc as moor_rpc;
-use rpc_async_client::rpc_client::RpcSendClient;
+use rpc_async_client::rpc_client::RpcClient;
 use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
@@ -62,24 +62,23 @@ async fn auth_handler(
     password: String,
 ) -> impl IntoResponse {
     debug!("Authenticating player: {}", player);
-    let (client_id, mut rpc_client, client_token) =
-        match host.establish_client_connection(addr).await {
-            Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
-            Err(WsHostError::AuthenticationFailed) => {
-                warn!("Authentication failed for {}", player);
-                return Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Body::empty())
-                    .unwrap();
-            }
-            Err(e) => {
-                error!("Unable to establish connection: {}", e);
-                return Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())
-                    .unwrap();
-            }
-        };
+    let (client_id, rpc_client, client_token) = match host.establish_client_connection(addr).await {
+        Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
+        Err(WsHostError::AuthenticationFailed) => {
+            warn!("Authentication failed for {}", player);
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Body::empty())
+                .unwrap();
+        }
+        Err(e) => {
+            error!("Unable to establish connection: {}", e);
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap();
+        }
+    };
 
     let auth_verb = match login_type {
         LoginType::Connect => "connect",
@@ -158,7 +157,7 @@ pub async fn auth_auth(
     host: WebHost,
     addr: SocketAddr,
     header_map: HeaderMap,
-) -> Result<(AuthToken, Uuid, ClientToken, RpcSendClient), StatusCode> {
+) -> Result<(AuthToken, Uuid, ClientToken, RpcClient), StatusCode> {
     let auth_token = match header_map.get("X-Moor-Auth-Token") {
         Some(auth_token) => match auth_token.to_str() {
             Ok(auth_token) => AuthToken(auth_token.to_string()),

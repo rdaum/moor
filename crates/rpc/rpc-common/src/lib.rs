@@ -108,18 +108,26 @@ pub const HOST_BROADCAST_TOPIC: &[u8; 5] = b"hosts";
 pub const WORKER_BROADCAST_TOPIC: &[u8; 7] = b"workers";
 
 /// Errors at the RPC transport / encoding layer.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum RpcError {
     #[error("could not initiate session: {0}")]
     CouldNotInitiateSession(String),
     #[error("could not authenticate: {0}")]
     AuthenticationError(String),
-    #[error("could not send RPC request: {0}")]
+    #[error("Could not send RPC request: {0}")]
     CouldNotSend(String),
-    #[error("could not receive RPC response: {0}")]
+    #[error("Could not receive RPC response: {0}")]
     CouldNotReceive(String),
+    #[error("Connection lost: {0}")]
+    ConnectionLost(String),
     #[error("could not decode RPC response: {0}")]
     CouldNotDecode(String),
+    #[error("RPC timeout: {0}")]
+    Timeout(String),
+    #[error("Recoverable error: {0}")]
+    Recoverable(String),
+    #[error("Fatal error: {0}")]
+    Fatal(String),
     #[error("unexpected reply: {0}")]
     UnexpectedReply(String),
 }

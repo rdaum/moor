@@ -24,7 +24,7 @@ use planus::ReadAsRoot;
 use rpc_async_client::{
     ListenersClient, ListenersMessage,
     pubsub_client::{broadcast_recv, events_recv},
-    rpc_client::RpcSendClient,
+    rpc_client::RpcClient,
 };
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, auth_token_from_ref, mk_client_pong_msg,
@@ -36,7 +36,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::{Instant, SystemTime},
 };
-use tmq::{request, subscribe, subscribe::Subscribe};
+use tmq::{subscribe, subscribe::Subscribe};
 use tokio::{
     sync::{Mutex, Notify},
     task::JoinHandle,
@@ -76,13 +76,12 @@ pub async fn broadcast_handle(
     connection_oid: Obj,
     kill_switch: Arc<AtomicBool>,
 ) {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(5000)
-        .set_sndtimeo(5000)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
-
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+    // Create managed RPC client with connection pooling and cancellation safety
+    let rpc_client = RpcClient::new_with_defaults(
+        std::sync::Arc::new(zmq_ctx.clone()),
+        rpc_address.clone(),
+        None, // No CURVE encryption for load testing
+    );
     // Process ping-pongs on the broadcast topic.
     tokio::spawn(async move {
         loop {
@@ -122,22 +121,22 @@ pub async fn create_user_session(
         AuthToken,
         ClientToken,
         Uuid,
-        RpcSendClient,
+        RpcClient,
         Subscribe,
         Subscribe,
     ),
     eyre::Error,
 > {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(5000)
-        .set_sndtimeo(5000)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
+    // Create managed RPC client with connection pooling and cancellation safety
+    let rpc_client = RpcClient::new_with_defaults(
+        std::sync::Arc::new(zmq_ctx.clone()),
+        rpc_address.clone(),
+        None, // No CURVE encryption for load testing
+    );
 
     // And let the RPC server know we're here, and it should start sending events on the
     // narrative subscription.
     debug!(rpc_address, "Contacting RPC server to establish connection");
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
     let client_id = uuid::Uuid::new_v4();
     let peer_addr = format!("{}.test", Uuid::new_v4());
 
@@ -260,7 +259,7 @@ pub async fn create_user_session(
 }
 
 pub async fn compile(
-    rpc_client: &mut RpcSendClient,
+    rpc_client: &mut RpcClient,
     client_id: Uuid,
     oid: Obj,
     auth_token: AuthToken,
@@ -340,7 +339,7 @@ pub async fn initialization_session(
     auth_token: AuthToken,
     client_token: ClientToken,
     client_id: Uuid,
-    mut rpc_client: RpcSendClient,
+    mut rpc_client: RpcClient,
     initialization_script: &str,
     verbs: &[(Symbol, String)],
 ) -> Result<(), eyre::Error> {

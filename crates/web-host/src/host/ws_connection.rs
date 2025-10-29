@@ -18,7 +18,7 @@ use moor_var::{Obj, v_binary, v_str};
 use planus::ReadAsRoot;
 use rpc_async_client::{
     pubsub_client::{broadcast_recv, events_recv},
-    rpc_client::RpcSendClient,
+    rpc_client::RpcClient,
 };
 use rpc_common::{
     AuthToken, ClientToken, mk_client_pong_msg, mk_command_msg, mk_detach_msg,
@@ -44,7 +44,7 @@ pub struct WebSocketConnection {
     pub(crate) client_id: Uuid,
     pub(crate) client_token: ClientToken,
     pub(crate) auth_token: AuthToken,
-    pub(crate) rpc_client: RpcSendClient,
+    pub(crate) rpc_client: RpcClient,
     pub(crate) handler_object: Obj,
     pub(crate) pending_task: Option<PendingTask>,
 }

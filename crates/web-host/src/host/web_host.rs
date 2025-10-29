@@ -25,7 +25,7 @@ use hickory_resolver::TokioResolver;
 use moor_common::model::ObjectRef;
 use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
-use rpc_async_client::{rpc_client::RpcSendClient, zmq};
+use rpc_async_client::{rpc_client::RpcClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_call_system_verb_msg,
     mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_eval_msg,
@@ -174,33 +174,28 @@ impl WebHost {
         auth_token: AuthToken,
         connect_type: Option<moor_rpc::ConnectType>,
         peer_addr: SocketAddr,
-    ) -> Result<(Obj, Uuid, ClientToken, RpcSendClient), WsHostError> {
+    ) -> Result<(Obj, Uuid, ClientToken, RpcClient), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
         // Establish a connection to the RPC server
         let client_id = Uuid::new_v4();
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
-
         // Configure CURVE encryption if keys provided
-        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
-            socket_builder = rpc_async_client::configure_curve_client(
-                socket_builder,
-                client_secret,
-                client_public,
-                server_public,
-            )
-            .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
-        }
+        let _socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
+        // Note: socket_builder is no longer used directly since we use ManagedRpcClient
 
-        let rcp_request_sock = socket_builder
-            .connect(self.rpc_addr.as_str())
-            .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
-
-        // Establish a connection to the RPC server
-        debug!(
-            self.rpc_addr,
-            "Contacting RPC server to establish connection"
+        // Create managed RPC client with connection pooling and cancellation safety
+        let rpc_client = RpcClient::new_with_defaults(
+            std::sync::Arc::new(zmq_ctx.clone()),
+            self.rpc_addr.clone(),
+            self.curve_keys
+                .as_ref()
+                .map(|(client_secret, client_public, server_public)| {
+                    rpc_async_client::rpc_client::CurveKeys {
+                        client_secret: client_secret.clone(),
+                        client_public: client_public.clone(),
+                        server_public: server_public.clone(),
+                    }
+                }),
         );
-        let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
         // Perform reverse DNS lookup for hostname
         debug!("Starting reverse DNS lookup for {}", peer_addr.ip());
@@ -311,7 +306,7 @@ impl WebHost {
         client_id: Uuid,
         client_token: ClientToken,
         auth_token: AuthToken,
-        rpc_client: RpcSendClient,
+        rpc_client: RpcClient,
         peer_addr: SocketAddr,
     ) -> Result<WebSocketConnection, eyre::Error> {
         let zmq_ctx = self.zmq_context.clone();
@@ -389,27 +384,28 @@ impl WebHost {
     pub async fn establish_client_connection(
         &self,
         addr: SocketAddr,
-    ) -> Result<(Uuid, RpcSendClient, ClientToken), WsHostError> {
+    ) -> Result<(Uuid, RpcClient, ClientToken), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
-
         // Configure CURVE encryption if keys provided
-        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
-            socket_builder = rpc_async_client::configure_curve_client(
-                socket_builder,
-                client_secret,
-                client_public,
-                server_public,
-            )
-            .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
-        }
+        let _socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
+        // Note: socket_builder is no longer used directly since we use ManagedRpcClient
 
-        let rcp_request_sock = socket_builder
-            .connect(self.rpc_addr.as_str())
-            .expect("Unable to bind RPC server for connection");
+        // Create managed RPC client with connection pooling and cancellation safety
+        let rpc_client = RpcClient::new_with_defaults(
+            std::sync::Arc::new(zmq_ctx.clone()),
+            self.rpc_addr.clone(),
+            self.curve_keys
+                .as_ref()
+                .map(|(client_secret, client_public, server_public)| {
+                    rpc_async_client::rpc_client::CurveKeys {
+                        client_secret: client_secret.clone(),
+                        client_public: client_public.clone(),
+                        server_public: server_public.clone(),
+                    }
+                }),
+        );
 
         let client_id = Uuid::new_v4();
-        let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
         // Perform reverse DNS lookup for hostname
         let hostname = match resolve_hostname(addr.ip()).await {
@@ -499,32 +495,20 @@ impl WebHost {
 
     pub async fn fetch_server_features(&self) -> Result<Vec<u8>, StatusCode> {
         let zmq_ctx = self.zmq_context.clone();
-        let mut socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
 
-        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
-            socket_builder = match rpc_async_client::configure_curve_client(
-                socket_builder,
-                client_secret,
-                client_public,
-                server_public,
-            ) {
-                Ok(builder) => builder,
-                Err(e) => {
-                    error!("Failed to configure CURVE for feature fetch: {}", e);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
-            };
-        }
-
-        let rpc_request_sock = match socket_builder.connect(self.rpc_addr.as_str()) {
-            Ok(sock) => sock,
-            Err(e) => {
-                error!("Failed to connect to RPC server for feature fetch: {}", e);
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
-
-        let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+        let rpc_client = RpcClient::new_with_defaults(
+            std::sync::Arc::new(zmq_ctx.clone()),
+            self.rpc_addr.clone(),
+            self.curve_keys
+                .as_ref()
+                .map(|(client_secret, client_public, server_public)| {
+                    rpc_async_client::rpc_client::CurveKeys {
+                        client_secret: client_secret.clone(),
+                        client_public: client_public.clone(),
+                        server_public: server_public.clone(),
+                    }
+                }),
+        );
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration.as_nanos() as u64,
             Err(e) => {
@@ -662,7 +646,7 @@ impl WebHost {
 
 pub(crate) async fn rpc_call(
     client_id: Uuid,
-    rpc_client: &mut RpcSendClient,
+    rpc_client: &mut RpcClient,
     request: moor_rpc::HostClientToDaemonMessage,
 ) -> Result<Vec<u8>, StatusCode> {
     match rpc_client.make_client_rpc_call(client_id, request).await {
