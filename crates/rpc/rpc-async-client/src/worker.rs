@@ -59,7 +59,7 @@ pub async fn attach_worker(
 
         // And let the RPC server know we're here, and it should start sending events on the
         // narrative subscription.
-        let mut rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
+        let rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
 
         info!(
             "Attaching worker type {} to daemon with worker id {} via {}",

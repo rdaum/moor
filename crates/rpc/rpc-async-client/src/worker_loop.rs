@@ -182,7 +182,7 @@ async fn process_fb<ProcessFunc, Fut>(
     let rpc_request_sock = socket_builder
         .connect(&rpc_address)
         .expect("Unable to bind RPC server for connection");
-    let mut rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
+    let rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
 
     // Work directly with flatbuffer references to avoid copying
     let message_union = match event.message() {
