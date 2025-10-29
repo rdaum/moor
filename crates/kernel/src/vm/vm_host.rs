@@ -567,17 +567,29 @@ impl VmHost {
     pub fn permissions(&self) -> Obj {
         self.vm_exec_state.top().permissions
     }
-    pub fn verb_name(&self) -> Symbol {
-        self.vm_exec_state.top().verb_name
+
+    /// Try to get the verb name of the current activation.
+    /// Returns None if the activation stack is empty (e.g., task not yet initialized).
+    pub fn verb_name(&self) -> Option<Symbol> {
+        self.vm_exec_state.try_top().map(|a| a.verb_name)
     }
-    pub fn verb_definer(&self) -> Obj {
-        self.vm_exec_state.top().verb_definer()
+
+    /// Try to get the verb definer of the current activation.
+    /// Returns None if the activation stack is empty (e.g., task not yet initialized).
+    pub fn verb_definer(&self) -> Option<Obj> {
+        self.vm_exec_state.try_top().map(|a| a.verb_definer())
     }
-    pub fn this(&self) -> Var {
-        self.vm_exec_state.top().this.clone()
+
+    /// Try to get the 'this' value of the current activation.
+    /// Returns None if the activation stack is empty (e.g., task not yet initialized).
+    pub fn this(&self) -> Option<Var> {
+        self.vm_exec_state.try_top().map(|a| a.this.clone())
     }
-    pub fn line_number(&self) -> usize {
-        self.vm_exec_state.top().frame.find_line_no().unwrap_or(0)
+
+    /// Try to get the line number of the current activation.
+    /// Returns None if the activation stack is empty (e.g., task not yet initialized).
+    pub fn line_number(&self) -> Option<usize> {
+        self.vm_exec_state.try_top().map(|a| a.frame.find_line_no().unwrap_or(0))
     }
 
     /// Get the current traceback and formatted backtrace

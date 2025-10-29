@@ -108,6 +108,12 @@ impl VMExecState {
         self.stack.last().expect("activation stack underflow")
     }
 
+    /// Try to get the top activation without panicking. Returns None if stack is empty.
+    /// Used for diagnostics and scheduler queries where stack emptiness is not a bug.
+    pub(crate) fn try_top(&self) -> Option<&Activation> {
+        self.stack.last()
+    }
+
     /// Return the object that called the current activation.
     pub(crate) fn caller(&self) -> Var {
         let stack_iter = self.stack.iter().rev();

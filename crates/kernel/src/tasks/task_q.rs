@@ -613,13 +613,38 @@ impl SuspensionQ {
                     }
                 }
                 TaskState::Prepared(_) => {
-                    // For running tasks, get info from vm_host
-                    (
-                        sr.task.vm_host.verb_name(),
-                        sr.task.vm_host.verb_definer(),
-                        sr.task.vm_host.line_number(),
-                        sr.task.vm_host.this(),
-                    )
+                    // For prepared tasks, vm_host stack MUST be non-empty
+                    // If it's empty, that's a critical bug - log and skip this task
+                    let Some(verb_name) = sr.task.vm_host.verb_name() else {
+                        error!(
+                            task_id = sr.task.task_id,
+                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
+                        );
+                        continue;
+                    };
+                    let Some(verb_definer) = sr.task.vm_host.verb_definer() else {
+                        error!(
+                            task_id = sr.task.task_id,
+                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
+                        );
+                        continue;
+                    };
+                    let Some(line_number) = sr.task.vm_host.line_number() else {
+                        error!(
+                            task_id = sr.task.task_id,
+                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
+                        );
+                        continue;
+                    };
+                    let Some(this) = sr.task.vm_host.this() else {
+                        error!(
+                            task_id = sr.task.task_id,
+                            "CRITICAL: Prepared task has empty activation stack - skipping from queued_tasks list"
+                        );
+                        continue;
+                    };
+
+                    (verb_name, verb_definer, line_number, this)
                 }
             };
 
