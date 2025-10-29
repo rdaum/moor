@@ -133,7 +133,8 @@ details.
 
 ## For Developers & Contributors
 
-mooR offers several opportunities for contribution. For detailed contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+mooR offers several opportunities for contribution. For detailed contribution guidelines, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Core Development** (Rust):
 

@@ -22,6 +22,20 @@ bacon daemon-debug-traced
 
 This builds with the `trace_events` feature and outputs traces to `moor-trace.json`.
 
+## NPM Scripts
+
+For convenience, npm scripts are available for tracing:
+
+```bash
+# Daemon with tracing
+npm run daemon:traced
+
+# Full development stack with tracing
+npm run full:dev-traced
+```
+
+These scripts build with the `trace_events` feature and output traces to `moor-trace.json`.
+
 ## Docker with Tracing
 
 ### Option 1: Using Docker Compose Override

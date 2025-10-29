@@ -1,7 +1,7 @@
 # Licensing Notice for MOO Core Databases
 
-This directory contains MOO core databases that are distributed under separate licensing terms
-from the main mooR project.
+This directory contains MOO core databases that are distributed under separate licensing terms from
+the main mooR project.
 
 ## Core Database Files
 
@@ -13,23 +13,24 @@ from the main mooR project.
 - **License Status**: Complex/Unclear - see notes below
 - **Notes**: Standard LambdaMOO core database with community contributions
 - **Notes**: LambdaCore adaptation for mooR compatibility
-- **Original LambdaCore Location**: The original official LambdaCore releases previously at parcftp.xerox.com are now
-  available at https://lambda.moo.mud.org/pub/MOO/
+- **Original LambdaCore Location**: The original official LambdaCore releases previously at
+  parcftp.xerox.com are now available at https://lambda.moo.mud.org/pub/MOO/
 
 ### JHCore-DEV-2.db
 
 - **Source**: JHCore development database (originally derived from LambdaCore)
 - **Original Author**: Various MOO community contributors especially from Waterpoint MOO
-- **License Status**: Mixed - JHCore authors' modifications are explicitly licensed, but LambdaCore-derived portions
-  remain complex
+- **License Status**: Mixed - JHCore authors' modifications are explicitly licensed, but
+  LambdaCore-derived portions remain complex
 - **Notes**: Community-developed core with additional features
-- **Original LambdaCore Location**: The original official LambdaCore releases previously at parcftp.xerox.com are now
-  available at https://lambda.moo.mud.org/pub/MOO/
+- **Original LambdaCore Location**: The original official LambdaCore releases previously at
+  parcftp.xerox.com are now available at https://lambda.moo.mud.org/pub/MOO/
 
 #### JHCore License
 
-**Important Note**: This license applies to the modifications and new works created by the JHCore authors. The
-underlying LambdaCore-derived portions still have the complex licensing situation described below.
+**Important Note**: This license applies to the modifications and new works created by the JHCore
+authors. The underlying LambdaCore-derived portions still have the complex licensing situation
+described below.
 
 ```
 CORE-LICENSE
@@ -74,8 +75,8 @@ We are not lawyers, but here's our best summation of the current situation.
 
 1. **No Explicit License**: LambdaCore was distributed without an explicit license
 2. **Multiple Contributors**: Contains contributions from many authors with no unified licensing
-3. **No Copyright Assertion**: Original author Pavel Curtis stated neither he nor Xerox "assert any copyright over any
-   part of the LambdaCore code" (1994)
+3. **No Copyright Assertion**: Original author Pavel Curtis stated neither he nor Xerox "assert any
+   copyright over any part of the LambdaCore code" (1994)
 4. **Implied License**: The long-standing distribution practice suggests an implied license for use
 
 ## Historical Reference: Pavel Curtis's Email (1994)
@@ -126,6 +127,6 @@ possible copyright on the core.
 
 ---
 
-**Disclaimer**: This licensing notice represents our best understanding of the complex
-historical licensing situation. Users should conduct their own due diligence and consult
-legal counsel if concerned about licensing compliance.
+**Disclaimer**: This licensing notice represents our best understanding of the complex historical
+licensing situation. Users should conduct their own due diligence and consult legal counsel if
+concerned about licensing compliance.
