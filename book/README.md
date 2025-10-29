@@ -5,6 +5,7 @@ Points of interest:
 - `install-tools.sh`: installs `mdbook` and friends. You should run this.
 - `src`: the actual content.
 - `theme`: styling and custom JS, like syntax highlighting.
+- `src/legal.md`: licensing information for the book content
 
 # But I just want to read the book!
 
