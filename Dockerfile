@@ -30,6 +30,7 @@ COPY ./.git ./.git
 # Build configuration: Use ARG to allow build-time customization
 ARG BUILD_PROFILE=debug
 ARG CARGO_BUILD_FLAGS=""
+ARG TRACE_EVENTS=false
 
 # Build flags here if you want optimal performance for your *particular* CPU,
 # at the expense of portability.
@@ -41,11 +42,21 @@ ARG CARGO_BUILD_FLAGS=""
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/moor-build/target,sharing=locked \
     if [ "$BUILD_PROFILE" = "release" ]; then \
-        CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release -j 6 $CARGO_BUILD_FLAGS && \
-        cp -r target/release /moor-build/target-final; \
+        if [ "$TRACE_EVENTS" = "true" ]; then \
+            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release --features trace_events -j 6 $CARGO_BUILD_FLAGS && \
+            cp -r target/release /moor-build/target-final; \
+        else \
+            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release -j 6 $CARGO_BUILD_FLAGS && \
+            cp -r target/release /moor-build/target-final; \
+        fi \
     else \
-        cargo build -j 6 $CARGO_BUILD_FLAGS && \
-        cp -r target/debug /moor-build/target-final; \
+        if [ "$TRACE_EVENTS" = "true" ]; then \
+            cargo build --features trace_events -j 6 $CARGO_BUILD_FLAGS && \
+            cp -r target/debug /moor-build/target-final; \
+        else \
+            cargo build -j 6 $CARGO_BUILD_FLAGS && \
+            cp -r target/debug /moor-build/target-final; \
+        fi \
     fi
 
 # Runtime image - slim debian with just the essentials
