@@ -1,0 +1,137 @@
+### Changes by the mooR authors
+
+- Converted to mooR objdef structure
+- Switched to `argon2` for password crypt
+- Changes throughout to avoid assignment into type literals (which is a compile error in mooR but not LambdaMOO)
+- Changes throughout to better support mooR UUID-style object references
+- New $login.welcome_message, with djot/markdown style content
+- Added `$oauth_challenge` `$ouath_create` `$oauth_connect`
+
+### Exhaustive List of Changes Since LambdaCore-17May04
+
+Sourced from https://lisdude.com/moo/LambdaCore-2018-Changelog.txt
+
+(Note LambdaCore-17May04: is available at https://lambda.moo.mud.org/pub/MOO/)
+
+- [#0:do_out_of_band_command] Make sure do_out_of_band_command exists before calling.
+- [#0:handle_task_timeout] Added
+- [$http] Added HTTP Server (#97)
+    - NOTE: You will probably want to change #97.master_key to something unique.
+- [$wiz_utils:do_new_password] Removed #0.new_password_log and line 13 of $wiz_utils:do_new_password, as it was #-1 and
+  the list in LambdaMOO seems to be a bit hacky anyway
+- [$builder:@recycle] Add a $perm_utils:controls check
+- [$player:my_huh] Ask feature objects for matching verbs
+- [$player:@paranoid] Get kept lines from $paranoid_db
+- [$player:@sethome] Ensure that the player owns itself before setting a home
+- [$player:set_aliases] Remove superfluous 'changed' variable
+- [$player:@addalias] Add a check for cases where parsing the string failed
+- [$player:@rmalias] Notify the player when no aliases were removed.
+- [$player:@version] Don't show 'v' before version number (if applicable)
+- [$player:@uptime] Show the MOO name instead of 'The server'
+- [$player:@set-note-string] Set task permissions later in the verb
+- [$player:@users] Columnize instead of displaying in a long list
+- [$player:notify] Move the pagelen check and remove the perm_utils checks.
+- [$login:init_for_core] Set .current_lag to 0 (also actually set $login.current_lag to 0)
+- [$big_mail_recipient:from_msg_seq] Use $mail_agent to parse address fields
+- [$big_mail_recipient:set_message_body_by_index] Added.
+- [$registration_db:search] Added.
+- [$building_utils:parse_names] Ensure that aliase list isn't empty
+- [$building_utils:size_string] Rewritten
+- [$prog_help] Forward @props documentation to verb documentation
+- [$prog_help] Correct the URL to the Programmer's Manual in $prog_help.language
+- [$wiz_utils:unset_player] Remove shared character registry listings
+- [$wiz_utils:check_player_request] Consult $wiz_utils.registration_domain_restricted
+- [$math_utils] Add .e and .e_string
+- [$math_utils:pow] Fix traceback when using a float as the second argument
+- [$math_utils:geometric] Fix traceback when using a float as the first argument
+- [$builtin_function_help] Update: open_network_connection, verb_code, add_verb, crypt, set_connection_option. Added:
+  verb_cache_stats, log_cache_stats
+- [$new_prog_log:receive_message] Use $mail_agent:parse_address_field
+- [$guest:@subscribe] Added
+- [$guest:current_folder] Added
+- [$guest:notify] Added
+- [$you:say_action_reflexive] Added
+- [$you:reflexive] Added
+- [$player_db:available] Check for parenthesized object numbers
+- [$player_db:why_bad_name] Same as :available
+- [$player_class:confunc] Call this:check_mail()
+- [$player_class:@annotate] Added
+- [$player_class:annotate_message_seq] Added
+- [$player_class:check_mail] Added
+- [$perm_utils:controls] Add validity checks to the arguments
+- [$time_utils:from_day] Add a reference time
+- [$time_utils:time_sub] Print leading 0 in $O format
+- [$mail_recipient:is_writable_by] Add 'is_annotable_by' alias
+- [$mail_recipient:ok_annotate] Added
+- [$mail_recipient:annotate_message_seq] Added
+- [$mail_recipient:undo_rmm] Add 'set_message_body_by_index' alias and documentation
+- [$mail_recipient:expire_old_messages] Check that the network is active before sending mail
+- [$mail_agent:look_self] Added a suspend_if_needed
+- [$mail_agent:acceptable] Pass 'what' to :check_names
+- [$mail_agent:check_names] Add an OBJ as the first argument
+- [$mail_agent:match] Change the suspend from 2 seconds to 0
+- [$mail_agent:name] Use match() instead of strsub
+- [$mail_agent:parse_address_field] Use match() over index()
+- [$mail_agent:from_msg_seq] Use :parse_address_field
+- [$mail_agent:to_text] Use player:ctime() instead of builtin ctime()
+- [$mail_agent:set_message_body_by_index] Added
+- [$mail_agent:get_message_body_by_index] Added
+- [$verb_editor:local_editing_info] Check vname[3] isn't none before applying short_prep
+- [$generic_editor:parse_insert] 0 length strings are invalid arguments
+- [$generic_editor:parse_subst] Return more descriptive error message
+- [$generic_editor:yank] Wrap :notify in a tostr()
+- [$match_utils:match_list] Change listappend to a splice to save ticks
+- [$object_utils:accessible_verbs] Cache the number of verbs before the for loop
+- [$object_utils:accessible_properties] Added
+- [$list_utils:flatten_suspended] Added
+- [$command_utils:player_match_result] Fail when there are no valid results and no errors
+- [$wiz:make-core-database] Wrap notify text in a tostr
+- [$wiz:@shutdown] Use $shutdown_message instead of recreating the value and use the length of the shutdown message in :
+  fill_string
+- [$wiz:@make-player] Check for the appropriate number of arguments
+- [$prog:@forked] Combine @forked and @forked-verbose
+- [$prog:@forked-verbose] Renamed to @old-forked-v
+- [$prog:eval_cmd_string] Adjust how many ticks get subtracted
+- [$prog:@props] Added
+- [$code_utils:find_verbs_containing] Move suspends into called verbs and add documentation
+- [$code_utils:_find_verbs_containing] Add suspend and valid check
+- [$code_utils:_egrep_verb_code] Move try before for loop
+- [$code_utils:_egrep_verb_code_all] Add a casematters argument
+- [$code_utils:_find_verb_lines_containing] Add a suspend and validity check
+- [$news:_parse] Use the strings variable in the error message
+- [$housekeeper:replace] Add additional validation checks and fork the movement
+- [$housekeeper:cleanup_list] Add additional validation checks
+- [$housekeeper:add_cleanup] More validation checks
+- [$housekeeper:continuous] Fork replacements
+- [$housekeeper:clean_status] Report on testing mode and ensure that the housekeeper task is valid. Also replaced some
+  Lambda-specific wording.
+- [$housekeeper:is_cleaning] Use $string_utils:nn instead of doing it manually.
+- [$network] Change the valid_host_regexp
+- [$network:open] Use scattering assignment instead of args variables
+- [$network:raw_sendmail] Support a list of maildrops
+- [$feature:has_feature_verb] Added
+- [$gopher:daily] Comment out frozen and suspend
+- [$build_options] Add 'show_audit_bytes' and 'show_audit_float' options
+- [$quota_utils:init_for_core] Set default_quota
+- [$quota_utils:do_breakdown] Add suspends
+- [$paranoid_db:init_for_core] Only delete properties beginning with #
+- [$paranoid_db:set_kept_lines] Set the maximum in a property instead of hardcoded. Also return kept instead of nothing.
+- [$paranoid_db:gc] Only clean up properties beginning with #
+- [$server_options] Bump up foreground and background ticks. Add 'boot_msg' property
+- [$builder_help] Pass @quota. Add help for 'audit_bytes' and 'audit_float'
+- [$frand_class:@addword] Check if player owns itself
+- [$frand_class:refusal_origin_to_name] Return a message for permission denied
+- [$frand_class:@addsubmitted] Added
+- [$matrix_utils:vector_add] Add suspends
+- [$matrix_utils:transpose] Add suspend
+- [$matrix_utils:determinant] Math...
+- [$matrix_utils:inverse] More, probably very fancy, math...
+- [$matrix_utils:dot_prod] Add suspend
+- [$matrix_utils:column] Add suspend
+- [$matrix_utils:matrix_mul] Add suspend
+- [$matrix_utils:is_vector] Add suspend
+- [$frand_help] Add properties for: @adddict, @rmdict, @spurn, @spurned, @submitted, @addsubmitted, @rmsubmitted
+- [$convert_utils] Fix name of astronomicalunit. Add properties: fluidounce, tsp, tbsp
+- [$convert_utils:convert] Fix error when converting to/from fluid ounces
+- [#96:page / #96:tell] Removed these verbs, as they only reference the non-existant lag reduction FO.
+- [$lock_utils] Reset properties: player, input_index, input_length, input_string, index_incremented
