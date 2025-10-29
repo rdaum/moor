@@ -13,7 +13,8 @@ from the main mooR project.
 - **License Status**: Complex/Unclear - see notes below
 - **Notes**: Standard LambdaMOO core database with community contributions
 - **Notes**: LambdaCore adaptation for mooR compatibility
-- **Original LambdaCore Location**: The original official LambdaCore releases previously at parcftp.xerox.com are now available at https://lambda.moo.mud.org/pub/MOO/
+- **Original LambdaCore Location**: The original official LambdaCore releases previously at parcftp.xerox.com are now
+  available at https://lambda.moo.mud.org/pub/MOO/
 
 ### JHCore-DEV-2.db
 
@@ -22,7 +23,8 @@ from the main mooR project.
 - **License Status**: Mixed - JHCore authors' modifications are explicitly licensed, but LambdaCore-derived portions
   remain complex
 - **Notes**: Community-developed core with additional features
-- **Original LambdaCore Location**: The original official LambdaCore releases previously at parcftp.xerox.com are now available at https://lambda.moo.mud.org/pub/MOO/
+- **Original LambdaCore Location**: The original official LambdaCore releases previously at parcftp.xerox.com are now
+  available at https://lambda.moo.mud.org/pub/MOO/
 
 #### JHCore License
 
@@ -120,7 +122,6 @@ possible copyright on the core.
 - **minimal-core**: Covered by mooR's GPL-3.0 license - safe for GPL-compatible use
 
 - These core databases are provided "as-is" for compatibility testing and reference
-- For production use, consider using minimal-core or creating your own core database
 - The mooR project maintainers are not responsible for licensing compliance of third-party databases
 
 ---
