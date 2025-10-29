@@ -840,12 +840,7 @@ pub(crate) fn moo_stack_frame_from_flatbuffer(
     let capture_stack = capture_stack?;
 
     // Create frame with environment, then set other fields
-    // For deserialization, create a temporary owned arena that will be owned by the environment
-    let temp_arena = Box::into_raw(Box::new(
-        crate::vm::environment_arena::VarArena::new()
-            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?,
-    ));
-    let mut frame = KernelMooStackFrame::with_environment(program, temp_arena, environment);
+    let mut frame = KernelMooStackFrame::with_environment(program, environment);
     frame.pc = fb.pc as usize;
     frame.pc_type = pc_type;
     frame.valstack = valstack;
@@ -1082,18 +1077,9 @@ pub(crate) fn vm_exec_state_from_flatbuffer(
         None
     };
 
-    // Note: We can't fully reconstruct VMExecState without task_id and other fields
-    // Those will need to be set by the caller
-    // Create a new arena for the deserialized state
-    let environment_arena = Box::new(
-        crate::vm::environment_arena::VarArena::new()
-            .map_err(|e| TaskConversionError::VarError(format!("Failed to create arena: {e}")))?,
-    );
-
     Ok(KernelVMExecState {
         task_id: 0, // Will be set by caller
         stack,
-        environment_arena,
         tick_slice: 0,
         max_ticks: 0, // Will be set by caller
         tick_count: fb.tick_count as usize,
@@ -1148,13 +1134,13 @@ pub(crate) fn vm_host_from_flatbuffer(
 
 fn task_state_to_flatbuffer(state: &KernelTaskState) -> Result<fb::TaskState, TaskConversionError> {
     let state_union = match state {
-        KernelTaskState::Created(start) => {
+        KernelTaskState::Pending(start) => {
             let fb_start = task_start_to_flatbuffer(start)?;
             fb::TaskStateUnion::TaskCreated(Box::new(fb::TaskCreated {
                 start: fb_start.start,
             }))
         }
-        KernelTaskState::Running(start) => {
+        KernelTaskState::Prepared(start) => {
             let fb_start = task_start_to_flatbuffer(start)?;
             fb::TaskStateUnion::TaskRunning(Box::new(fb::TaskRunning {
                 start: fb_start.start,
@@ -1171,11 +1157,11 @@ fn task_state_from_flatbuffer(fb: &fb::TaskState) -> Result<KernelTaskState, Tas
     match &fb.state {
         TaskStateUnion::TaskCreated(created) => {
             let task_start = task_start_from_flatbuffer_union(&created.start)?;
-            Ok(KernelTaskState::Created(task_start))
+            Ok(KernelTaskState::Pending(task_start))
         }
         TaskStateUnion::TaskRunning(running) => {
             let task_start = task_start_from_flatbuffer_union(&running.start)?;
-            Ok(KernelTaskState::Running(task_start))
+            Ok(KernelTaskState::Prepared(task_start))
         }
     }
 }

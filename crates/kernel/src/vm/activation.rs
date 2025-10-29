@@ -210,7 +210,6 @@ impl Activation {
         argstr: String,
         current_activation: Option<&Activation>,
         program: ProgramType,
-        arena: *mut crate::vm::environment_arena::VarArena,
     ) -> Self {
         let verb_owner = resolved_verb.owner();
 
@@ -219,7 +218,7 @@ impl Activation {
         };
 
         // Use builder pattern for safe, ergonomic initialization
-        let moo_frame = MooStackFrame::builder(program, arena)
+        let moo_frame = MooStackFrame::builder(program)
             .with_global(GlobalName::this, this.clone())
             .with_global(GlobalName::player, v_obj(player))
             .with_global(GlobalName::caller, caller)
@@ -252,7 +251,6 @@ impl Activation {
         lambda: &Lambda,
         current_activation: &Activation,
         args: Vec<Var>,
-        arena: *mut crate::vm::environment_arena::VarArena,
     ) -> Result<Self, Error> {
         // Build environment as Vec first (hybrid approach for lambda initialization)
         use moor_var::program::names::GlobalName;
@@ -388,7 +386,7 @@ impl Activation {
         }
 
         // Create frame with the built environment
-        let moo_frame = MooStackFrame::with_environment(lambda.0.body.clone(), arena, temp_env);
+        let moo_frame = MooStackFrame::with_environment(lambda.0.body.clone(), temp_env);
         let mut frame = Frame::Moo(moo_frame);
 
         // Inherit global variables from current activation (this, player, etc.)
@@ -424,12 +422,7 @@ impl Activation {
         })
     }
 
-    pub fn for_eval(
-        permissions: Obj,
-        player: &Obj,
-        program: Program,
-        arena: *mut crate::vm::environment_arena::VarArena,
-    ) -> Self {
+    pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,
@@ -439,7 +432,7 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let moo_frame = MooStackFrame::builder(program, arena)
+        let moo_frame = MooStackFrame::builder(program)
             .with_global(GlobalName::this, v_obj(NOTHING))
             .with_global(GlobalName::player, v_obj(*player))
             .with_global(GlobalName::caller, v_obj(*player))

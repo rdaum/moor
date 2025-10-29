@@ -85,17 +85,18 @@ lazy_static! {
 /// Tracks the lifecycle state of a task
 #[derive(Debug, Clone)]
 pub enum TaskState {
-    /// Brand new task that hasn't executed yet, needs setup_task_start called
-    Created(TaskStart),
-    /// Task has been initialized and can be resumed
-    Running(TaskStart),
+    /// Task pending execution, their host and activation frames are not yet set up, and is not
+    /// prepared for execution yet.
+    Pending(TaskStart),
+    /// Task has had its state set up and ready to go.
+    Prepared(TaskStart),
 }
 
 impl TaskState {
     pub fn task_start(&self) -> &TaskStart {
         match self {
-            TaskState::Created(start) => start,
-            TaskState::Running(start) => start,
+            TaskState::Pending(start) => start,
+            TaskState::Prepared(start) => start,
         }
     }
 
@@ -145,7 +146,7 @@ impl Task {
         kill_switch: Arc<AtomicBool>,
     ) -> Box<Self> {
         let is_background = task_start.is_background();
-        let state = TaskState::Created(task_start.clone());
+        let state = TaskState::Pending(task_start.clone());
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
         // the DB or from default constants.
@@ -378,7 +379,7 @@ impl Task {
                     let (player, command) = (*player, command.clone());
                     if !result.is_true() {
                         // Intercept and rewrite us back to StartVerbCommand and do old school parse.
-                        self.state = TaskState::Running(TaskStart::StartCommandVerb {
+                        self.state = TaskState::Prepared(TaskStart::StartCommandVerb {
                             handler_object: *handler_object,
                             player,
                             command: command.clone(),
@@ -803,10 +804,11 @@ impl Task {
             }
             TaskStart::StartFork {
                 fork_request,
-                suspended,
+                suspended: _,
             } => {
-                self.vm_host
-                    .start_fork(self.task_id, fork_request, *suspended);
+                // When setup_task_start is called, the task is being woken/started, so we always
+                // pass suspended=false to ensure vm_host.running is set to true
+                self.vm_host.start_fork(self.task_id, fork_request, false);
             }
             TaskStart::StartEval { player, program } => {
                 self.vm_host
@@ -866,7 +868,7 @@ impl Task {
                     command.to_string(),
                     program,
                 );
-                self.state = TaskState::Running(TaskStart::StartDoCommand {
+                self.state = TaskState::Prepared(TaskStart::StartDoCommand {
                     handler_object: *handler_object,
                     player: *player,
                     command: command.to_string(),

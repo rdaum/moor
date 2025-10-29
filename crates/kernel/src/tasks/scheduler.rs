@@ -2054,7 +2054,7 @@ impl TaskQ {
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
 
         // Check if this is a brand new task or a resuming task
-        let is_created = matches!(task.state, crate::tasks::task::TaskState::Created(_));
+        let is_created = matches!(task.state, crate::tasks::task::TaskState::Pending(_));
 
         self.thread_pool.spawn(move || {
             // Set up transaction context for this thread
@@ -2075,8 +2075,8 @@ impl TaskQ {
                 }
 
                 // Transition to Running state
-                if let crate::tasks::task::TaskState::Created(start) = &task.state {
-                    task.state = crate::tasks::task::TaskState::Running(start.clone());
+                if let crate::tasks::task::TaskState::Pending(start) = &task.state {
+                    task.state = crate::tasks::task::TaskState::Prepared(start.clone());
                 }
 
                 task.retry_state = task.vm_host.snapshot_state();

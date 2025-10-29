@@ -175,13 +175,16 @@ impl WorkerRpcSendClient {
                 socket_guard.return_socket(socket).await;
 
                 // Decode flatbuffer response
-                let fb_reply = moor_rpc::DaemonToWorkerReplyRef::read_as_root(&reply_bytes).map_err(|e| {
-                    RpcError::CouldNotDecode(format!("Unable to decode flatbuffer daemon reply: {e}"))
-                })?;
+                let fb_reply = moor_rpc::DaemonToWorkerReplyRef::read_as_root(&reply_bytes)
+                    .map_err(|e| {
+                        RpcError::CouldNotDecode(format!(
+                            "Unable to decode flatbuffer daemon reply: {e}"
+                        ))
+                    })?;
 
-                let reply_union = fb_reply
-                    .reply()
-                    .map_err(|e| RpcError::CouldNotDecode(format!("Unable to decode reply union: {e}")))?;
+                let reply_union = fb_reply.reply().map_err(|e| {
+                    RpcError::CouldNotDecode(format!("Unable to decode reply union: {e}"))
+                })?;
 
                 let reply = match reply_union {
                     moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAck(_) => DaemonToWorkerReply::Ack,
@@ -197,27 +200,36 @@ impl WorkerRpcSendClient {
                     moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAttached(attached) => {
                         let worker_id_data = attached
                             .worker_id()
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
+                            .map_err(|e| {
+                                RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}"))
+                            })?
                             .data()
                             .map_err(|e| {
-                                RpcError::CouldNotDecode(format!("Failed to get worker_id data: {e}"))
+                                RpcError::CouldNotDecode(format!(
+                                    "Failed to get worker_id data: {e}"
+                                ))
                             })?;
-                        let worker_id = Uuid::from_slice(worker_id_data)
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}")))?;
+                        let worker_id = Uuid::from_slice(worker_id_data).map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}"))
+                        })?;
 
                         DaemonToWorkerReply::Attached(worker_id)
                     }
                     moor_rpc::DaemonToWorkerReplyUnionRef::WorkerAuthFailed(auth_failed) => {
                         let reason = auth_failed
                             .reason()
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get reason: {e}")))?
+                            .map_err(|e| {
+                                RpcError::CouldNotDecode(format!("Failed to get reason: {e}"))
+                            })?
                             .to_string();
                         DaemonToWorkerReply::AuthFailed(reason)
                     }
                     moor_rpc::DaemonToWorkerReplyUnionRef::WorkerInvalidPayload(invalid) => {
                         let reason = invalid
                             .reason()
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get reason: {e}")))?
+                            .map_err(|e| {
+                                RpcError::CouldNotDecode(format!("Failed to get reason: {e}"))
+                            })?
                             .to_string();
                         DaemonToWorkerReply::InvalidPayload(reason)
                     }
@@ -229,22 +241,30 @@ impl WorkerRpcSendClient {
                             })?
                             .data()
                             .map_err(|e| {
-                                RpcError::CouldNotDecode(format!("Failed to get request_id data: {e}"))
+                                RpcError::CouldNotDecode(format!(
+                                    "Failed to get request_id data: {e}"
+                                ))
                             })?;
-                        let request_id = Uuid::from_slice(request_id_data)
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Invalid request UUID: {e}")))?;
+                        let request_id = Uuid::from_slice(request_id_data).map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Invalid request UUID: {e}"))
+                        })?;
                         DaemonToWorkerReply::UnknownRequest(request_id)
                     }
                     moor_rpc::DaemonToWorkerReplyUnionRef::WorkerNotRegistered(not_registered) => {
                         let worker_id_data = not_registered
                             .worker_id()
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}")))?
+                            .map_err(|e| {
+                                RpcError::CouldNotDecode(format!("Failed to get worker_id: {e}"))
+                            })?
                             .data()
                             .map_err(|e| {
-                                RpcError::CouldNotDecode(format!("Failed to get worker_id data: {e}"))
+                                RpcError::CouldNotDecode(format!(
+                                    "Failed to get worker_id data: {e}"
+                                ))
                             })?;
-                        let worker_id = Uuid::from_slice(worker_id_data)
-                            .map_err(|e| RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}")))?;
+                        let worker_id = Uuid::from_slice(worker_id_data).map_err(|e| {
+                            RpcError::CouldNotDecode(format!("Invalid worker UUID: {e}"))
+                        })?;
                         DaemonToWorkerReply::NotRegistered(worker_id)
                     }
                 };
@@ -333,11 +353,10 @@ impl WorkerRpcSendClient {
     /// Acquire the socket from the shared state
     async fn acquire_socket(&self) -> Result<RequestSender, RpcError> {
         let mut socket_guard = self.socket.lock().await;
-        socket_guard.take().ok_or_else(|| {
-            RpcError::CouldNotSend("RPC request socket not initialized".to_string())
-        })
+        socket_guard
+            .take()
+            .ok_or_else(|| RpcError::CouldNotSend("RPC request socket not initialized".to_string()))
     }
-
 
     /// Perform a worker RPC call that doesn't return response data
     async fn perform_worker_rpc_call(

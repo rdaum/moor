@@ -12,7 +12,7 @@
 //
 
 use crate::vm::FinallyReason;
-use crate::vm::environment_arena::VarEnvironment;
+use crate::vm::environment::Environment;
 use moor_compiler::{Label, Op, Program};
 use moor_var::{
     Error, Var,
@@ -37,7 +37,7 @@ pub(crate) struct MooStackFrame {
     /// Where is the PC pointing to?
     pub(crate) pc_type: PcType,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: VarEnvironment,
+    pub(crate) environment: Environment,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
@@ -119,27 +119,19 @@ pub(crate) struct Scope {
 impl MooStackFrame {
     /// Create a builder for constructing a new MOO stack frame.
     /// This is the preferred way to create frames as it provides type-safe initialization.
-    pub(crate) fn builder(
-        program: Program,
-        arena: *mut crate::vm::environment_arena::VarArena,
-    ) -> MooStackFrameBuilder {
-        MooStackFrameBuilder::new(program, arena)
+    pub(crate) fn builder(program: Program) -> MooStackFrameBuilder {
+        MooStackFrameBuilder::new(program)
     }
 
-    /// Create a new MOO stack frame using the shared arena from the task.
+    /// Create a new MOO stack frame.
     /// Consider using `builder()` instead for safer initialization.
     #[allow(dead_code)]
-    pub(crate) fn new(
-        program: Program,
-        arena: *mut crate::vm::environment_arena::VarArena,
-    ) -> Self {
+    pub(crate) fn new(program: Program) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
-        // Create environment using the shared arena
-        let mut environment = VarEnvironment::new_with_arena(arena);
-        environment
-            .push_scope(width)
-            .expect("Failed to push initial scope");
+        // Create environment
+        let mut environment = Environment::new();
+        environment.push_scope(width);
 
         let valstack = Vec::with_capacity(16);
         let scope_stack = Vec::with_capacity(8);
@@ -158,19 +150,22 @@ impl MooStackFrame {
     }
 
     /// Create a new frame with a pre-built environment (for lambdas)
-    pub(crate) fn with_environment(
-        program: Program,
-        arena: *mut crate::vm::environment_arena::VarArena,
-        environment: Vec<Vec<Option<Var>>>,
-    ) -> Self {
-        let environment = VarEnvironment::from_vec(arena, environment)
-            .expect("Failed to create environment from vec");
+    pub(crate) fn with_environment(program: Program, environment: Vec<Vec<Option<Var>>>) -> Self {
+        let mut env = Environment::new();
+        for scope in environment {
+            env.push_scope(scope.len());
+            for (i, var) in scope.into_iter().enumerate() {
+                if let Some(v) = var {
+                    env.set(env.len() - 1, i, v);
+                }
+            }
+        }
 
         let valstack = Vec::with_capacity(16);
         let scope_stack = Vec::with_capacity(8);
         Self {
             program,
-            environment,
+            environment: env,
             pc: 0,
             pc_type: PcType::Main,
             temp: v_none(),
@@ -326,9 +321,7 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        self.environment
-            .push_scope(scope_width as usize)
-            .expect("Failed to push scope");
+        self.environment.push_scope(scope_width as usize);
     }
 
     /// Enter a scope which does not restrict stack of environment size, purely for catch expressions
@@ -348,9 +341,7 @@ impl MooStackFrame {
     pub fn pop_scope(&mut self) -> Option<Scope> {
         let scope = self.scope_stack.pop()?;
         if scope.environment {
-            unsafe {
-                self.environment.pop_scope().expect("Failed to pop scope");
-            }
+            self.environment.pop_scope();
         }
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
@@ -382,9 +373,7 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        self.environment
-            .push_scope(environment_width as usize)
-            .expect("Failed to push for-sequence scope");
+        self.environment.push_scope(environment_width as usize);
     }
 
     /// Get the current ForSequence scope for iteration
@@ -422,9 +411,7 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        self.environment
-            .push_scope(environment_width as usize)
-            .expect("Failed to push for-range scope");
+        self.environment.push_scope(environment_width as usize);
     }
 
     /// Get the current ForRange scope for iteration
@@ -444,24 +431,19 @@ impl MooStackFrame {
 /// where slots contain uninitialized None values.
 pub(crate) struct MooStackFrameBuilder {
     program: Program,
-    environment: VarEnvironment,
+    environment: Environment,
     valstack: Vec<Var>,
     scope_stack: Vec<Scope>,
 }
 
 impl MooStackFrameBuilder {
     /// Create a new builder with an allocated scope.
-    pub(crate) fn new(
-        program: Program,
-        arena: *mut crate::vm::environment_arena::VarArena,
-    ) -> Self {
+    pub(crate) fn new(program: Program) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
 
-        // Create environment using the shared arena
-        let mut environment = VarEnvironment::new_with_arena(arena);
-        environment
-            .push_scope(width)
-            .expect("Failed to push initial scope");
+        // Create environment
+        let mut environment = Environment::new();
+        environment.push_scope(width);
 
         Self {
             program,
@@ -471,11 +453,11 @@ impl MooStackFrameBuilder {
         }
     }
 
-    /// Initialize a global variable by moving the value directly into the arena.
+    /// Initialize a global variable by moving the value directly into the environment.
     /// This avoids copying and ensures the slot is initialized exactly once.
     pub(crate) fn with_global(mut self, gname: GlobalName, value: Var) -> Self {
         let pos = gname as usize;
-        self.environment.init(0, pos, value);
+        self.environment.set(0, pos, value);
         self
     }
 
@@ -493,7 +475,7 @@ impl MooStackFrameBuilder {
             .and_then(|a| a.frame.get_global_variable(gname))
             .cloned()
             .unwrap_or_else(fallback);
-        self.environment.init(0, pos, value);
+        self.environment.set(0, pos, value);
         self
     }
 

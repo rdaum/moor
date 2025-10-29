@@ -44,6 +44,7 @@ impl TimerEntryWithDelay for TimerEntry {
         self.delay
     }
 }
+use crate::tasks::task::TaskState;
 use crate::tasks::{TaskDescription, TaskNotification, TaskStart, TasksDb};
 use moor_common::tasks::{SchedulerError, Session, SessionFactory, TaskId};
 
@@ -584,14 +585,52 @@ impl SuspensionQ {
                 }
                 _ => None,
             };
+            // For tasks in Created state (not yet started), we need to extract info from TaskStart
+            // because the vm_host stack is still empty (setup_task_start hasn't been called yet)
+            let (verb_name, verb_definer, line_number, this) = match &sr.task.state {
+                TaskState::Pending(task_start) => {
+                    // Extract info from the TaskStart since vm_host isn't initialized yet
+                    match task_start {
+                        TaskStart::StartFork { fork_request, .. } => {
+                            let activation = &fork_request.activation;
+                            (
+                                activation.verb_name,
+                                activation.verb_definer(),
+                                activation.frame.find_line_no().unwrap_or(0),
+                                activation.this.clone(),
+                            )
+                        }
+                        _ => {
+                            // For other task types in Created state, we can't get this info yet
+                            // Use placeholder values
+                            (
+                                moor_var::Symbol::mk(""),
+                                moor_var::NOTHING,
+                                0,
+                                moor_var::v_none(),
+                            )
+                        }
+                    }
+                }
+                TaskState::Prepared(_) => {
+                    // For running tasks, get info from vm_host
+                    (
+                        sr.task.vm_host.verb_name(),
+                        sr.task.vm_host.verb_definer(),
+                        sr.task.vm_host.line_number(),
+                        sr.task.vm_host.this(),
+                    )
+                }
+            };
+
             tasks.push(TaskDescription {
                 task_id: sr.task.task_id,
                 start_time,
                 permissions: sr.task.perms,
-                verb_name: sr.task.vm_host.verb_name(),
-                verb_definer: sr.task.vm_host.verb_definer(),
-                line_number: sr.task.vm_host.line_number(),
-                this: sr.task.vm_host.this(),
+                verb_name,
+                verb_definer,
+                line_number,
+                this,
             });
         }
         tasks

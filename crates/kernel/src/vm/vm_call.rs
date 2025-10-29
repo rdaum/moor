@@ -298,7 +298,6 @@ impl VMExecState {
         program: ProgramType,
     ) {
         // Initial command activation - no parent to inherit from
-        let arena = self.arena_ptr();
         let mut a = Activation::for_call(
             permissions,
             resolved_verb,
@@ -310,7 +309,6 @@ impl VMExecState {
             argstr,
             None,
             program,
-            arena,
         );
 
         // Set parsing variables from the parsed command
@@ -375,8 +373,6 @@ impl VMExecState {
         argstr: String,
         program: ProgramType,
     ) {
-        // Get arena first before borrowing self immutably
-        let arena = self.arena_ptr();
         // Get current activation to inherit global variables from, if any.
         let current_activation = self.stack.last();
 
@@ -391,7 +387,6 @@ impl VMExecState {
             argstr,
             current_activation,
             program,
-            arena,
         );
         self.stack.push(a);
 
@@ -417,8 +412,7 @@ impl VMExecState {
     }
 
     pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
-        let arena = self.arena_ptr();
-        let a = Activation::for_eval(*permissions, player, program, arena);
+        let a = Activation::for_eval(*permissions, player, program);
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO eval
@@ -448,11 +442,9 @@ impl VMExecState {
         lambda: moor_var::Lambda,
         args: List,
     ) -> Result<(), Error> {
-        // Get arena first before borrowing self immutably
-        let arena = self.arena_ptr();
+        // Get current activation before borrowing self immutably
         let current_activation = self.top();
-        let a =
-            Activation::for_lambda_call(&lambda, current_activation, args.iter().collect(), arena)?;
+        let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect())?;
         self.stack.push(a);
 
         // Emit VerbBegin trace event if this is a MOO lambda

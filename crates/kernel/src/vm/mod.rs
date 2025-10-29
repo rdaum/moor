@@ -26,7 +26,7 @@ pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 
 pub(crate) mod activation;
-pub(crate) mod environment_arena;
+pub(crate) mod environment;
 pub(crate) mod exec_state;
 pub(crate) mod moo_execute;
 pub(crate) mod scatter_assign;
