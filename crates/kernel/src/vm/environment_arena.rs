@@ -388,10 +388,19 @@ impl ArenaEnvironment {
     /// Set an item in a specific scope.
     /// SAFETY: Caller must ensure scope_idx and var_idx are valid.
     pub fn set(&mut self, scope_idx: usize, var_idx: usize, value: moor_var::Var) {
-        debug_assert!(scope_idx < self.scopes.len(), "scope index out of bounds");
+        debug_assert!(
+            scope_idx < self.scopes.len(),
+            "scope index out of bounds: scope_idx={}, num_scopes={}, scopes={:?}",
+            scope_idx,
+            self.scopes.len(),
+            self.scopes.iter().map(|s| s.width).collect::<Vec<_>>()
+        );
         debug_assert!(
             var_idx < self.scopes[scope_idx].width,
-            "var index out of bounds"
+            "var index out of bounds: scope_idx={}, var_idx={}, scope_width={}",
+            scope_idx,
+            var_idx,
+            self.scopes[scope_idx].width
         );
 
         let scope = &self.scopes[scope_idx];
@@ -410,10 +419,19 @@ impl ArenaEnvironment {
     /// and has not been initialized yet. Using this on an already-initialized slot
     /// will leak the old value.
     pub fn init(&mut self, scope_idx: usize, var_idx: usize, value: moor_var::Var) {
-        debug_assert!(scope_idx < self.scopes.len(), "scope index out of bounds");
+        debug_assert!(
+            scope_idx < self.scopes.len(),
+            "scope index out of bounds: scope_idx={}, num_scopes={}, scopes={:?}",
+            scope_idx,
+            self.scopes.len(),
+            self.scopes.iter().map(|s| s.width).collect::<Vec<_>>()
+        );
         debug_assert!(
             var_idx < self.scopes[scope_idx].width,
-            "var index out of bounds"
+            "var index out of bounds: scope_idx={}, var_idx={}, scope_width={}",
+            scope_idx,
+            var_idx,
+            self.scopes[scope_idx].width
         );
 
         let scope = &self.scopes[scope_idx];
