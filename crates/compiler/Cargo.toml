@@ -27,9 +27,9 @@ byteview.workspace = true
 planus.workspace = true
 
 # Compiler & Language Processing
+ariadne.workspace = true
 pest.workspace = true
 pest_derive.workspace = true
-ariadne.workspace = true
 
 # Collections & Data Structures
 itertools.workspace = true

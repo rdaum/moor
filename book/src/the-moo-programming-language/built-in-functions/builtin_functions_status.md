@@ -112,19 +112,20 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Verbs
 
-| Name                                      | Complete | Notes                                 |
-|-------------------------------------------|----------|---------------------------------------|
-| [`verbs`](verbs.md#verbs)                 | &check;  |                                       |
-| [`verb_info`](verbs.md#verb_info)         | &check;  |                                       |
-| [`set_verb_info`](verbs.md#set_verb_info) | &check;  |                                       |
-| [`verb_args`](verbs.md#verb_args)         | &check;  |                                       |
-| [`set_verb_args`](verbs.md#set_verb_args) | &check;  |                                       |
-| [`add_verb`](verbs.md#add_verb)           | &check;  |                                       |
-| [`delete_verb`](verbs.md#delete_verb)     | &check;  |                                       |
-| [`set_verb_code`](verbs.md#set_verb_code) | &check;  |                                       |
-| [`eval`](verbs.md#eval)                   | &check;  |                                       |
-| [`disassemble`](verbs.md#disassemble)     | &check;  | Output looks nothing like LambdaMOO's |
-| [`verb_code`](verbs.md#verb_code)         | &check;  |                                       |
+| Name                                                  | Complete | Notes                                                                   |
+|-------------------------------------------------------|----------|-------------------------------------------------------------------------|
+| [`verbs`](verbs.md#verbs)                             | &check;  |                                                                         |
+| [`verb_info`](verbs.md#verb_info)                     | &check;  |                                                                         |
+| [`set_verb_info`](verbs.md#set_verb_info)             | &check;  |                                                                         |
+| [`verb_args`](verbs.md#verb_args)                     | &check;  |                                                                         |
+| [`set_verb_args`](verbs.md#set_verb_args)             | &check;  |                                                                         |
+| [`add_verb`](verbs.md#add_verb)                       | &check;  |                                                                         |
+| [`delete_verb`](verbs.md#delete_verb)                 | &check;  |                                                                         |
+| [`set_verb_code`](verbs.md#set_verb_code)             | &check;  | Enhanced with diagnostic verbosity & output mode options                |
+| [`eval`](server.md#eval)                              | &check;  | Enhanced with diagnostic verbosity & output mode options                |
+| [`format_compile_error`](verbs.md#format_compile_error) | &check;  | mooR extension. Formats structured compilation errors                   |
+| [`disassemble`](verbs.md#disassemble)                 | &check;  | Output looks nothing like LambdaMOO's                                   |
+| [`verb_code`](verbs.md#verb_code)                     | &check;  |                                                                         |
 
 ### Values / encoding
 

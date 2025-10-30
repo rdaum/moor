@@ -17,6 +17,7 @@ use std::{borrow::Cow, cmp::min, io::{self, Write}, ops::Range};
 
 use ariadne::{CharSet, Config, Label, Report, ReportKind, Source};
 use itertools::Itertools;
+use moor_var::{Symbol, v_int, v_list, v_map, v_str, v_sym, Var};
 use pest::error::{Error, ErrorVariant, InputLocation};
 
 use crate::parse::moo::Rule;
@@ -168,11 +169,7 @@ pub fn build_parse_error_details(
     let notes = collect_notes(program_text, error);
 
     let span_range = compute_span(program_text, error);
-    let span = if span_range.is_empty() {
-        None
-    } else {
-        Some((span_range.start, span_range.end))
-    };
+    let span = Some((span_range.start, span_range.end));
 
     let details = ParseErrorDetails {
         span,
@@ -641,5 +638,73 @@ impl ReportWrite for Report<'_, Range<usize>> {
         let mut buffer = Vec::new();
         self.write(cache, &mut buffer).unwrap();
         String::from_utf8(buffer).unwrap_or_else(|_| String::new())
+    }
+}
+
+/// Convert a [`CompileError`] into a MOO map structure with all diagnostic information.
+///
+/// Returns a map with keys:
+///   - "type": "parse" or "other"
+///   - "message": error summary string
+///   - "line": line number (int)
+///   - "column": column number (int)
+///   - "context": the source line where error occurred (str)
+///   - "source": full source code (str, optional)
+///   - "span_start": start position in source (int, optional)
+///   - "span_end": end position in source (int, optional)
+///   - "expected_tokens": list of expected token strings
+///   - "notes": list of hint strings
+pub fn compile_error_to_map(error: &CompileError, source: Option<&str>, use_symbols: bool) -> Var {
+    let sym_or_str = |s: &str| {
+        if use_symbols {
+            v_sym(Symbol::mk(s))
+        } else {
+            v_str(s)
+        }
+    };
+
+    match error {
+        CompileError::ParseError {
+            error_position,
+            context,
+            message,
+            details,
+            ..
+        } => {
+            let expected_tokens_list = v_list(
+                &details
+                    .expected_tokens
+                    .iter()
+                    .map(|t| v_str(t))
+                    .collect::<Vec<_>>(),
+            );
+
+            let notes_list = v_list(&details.notes.iter().map(|n| v_str(n)).collect::<Vec<_>>());
+
+            let mut fields = vec![
+                (sym_or_str("type"), sym_or_str("parse")),
+                (sym_or_str("message"), v_str(message)),
+                (sym_or_str("line"), v_int(error_position.line_col.0 as i64)),
+                (sym_or_str("column"), v_int(error_position.line_col.1 as i64)),
+                (sym_or_str("context"), v_str(context)),
+                (sym_or_str("expected_tokens"), expected_tokens_list),
+                (sym_or_str("notes"), notes_list),
+            ];
+
+            // Include source and span if available
+            if let Some(src) = source {
+                fields.push((sym_or_str("source"), v_str(src)));
+            }
+            if let Some((start, end)) = details.span {
+                fields.push((sym_or_str("span_start"), v_int(start as i64)));
+                fields.push((sym_or_str("span_end"), v_int(end as i64)));
+            }
+
+            v_map(&fields)
+        }
+        _ => v_map(&[
+            (sym_or_str("type"), sym_or_str("other")),
+            (sym_or_str("message"), v_str(&error.to_string())),
+        ]),
     }
 }

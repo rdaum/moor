@@ -441,11 +441,11 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin(
             "set_verb_code",
             Q(3),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Any, Typed(TYPE_LIST)],
+            Q(5),
+            vec![Typed(TYPE_OBJ), Any, Typed(TYPE_LIST), Any, Any],
             true,
         ),
-        mk_builtin("eval", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
+        mk_builtin("eval", Q(1), Q(3), vec![Typed(TYPE_STR), Any, Any], true),
         mk_builtin("mapkeys", Q(1), Q(1), vec![Typed(TYPE_MAP)], true),
         mk_builtin("mapvalues", Q(1), Q(1), vec![Typed(TYPE_MAP)], true),
         mk_builtin("mapdelete", Q(2), Q(2), vec![Typed(TYPE_MAP), Any], true),
@@ -653,6 +653,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             Q(2),
             Q(2),
             vec![Typed(TYPE_MAP), Typed(TYPE_LIST)],
+            true,
+        ),
+        mk_builtin(
+            "format_compile_error",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_MAP), Any, Any],
             true,
         ),
     ]

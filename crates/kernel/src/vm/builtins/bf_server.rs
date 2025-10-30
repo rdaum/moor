@@ -36,7 +36,8 @@ use crate::{
             BfErr::{Code, ErrValue},
             BfRet,
             BfRet::{Ret, RetNil, VmInstr},
-            BuiltinFunction, bf_perf_counters, parse_diagnostic_options, world_state_bf_err,
+            BuiltinFunction, DiagnosticOutput, bf_perf_counters, parse_diagnostic_options,
+            world_state_bf_err,
         },
         vm_host::ExecutionResult,
     },
@@ -51,7 +52,8 @@ use moor_common::{
     util::PerfCounter,
 };
 use moor_compiler::{
-    ArgCount, ArgType, BUILTINS, Builtin, compile, format_compile_error, offset_for_builtin,
+    ArgCount, ArgType, BUILTINS, Builtin, compile, compile_error_to_map, format_compile_error,
+    offset_for_builtin,
 };
 use moor_db::{
     db_counters,
@@ -1521,9 +1523,20 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 /// Compiles and evaluates a MOO expression or statement.
 /// MOO: `list eval(str program [, int verbosity [, int output_mode]])`
-/// Optional arguments:
-///   - verbosity: 0=summary, 1=notes, 2=detailed (default: 0)
-///   - output_mode: 0=plain text, 1=graphics, 2=graphics+colour (default: 0)
+///
+/// Arguments controlling compilation error output:
+///   - verbosity: Controls error detail level (default: 0)
+///     - 0=summary: Brief error message only
+///     - 1=notes: Summary plus diagnostic hints
+///     - 2=detailed: Full context with error markers
+///     - 3=structured map: Returns error data as map for programmatic handling
+///   - output_mode: Controls error formatting style (default: 0)
+///     - 0=plain text
+///     - 1=graphics: Unicode box-drawing characters
+///     - 2=graphics+color: Graphics with ANSI color codes
+///
+/// When verbosity=3, error result is a map with diagnostic data instead of formatted strings.
+/// Use `format_compile_error()` to format the structured map into human-readable text.
 fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1552,7 +1565,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Some(0)
     };
 
-    let render_options = parse_diagnostic_options(verbosity, output_mode)?;
+    let diagnostic_output = parse_diagnostic_options(verbosity, output_mode)?;
 
     // Clone the program code before we borrow bf_args mutably
     let program_code_string = program_code.to_string();
@@ -1568,14 +1581,21 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let program = match compile(&program_code_string, bf_args.config.compile_options()) {
                 Ok(program) => program,
                 Err(e) => {
-                    let formatted = format_compile_error(
-                        &e,
-                        Some(program_code_string.as_str()),
-                        render_options,
-                    );
-                    let error_vars: Vec<Var> = formatted.into_iter().map(v_string).collect();
-                    let error_list = v_list(error_vars.as_slice());
-                    return Ok(Ret(v_list(&[v_int(0), error_list])));
+                    let error_result = match diagnostic_output {
+                        DiagnosticOutput::Formatted(options) => {
+                            let formatted = format_compile_error(
+                                &e,
+                                Some(program_code_string.as_str()),
+                                options,
+                            );
+                            let error_vars: Vec<Var> = formatted.into_iter().map(v_string).collect();
+                            v_list(error_vars.as_slice())
+                        }
+                        DiagnosticOutput::Structured => {
+                            compile_error_to_map(&e, Some(program_code_string.as_str()), bf_args.config.symbol_type)
+                        }
+                    };
+                    return Ok(Ret(v_list(&[v_int(0), error_result])));
                 }
             };
             let bf_frame = bf_args.bf_frame_mut();

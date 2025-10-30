@@ -16,7 +16,8 @@ use crate::task_context::{
 };
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{
-    BfCallState, BfErr, BfRet, BuiltinFunction, parse_diagnostic_options, world_state_bf_err,
+    BfCallState, BfErr, BfRet, BuiltinFunction, DiagnosticOutput, parse_diagnostic_options,
+    world_state_bf_err,
 };
 use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
@@ -454,7 +455,12 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
             }
 
-            diagnostic_options = parse_diagnostic_options(verbosity, output_mode)?;
+            let diagnostic_output = parse_diagnostic_options(verbosity, output_mode)?;
+            // obj_load only uses formatted output
+            diagnostic_options = match diagnostic_output {
+                DiagnosticOutput::Formatted(options) => options,
+                DiagnosticOutput::Structured => DiagnosticRenderOptions::default(),
+            };
             continue;
         }
     }

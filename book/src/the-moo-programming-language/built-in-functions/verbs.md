@@ -86,15 +86,44 @@
 
 ### `set_verb_code`
 
-**Description:** Changes the source code of a verb.  
+**Description:** Changes the source code of a verb.
 **Arguments:**
 
-- : The object with the verb to modify `object`
-- : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
-- : A list of strings, each representing a line of the verb's source code `code`
+- `object`: The object with the verb to modify
+- `verb-desc`: Either the verb name or a positive integer representing the verb's position (1-based)
+- `code`: A list of strings, each representing a line of the verb's source code
+- `verbosity`: (Optional) Controls error output detail level (default: 2)
+  - `0` - Summary: Brief error message only
+  - `1` - Notes: Summary plus additional diagnostic notes
+  - `2` - Detailed: Full context with inline error markers (default)
+  - `3` - Structured: Returns error data as a map for programmatic handling
+- `output_mode`: (Optional) Controls error formatting style (default: 0)
+  - `0` - Plain text without special characters
+  - `1` - Graphics characters for visual clarity
+  - `2` - Graphics with ANSI color codes
 
-**Returns:** If successful, returns `none`. If compilation fails, returns a list of error messages.  
+**Returns:**
+- On success: empty list `{}`
+- On compilation failure with `verbosity` 0-2: list of formatted error strings
+- On compilation failure with `verbosity` 3: map containing structured error data (use `format_compile_error()` to format)
+
 **Note:** Requires appropriate permissions to modify the verb and programmer bit.
+
+**Examples:**
+
+```moo
+// Basic usage with default detailed errors
+set_verb_code(#123, "test", {"return 1 + ;"});
+=> {"Parse error at line 1, column 12:", "  return 1 + ;", "             ⚠", ...}
+
+// Get structured error data for custom handling
+err = set_verb_code(#123, "test", {"return 1 + ;"}, 3);
+=> [type -> "parse", message -> "unexpected ';'", line -> 1, column -> 12, ...]
+
+// Format the structured error with custom verbosity
+formatted = format_compile_error(err, 0);  // Summary only
+=> {"Parse error at line 1, column 12: unexpected ';'"}
+```
 
 ## Verb Management Functions
 
@@ -120,6 +149,44 @@
 
 **Returns:** `none`  
 **Note:** Requires ownership of the verb or the object and programmer bit. 
+
+## Error Formatting Functions
+
+### `format_compile_error`
+
+**Description:** Formats a structured compilation error map into human-readable text.
+**Arguments:**
+
+- `error`: Map containing compilation error data (from `set_verb_code()` or `eval()` with `verbosity` 3)
+- `verbosity`: (Optional) Controls output detail level (default: 2)
+  - `0` - Summary: Brief error message only
+  - `1` - Notes: Summary plus additional diagnostic notes
+  - `2` - Detailed: Full context with inline error markers
+- `output_mode`: (Optional) Controls formatting style (default: 0)
+  - `0` - Plain text without special characters
+  - `1` - Graphics characters for visual clarity
+  - `2` - Graphics with ANSI color codes
+
+**Returns:** List of formatted error strings
+
+**Note:** Use this function to format structured error maps returned by `set_verb_code()` or `eval()` when called with `verbosity` 3.
+
+**Example:**
+
+```moo
+// Get structured error data
+err = set_verb_code(#123, "test", {"return 1 + ;"}, 3);
+
+// Format with different verbosity levels
+summary = format_compile_error(err, 0);
+=> {"Parse error at line 1, column 12: unexpected ';'"}
+
+detailed = format_compile_error(err, 2);
+=> {"Parse error at line 1, column 12:", "  return 1 + ;", "             ⚠", ...}
+
+// Format with color for terminal display
+colored = format_compile_error(err, 2, 2);
+```
 
 ## Advanced Verb Functions
 

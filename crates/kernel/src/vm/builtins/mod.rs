@@ -266,18 +266,29 @@ pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
         _ => BfErr::ErrValue(err.into()),
     }
 }
+pub(crate) enum DiagnosticOutput {
+    Formatted(DiagnosticRenderOptions),
+    Structured,
+}
+
 pub(crate) fn parse_diagnostic_options(
     verbosity: Option<i64>,
     output_mode: Option<i64>,
-) -> Result<DiagnosticRenderOptions, BfErr> {
-    let verbosity = match verbosity {
-        Some(0) => DiagnosticVerbosity::Summary,
-        Some(1) => DiagnosticVerbosity::Notes,
-        Some(2) => DiagnosticVerbosity::Detailed,
-        Some(_) => {
+) -> Result<DiagnosticOutput, BfErr> {
+    let verbosity_level = verbosity.unwrap_or(0);
+
+    // Verbosity 3 means return structured data instead of formatted strings
+    if verbosity_level == 3 {
+        return Ok(DiagnosticOutput::Structured);
+    }
+
+    let verbosity = match verbosity_level {
+        0 => DiagnosticVerbosity::Summary,
+        1 => DiagnosticVerbosity::Notes,
+        2 => DiagnosticVerbosity::Detailed,
+        _ => {
             return Err(BfErr::Code(E_INVARG));
         }
-        None => DiagnosticVerbosity::Summary,
     };
 
     let (use_graphics, use_color) = match output_mode {
@@ -290,9 +301,9 @@ pub(crate) fn parse_diagnostic_options(
         None => (false, false),
     };
 
-    Ok(DiagnosticRenderOptions {
+    Ok(DiagnosticOutput::Formatted(DiagnosticRenderOptions {
         verbosity,
         use_graphics,
         use_color,
-    })
+    }))
 }

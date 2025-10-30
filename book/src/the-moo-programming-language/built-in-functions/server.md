@@ -561,11 +561,49 @@ connections()
 
 ### `eval`
 
-**Description:** Evaluates code dynamically at runtime.  
+**Description:** Compiles and evaluates a MOO expression or statement dynamically at runtime.
 **Arguments:**
 
-- `code`: The code string to evaluate
-- `environment`: Optional environment context for the evaluation
+- `program`: String containing MOO code to evaluate
+- `verbosity`: (Optional) Controls error output detail level (default: 0)
+  - `0` - Summary: Brief error message only (default for eval)
+  - `1` - Notes: Summary plus additional diagnostic notes
+  - `2` - Detailed: Full context with inline error markers
+  - `3` - Structured: Returns error data as a map for programmatic handling
+- `output_mode`: (Optional) Controls error formatting style (default: 0)
+  - `0` - Plain text without special characters
+  - `1` - Graphics characters for visual clarity
+  - `2` - Graphics with ANSI color codes
+
+**Returns:**
+- On success: list containing `{result, ...}` where `result` is the value produced by evaluating the code
+- On compilation failure with `verbosity` 0-2: list where first element is error object, followed by formatted error strings
+- On compilation failure with `verbosity` 3: list where first element is error object, second is map containing structured error data (use `format_compile_error()` to format)
+
+**Note:** Requires programmer bit. The evaluated code runs with the permissions of the current task.
+
+**Examples:**
+
+```moo
+// Basic evaluation
+eval("2 + 2");
+=> {4}
+
+// Evaluation with compilation error (default summary)
+eval("2 +");
+=> {E_INVARG, "Parse error at line 1, column 4: ..."}
+
+// Get detailed error with context
+eval("return 1 + ;", 2);
+=> {E_INVARG, "Parse error at line 1, column 12:", "  return 1 + ;", "             ⚠", ...}
+
+// Get structured error data for custom handling
+result = eval("return 1 + ;", 3);
+if (typeof(result[1]) == MAP)
+  // result[1] is the error map, result[2] is structured data
+  formatted = format_compile_error(result[2], 0);
+endif
+```
 
 ### `call_function`
 

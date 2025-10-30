@@ -29,7 +29,10 @@ mod var_scope;
 #[cfg(test)]
 mod tests;
 
-pub use crate::diagnostics::{DiagnosticRenderOptions, DiagnosticVerbosity, emit_compile_error, format_compile_error};
+pub use crate::diagnostics::{
+    DiagnosticRenderOptions, DiagnosticVerbosity, compile_error_to_map, emit_compile_error,
+    format_compile_error,
+};
 pub use crate::{
     codegen::compile,
     decompile::program_to_tree,
