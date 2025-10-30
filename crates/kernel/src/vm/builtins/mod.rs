@@ -43,9 +43,10 @@ use moor_common::{
     model::{Perms, WorldStateError},
     util::PerfCounter,
 };
-use moor_compiler::{BUILTINS, BuiltinId};
+use moor_compiler::{BUILTINS, BuiltinId, DiagnosticRenderOptions, DiagnosticVerbosity};
 use moor_var::{
-    E_TYPE, Error, ErrorCode, List, Map, Obj, Sequence, Symbol, Var, Variant, v_bool_int, v_map,
+    E_INVARG, E_TYPE, Error, ErrorCode, List, Map, Obj, Sequence, Symbol, Var, Variant, v_bool_int,
+    v_map,
 };
 
 mod bf_age_crypto;
@@ -264,4 +265,34 @@ pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
         WorldStateError::RollbackRetry => BfErr::Rollback,
         _ => BfErr::ErrValue(err.into()),
     }
+}
+pub(crate) fn parse_diagnostic_options(
+    verbosity: Option<i64>,
+    output_mode: Option<i64>,
+) -> Result<DiagnosticRenderOptions, BfErr> {
+    let verbosity = match verbosity {
+        Some(0) => DiagnosticVerbosity::Summary,
+        Some(1) => DiagnosticVerbosity::Notes,
+        Some(2) => DiagnosticVerbosity::Detailed,
+        Some(_) => {
+            return Err(BfErr::Code(E_INVARG));
+        }
+        None => DiagnosticVerbosity::Summary,
+    };
+
+    let (use_graphics, use_color) = match output_mode {
+        Some(0) => (false, false),
+        Some(1) => (true, false),
+        Some(2) => (true, true),
+        Some(_) => {
+            return Err(BfErr::Code(E_INVARG));
+        }
+        None => (false, false),
+    };
+
+    Ok(DiagnosticRenderOptions {
+        verbosity,
+        use_graphics,
+        use_color,
+    })
 }

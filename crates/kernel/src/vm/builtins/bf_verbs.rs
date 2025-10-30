@@ -21,7 +21,7 @@ use crate::{
     vm::builtins::{
         BfCallState, BfErr, BfRet,
         BfRet::{Ret, RetNil},
-        BuiltinFunction, world_state_bf_err,
+        BuiltinFunction, parse_diagnostic_options, world_state_bf_err,
     },
 };
 use moor_common::{
@@ -31,7 +31,10 @@ use moor_common::{
     },
     util::BitEnum,
 };
-use moor_compiler::{Program, compile, offset_for_builtin, program_to_tree, to_literal, unparse};
+use moor_compiler::{
+    Program, compile, format_compile_error, offset_for_builtin, program_to_tree, to_literal,
+    unparse,
+};
 use moor_var::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF, Error, List, Obj, Sequence, Symbol, Var,
     Variant,
@@ -409,10 +412,13 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(unparsed.iter().map(|s| v_str(s)))))
 }
 
-/// MOO: `list set_verb_code(obj object, str|int verb_desc, list code)`
+/// MOO: `list set_verb_code(obj object, str|int verb_desc, list code [, int verbosity [, int output_mode]])`
 /// Sets the source code of a verb. Returns empty list on success, or compilation errors.
+/// Optional arguments:
+///   - verbosity: 0=summary, 1=notes, 2=detailed (default: 2)
+///   - output_mode: 0=plain text, 1=graphics, 2=graphics+coluor (default: 0)
 fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 3 {
+    if bf_args.args.len() < 3 || bf_args.args.len() > 5 {
         return Err(BfErr::Code(E_ARGS));
     }
     let Some(obj) = bf_args.args[0].as_object() else {
@@ -435,6 +441,21 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let verbdef = get_verbdef(&obj, bf_args.args[1].clone(), bf_args)?;
+
+    // Parse optional verbosity (default 2 for set_verb_code) and output_mode (default 0)
+    let verbosity = if bf_args.args.len() >= 4 {
+        bf_args.args[3].as_integer()
+    } else {
+        Some(2) // Default to detailed for set_verb_code
+    };
+
+    let output_mode = if bf_args.args.len() >= 5 {
+        bf_args.args[4].as_integer()
+    } else {
+        Some(0)
+    };
+
+    let render_options = parse_diagnostic_options(verbosity, output_mode)?;
 
     // Right now set_verb_code is going to always compile to LambdaMOO 1.8.x. binary type.
     let program_code = match bf_args.args[2].variant() {
@@ -460,9 +481,9 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // MOO-code compiler during processing of code. If the list is non-empty, then
             // set_verb_code() did not install code; the program associated with the verb in question
             // is unchanged.
-            let error_strings = e.to_error_list();
-            let error_vars: Vec<Var> = error_strings.iter().map(|s| v_str(s)).collect();
-            return Ok(Ret(v_list(&error_vars)));
+            let formatted = format_compile_error(&e, Some(code_string.as_str()), render_options);
+            let error_vars: Vec<Var> = formatted.into_iter().map(v_string).collect();
+            return Ok(Ret(v_list(error_vars.as_slice())));
         }
     };
     // Now we can update the verb.

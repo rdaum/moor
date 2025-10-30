@@ -18,6 +18,7 @@ pub use moor_var::program::names::Names;
 mod ast;
 mod codegen;
 mod decompile;
+mod diagnostics;
 mod parse;
 mod unparse;
 
@@ -28,6 +29,7 @@ mod var_scope;
 #[cfg(test)]
 mod tests;
 
+pub use crate::diagnostics::{DiagnosticRenderOptions, DiagnosticVerbosity, emit_compile_error, format_compile_error};
 pub use crate::{
     codegen::compile,
     decompile::program_to_tree,

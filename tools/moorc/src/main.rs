@@ -21,9 +21,10 @@ use clap::Parser;
 use clap_derive::Parser;
 use moor_common::{
     build,
-    model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource},
+    model::{CompileError, Named, ObjectRef, PropFlag, ValSet, WorldStateSource},
     tasks::{NoopSystemControl, SchedulerError, SessionFactory},
 };
+use moor_compiler::emit_compile_error;
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::{
     SchedulerClient,
@@ -31,10 +32,18 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_moot::MootOptions;
-use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
+use moor_objdef::{
+    ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
+};
 use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
-use std::{fs::File, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    fs::{self, File},
+    io::{self, IsTerminal},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Parser, Debug)] // requires `derive` feature
@@ -98,6 +107,30 @@ pub struct Args {
 
     #[clap(long, help = "Enable debug logging")]
     debug: bool,
+}
+
+fn emit_objdef_compile_error(
+    path: &str,
+    compile_error: &CompileError,
+    inline_source: Option<&str>,
+) {
+    let source = if let Some(source) = inline_source {
+        Some(source.to_string())
+    } else if path != "<string>" {
+        match fs::read_to_string(path) {
+            Ok(text) => Some(text),
+            Err(err) => {
+                error!("Failed to read {path} for diagnostic rendering: {err}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let use_color = io::stderr().is_terminal();
+    eprintln!();
+    emit_compile_error(compile_error, source.as_deref(), path, use_color);
 }
 
 fn run_tests(
@@ -235,6 +268,11 @@ fn main() -> Result<(), eyre::Report> {
                 results.commit
             }
             Err(e) => {
+                if let Some((source, compile_error)) = e.compile_error() {
+                    emit_objdef_compile_error(source, compile_error, None);
+                    error!("Object load failed");
+                    return Ok(());
+                }
                 error!("Object load failure @ {}", e.source());
                 error!("{:#}", e);
                 return Ok(());

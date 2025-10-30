@@ -2131,7 +2131,7 @@ impl TaskQ {
                 control_sender
                     .send((
                         task_id,
-                        TaskControlMsg::TaskAbortPanicked(panic_msg, backtrace),
+                        TaskControlMsg::TaskAbortPanicked(panic_msg, Box::new(backtrace)),
                     ))
                     .ok(); // Ignore send errors - scheduler might be shutting down
             }
@@ -2276,7 +2276,7 @@ impl TaskQ {
                 control_sender
                     .send((
                         task_id,
-                        TaskControlMsg::TaskAbortPanicked(panic_msg, backtrace),
+                        TaskControlMsg::TaskAbortPanicked(panic_msg, Box::new(backtrace)),
                     ))
                     .ok(); // Ignore send errors - scheduler might be shutting down
             }

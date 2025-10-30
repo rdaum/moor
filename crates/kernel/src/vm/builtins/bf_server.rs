@@ -36,7 +36,7 @@ use crate::{
             BfErr::{Code, ErrValue},
             BfRet,
             BfRet::{Ret, RetNil, VmInstr},
-            BuiltinFunction, bf_perf_counters, world_state_bf_err,
+            BuiltinFunction, bf_perf_counters, parse_diagnostic_options, world_state_bf_err,
         },
         vm_host::ExecutionResult,
     },
@@ -50,7 +50,9 @@ use moor_common::{
     },
     util::PerfCounter,
 };
-use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, compile, offset_for_builtin};
+use moor_compiler::{
+    ArgCount, ArgType, BUILTINS, Builtin, compile, format_compile_error, offset_for_builtin,
+};
 use moor_db::{
     db_counters,
     prop_cache::{ANCESTRY_CACHE_STATS, PROP_CACHE_STATS, VERB_CACHE_STATS},
@@ -1518,21 +1520,39 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 /// Compiles and evaluates a MOO expression or statement.
-/// MOO: `list eval(str program)`
+/// MOO: `list eval(str program [, int verbosity [, int output_mode]])`
+/// Optional arguments:
+///   - verbosity: 0=summary, 1=notes, 2=detailed (default: 0)
+///   - output_mode: 0=plain text, 1=graphics, 2=graphics+colour (default: 0)
 fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
         .map_err(world_state_bf_err)?
         .check_programmer()
         .map_err(world_state_bf_err)?;
-    if bf_args.args.len() != 1 {
-        return Err(ErrValue(E_ARGS.msg("bf_eval() requires 1 argument")));
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
+        return Err(ErrValue(E_ARGS.msg("bf_eval() requires 1-3 arguments")));
     }
     let Some(program_code) = bf_args.args[0].as_string() else {
         return Err(ErrValue(
             E_TYPE.msg("bf_eval() requires a string as the first argument"),
         ));
     };
+
+    // Parse optional verbosity (default 0 for eval) and output_mode (default 0)
+    let verbosity = if bf_args.args.len() >= 2 {
+        bf_args.args[1].as_integer()
+    } else {
+        Some(0) // Default to summary for eval
+    };
+
+    let output_mode = if bf_args.args.len() >= 3 {
+        bf_args.args[2].as_integer()
+    } else {
+        Some(0)
+    };
+
+    let render_options = parse_diagnostic_options(verbosity, output_mode)?;
 
     // Clone the program code before we borrow bf_args mutably
     let program_code_string = program_code.to_string();
@@ -1548,9 +1568,14 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let program = match compile(&program_code_string, bf_args.config.compile_options()) {
                 Ok(program) => program,
                 Err(e) => {
-                    let error_strings = e.to_error_list();
-                    let error_vars: Vec<Var> = error_strings.iter().map(|s| v_str(s)).collect();
-                    return Ok(Ret(v_list(&[v_int(0), v_list(&error_vars)])));
+                    let formatted = format_compile_error(
+                        &e,
+                        Some(program_code_string.as_str()),
+                        render_options,
+                    );
+                    let error_vars: Vec<Var> = formatted.into_iter().map(v_string).collect();
+                    let error_list = v_list(error_vars.as_slice());
+                    return Ok(Ret(v_list(&[v_int(0), error_list])));
                 }
             };
             let bf_frame = bf_args.bf_frame_mut();

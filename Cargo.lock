@@ -246,6 +246,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ariadne"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44055e597c674aef7cb903b2b9f6e4cba1277ed0d2d61dae7cd52d7ffa81f8e2"
+dependencies = [
+ "unicode-width 0.1.14",
+ "yansi",
+]
+
+[[package]]
 name = "array-init-cursor"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3110,6 +3120,7 @@ dependencies = [
 name = "moor-compiler"
 version = "0.9.0-alpha"
 dependencies = [
+ "ariadne",
  "base64 0.21.7",
  "byteview",
  "itertools 0.14.0",
@@ -3169,6 +3180,7 @@ dependencies = [
  "mimalloc",
  "minstant",
  "moor-common",
+ "moor-compiler",
  "moor-db",
  "moor-kernel",
  "moor-objdef",

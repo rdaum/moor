@@ -15,11 +15,16 @@ use crate::task_context::{
     current_task_scheduler_client, with_current_transaction, with_loader_interface,
 };
 use crate::vm::builtins::BfRet::Ret;
-use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::{
+    BfCallState, BfErr, BfRet, BuiltinFunction, parse_diagnostic_options, world_state_bf_err,
+};
 use lazy_static::lazy_static;
 use moor_common::builtins::offset_for_builtin;
 use moor_common::model::{ObjectKind, obj_flags_string, prop_flags_string};
-use moor_objdef::{ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions};
+use moor_compiler::{DiagnosticRenderOptions, format_compile_error};
+use moor_objdef::{
+    ConflictEntity, ConflictMode, Constants, Entity, ObjDefLoaderOptions, ObjdefLoaderError,
+};
 use moor_var::{
     E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_empty_map, v_list, v_obj, v_str,
     v_sym,
@@ -45,6 +50,7 @@ lazy_static! {
     static ref OVERRIDES_SYM: Symbol = Symbol::mk("overrides");
     static ref REMOVALS_SYM: Symbol = Symbol::mk("removals");
     static ref RETURN_CONFLICTS_SYM: Symbol = Symbol::mk("return_conflicts");
+    static ref DIAGNOSTICS_SYM: Symbol = Symbol::mk("diagnostics");
 
     // Conflict mode symbols
     static ref CLOBBER_SYM: Symbol = Symbol::mk("clobber");
@@ -378,6 +384,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut constants: Option<Constants> = None;
     let mut overrides = Vec::new();
     let mut return_conflicts = false;
+    let mut diagnostic_options = DiagnosticRenderOptions::default();
 
     for (key, value) in options_map.iter() {
         let key_sym = key.as_symbol().map_err(BfErr::ErrValue)?;
@@ -421,6 +428,34 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         if key_sym == *RETURN_CONFLICTS_SYM {
             return_conflicts = value.is_true();
+            continue;
+        }
+
+        if key_sym == *DIAGNOSTICS_SYM {
+            // Parse diagnostic options from a map with "verbosity" and "output_mode" fields
+            let Some(diag_map) = value.as_map() else {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("diagnostics must be a map"),
+                ));
+            };
+
+            let mut verbosity = None;
+            let mut output_mode = None;
+
+            for (k, v) in diag_map.iter() {
+                let Some(key_str) = k.as_string() else {
+                    continue;
+                };
+
+                if key_str == "verbosity" {
+                    verbosity = v.as_integer();
+                } else if key_str == "output_mode" {
+                    output_mode = v.as_integer();
+                }
+            }
+
+            diagnostic_options = parse_diagnostic_options(verbosity, output_mode)?;
+            continue;
         }
     }
 
@@ -441,22 +476,29 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Get the compile options from the config
     let compile_options = bf_args.config.compile_options();
 
-    // Use the current task's transaction via loader interface
-    let result = with_loader_interface(|loader| {
+    let loader_result: Result<_, ObjdefLoaderError> = with_loader_interface(|loader| {
         let mut object_loader = moor_objdef::ObjectDefinitionLoader::new(loader);
+        object_loader.load_single_object(&object_definition, compile_options, loader_options)
+    });
 
-        // Load the single object with provided options
-        let results = object_loader
-            .load_single_object(&object_definition, compile_options, loader_options)
-            .map_err(|e| {
-                moor_common::model::WorldStateError::DatabaseError(format!(
-                    "Failed to load object: {e}"
-                ))
-            })?;
+    let result = match loader_result {
+        Ok(results) => results,
+        Err(e) => {
+            if let Some((_, compile_error)) = e.compile_error() {
+                let formatted = format_compile_error(
+                    compile_error,
+                    Some(&object_definition),
+                    diagnostic_options,
+                );
+                let message = formatted.join("\n");
+                return Err(BfErr::ErrValue(E_INVARG.msg(message)));
+            }
 
-        Ok(results)
-    })
-    .map_err(world_state_bf_err)?;
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg(format!("Failed to load object: {e}")),
+            ));
+        }
+    };
 
     // Format and return the result
     let return_value = format_load_result(bf_args, &result, return_conflicts)?;

@@ -18,7 +18,7 @@ mod load;
 #[cfg(test)]
 mod conflict_tests;
 
-use moor_common::model::WorldStateError;
+use moor_common::model::{CompileError, WorldStateError};
 use moor_compiler::ObjDefParseError;
 use moor_var::{Obj, Symbol};
 use std::{io, path::PathBuf};
@@ -80,6 +80,16 @@ impl ObjdefLoaderError {
             ObjdefLoaderError::DirectoryNotFound(path)
             | ObjdefLoaderError::InvalidObjectFilename(path)
             | ObjdefLoaderError::ObjectFileReadError(path, _) => Some(path),
+            _ => None,
+        }
+    }
+
+    pub fn compile_error(&self) -> Option<(&str, &CompileError)> {
+        match self {
+            ObjdefLoaderError::ObjectDefParseError(
+                source,
+                ObjDefParseError::VerbCompileError(error),
+            ) => Some((source.as_str(), error)),
             _ => None,
         }
     }

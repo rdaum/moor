@@ -77,16 +77,24 @@ impl Display for CompileContext {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+pub struct ParseErrorDetails {
+    pub span: Option<(usize, usize)>,
+    pub expected_tokens: Vec<String>,
+    pub notes: Vec<String>,
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq, Serialize)]
 pub enum CompileError {
     #[error("Failure to parse string @ {0}: {1}")]
     StringLexError(CompileContext, String),
-    #[error("Failure to parse program @ {error_position}: {message}")]
+    #[error("Failure to parse program @ {error_position}:\n{message}")]
     ParseError {
         error_position: CompileContext,
         context: String,
         end_line_col: Option<(usize, usize)>,
         message: String,
+        details: Box<ParseErrorDetails>,
     },
     #[error("Unknown built-in function @ {0}: {1}")]
     UnknownBuiltinFunction(CompileContext, String),

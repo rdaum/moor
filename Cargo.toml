@@ -158,6 +158,7 @@ unicase = "2.8"
 
 # Compiler & Language Processing
 pest = "2.8"
+ariadne = "0.4"
 pest_derive = "2.8"
 
 # Collections & Data Structures

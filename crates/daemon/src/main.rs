@@ -15,9 +15,10 @@
 use crate::args::Args;
 use eyre::{bail, eyre};
 use fs2::FileExt;
+use std::io::IsTerminal;
 use std::{
-    fs::{File, OpenOptions},
-    io::Write,
+    fs::{self, File, OpenOptions},
+    io::{self, Write},
     path::PathBuf,
     process::exit,
     sync::{Arc, atomic::AtomicBool},
@@ -38,6 +39,7 @@ use ed25519_dalek::{
 use eyre::Report;
 use mimalloc::MiMalloc;
 use moor_common::{build, model::ObjectRef, tasks::SessionFactory};
+use moor_compiler::emit_compile_error;
 use moor_db::{Database, TxDB};
 use moor_kernel::{
     SchedulerClient,
@@ -68,7 +70,7 @@ mod zap_auth;
 
 // main.rs
 use crate::tasks::tasks_db_fjall::FjallTasksDB;
-use moor_common::model::{CommitResult, loader::LoaderInterface};
+use moor_common::model::{CommitResult, CompileError, loader::LoaderInterface};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -104,6 +106,24 @@ fn acquire_data_directory_lock(data_dir: &PathBuf) -> Result<File, Report> {
     }
 }
 
+fn log_objdef_compile_error(path: &str, compile_error: &CompileError) {
+    let source = if path != "<string>" {
+        match fs::read_to_string(path) {
+            Ok(text) => Some(text),
+            Err(err) => {
+                error!("Failed to read {path} for diagnostic rendering: {err}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let use_color = io::stderr().is_terminal();
+    eprintln!();
+    emit_compile_error(compile_error, source.as_deref(), path, use_color);
+}
+
 fn perform_import(
     config: &Config,
     import_path: &PathBuf,
@@ -118,11 +138,20 @@ fn perform_import(
         ImportExportFormat::Objdef => {
             let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
             let options = moor_objdef::ObjDefLoaderOptions::default();
-            let results = od.load_objdef_directory(
+            let results = match od.load_objdef_directory(
                 config.features.compile_options(),
                 import_path.as_ref(),
                 options,
-            )?;
+            ) {
+                Ok(results) => results,
+                Err(e) => {
+                    if let Some((source, compile_error)) = e.compile_error() {
+                        log_objdef_compile_error(source, compile_error);
+                        return Err(eyre::eyre!("Failed to compile object definitions"));
+                    }
+                    return Err(Report::new(e));
+                }
+            };
             info!(
                 "Imported {} objects w/ {} verbs, {} properties and {} property overrides",
                 results.loaded_objects.len(),

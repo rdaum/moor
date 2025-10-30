@@ -22,7 +22,7 @@ use crate::{
     convert_common::{symbol_from_flatbuffer_struct, symbol_from_ref, symbol_to_flatbuffer_struct},
     convert_var::{var_from_flatbuffer, var_to_flatbuffer},
 };
-use moor_common::model::{CompileContext, CompileError};
+use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
 use moor_var::Var;
 
 /// Convert from moor_var::Error to flatbuffer Error struct
@@ -254,6 +254,7 @@ pub fn compilation_error_from_ref(
                 context,
                 end_line_col,
                 message,
+                details: Box::new(ParseErrorDetails::default()),
             })
         }
         CompileErrorUnionRef::UnknownBuiltinFunction(e) => {
@@ -364,6 +365,7 @@ pub fn compilation_error_to_flatbuffer_struct(
             context,
             end_line_col,
             message,
+            details: _,
         } => common::CompileErrorUnion::ParseError(Box::new(common::ParseError {
             error_position: Box::new(common::CompileContext {
                 line: error_position.line_col.0 as u64,

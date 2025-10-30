@@ -461,7 +461,7 @@ pub enum TaskControlMsg {
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
     /// The task thread panicked with the given message.
-    TaskAbortPanicked(String, Backtrace),
+    TaskAbortPanicked(String, Box<Backtrace>),
     /// The task is letting us know that it has reached its abort limits.
     TaskAbortLimitsReached(AbortLimitReason, Var, Symbol, usize),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)

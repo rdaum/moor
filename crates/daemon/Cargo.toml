@@ -47,6 +47,7 @@ moor-objdef = { path = "../objdef" }
 moor-schema = { path = "../schema" }
 moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
+moor-compiler = { path = "../compiler" }
 rpc-common = { path = "../rpc/rpc-common" }
 
 # Core Runtime & System

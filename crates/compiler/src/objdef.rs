@@ -20,8 +20,8 @@ use crate::{
 use itertools::Itertools;
 use moor_common::{
     model::{
-        ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms,
-        VerbArgsSpec, VerbFlag,
+        ArgSpec, CompileContext, CompileError, ObjFlag, ParseErrorDetails, PrepSpec, PropFlag,
+        PropPerms, VerbArgsSpec, VerbFlag,
     },
     util::{BitEnum, unquote_str},
 };
@@ -103,6 +103,15 @@ pub enum ObjDefParseError {
     BadAttributeType(VarType),
     #[error("Invalid object ID: {0}")]
     InvalidObjectId(String),
+}
+
+impl ObjDefParseError {
+    pub fn compile_error(&self) -> Option<&CompileError> {
+        match self {
+            ObjDefParseError::VerbCompileError(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 fn parse_boolean_literal(pair: Pair<Rule>) -> Result<bool, ObjDefParseError> {
@@ -459,6 +468,7 @@ fn parse_literal_atom(
                     end_line_col: None,
                     context: e.to_string(),
                     message: e.to_string(),
+                    details: Box::new(ParseErrorDetails::default()),
                 }));
             };
             Ok(v_err(e))
@@ -503,12 +513,30 @@ pub fn parse_literal_value(literal_str: &str) -> Result<Var, ObjDefParseError> {
                 end_line_col,
                 context: e.line().to_string(),
                 message: e.variant.message().to_string(),
+                details: Box::new(ParseErrorDetails::default()),
             }));
         }
     };
 
     let literal_pair = pairs.next().unwrap();
     parse_literal(&mut context, literal_pair)
+}
+
+fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    let clamped = offset.min(source.len());
+
+    for ch in source[..clamped].chars() {
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+
+    (line, column)
 }
 
 pub fn compile_object_definitions(
@@ -519,16 +547,29 @@ pub fn compile_object_definitions(
     let mut pairs = match MooParser::parse(Rule::objects_file, objdef) {
         Ok(pairs) => pairs,
         Err(e) => {
-            let ((line, column), end_line_col) = match e.line_col {
+            let ((mut line, mut column), mut end_line_col) = match e.line_col {
                 LineColLocation::Pos(lc) => (lc, None),
                 LineColLocation::Span(begin, end) => (begin, Some(end)),
             };
+
+            let (summary, details) = crate::diagnostics::build_parse_error_details(objdef, &e);
+
+            if let Some((start, end)) = details.span {
+                let (computed_line, computed_col) = offset_to_line_col(objdef, start);
+                line = computed_line;
+                column = computed_col;
+
+                let end_offset = if end > start { end - 1 } else { start };
+                let (end_line, end_col) = offset_to_line_col(objdef, end_offset);
+                end_line_col = Some((end_line, end_col));
+            }
 
             return Err(VerbCompileError(CompileError::ParseError {
                 error_position: CompileContext::new((line, column)),
                 end_line_col,
                 context: e.line().to_string(),
-                message: e.variant.message().to_string(),
+                message: summary,
+                details: Box::new(details),
             }));
         }
     };

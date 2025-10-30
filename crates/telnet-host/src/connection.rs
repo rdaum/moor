@@ -120,6 +120,7 @@ fn describe_compile_error(compile_error: CompileError) -> String {
             context: _,
             end_line_col,
             message,
+            details: _,
         } => {
             let mut err = format!(
                 "Parse error at line {} column {}: {}",

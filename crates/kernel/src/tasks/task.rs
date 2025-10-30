@@ -634,9 +634,18 @@ impl Task {
                 warn!(task_id = self.task_id, "Task abort limit reached");
 
                 // Inside a running task, stack should never be empty - if it is, that's a critical bug
-                let this = self.vm_host.this().expect("Task has empty activation stack during abort - critical bug");
-                let verb_name = self.vm_host.verb_name().expect("Task has empty activation stack during abort - critical bug");
-                let line_number = self.vm_host.line_number().expect("Task has empty activation stack during abort - critical bug");
+                let this = self
+                    .vm_host
+                    .this()
+                    .expect("Task has empty activation stack during abort - critical bug");
+                let verb_name = self
+                    .vm_host
+                    .verb_name()
+                    .expect("Task has empty activation stack during abort - critical bug");
+                let line_number = self
+                    .vm_host
+                    .line_number()
+                    .expect("Task has empty activation stack during abort - critical bug");
 
                 // If we're not already handling a timeout, try to call $handle_task_timeout
                 if !self.handling_task_timeout {

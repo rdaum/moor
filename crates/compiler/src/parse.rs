@@ -23,7 +23,9 @@ use pest::{
     error::LineColLocation,
     iterators::{Pair, Pairs},
     pratt_parser::{Assoc, Op, PrattParser},
+    set_error_detail,
 };
+use std::sync::Once;
 
 use moor_common::builtins::BUILTINS;
 use moor_var::{AnonymousObjid, Obj, UuObjid, v_binary, v_float, v_int, v_obj, v_str, v_string};
@@ -37,6 +39,7 @@ use crate::{
         StmtNode::Scope,
         UnaryOp,
     },
+    diagnostics::build_parse_error_details,
     parse::moo::{MooParser, Rule},
     unparse::annotate_line_numbers,
     var_scope::VarScope,
@@ -45,6 +48,7 @@ use base64::{Engine, engine::general_purpose};
 use moor_common::model::{
     CompileContext, CompileError,
     CompileError::{DuplicateVariable, UnknownTypeConstant},
+    ParseErrorDetails,
 };
 use moor_var::program::{DeclType, names::Names};
 
@@ -555,6 +559,7 @@ impl TreeTransformer {
                                     end_line_col: Some(line_col),
                                     context: "lambda body parsing".to_string(),
                                     message: "Expected statement in lambda body".to_string(),
+                                    details: Box::new(ParseErrorDetails::default()),
                                 })?;
                                 Box::new(stmt)
                             }
@@ -576,6 +581,7 @@ impl TreeTransformer {
                                     end_line_col: Some(line_col),
                                     context: "lambda body parsing".to_string(),
                                     message: "Invalid lambda body".to_string(),
+                                    details: Box::new(ParseErrorDetails::default()),
                                 });
                             }
                         };
@@ -1788,6 +1794,7 @@ impl TreeTransformer {
                         end_line_col: None,
                         context: "scattering assignment validation".to_string(),
                         message: "More than one `@' target in scattering assignment.".to_string(),
+                        details: Box::new(ParseErrorDetails::default()),
                     });
                 }
                 seen_rest = true;
@@ -1888,6 +1895,7 @@ impl TreeTransformer {
                         end_line_col: None,
                         context: "lambda parameter validation".to_string(),
                         message: "More than one `@' target in scattering assignment.".to_string(),
+                        details: Box::new(ParseErrorDetails::default()),
                     });
                 }
                 seen_rest = true;
@@ -1979,20 +1987,35 @@ pub struct Parse {
 }
 
 pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Parse, CompileError> {
+    ensure_pest_error_detail();
+
     let pairs = match MooParser::parse(Rule::program, program_text) {
         Ok(pairs) => pairs,
         Err(e) => {
-            let ((line, column), end_line_col) = match e.line_col {
+            let ((mut line, mut column), mut end_line_col) = match e.line_col {
                 LineColLocation::Pos(lc) => (lc, None),
                 LineColLocation::Span(begin, end) => (begin, Some(end)),
             };
+
+            let (summary, details) = build_parse_error_details(program_text, &e);
+
+            if let Some((start, end)) = details.span {
+                let (computed_line, computed_col) = offset_to_line_col(program_text, start);
+                line = computed_line;
+                column = computed_col;
+
+                let end_offset = if end > start { end - 1 } else { start };
+                let (end_line, end_col) = offset_to_line_col(program_text, end_offset);
+                end_line_col = Some((end_line, end_col));
+            }
 
             let context = CompileContext::new((line, column));
             return Err(CompileError::ParseError {
                 error_position: context,
                 end_line_col,
                 context: e.line().to_string(),
-                message: e.variant.message().to_string(),
+                message: summary,
+                details: Box::new(details),
             });
         }
     };
@@ -2000,6 +2023,28 @@ pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Pars
     // TODO: this is in Rc because of borrowing issues in the Pratt parser
     let tree_transform = TreeTransformer::new(options);
     tree_transform.transform_tree(pairs)
+}
+
+fn ensure_pest_error_detail() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| set_error_detail(true));
+}
+
+fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    let clamped = offset.min(source.len());
+
+    for ch in source[..clamped].chars() {
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+
+    (line, column)
 }
 
 pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, CompileError> {

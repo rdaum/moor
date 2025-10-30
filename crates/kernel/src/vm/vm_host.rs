@@ -589,7 +589,9 @@ impl VmHost {
     /// Try to get the line number of the current activation.
     /// Returns None if the activation stack is empty (e.g., task not yet initialized).
     pub fn line_number(&self) -> Option<usize> {
-        self.vm_exec_state.try_top().map(|a| a.frame.find_line_no().unwrap_or(0))
+        self.vm_exec_state
+            .try_top()
+            .map(|a| a.frame.find_line_no().unwrap_or(0))
     }
 
     /// Get the current traceback and formatted backtrace
