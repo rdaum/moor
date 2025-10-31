@@ -249,12 +249,50 @@ pub fn compilation_error_from_ref(
             } else {
                 None
             };
+            let span = if e.has_span().map_err(|_| "Missing has_span")? {
+                Some((
+                    e.span_start().map_err(|_| "Missing span_start")? as usize,
+                    e.span_end().map_err(|_| "Missing span_end")? as usize,
+                ))
+            } else {
+                None
+            };
+
+            let expected_tokens = match e.expected_tokens().map_err(|_| "Missing expected_tokens")?
+            {
+                Some(tokens_vec) => tokens_vec
+                    .iter()
+                    .map(|token_ref| {
+                        token_ref
+                            .map_err(|e| format!("Failed to read expected token: {e}"))
+                            .map(|token| token.to_string())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                None => Vec::new(),
+            };
+
+            let notes = match e.notes().map_err(|_| "Missing notes")? {
+                Some(notes_vec) => notes_vec
+                    .iter()
+                    .map(|note_ref| {
+                        note_ref
+                            .map_err(|e| format!("Failed to read note: {e}"))
+                            .map(|note| note.to_string())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                None => Vec::new(),
+            };
+
             Ok(CompileError::ParseError {
                 error_position,
                 context,
                 end_line_col,
                 message,
-                details: Box::new(ParseErrorDetails::default()),
+                details: Box::new(ParseErrorDetails {
+                    span,
+                    expected_tokens,
+                    notes,
+                }),
             })
         }
         CompileErrorUnionRef::UnknownBuiltinFunction(e) => {
@@ -365,7 +403,7 @@ pub fn compilation_error_to_flatbuffer_struct(
             context,
             end_line_col,
             message,
-            details: _,
+            details,
         } => common::CompileErrorUnion::ParseError(Box::new(common::ParseError {
             error_position: Box::new(common::CompileContext {
                 line: error_position.line_col.0 as u64,
@@ -376,6 +414,19 @@ pub fn compilation_error_to_flatbuffer_struct(
             end_col: end_line_col.map(|(_, c)| c as u64).unwrap_or(0),
             has_end: end_line_col.is_some(),
             message: message.clone(),
+            span_start: details.span.map(|(s, _)| s as u64).unwrap_or(0),
+            span_end: details.span.map(|(_, e)| e as u64).unwrap_or(0),
+            has_span: details.span.is_some(),
+            expected_tokens: if details.expected_tokens.is_empty() {
+                None
+            } else {
+                Some(details.expected_tokens.clone())
+            },
+            notes: if details.notes.is_empty() {
+                None
+            } else {
+                Some(details.notes.clone())
+            },
         })),
         CompileError::UnknownBuiltinFunction(ctx, name) => {
             common::CompileErrorUnion::UnknownBuiltinFunction(Box::new(

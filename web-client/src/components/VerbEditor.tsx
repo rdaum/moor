@@ -39,6 +39,12 @@ interface CompileError {
     message: string;
     line?: number;
     column?: number;
+    endLine?: number;
+    endColumn?: number;
+    span?: { start: number; end: number };
+    contextLine?: string;
+    expectedTokens?: string[];
+    notes?: string[];
 }
 
 const FONT_SIZE_STORAGE_KEY = "moor-code-editor-font-size";
@@ -946,16 +952,74 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         );
 
                         if (errorObj instanceof ParseError) {
-                            const context = errorObj.errorPosition();
-                            const line = context ? Number(context.line()) : undefined;
-                            const column = context ? Number(context.col()) : undefined;
-                            const message = errorObj.message() || "Parse error";
+                            const position = errorObj.errorPosition();
+                            const line = position ? Number(position.line()) : undefined;
+                            const column = position ? Number(position.col()) : undefined;
+                            const messageRaw = errorObj.message();
+                            const message = typeof messageRaw === "string" ? messageRaw : "Parse error";
+
+                            const contextLineRaw = errorObj.context();
+                            const contextLine = typeof contextLineRaw === "string" ? contextLineRaw : undefined;
+
+                            const textDecoder = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
+                            const decodeBytes = (bytes: Uint8Array): string => {
+                                if (textDecoder) {
+                                    return textDecoder.decode(bytes);
+                                }
+                                let out = "";
+                                for (let i = 0; i < bytes.length; i++) {
+                                    out += String.fromCharCode(bytes[i]);
+                                }
+                                return out;
+                            };
+
+                            const expectedTokens: string[] = [];
+                            const expectedTokensLength = errorObj.expectedTokensLength();
+                            for (let i = 0; i < expectedTokensLength; i++) {
+                                const token = errorObj.expectedTokens(i);
+                                if (typeof token === "string") {
+                                    expectedTokens.push(token);
+                                } else if (token !== null && typeof token !== "string") {
+                                    expectedTokens.push(decodeBytes(token as Uint8Array));
+                                }
+                            }
+
+                            const notes: string[] = [];
+                            const notesLength = errorObj.notesLength();
+                            for (let i = 0; i < notesLength; i++) {
+                                const note = errorObj.notes(i);
+                                if (typeof note === "string") {
+                                    notes.push(note);
+                                } else if (note !== null && typeof note !== "string") {
+                                    notes.push(decodeBytes(note as Uint8Array));
+                                }
+                            }
+
+                            const span = errorObj.hasSpan()
+                                ? {
+                                    start: Number(errorObj.spanStart()),
+                                    end: Number(errorObj.spanEnd()),
+                                }
+                                : undefined;
+
+                            const endLine = errorObj.hasEnd()
+                                ? Number(errorObj.endLine())
+                                : undefined;
+                            const endColumn = errorObj.hasEnd()
+                                ? Number(errorObj.endCol())
+                                : undefined;
 
                             compilationErrors.push({
                                 type: "parse",
                                 message,
                                 line,
                                 column,
+                                endLine,
+                                endColumn,
+                                span,
+                                contextLine,
+                                expectedTokens: expectedTokens.length ? expectedTokens : undefined,
+                                notes: notes.length ? notes : undefined,
                             });
                         } else {
                             // Handle other error types - just use the toString for now
@@ -972,21 +1036,96 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     if (editorRef.current) {
                         const model = editorRef.current.getModel();
                         if (model) {
-                            const markers = compilationErrors.map(error => {
-                                const line = error.line || 1;
-                                const column = error.column || 1;
-                                // Make the error span a wider area to be more visible
-                                const lineText = model.getLineContent(line);
-                                const wordEnd = lineText.indexOf(" ", column - 1);
-                                const endColumn = wordEnd !== -1 ? wordEnd + 1 : model.getLineMaxColumn(line);
+                            const clampLine = (line: number): number =>
+                                Math.min(Math.max(line, 1), model.getLineCount());
+                            const clampColumn = (line: number, column: number): number => {
+                                const maxColumn = model.getLineMaxColumn(line);
+                                return Math.min(Math.max(column, 1), maxColumn);
+                            };
+                            const toHoverText = (error: CompileError): string => formatError(error);
 
+                            const modelLength = model.getValueLength();
+                            const computeRange = (error: CompileError): monaco.Range => {
+                                if (
+                                    error.type === "parse"
+                                    && error.span
+                                    && error.span.end > error.span.start
+                                ) {
+                                    const startOffset = Math.max(
+                                        0,
+                                        Math.min(error.span.start, modelLength),
+                                    );
+                                    const rawEnd = Math.max(
+                                        error.span.end,
+                                        error.span.start + 1,
+                                    );
+                                    const endOffset = Math.max(
+                                        startOffset + 1,
+                                        Math.min(rawEnd, modelLength),
+                                    );
+                                    const startPos = model.getPositionAt(startOffset);
+                                    const endPos = model.getPositionAt(endOffset);
+                                    return new monaco.Range(
+                                        startPos.lineNumber,
+                                        startPos.column,
+                                        endPos.lineNumber,
+                                        endPos.column,
+                                    );
+                                }
+
+                                const startLine = clampLine(error.line ?? 1);
+                                const startColumn = clampColumn(startLine, error.column ?? 1);
+                                const endLine = clampLine(error.endLine ?? startLine);
+                                let endColumn = clampColumn(
+                                    endLine,
+                                    error.endColumn ?? startColumn,
+                                );
+
+                                if (
+                                    error.type === "parse"
+                                    && !error.endColumn
+                                    && typeof error.line === "number"
+                                    && (typeof error.endLine !== "number"
+                                        || error.endLine === error.line)
+                                ) {
+                                    const lineText = model.getLineContent(startLine);
+                                    const wordEnd = lineText.indexOf(" ", startColumn - 1);
+                                    const fallback = Math.max(startColumn + 1, startColumn + 5);
+                                    endColumn = wordEnd !== -1
+                                        ? Math.max(startColumn + 1, wordEnd + 1)
+                                        : Math.max(
+                                            fallback,
+                                            model.getLineMaxColumn(startLine),
+                                        );
+                                }
+
+                                if (
+                                    endLine === startLine
+                                    && endColumn <= startColumn
+                                ) {
+                                    endColumn = Math.min(
+                                        startColumn + 1,
+                                        model.getLineMaxColumn(startLine),
+                                    );
+                                }
+
+                                return new monaco.Range(
+                                    startLine,
+                                    startColumn,
+                                    endLine,
+                                    endColumn,
+                                );
+                            };
+
+                            const markers = compilationErrors.map(error => {
+                                const range = computeRange(error);
                                 return {
                                     severity: monaco.MarkerSeverity.Error,
-                                    message: error.message,
-                                    startLineNumber: line,
-                                    startColumn: column,
-                                    endLineNumber: line,
-                                    endColumn: Math.max(column + 5, endColumn), // Span at least 5 characters or to end of word
+                                    message: toHoverText(error),
+                                    startLineNumber: range.startLineNumber,
+                                    startColumn: range.startColumn,
+                                    endLineNumber: range.endLineNumber,
+                                    endColumn: range.endColumn,
                                 };
                             });
                             monaco.editor.setModelMarkers(model, "moo-compiler", markers);
@@ -994,18 +1133,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             // Add more visible decorations
                             if (errorDecorationsRef.current) {
                                 const decorations = compilationErrors.map(error => {
-                                    const line = error.line || 1;
-                                    const column = error.column || 1;
-                                    const lineText = model.getLineContent(line);
-                                    const wordEnd = lineText.indexOf(" ", column - 1);
-                                    const endColumn = wordEnd !== -1 ? wordEnd + 1 : model.getLineMaxColumn(line);
-
+                                    const range = computeRange(error);
+                                    const hoverText = toHoverText(error);
                                     return {
-                                        range: new monaco.Range(line, column, line, Math.max(column + 5, endColumn)),
+                                        range,
                                         options: {
                                             className: "moo-error-decoration",
                                             inlineClassName: "moo-error-inline",
-                                            hoverMessage: { value: error.message },
+                                            hoverMessage: { value: hoverText },
                                             overviewRuler: {
                                                 color: "#ff0000",
                                                 position: monaco.editor.OverviewRulerLane.Right,
@@ -1050,8 +1185,31 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     }, [authToken, content, objectCurie, verbName, uploadAction, onSendMessage, isCompiling]);
 
     const formatError = (error: CompileError): string => {
-        if (error.type === "parse" && error.line && error.column) {
-            return `At line ${error.line}, column ${error.column}: ${error.message}`;
+        if (error.type === "parse") {
+            const segments: string[] = [];
+            const locationBits: string[] = [];
+            if (typeof error.line === "number") {
+                locationBits.push(`line ${error.line}`);
+            }
+            if (typeof error.column === "number") {
+                locationBits.push(`column ${error.column}`);
+            }
+            const locationPrefix = locationBits.length > 0 ? `At ${locationBits.join(", ")}` : "Parse error";
+            segments.push(`${locationPrefix}: ${error.message}`);
+
+            if (error.contextLine) {
+                segments.push(`  ${error.contextLine.trimEnd()}`);
+            }
+            if (error.expectedTokens && error.expectedTokens.length > 0) {
+                segments.push(`  Expected ${error.expectedTokens.join(", ")}`);
+            }
+            if (error.notes && error.notes.length > 0) {
+                for (const note of error.notes) {
+                    segments.push(`  Note: ${note}`);
+                }
+            }
+
+            return segments.join("\n");
         }
         return error.message;
     };
@@ -1344,24 +1502,34 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 <div
                     className="verb_compile_errors"
                     style={{
-                        height: "80px",
+                        minHeight: "80px",
+                        maxHeight: "180px",
                         padding: "var(--space-sm)",
                         backgroundColor: "var(--color-bg-error)",
                         borderTop: "1px solid var(--color-border-light)",
                         borderBottom: "1px solid var(--color-border-light)",
                         overflowY: "auto",
+                        overflowX: "hidden",
                     }}
                 >
-                    <pre
-                        style={{
-                            margin: 0,
-                            color: "var(--color-text-error)",
-                            fontSize: "0.9em",
-                            fontFamily: "var(--font-mono)",
-                        }}
-                    >
-                        {errors.map(formatError).join('\n')}
-                    </pre>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                        {errors.map((error, index) => (
+                            <pre
+                                key={`${error.type}-${index}`}
+                                style={{
+                                    margin: 0,
+                                    color: "var(--color-text-error)",
+                                    fontSize: "0.9em",
+                                    fontFamily: "var(--font-mono)",
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-word",
+                                    overflowWrap: "anywhere",
+                                }}
+                            >
+                                {formatError(error)}
+                            </pre>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -1441,7 +1609,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 clientY: touch.clientY,
                                 preventDefault: () => e.preventDefault(),
                                 stopPropagation: () => e.stopPropagation(),
-                            } as unknown as React.MouseEvent);
+                            } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
                     tabIndex={0}
@@ -1456,7 +1624,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 clientX: size.width + position.x,
                                 clientY: size.height + position.y,
                                 button: 0,
-                            } as any);
+                            } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
                     style={{

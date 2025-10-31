@@ -58,8 +58,47 @@ export class ParseError {
         return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
     }
 
+    spanStart(): bigint {
+        const offset = this.bb!.__offset(this.bb_pos, 16);
+        return offset ? this.bb!.readUint64(this.bb_pos + offset) : BigInt("0");
+    }
+
+    spanEnd(): bigint {
+        const offset = this.bb!.__offset(this.bb_pos, 18);
+        return offset ? this.bb!.readUint64(this.bb_pos + offset) : BigInt("0");
+    }
+
+    hasSpan(): boolean {
+        const offset = this.bb!.__offset(this.bb_pos, 20);
+        return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+    }
+
+    expectedTokens(index: number): string;
+    expectedTokens(index: number, optionalEncoding: flatbuffers.Encoding): string | Uint8Array;
+    expectedTokens(index: number, optionalEncoding?: any): string | Uint8Array | null {
+        const offset = this.bb!.__offset(this.bb_pos, 22);
+        return offset ? this.bb!.__string(this.bb!.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+    }
+
+    expectedTokensLength(): number {
+        const offset = this.bb!.__offset(this.bb_pos, 22);
+        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
+    }
+
+    notes(index: number): string;
+    notes(index: number, optionalEncoding: flatbuffers.Encoding): string | Uint8Array;
+    notes(index: number, optionalEncoding?: any): string | Uint8Array | null {
+        const offset = this.bb!.__offset(this.bb_pos, 24);
+        return offset ? this.bb!.__string(this.bb!.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+    }
+
+    notesLength(): number {
+        const offset = this.bb!.__offset(this.bb_pos, 24);
+        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
+    }
+
     static startParseError(builder: flatbuffers.Builder) {
-        builder.startObject(6);
+        builder.startObject(11);
     }
 
     static addErrorPosition(builder: flatbuffers.Builder, errorPositionOffset: flatbuffers.Offset) {
@@ -86,6 +125,50 @@ export class ParseError {
         builder.addFieldOffset(5, messageOffset, 0);
     }
 
+    static addSpanStart(builder: flatbuffers.Builder, spanStart: bigint) {
+        builder.addFieldInt64(6, spanStart, BigInt("0"));
+    }
+
+    static addSpanEnd(builder: flatbuffers.Builder, spanEnd: bigint) {
+        builder.addFieldInt64(7, spanEnd, BigInt("0"));
+    }
+
+    static addHasSpan(builder: flatbuffers.Builder, hasSpan: boolean) {
+        builder.addFieldInt8(8, +hasSpan, +false);
+    }
+
+    static addExpectedTokens(builder: flatbuffers.Builder, expectedTokensOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(9, expectedTokensOffset, 0);
+    }
+
+    static createExpectedTokensVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
+        builder.startVector(4, data.length, 4);
+        for (let i = data.length - 1; i >= 0; i--) {
+            builder.addOffset(data[i]!);
+        }
+        return builder.endVector();
+    }
+
+    static startExpectedTokensVector(builder: flatbuffers.Builder, numElems: number) {
+        builder.startVector(4, numElems, 4);
+    }
+
+    static addNotes(builder: flatbuffers.Builder, notesOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(10, notesOffset, 0);
+    }
+
+    static createNotesVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
+        builder.startVector(4, data.length, 4);
+        for (let i = data.length - 1; i >= 0; i--) {
+            builder.addOffset(data[i]!);
+        }
+        return builder.endVector();
+    }
+
+    static startNotesVector(builder: flatbuffers.Builder, numElems: number) {
+        builder.startVector(4, numElems, 4);
+    }
+
     static endParseError(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
         builder.requiredField(offset, 4); // error_position
@@ -102,6 +185,11 @@ export class ParseError {
         endCol: bigint,
         hasEnd: boolean,
         messageOffset: flatbuffers.Offset,
+        spanStart: bigint,
+        spanEnd: bigint,
+        hasSpan: boolean,
+        expectedTokensOffset: flatbuffers.Offset,
+        notesOffset: flatbuffers.Offset,
     ): flatbuffers.Offset {
         ParseError.startParseError(builder);
         ParseError.addErrorPosition(builder, errorPositionOffset);
@@ -110,6 +198,11 @@ export class ParseError {
         ParseError.addEndCol(builder, endCol);
         ParseError.addHasEnd(builder, hasEnd);
         ParseError.addMessage(builder, messageOffset);
+        ParseError.addSpanStart(builder, spanStart);
+        ParseError.addSpanEnd(builder, spanEnd);
+        ParseError.addHasSpan(builder, hasSpan);
+        ParseError.addExpectedTokens(builder, expectedTokensOffset);
+        ParseError.addNotes(builder, notesOffset);
         return ParseError.endParseError(builder);
     }
 }

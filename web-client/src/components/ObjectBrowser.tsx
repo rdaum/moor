@@ -1531,7 +1531,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 clientY: touch.clientY,
                                 preventDefault: () => e.preventDefault(),
                                 stopPropagation: () => e.stopPropagation(),
-                            } as unknown as React.MouseEvent);
+                            } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
                     tabIndex={0}
@@ -1545,7 +1545,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 clientX: size.width + position.x,
                                 clientY: size.height + position.y,
                                 button: 0,
-                            } as any);
+                            } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
                     style={{

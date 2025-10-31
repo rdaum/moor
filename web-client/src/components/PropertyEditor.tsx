@@ -714,7 +714,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                                 clientY: touch.clientY,
                                 preventDefault: () => e.preventDefault(),
                                 stopPropagation: () => e.stopPropagation(),
-                            } as unknown as React.MouseEvent);
+                            } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
                     tabIndex={0}
@@ -729,7 +729,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                                 button: 0,
                                 clientX: size.width + position.x,
                                 clientY: size.height + position.y,
-                            } as React.MouseEvent);
+                            } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
                     style={{

@@ -182,6 +182,11 @@ table ParseError {
     end_col: uint64;
     has_end: bool;
     message: string (required);
+    span_start: uint64;
+    span_end: uint64;
+    has_span: bool;
+    expected_tokens: [string];
+    notes: [string];
 }
 
 table UnknownBuiltinFunction {
@@ -473,4 +478,3 @@ table ObjAttrs {
     flags: uint16;  // BitEnum<ObjFlag>
     name: string;  // Optional, can be empty
 }
-
