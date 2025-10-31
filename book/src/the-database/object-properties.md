@@ -1,22 +1,27 @@
 # Object Properties
 
-A _property_ is a named "slot" in an object that can hold any MOO value. Think of properties as the variables that belong to an object—they store information about what the object is and what state it's in.
+A _property_ is a named "slot" in an object that can hold any MOO value. Think of properties as the variables that
+belong to an object—they store information about what the object is and what state it's in.
 
 **How properties work:**
+
 - You access properties using dot notation: `object.property_name`
 - You can read values: `player.score` might return `1500`
 - You can set values: `sword.damage = 25`
 - Properties can hold any type of data: strings, numbers, lists, other objects, etc.
 
 **Creating and managing properties:**
+
 - Object owners and wizards can add new properties to objects
 - Properties are inherited—if a parent object has a `weight` property, all its children automatically have one too
 - Children can override inherited properties with their own values
 - Properties have permissions that control who can read or modify them
+  ``
 
 ## Built-in properties
 
-Every object automatically comes with several built-in properties that MOO uses for core functionality. You can't delete these, but you can read and (usually) modify them just like regular properties:
+Every object automatically comes with several built-in properties that MOO uses for core functionality. You can't delete
+these, but you can read and (usually) modify them just like regular properties:
 
 | Property   | Description                                                |
 |------------|------------------------------------------------------------|
@@ -63,19 +68,24 @@ only be set by a wizard or by the owner of the object.
 
 All of the built-in properties on any object can, by default, be read by any player. It is possible, however, to
 override this behavior from within the database, making any of these properties readable only by wizards. See the
-chapter on server assumptions about the database for details.
+chapter on server assumptions about the database for details.``
 
 ## Custom properties: Building your world
 
-The real power of MOO comes from adding your own properties to objects. This is how you create the unique characteristics that make your world interesting and interactive.
+The real power of MOO comes from adding your own properties to objects. This is how you create the unique
+characteristics that make your world interesting and interactive.
 
 **Where custom properties come from:**
 
-**Inheritance** - An object automatically has all the properties that its parent object has. If you create a "generic weapon" object with properties like `damage`, `weight`, and `material`, then every sword, axe, and bow that inherits from it will also have those properties.
+**Inheritance** - An object automatically has all the properties that its parent object has. If you create a "generic
+weapon" object with properties like `damage`, `weight`, and `material`, then every sword, axe, and bow that inherits
+from it will also have those properties.
 
-**Direct definition** - You can add completely new properties to specific objects. For example, a magical sword might have a `magic_power` property that no other weapon has.
+**Direct definition** - You can add completely new properties to specific objects. For example, a magical sword might
+have a `magic_power` property that no other weapon has.
 
 **Examples of custom properties:**
+
 - A player might have: `score`, `level`, `inventory_limit`, `last_login`
 - A room might have: `temperature`, `lighting`, `exits_hidden`, `background_music`
 - A weapon might have: `damage`, `durability`, `enchantment`, `required_strength`

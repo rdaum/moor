@@ -231,18 +231,21 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [showDeletePropertyDialog, setShowDeletePropertyDialog] = useState(false);
     const [showAddVerbDialog, setShowAddVerbDialog] = useState(false);
     const [showDeleteVerbDialog, setShowDeleteVerbDialog] = useState(false);
+    const [showEditFlagsDialog, setShowEditFlagsDialog] = useState(false);
     const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
     const [isSubmittingRecycle, setIsSubmittingRecycle] = useState(false);
     const [isSubmittingAddProperty, setIsSubmittingAddProperty] = useState(false);
     const [isSubmittingDeleteProperty, setIsSubmittingDeleteProperty] = useState(false);
     const [isSubmittingAddVerb, setIsSubmittingAddVerb] = useState(false);
     const [isSubmittingDeleteVerb, setIsSubmittingDeleteVerb] = useState(false);
+    const [isSubmittingEditFlags, setIsSubmittingEditFlags] = useState(false);
     const [createDialogError, setCreateDialogError] = useState<string | null>(null);
     const [recycleDialogError, setRecycleDialogError] = useState<string | null>(null);
     const [addPropertyDialogError, setAddPropertyDialogError] = useState<string | null>(null);
     const [deletePropertyDialogError, setDeletePropertyDialogError] = useState<string | null>(null);
     const [addVerbDialogError, setAddVerbDialogError] = useState<string | null>(null);
     const [deleteVerbDialogError, setDeleteVerbDialogError] = useState<string | null>(null);
+    const [editFlagsDialogError, setEditFlagsDialogError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [editingName, setEditingName] = useState<string>("");
     const [isSavingName, setIsSavingName] = useState(false);
@@ -522,6 +525,92 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             setTimeout(() => setActionMessage(null), 5000);
         } finally {
             setIsSavingName(false);
+        }
+    };
+
+    const handleEditFlagsSubmit = async (flags: number) => {
+        if (!selectedObject) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr) {
+            setEditFlagsDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        // Extract new flag values
+        const newUser = (flags & (1 << 0)) !== 0 ? 1 : 0;
+        const newProgrammer = (flags & (1 << 1)) !== 0 ? 1 : 0;
+        const newWizard = (flags & (1 << 2)) !== 0 ? 1 : 0;
+        const newReadable = (flags & (1 << 4)) !== 0 ? 1 : 0;
+        const newWritable = (flags & (1 << 5)) !== 0 ? 1 : 0;
+        const newFertile = (flags & (1 << 7)) !== 0 ? 1 : 0;
+
+        // Extract current flag values
+        const currentUser = (selectedObject.flags & (1 << 0)) !== 0 ? 1 : 0;
+        const currentProgrammer = (selectedObject.flags & (1 << 1)) !== 0 ? 1 : 0;
+        const currentWizard = (selectedObject.flags & (1 << 2)) !== 0 ? 1 : 0;
+        const currentReadable = (selectedObject.flags & (1 << 4)) !== 0 ? 1 : 0;
+        const currentWritable = (selectedObject.flags & (1 << 5)) !== 0 ? 1 : 0;
+        const currentFertile = (selectedObject.flags & (1 << 7)) !== 0 ? 1 : 0;
+
+        // Build expression only for changed flags
+        const assignments: string[] = [];
+        if (newProgrammer !== currentProgrammer) {
+            assignments.push(`${objectExpr}.programmer = ${newProgrammer}`);
+        }
+        if (newWizard !== currentWizard) {
+            assignments.push(`${objectExpr}.wizard = ${newWizard}`);
+        }
+        if (newReadable !== currentReadable) {
+            assignments.push(`${objectExpr}.r = ${newReadable}`);
+        }
+        if (newWritable !== currentWritable) {
+            assignments.push(`${objectExpr}.w = ${newWritable}`);
+        }
+        if (newFertile !== currentFertile) {
+            assignments.push(`${objectExpr}.f = ${newFertile}`);
+        }
+
+        // If nothing changed, just close the dialog
+        if (assignments.length === 0 && newUser === currentUser) {
+            setShowEditFlagsDialog(false);
+            return;
+        }
+
+        setIsSubmittingEditFlags(true);
+        setEditFlagsDialogError(null);
+        try {
+            // Handle player flag change if needed (requires set_player_flag builtin)
+            if (newUser !== currentUser) {
+                const userExpr = `return set_player_flag(${objectExpr}, ${newUser});`;
+                console.debug("Evaluating set_player_flag expression:", userExpr);
+                await performEvalFlatBuffer(authToken, userExpr);
+            }
+
+            // Handle other flag changes
+            if (assignments.length > 0) {
+                const expr = assignments.join("; ") + "; return 1;";
+                console.debug("Evaluating set flags expression:", expr);
+                await performEvalFlatBuffer(authToken, expr);
+            }
+
+            // Reload the objects list to reflect the change
+            const updated = await loadObjects();
+            const updatedObj = updated.find(obj => obj.obj === selectedObject.obj);
+            if (updatedObj) {
+                setSelectedObject(updatedObj);
+            }
+
+            setActionMessage("Flags updated successfully");
+            setTimeout(() => setActionMessage(null), 3000);
+            setShowEditFlagsDialog(false);
+        } catch (error) {
+            console.error("Failed to update flags:", error);
+            setEditFlagsDialogError(
+                "Failed to update flags: " + (error instanceof Error ? error.message : String(error)),
+            );
+        } finally {
+            setIsSubmittingEditFlags(false);
         }
     };
 
@@ -1947,6 +2036,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setActionMessage(null);
                                         setShowRecycleDialog(true);
                                     }}
+                                    onEditFlags={() => {
+                                        setEditFlagsDialogError(null);
+                                        setActionMessage(null);
+                                        setShowEditFlagsDialog(true);
+                                    }}
                                     isSubmittingCreate={isSubmittingCreate}
                                     isSubmittingRecycle={isSubmittingRecycle}
                                     editingName={editingName}
@@ -2212,6 +2306,17 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     onConfirm={handleDeleteVerbConfirm}
                     isSubmitting={isSubmittingDeleteVerb}
                     errorMessage={deleteVerbDialogError}
+                />
+            )}
+            {showEditFlagsDialog && selectedObject && (
+                <EditFlagsDialog
+                    key={`edit-flags-${selectedObject.obj}`}
+                    objectLabel={describeObject(selectedObject)}
+                    currentFlags={selectedObject.flags}
+                    onCancel={() => setShowEditFlagsDialog(false)}
+                    onSubmit={handleEditFlagsSubmit}
+                    isSubmitting={isSubmittingEditFlags}
+                    errorMessage={editFlagsDialogError}
                 />
             )}
         </>
@@ -3245,6 +3350,208 @@ const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
     );
 };
 
+interface EditFlagsDialogProps {
+    objectLabel: string;
+    currentFlags: number;
+    onCancel: () => void;
+    onSubmit: (flags: number) => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
+    objectLabel,
+    currentFlags,
+    onCancel,
+    onSubmit,
+    isSubmitting,
+    errorMessage,
+}) => {
+    const [user, setUser] = useState((currentFlags & (1 << 0)) !== 0);
+    const [programmer, setProgrammer] = useState((currentFlags & (1 << 1)) !== 0);
+    const [wizard, setWizard] = useState((currentFlags & (1 << 2)) !== 0);
+    const [readable, setReadable] = useState((currentFlags & (1 << 4)) !== 0);
+    const [writable, setWritable] = useState((currentFlags & (1 << 5)) !== 0);
+    const [fertile, setFertile] = useState((currentFlags & (1 << 7)) !== 0);
+
+    useEffect(() => {
+        setUser((currentFlags & (1 << 0)) !== 0);
+        setProgrammer((currentFlags & (1 << 1)) !== 0);
+        setWizard((currentFlags & (1 << 2)) !== 0);
+        setReadable((currentFlags & (1 << 4)) !== 0);
+        setWritable((currentFlags & (1 << 5)) !== 0);
+        setFertile((currentFlags & (1 << 7)) !== 0);
+    }, [currentFlags]);
+
+    const handleSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        let flags = 0;
+        if (user) flags |= 1 << 0;
+        if (programmer) flags |= 1 << 1;
+        if (wizard) flags |= 1 << 2;
+        if (readable) flags |= 1 << 4;
+        if (writable) flags |= 1 << 5;
+        if (fertile) flags |= 1 << 7;
+        onSubmit(flags);
+    };
+
+    const renderCheckbox = (
+        label: string,
+        description: string,
+        checked: boolean,
+        onChange: (checked: boolean) => void,
+        flagChar: string,
+    ) => (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "12px" }}>
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => onChange(e.target.checked)}
+                disabled={isSubmitting}
+                style={{ marginTop: "2px", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+            />
+            <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <strong>{label}</strong>
+                    <code
+                        style={{
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "0.9em",
+                            padding: "1px 4px",
+                            backgroundColor: "var(--color-bg-secondary)",
+                            borderRadius: "var(--radius-sm)",
+                        }}
+                    >
+                        {flagChar}
+                    </code>
+                </div>
+                <div style={{ fontSize: "0.9em", color: "var(--color-text-secondary)", marginTop: "2px" }}>
+                    {description}
+                </div>
+            </div>
+        </div>
+    );
+
+    return (
+        <>
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="dialog-sheet"
+                style={{ maxWidth: "520px" }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="edit-flags-title"
+            >
+                <div className="dialog-sheet-header">
+                    <h2 id="edit-flags-title">Edit Object Flags</h2>
+                </div>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
+                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                        Editing flags for <strong>{objectLabel}</strong>
+                    </p>
+
+                    {renderCheckbox(
+                        "Player",
+                        "Object is a player/user object",
+                        user,
+                        setUser,
+                        "u",
+                    )}
+
+                    {renderCheckbox(
+                        "Programmer",
+                        "Object has programmer rights",
+                        programmer,
+                        setProgrammer,
+                        "p",
+                    )}
+
+                    {renderCheckbox(
+                        "Wizard",
+                        "Object has wizard rights",
+                        wizard,
+                        setWizard,
+                        "w",
+                    )}
+
+                    {renderCheckbox(
+                        "Readable",
+                        "Object is publicly readable",
+                        readable,
+                        setReadable,
+                        "r",
+                    )}
+
+                    {renderCheckbox(
+                        "Writable",
+                        "Object is publicly writable",
+                        writable,
+                        setWritable,
+                        "W",
+                    )}
+
+                    {renderCheckbox(
+                        "Fertile",
+                        "Object can be used as a parent for new objects",
+                        fertile,
+                        setFertile,
+                        "f",
+                    )}
+
+                    {errorMessage && (
+                        <div
+                            style={{
+                                padding: "0.75em",
+                                backgroundColor: "var(--color-bg-error)",
+                                border: "1px solid var(--color-text-error)",
+                                borderRadius: "var(--radius-sm)",
+                                color: "var(--color-text-error)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: "0.5em", justifyContent: "flex-end", marginTop: "1em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-button-primary)",
+                                color: "white",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Saving…" : "Save Flags"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </>
+    );
+};
+
 interface ObjectInfoEditorProps {
     object: ObjectData;
     objects: ObjectData[];
@@ -3254,6 +3561,7 @@ interface ObjectInfoEditorProps {
     normalizeObjectInput: (raw: string) => string;
     onCreateChild: () => void;
     onRecycle: () => void;
+    onEditFlags: () => void;
     isSubmittingCreate: boolean;
     isSubmittingRecycle: boolean;
     editingName: string;
@@ -3272,6 +3580,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     normalizeObjectInput: _normalizeObjectInput,
     onCreateChild,
     onRecycle,
+    onEditFlags,
     isSubmittingCreate,
     isSubmittingRecycle,
     editingName,
@@ -3707,17 +4016,22 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                         <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
                             Flags:
                         </span>
-                        <span
+                        <button
+                            type="button"
+                            onClick={onEditFlags}
                             style={{
+                                background: "none",
                                 fontFamily: "var(--font-mono)",
                                 border: "1px solid var(--color-border-medium)",
                                 borderRadius: "var(--radius-sm)",
                                 padding: "2px 6px",
                                 fontSize: "0.95em",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
                             }}
                         >
                             {formatObjectFlags(object.flags) || "none"}
-                        </span>
+                        </button>
                     </div>
 
                     {/* Separator bar */}
