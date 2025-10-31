@@ -6,16 +6,17 @@ object EXIT
   readable: true
 
   property arrive_msg (owner: #2, flags: "rc") = 0;
-  property dest (owner: #2, flags: "rc") = LOCAL;
+  property dest (owner: #2, flags: "rc") = #-1;
   property leave_msg (owner: #2, flags: "rc") = 0;
   property nogo_msg (owner: #2, flags: "rc") = 0;
   property oarrive_msg (owner: #2, flags: "rc") = 0;
   property obvious (owner: #2, flags: "rc") = 1;
   property oleave_msg (owner: #2, flags: "rc") = 0;
   property onogo_msg (owner: #2, flags: "rc") = 0;
-  property source (owner: #2, flags: "rc") = LOCAL;
+  property source (owner: #2, flags: "rc") = #-1;
 
   override aliases = {"generic exit"};
+  override import_export_id = "exit";
   override object_size = {7191, 1084848672};
 
   verb invoke (this none this) owner: #2 flags: "rxd"

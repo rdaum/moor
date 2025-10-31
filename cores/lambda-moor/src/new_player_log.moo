@@ -6,6 +6,7 @@ object NEW_PLAYER_LOG
 
   override aliases (owner: HACKER, flags: "r") = {"Player-Creation-Log", "PCL"};
   override description = "Log of player creations.";
+  override import_export_id = "new_player_log";
   override mail_forward = {};
   override mail_notify = {#2};
   override moderated = {NEW_PLAYER_LOG};

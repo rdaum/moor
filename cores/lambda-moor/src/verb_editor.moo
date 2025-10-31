@@ -31,6 +31,7 @@ object VERB_EDITOR
   override depart_msg = "You hear the bips of keyclick, the sliding of mice and the hum of computers in the distance as %n fades slowly out of view, heading towards them.";
   override entrances = {#5749};
   override help = {};
+  override import_export_id = "verb_editor";
   override no_change_msg = "The verb has no pending changes.";
   override no_littering_msg = {
     "Keeping your verb for later work.  ",

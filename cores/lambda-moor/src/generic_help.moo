@@ -10,6 +10,7 @@ object GENERIC_HELP
 
   override aliases = {"Generic Help Database"};
   override description = "A help database of the standard form in need of a description. See `help $generic_help'...";
+  override import_export_id = "generic_help";
   override object_size = {9501, 1084848672};
 
   verb find_topics (this none this) owner: #2 flags: "rxd"

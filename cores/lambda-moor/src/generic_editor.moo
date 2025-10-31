@@ -63,6 +63,7 @@ object GENERIC_EDITOR
   override blessed_task = 1399008566;
   override description = {};
   override entrances = {#5751};
+  override import_export_id = "generic_editor";
   override object_size = {51968, 1084848672};
   override who_location_msg = "%L [editing]";
 

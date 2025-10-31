@@ -208,14 +208,34 @@ define SYSOBJ = #0;
 When you import an objdef directory, these constants become available during compilation, so verb code can use readable
 names instead of magic numbers.
 
-#### System Object Reference Translation
+#### Object Identity and Export Names
 
-mooR automatically handles the common MOO pattern of storing important object references as properties on the system
-object (#0). During export:
+mooR uses a special property called `import_export_id` to determine how objects are named in exports and referenced in `constants.moo`. This property establishes a stable identity for objects across import/export cycles.
 
-1. **Detection**: The exporter examines every property on #0 that directly points to an object
-2. **File Naming**: Objects referenced by #0 properties get exported with the property name as the filename
-3. **Constants Generation**: These symbolic names are automatically added to `constants.moo`
+**How It Works:**
+
+The system works differently depending on whether objects have `import_export_id` properties:
+
+**During Export:**
+
+If objects have `import_export_id` properties, mooR uses those values for filenames and constants:
+
+```moo
+// Object has this property:
+#789.import_export_id = "thing"
+
+// Exports as:
+thing.moo
+
+// constants.moo includes:
+define THING = #789;
+```
+
+If objects **don't** have `import_export_id` properties, mooR falls back to the #0 heuristic for backward compatibility:
+
+1. **Examines system object (#0)**: Looks for properties that directly reference other objects
+2. **Generates constants**: Creates symbolic names from those property names (e.g., `thing`, `room`, `player`)
+3. **Uses those names**: Exports objects using the discovered names
 
 For example, if #0 has these properties:
 
@@ -223,24 +243,24 @@ For example, if #0 has these properties:
 #0.thing = #789      // Generic thing prototype
 #0.room = #456       // Room prototype
 #0.player = #123     // Player prototype
-#0.wizard = #3       // Wizard object
 ```
 
-Then during export:
+Objects export as:
+- Object #789 → `thing.moo` (derived from #0.thing)
+- Object #456 → `room.moo` (derived from #0.room)
+- Object #123 → `player.moo` (derived from #0.player)
 
-- Object #789 gets exported as `thing.moo` (instead of `789.moo`)
-- Object #456 gets exported as `room.moo` (instead of `456.moo`)
-- Object #123 gets exported as `player.moo` (instead of `123.moo`)
-- Object #3 gets exported as `wizard.moo` (instead of `3.moo`)
+**During Import:**
 
-And `constants.moo` automatically includes:
+When importing an objdef created with the #0 heuristic (no `import_export_id` properties), mooR automatically creates these properties in the database:
 
 ```moo
-define THING = #789;
-define ROOM = #456;
-define PLAYER = #123;
-define WIZARD = #3;
+#789.import_export_id = "thing"
+#456.import_export_id = "room"
+#123.import_export_id = "player"
 ```
+
+This ensures that **subsequent exports** will use the `import_export_id` properties directly, maintaining stable filenames across export cycles without needing to analyze #0 properties again.
 
 #### Benefits of This System
 
@@ -250,31 +270,31 @@ self-documenting.
 **Object Number Independence**: Code can refer to `PLAYER` instead of hardcoding #123, making it portable between
 databases.
 
-**Automatic Maintenance**: The export process handles all the bookkeeping - you don't need to manually maintain the
-mappings.
+**Stable Identity**: Objects maintain their identity across import/export cycles, making version control meaningful.
 
-**Standard MOO Patterns**: This works seamlessly with existing MOO conventions like `$thing`, `$room`, etc.
+**Automatic Maintenance**: The first import automatically creates `import_export_id` properties, and subsequent exports just read them.
+
+**Backward Compatibility**: Imports from legacy textdumps or objdefs without `import_export_id` properties work seamlessly using the #0 heuristic.
 
 #### The Special `sysobj.moo` File
 
-Object #0 (the system object) is always exported as `sysobj.moo`, never as `0.moo`. This file contains all the
-properties that define the core object references for your MOO, like:
+Object #0 (the system object) is always exported as `sysobj.moo`, never as `0.moo`. This file typically contains properties that define the core object references for your MOO:
 
 ```moo
-// Example property in sysobj.moo
+// Example properties in sysobj.moo
 property thing (owner: WIZARD, flags: "rc") = THING;
 property room (owner: WIZARD, flags: "rc") = ROOM;
 property player (owner: WIZARD, flags: "rc") = PLAYER;
 ```
 
-#### Creating New Objects in Objdef Format
+**Note**: While these #0 properties provide a convenient way to access core objects, they are not required for the import/export system. The `import_export_id` property on each object controls export naming, not references from #0.
 
-When you want to create a new object directly in objdef format (rather than using MOO's in-world authoring tools), you
-need to follow a specific pattern to ensure the automatic naming system works correctly:
+#### Creating New Objects with Stable Names
+
+When creating objects that you want to have stable names across import/export cycles, you need to give them an `import_export_id` property:
 
 **Step 1: Choose an Object Number**
-Pick an unused object ID that won't conflict with existing objects. Check your current database to see what numbers are
-in use:
+Pick an unused object ID that won't conflict with existing objects. Check your current database to see what numbers are in use:
 
 ```bash
 # Look at existing objdef directory to see what numbers are taken
@@ -289,25 +309,26 @@ Add your new object to `constants.moo`:
 define MY_NEW_OBJECT = #12345;
 ```
 
-**Step 3: Add the System Object Property**
-Add a property to `sysobj.moo` that points to your new object:
+**Step 3: Create the Object File**
+Create your object file with the desired name and include the `import_export_id` property:
 
 ```moo
-// In sysobj.moo
-property my_new_object (owner: WIZARD, flags: "rc") = MY_NEW_OBJECT;
+// File: my_new_object.moo
+object MY_NEW_OBJECT
+  name: "My New Object"
+  parent: THING
+  owner: WIZARD
+
+  // This property makes the object export as my_new_object.moo
+  // Use 'override' if parent has this property, 'property' if defining for first time
+  override import_export_id = "my_new_object";
+
+  // ... other properties and verbs
+endobject
 ```
 
-**Step 4: Create the Object File**
-Create your object file with the correct name that matches the property name:
-
-```bash
-# Create file: my_new_object.moo
-# NOT: 12345.moo or MY_NEW_OBJECT.moo
-```
-
-**Step 5: Maintain the Pattern**
-If you name your file something that doesn't match this pattern during import, future exports will **not** maintain your
-custom filename. The exporter only uses symbolic names for objects that follow the #0 property pattern.
+**Step 4: Maintain the Pattern**
+The `import_export_id` property ensures stable filenames across import/export cycles. Without this property, the object will be exported as `12345.moo` (using its object number).
 
 #### Example: Adding a New Utility Object
 
@@ -320,12 +341,7 @@ Let's say you want to add a new string manipulation utility object:
    define STRING_FORMATTER = #98765;
    ```
 
-3. **Update `sysobj.moo`**:
-   ```moo
-   property string_formatter (owner: WIZARD, flags: "rc") = STRING_FORMATTER;
-   ```
-
-4. **Create `string_formatter.moo`**:
+3. **Create `string_formatter.moo`**:
    ```moo
    object STRING_FORMATTER
      name: "String Formatting Utilities"
@@ -333,19 +349,23 @@ Let's say you want to add a new string manipulation utility object:
      owner: WIZARD
      flags: "upw"
 
+     // This property controls the export filename
+     // Use 'override' if parent (THING) has this property defined
+     override import_export_id = "string_formatter";
+
      // ... properties and verbs would go here
    endobject
    ```
 
-5. **Import and Export Test**: After importing this objdef directory and then exporting it again, the object will
-   continue to be exported as `string_formatter.moo` because it follows the pattern.
+4. **Import and Export Test**: After importing this objdef directory and then exporting it again, the object will
+   continue to be exported as `string_formatter.moo` because it has an `import_export_id` property.
 
 #### Common Mistakes to Avoid
 
-- **Wrong filename**: Creating `98765.moo` instead of `string_formatter.moo`
-- **Missing sysobj property**: Adding to constants.moo but forgetting the #0 property
-- **Case mismatch**: Using `STRING_FORMATTER.moo` instead of `string_formatter.moo`
-- **Skipping constants**: Adding the sysobj property but not defining the constant
+- **Wrong filename**: The filename should match the `import_export_id` value
+- **Missing import_export_id**: Without this property, exports use object number (e.g., `98765.moo`)
+- **Case mismatch**: Filenames are lowercase - use `"string_formatter"` not `"STRING_FORMATTER"`
+- **Inconsistent naming**: Ensure constants.moo, filename, and import_export_id all match
 
 Each `.moo` file is human-readable and contains the complete definition of that object, including:
 

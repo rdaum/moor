@@ -13,6 +13,7 @@ object GENERIC_BIGLIST_HOME
   override description = {
     "This is the object you want to use as a parent in order to @create a place for your biglists to live.  Suitably sick souls may wish to reimplement :_genprop and :_kill to reclaim unused properties (this :_kill just throws them away and this :_genprop just relentlessly advances....  who cares).  Anyway, you'll need to look at $biglist before this will make sense."
   };
+  override import_export_id = "generic_biglist_home";
   override object_size = {3606, 1084848672};
 
   verb _make (this none this) owner: #2 flags: "rxd"

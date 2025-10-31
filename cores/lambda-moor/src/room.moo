@@ -5,7 +5,7 @@ object ROOM
   fertile: true
   readable: true
 
-  property blessed_object (owner: #2, flags: "rc") = LOCAL;
+  property blessed_object (owner: #2, flags: "rc") = #-1;
   property blessed_task (owner: #2, flags: "rc") = 0;
   property ctype (owner: #2, flags: "rc") = 3;
   property dark (owner: #2, flags: "rc") = 0;
@@ -20,6 +20,7 @@ object ROOM
   property who_location_msg (owner: #2, flags: "rc") = "%T";
 
   override aliases = {"generic room"};
+  override import_export_id = "room";
   override object_size = {28944, 1084848672};
 
   verb confunc (this none this) owner: #2 flags: "rxd"

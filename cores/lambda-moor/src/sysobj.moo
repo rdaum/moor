@@ -4,7 +4,7 @@ object SYSOBJ
   owner: #2
   readable: true
 
-  property ambiguous_match (owner: #2, flags: "rc") = AMBIGUOUS_MATCH;
+  property ambiguous_match (owner: #2, flags: "rc") = #-2;
   property big_mail_recipient (owner: #2, flags: "rc") = BIG_MAIL_RECIPIENT;
   property biglist (owner: #2, flags: "rc") = BIGLIST;
   property build_options (owner: #2, flags: "rc") = BUILD_OPTIONS;
@@ -72,7 +72,7 @@ object SYSOBJ
   property editor_help (owner: #2, flags: "rc") = EDITOR_HELP;
   property error (owner: #2, flags: "rc") = ERROR;
   property exit (owner: #2, flags: "rc") = EXIT;
-  property failed_match (owner: #2, flags: "rc") = FAILED_MATCH;
+  property failed_match (owner: #2, flags: "rc") = #-3;
   property feature (owner: #2, flags: "rc") = FEATURE;
   property feature_warehouse (owner: #2, flags: "r") = FEATURE_WAREHOUSE;
   property force_input_count (owner: #2, flags: "rc") = 19398082;
@@ -102,7 +102,7 @@ object SYSOBJ
   property limbo (owner: #2, flags: "rc") = LIMBO;
   property list_editor (owner: #2, flags: "rc") = LIST_EDITOR;
   property list_utils (owner: #2, flags: "rc") = LIST_UTILS;
-  property local (owner: #2, flags: "rc") = LOCAL;
+  property local (owner: #2, flags: "rc") = #-1;
   property lock_utils (owner: #2, flags: "rc") = LOCK_UTILS;
   property login (owner: #2, flags: "r") = LOGIN;
   property mail_agent (owner: #2, flags: "rc") = MAIL_AGENT;
@@ -127,7 +127,7 @@ object SYSOBJ
   property no_one (owner: #2, flags: "r") = NO_ONE;
   property note (owner: #2, flags: "rc") = NOTE;
   property note_editor (owner: #2, flags: "rc") = NOTE_EDITOR;
-  property nothing (owner: #2, flags: "rc") = LOCAL;
+  property nothing (owner: #2, flags: "rc") = #-1;
   property object_quota_utils (owner: #2, flags: "rc") = OBJECT_QUOTA_UTILS;
   property object_utils (owner: #2, flags: "rc") = OBJECT_UTILS;
   property paranoid_db (owner: #2, flags: "r") = PARANOID_DB;
@@ -172,6 +172,7 @@ object SYSOBJ
 
   override aliases = {"The System Object"};
   override description = "The known universe.";
+  override import_export_id = "sysobj";
   override object_size = {23528, 1084848672};
 
   verb do_login_command (this none this) owner: #2 flags: "rxd"

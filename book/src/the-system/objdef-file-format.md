@@ -210,6 +210,39 @@ property config (owner: WIZARD, flags: "rc") = ["debug" -> true, "level" -> 5];
 property parent_ref (owner: WIZARD, flags: "rc") = ROOM;
 ```
 
+### Special Property: import_export_id
+
+The `import_export_id` property is a special property that controls how objects are named during export:
+
+```moo
+property import_export_id (owner: WIZARD, flags: "rc") = "my_object_name";
+```
+
+**Purpose**: This property establishes stable identity for objects across import/export cycles.
+
+**Behavior**:
+- If present, the object exports as `<value>.moo` (e.g., `my_object_name.moo`)
+- If absent, the object exports as `<object_number>.moo` (e.g., `123.moo`)
+- The value appears in `constants.moo` as a symbolic constant
+
+**Type**: Must be a String or Symbol
+
+**Recommended Flags**: `"rc"` (readable, chown) - should be immutable after creation
+
+**Example**:
+```moo
+object #789
+  name: "Generic Thing"
+  parent: ROOT
+  owner: WIZARD
+
+  // This makes it export as thing.moo
+  property import_export_id (owner: WIZARD, flags: "rc") = "thing";
+endobject
+```
+
+See [Object Identity and Export Names](object-packaging.md#object-identity-and-export-names) for more details on how this property is used.
+
 ## Verb Definitions
 
 Verbs define executable code on objects.

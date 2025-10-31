@@ -541,6 +541,7 @@ object MAIL_HELP
 
   override aliases = {"Mail Commands Help Db"};
   override description = "This help database contains topics relating to the general use of the mail system.";
+  override import_export_id = "mail_help";
   override index_cache = {"mail-index"};
   override object_size = {36642, 1084848672};
 endobject

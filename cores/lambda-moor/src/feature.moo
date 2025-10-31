@@ -17,6 +17,7 @@ object FEATURE
     ".Features_Huh Object"
   };
   override description = "This is the Generic Feature Object.  It is not meant to be used as a feature object itself, but is handy for making new feature objects.";
+  override import_export_id = "feature";
   override object_size = {6698, 1084848672};
 
   verb help_msg (this none this) owner: HACKER flags: "rxd"

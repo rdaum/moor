@@ -4,7 +4,7 @@ object MATCH_UTILS
   owner: HACKER
   readable: true
 
-  property matching_room (owner: HACKER, flags: "r") = LOCAL;
+  property matching_room (owner: HACKER, flags: "r") = #-1;
   property ordinal_regexp (owner: HACKER, flags: "rc") = "%<%(first%|second%|third%|fourth%|fifth%|sixth%|seventh%|eighth%|ninth%|tenth%|1st%|2nd%|3rd%|4th%|5th%|6th%|7th%|8th%|9th%|10th%)%>";
   property ordn (owner: HACKER, flags: "rc") = {
     "first",
@@ -34,6 +34,7 @@ object MATCH_UTILS
     "",
     "For more documentation, see help $match_utils:<specific verb>."
   };
+  override import_export_id = "match_utils";
   override object_size = {9401, 1084848672};
 
   verb match (this none this) owner: HACKER flags: "rxd"

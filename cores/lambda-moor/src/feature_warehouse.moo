@@ -6,6 +6,7 @@ object FEATURE_WAREHOUSE
 
   override aliases = {"Feature Warehouse", "warehouse"};
   override dark = 0;
+  override import_export_id = "feature_warehouse";
   override object_size = {1594, 1084848672};
   override opened = 1;
 

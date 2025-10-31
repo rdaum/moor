@@ -56,6 +56,7 @@ object SERVER_OPTIONS
   property support_numeric_verbname_strings (owner: HACKER, flags: "r") = 0;
 
   override aliases = {"Server Options"};
+  override import_export_id = "server_options";
   override object_size = {6853, 1084848672};
 
   verb help_msg (this none this) owner: HACKER flags: "rxd"

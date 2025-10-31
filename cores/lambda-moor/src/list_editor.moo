@@ -31,6 +31,7 @@ object LIST_EDITOR
     {"w*hat", "abort", "q*uit,done,pause"}
   };
   override depart_msg = "%N heads off to edit some properties.";
+  override import_export_id = "list_editor";
   override no_littering_msg = {
     "Partially edited list value will be here when you get back.",
     "To return, give the `@pedit' command with no arguments.",
@@ -40,7 +41,7 @@ object LIST_EDITOR
   override return_msg = "%N comes back from editing properties.";
   override stateprops = {
     {"properties", ""},
-    {"objects", LOCAL},
+    {"objects", #-1},
     {"texts", 0},
     {"changes", 0},
     {"inserting", 1},

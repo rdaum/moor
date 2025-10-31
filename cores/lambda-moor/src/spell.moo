@@ -13104,6 +13104,7 @@ object SPELL
   override aliases = {"Mr. Spell", "spell"};
   override data = 3;
   override description = "For help on using the speller, use 'help spelling' and 'help @spell'.";
+  override import_export_id = "spell";
   override object_size = {1298817, 1084848672};
 
   verb description (this none this) owner: HACKER flags: "rxd"

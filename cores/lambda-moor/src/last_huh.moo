@@ -6,6 +6,7 @@ object LAST_HUH
 
   override aliases = {"Player Last_huh Verbs"};
   override description = "A repository of last-resort player verbs to be called by $player:last_huh";
+  override import_export_id = "last_huh";
   override object_size = {4598, 1084848672};
 
   verb "@*" (this none this) owner: #2 flags: "rxd"

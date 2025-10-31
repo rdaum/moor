@@ -25,6 +25,7 @@ object PERM_UTILS
     ":caller()",
     "  -- returns the first caller in the callers() stack distinct from `this'"
   };
+  override import_export_id = "perm_utils";
   override object_size = {3491, 1084848672};
 
   verb controls (this none this) owner: #2 flags: "rxd"

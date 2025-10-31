@@ -24,6 +24,7 @@ object HTTP
   property nonalpha (owner: #2, flags: "rc") = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
   override aliases = {"HTTP Server"};
+  override import_export_id = "http";
   override object_size = {7309, 1529542623};
 
   verb handle_connection (this none this) owner: #2 flags: "rxd"

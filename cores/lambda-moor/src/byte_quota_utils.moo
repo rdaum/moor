@@ -92,6 +92,7 @@ object BYTE_QUOTA_UTILS
     "",
     "And don't forget $object_quota_utils, which has the object based implementation."
   };
+  override import_export_id = "byte_quota_utils";
   override object_size = {32429, 1084848672};
 
   verb initialize_quota (this none this) owner: HACKER flags: "rxd"

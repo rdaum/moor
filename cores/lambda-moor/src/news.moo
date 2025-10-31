@@ -13,6 +13,7 @@ object NEWS
   override aliases = {"News"};
   override description = "It's the current issue of the News, dated %d.";
   override expire_period = 0;
+  override import_export_id = "news";
   override last_msg_date = 1084848652;
   override last_used_time = 1084848652;
   override mail_forward = {};

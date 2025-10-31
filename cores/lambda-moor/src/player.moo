@@ -16,7 +16,6 @@ object PLAYER
   property first_connect_time (owner: #2, flags: "r") = 2147483647;
   property gaglist (owner: #2, flags: "rc") = {};
   property gender (owner: #2, flags: "rc") = "neuter";
-  property oauth2_identities (owner: #2, flags: "") = {};
   property help (owner: #2, flags: "rc") = 0;
   property home (owner: #2, flags: "rc") = PLAYER_START;
   property last_connect_attempt (owner: #2, flags: "") = 0;
@@ -30,6 +29,7 @@ object PLAYER
   property linesleft (owner: HACKER, flags: "r") = 0;
   property linetask (owner: HACKER, flags: "r") = {0, 0};
   property more_msg (owner: #2, flags: "rc") = "*** More ***  %n lines left.  Do @more [rest|flush] for more.";
+  property oauth2_identities (owner: #2, flags: "") = {};
   property owned_objects (owner: #2, flags: "r") = {};
   property ownership_quota (owner: HACKER, flags: "") = 0;
   property page_absent_msg (owner: #2, flags: "rc") = "%N is not currently logged in.";
@@ -54,6 +54,7 @@ object PLAYER
 
   override aliases = {"generic player"};
   override description = "You see a player who should type '@describe me as ...'.";
+  override import_export_id = "player";
   override object_size = {97774, 1084848672};
 
   verb init_for_core (this none this) owner: #2 flags: "rxd"

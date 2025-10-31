@@ -403,6 +403,7 @@ object EDITOR_HELP
 
   override aliases = {"Editor Help"};
   override description = 0;
+  override import_export_id = "editor_help";
   override index_cache = {"edit-index"};
   override object_size = {21862, 1084848672};
 endobject

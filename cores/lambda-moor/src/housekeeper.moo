@@ -7,7 +7,7 @@ object HOUSEKEEPER
   readable: true
 
   property clean (owner: HOUSEKEEPER, flags: "r") = {};
-  property cleaning (owner: HOUSEKEEPER, flags: "rc") = LOCAL;
+  property cleaning (owner: HOUSEKEEPER, flags: "rc") = #-1;
   property cleaning_index (owner: HOUSEKEEPER, flags: "rc") = 0;
   property destination (owner: HOUSEKEEPER, flags: "rc") = {};
   property drop_off_msg (owner: HOUSEKEEPER, flags: "rc") = "%[tpsc] arrives to drop off %n, who is sound asleep.";
@@ -27,6 +27,7 @@ object HOUSEKEEPER
   override aliases (owner: #2, flags: "r") = {"housekeeper"};
   override description = "A very clean, neat, tidy person who doesn't mind lugging players and their gear all over the place.";
   override features = {PASTING_FEATURE, STAGE_TALK};
+  override import_export_id = "housekeeper";
   override last_disconnect_time = 2147483647;
   override linelen = -80;
   override mail_forward = {#2};

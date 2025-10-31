@@ -21,7 +21,6 @@ object ERROR
     E_INVARG,
     E_QUOTA,
     E_FLOAT
-  
   };
   property names (owner: HACKER, flags: "rc") = {
     "E_NONE",
@@ -48,6 +47,7 @@ object ERROR
     "",
     "raise(error) actually raises the error."
   };
+  override import_export_id = "error";
   override object_size = {7458, 1084848672};
 
   verb raise (this none this) owner: HACKER flags: "rxd"

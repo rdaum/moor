@@ -19,6 +19,7 @@ object BUILD_OPTIONS
   override _namelist = "!dig_room!dig_exit!create_flags!bi_create!audit_bytes!audit_float!";
   override aliases = {"Builder Options"};
   override description = {"Option package for $builder commands.  See `help @build-options'."};
+  override import_export_id = "build_options";
   override names = {
     "dig_room",
     "dig_exit",

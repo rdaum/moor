@@ -5,12 +5,12 @@ object WIZ
   readable: true
 
   property advertised (owner: #2, flags: "rc") = 1;
-  property mail_identity (owner: #2, flags: "c") = LOCAL;
+  property mail_identity (owner: #2, flags: "c") = #-1;
   property newt_msg (owner: #2, flags: "rc") = "%n @newts %d (%[#d])";
   property newt_victim_msg (owner: #2, flags: "rc") = "";
   property programmer_msg (owner: #2, flags: "rc") = "%d is now a programmer.";
   property programmer_victim_msg (owner: #2, flags: "rc") = "You are now a programmer.";
-  property public_identity (owner: #2, flags: "rc") = LOCAL;
+  property public_identity (owner: #2, flags: "rc") = #-1;
   property toad_msg (owner: #2, flags: "rc") = "%n @toads %d (%[#d])";
   property toad_victim_msg (owner: #2, flags: "rc") = "Have a nice life...";
 
@@ -18,6 +18,7 @@ object WIZ
   override description = "You see a wizard who chooses not to reveal its true appearance.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override help = WIZ_HELP;
+  override import_export_id = "wiz";
   override mail_notify (owner: #2, flags: "rc");
   override object_size = {56607, 1084848672};
   override password = "really impossible password to type";

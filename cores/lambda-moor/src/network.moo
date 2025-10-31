@@ -117,6 +117,7 @@ object NETWORK
     "",
     "                "
   };
+  override import_export_id = "network";
   override object_size = {22932, 1084848672};
 
   verb parse_address (this none this) owner: #2 flags: "rxd"

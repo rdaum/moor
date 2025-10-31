@@ -12,6 +12,7 @@ object REGISTRATION_DB
   property total_pruned_people (owner: HACKER, flags: "rc") = 0;
 
   override aliases = {"Registration Database"};
+  override import_export_id = "registration_db";
   override node_perms = "";
   override object_size = {8549, 1084848672};
 

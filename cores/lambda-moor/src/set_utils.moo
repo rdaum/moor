@@ -32,6 +32,7 @@ object SET_UTILS
     " equal(set1, set2)",
     "        => true if and only if set1 and set2 are equal"
   };
+  override import_export_id = "set_utils";
   override object_size = {5574, 1084848672};
 
   verb union (this none this) owner: HACKER flags: "rxd"

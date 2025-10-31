@@ -48,6 +48,7 @@ object SEQ_UTILS
     "(*) i.e., integers in the range [$minint+1..$maxint].  The implementation depends on $minint never being included in a sequence.",
     ""
   };
+  override import_export_id = "seq_utils";
   override object_size = {17130, 1084848672};
 
   verb "add remove" (this none this) owner: HACKER flags: "rxd"

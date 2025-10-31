@@ -26,6 +26,7 @@ object CONTAINER
   property remove_msg (owner: #2, flags: "rc") = "You remove %d from %i.";
 
   override aliases = {"generic container"};
+  override import_export_id = "container";
   override object_size = {9415, 1084848672};
 
   verb "p*ut in*sert d*rop" (any in this) owner: #2 flags: "rxd"

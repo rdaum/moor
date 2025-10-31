@@ -6,6 +6,7 @@ object NEWT_LOG
 
   override aliases (owner: HACKER, flags: "r") = {"Site-Locks"};
   override description = "Notes on annoying sites.";
+  override import_export_id = "newt_log";
   override mail_forward = {};
   override mail_notify = {#2};
   override moderated = 1;

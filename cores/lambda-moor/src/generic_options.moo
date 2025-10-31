@@ -12,6 +12,7 @@ object GENERIC_OPTIONS
 
   override aliases = {"Generic Option Package"};
   override description = "an option package in need of a description.  See `help $generic_option'...";
+  override import_export_id = "generic_options";
   override object_size = {12729, 1084848672};
 
   verb get (this none this) owner: HACKER flags: "rxd"

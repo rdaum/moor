@@ -4,7 +4,7 @@ object COMMAND_UTILS
   owner: #2
   readable: true
 
-  property feature_task (owner: HACKER, flags: "") = {388912170, "@abort", {}, "", LOCAL, "", "", LOCAL, ""};
+  property feature_task (owner: HACKER, flags: "") = {388912170, "@abort", {}, "", #-1, "", "", #-1, ""};
   property lag_samples (owner: #2, flags: "r") = {};
 
   override description = {
@@ -50,6 +50,7 @@ object COMMAND_UTILS
     "-----------------------------------",
     ":suspend(args)  -- Handle PREFIX and SUFFIX for clients in long commands."
   };
+  override import_export_id = "command_utils";
   override object_size = {18931, 1084848672};
 
   verb object_match_failed (this none this) owner: #2 flags: "rxd"

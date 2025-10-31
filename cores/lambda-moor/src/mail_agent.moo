@@ -34,6 +34,7 @@ object MAIL_AGENT
     "Avaliable aliases:",
     ""
   };
+  override import_export_id = "mail_agent";
   override object_size = {50262, 1084848672};
 
   verb resolve_addr (this none this) owner: HACKER flags: "rxd"

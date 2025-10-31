@@ -4,6 +4,7 @@ object GARBAGE
   readable: true
 
   property aliases (owner: HACKER, flags: "r") = {"garbage"};
+  property import_export_id (owner: HACKER, flags: "r") = "garbage";
 
   verb description (this none this) owner: #2 flags: "rxd"
     return "Garbage object " + tostr(this) + ".";

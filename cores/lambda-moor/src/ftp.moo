@@ -9,6 +9,7 @@ object FTP
   property trusted (owner: #2, flags: "rc") = 1;
 
   override aliases = {"FTP utilities"};
+  override import_export_id = "ftp";
   override object_size = {9099, 1084848672};
 
   verb open (this none this) owner: #2 flags: "rxd"

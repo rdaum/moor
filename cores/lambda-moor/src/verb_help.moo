@@ -32,6 +32,7 @@ object VERB_HELP
 
   override aliases = {"verbhelp", "vh"};
   override description = "A `help database' that knows about all of the documented verbs.";
+  override import_export_id = "verb_help";
   override object_size = {3958, 1084848672};
 
   verb find_topics (this none this) owner: HACKER flags: "rxd"

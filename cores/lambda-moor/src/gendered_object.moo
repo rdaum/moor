@@ -18,6 +18,7 @@ object GENDERED_OBJECT
   property psc (owner: #2, flags: "rc") = "It";
 
   override aliases = {"Generic Gendered Object"};
+  override import_export_id = "gendered_object";
   override object_size = {2378, 1084848672};
 
   verb set_gender (this none this) owner: #2 flags: "rxd"

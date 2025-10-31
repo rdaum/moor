@@ -55,6 +55,7 @@ object OBJECT_UTILS
     "   all_properties_suspended           ",
     "   descendants_with_property_suspended"
   };
+  override import_export_id = "object_utils";
   override object_size = {21564, 1084848672};
 
   verb has_property (this none this) owner: #2 flags: "rxd"

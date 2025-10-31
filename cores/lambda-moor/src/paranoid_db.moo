@@ -28,6 +28,7 @@ object PARANOID_DB
     "   :ensure_props_exist(who,linesname,dataname):  creates the above",
     "   :GC() --- loops over all data and verifies they're for players."
   };
+  override import_export_id = "paranoid_db";
   override object_size = {5921, 1084848672};
 
   verb ensure_props_exist (this none this) owner: HACKER flags: "rxd"

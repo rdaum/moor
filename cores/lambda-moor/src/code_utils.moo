@@ -87,7 +87,6 @@ object CODE_UTILS
     E_INVARG,
     E_QUOTA,
     E_FLOAT
-  
   };
   property error_names (owner: HACKER, flags: "rc") = {
     "E_NONE",
@@ -196,6 +195,7 @@ object CODE_UTILS
     "argstr(verb,args[,argstr] => returns a corrected argstr (see full verb help)",
     "substitute(string,subs)   => subs in form {{\"target\", \"sub\"}, {...}, ...}"
   };
+  override import_export_id = "code_utils";
   override object_size = {59174, 1084848672};
 
   verb eval_d (any any any) owner: #2 flags: "rx"

@@ -3,12 +3,7 @@ object SITE_DB
   parent: GENERIC_DB
   owner: HACKER
 
-  property " l" (owner: HACKER, flags: "") = {
-    "ocal",
-    "",
-    {"localdomain", "localhost.localdomain"},
-    {{"localhost"}, {#2}}
-  };
+  property " l" (owner: HACKER, flags: "") = {"ocal", "", {"localdomain", "localhost.localdomain"}, {{"localhost"}, {#2}}};
   property alphabet (owner: HACKER, flags: "rc") = "abcdefghijklmnopqrstuvwxy0123456789_z";
   property domain (owner: HACKER, flags: "r") = "localdomain";
   property prune_progress (owner: HACKER, flags: "c") = "aaa";
@@ -23,6 +18,7 @@ object SITE_DB
     "This object holds a db of places from which players have connected (see `help $site_db').",
     "The site blacklist and the graylist live as well (see `help blacklist')."
   };
+  override import_export_id = "site_db";
   override node_perms = "";
   override object_size = {13167, 1084848672};
 

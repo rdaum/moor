@@ -424,6 +424,7 @@ object CONVERT_UTILS
     "            multiplicative conversion factor. See the verb help for details",
     "            and input format.\""
   };
+  override import_export_id = "convert_utils";
   override object_size = {30721, 1084848672};
 
   verb "dd_to_dms dh_to_hms" (this none this) owner: HACKER flags: "rxd"

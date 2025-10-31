@@ -13,6 +13,7 @@ object STAGE_TALK
   override help_msg = {
     "This feature contains various verbs used in stage talk, which allows players to describe their actions in terms of stage directions instead of prose."
   };
+  override import_export_id = "stage_talk";
   override object_size = {4109, 1084848672};
 
   verb "stage `* -*" (any any any) owner: HACKER flags: "rxd"

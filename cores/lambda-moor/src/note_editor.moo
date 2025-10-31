@@ -31,6 +31,7 @@ object NOTE_EDITOR
   override depart_msg = "A small swarm of 3x5 index cards arrives, engulfs %n, and carries %o away.";
   override entrances = {#5750};
   override help = {};
+  override import_export_id = "note_editor";
   override no_change_msg = "Note has not been modified since the last save.";
   override no_littering_msg = {
     "Partially edited text will be here when you get back.",

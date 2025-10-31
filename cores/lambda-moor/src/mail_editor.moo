@@ -55,6 +55,7 @@ object MAIL_EDITOR
   override entrances = {#16500};
   override exit_on_abort = 1;
   override help = {};
+  override import_export_id = "mail_editor";
   override no_littering_msg = {
     "Saving your message so that you can finish it later.",
     "To come back, give the `@send' command with no arguments.",

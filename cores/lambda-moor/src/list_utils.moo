@@ -57,6 +57,7 @@ object LIST_UTILS
     "sort_suspended          iassoc_suspended          sort_alist_suspended",
     "reverse_suspended       randomly_permute_suspended"
   };
+  override import_export_id = "list_utils";
   override object_size = {29031, 1084848672};
 
   verb make (this none this) owner: HACKER flags: "rxd"

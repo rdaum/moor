@@ -72,6 +72,7 @@ object MATRIX_UTILS
     ":is_partial_ordering (M) => 1 if M is a reflexive, asymmetric, transitive",
     "                            relation."
   };
+  override import_export_id = "matrix_utils";
   override object_size = {29765, 1084848672};
 
   verb "vector_add vector_sub vector_mul vector_div" (this none this) owner: HACKER flags: "rxd"

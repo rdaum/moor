@@ -94,6 +94,3 @@ define CONVERT_UTILS = #93;
 define GENDERED_OBJECT = #94;
 define LIST_EDITOR = #95;
 define HTTP = #97;
-define FAILED_MATCH = #-3;
-define AMBIGUOUS_MATCH = #-2;
-define LOCAL = #-1;

@@ -592,6 +592,7 @@ object BUILDER_HELP
 
   override aliases = {"Builder Help DB", "BHD"};
   override description = "This help database contains topics about the generic builder and building commands.";
+  override import_export_id = "builder_help";
   override index_cache = {"builder-index"};
   override object_size = {39390, 1084848672};
 

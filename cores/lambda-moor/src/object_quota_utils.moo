@@ -11,6 +11,7 @@ object OBJECT_QUOTA_UTILS
     "This is the Object Quota Utilities utility package.  See `help $object_quota_utils' for more details."
   };
   override help_msg = "This is the default package that interfaces to the $player/$prog quota manipulation verbs.";
+  override import_export_id = "object_quota_utils";
   override object_size = {6728, 1084848672};
 
   verb initialize_quota (this none this) owner: HACKER flags: "rxd"

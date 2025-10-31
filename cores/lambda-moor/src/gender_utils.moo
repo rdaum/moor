@@ -111,6 +111,7 @@ object GENDER_UTILS
     "  :get_pronoun     (which,object) -- return pronoun for a given object",
     "  :get_conj*ugation(verbspec,object) -- return appropriately conjugated verb"
   };
+  override import_export_id = "gender_utils";
   override object_size = {12822, 1084848672};
 
   verb set (this none this) owner: #2 flags: "rxd"

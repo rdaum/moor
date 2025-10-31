@@ -44,6 +44,7 @@ object GOPHER
     "   $gopher:type(\"I\") => \"image\"",
     ""
   };
+  override import_export_id = "gopher";
   override object_size = {15578, 1084848672};
 
   verb get_now (this none this) owner: #2 flags: "rxd"

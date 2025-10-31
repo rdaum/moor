@@ -15,6 +15,7 @@ object THING
   property take_succeeded_msg (owner: #2, flags: "rc") = "You take %t.";
 
   override aliases = {"generic thing"};
+  override import_export_id = "thing";
   override object_size = {4787, 1084848672};
 
   verb "g*et t*ake" (this none none) owner: #2 flags: "rxd"

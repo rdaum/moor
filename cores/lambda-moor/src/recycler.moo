@@ -12,6 +12,7 @@ object RECYCLER
 
   override aliases = {"Recycling Center", "Center"};
   override description = "Object reuse. Call $recycler:_create() to create an object (semantics the same as create()), $recycler:_recycle() to recycle an object. Will create a new object if nothing available in its contents. Note underscores, to avoid builtin :recycle() verb called when objects are recycled. Uses $building_utils:recreate() to prepare objects.";
+  override import_export_id = "recycler";
   override object_size = {11836, 1084848672};
 
   verb _recreate (this none this) owner: #2 flags: "rxd"

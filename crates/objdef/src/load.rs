@@ -288,6 +288,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
         info!("Defining and compiling {} verbs...", num_loaded_verbs);
         self.define_verbs(&options)?;
 
+        // Auto-create import_export_id properties if we loaded using the heuristic
+        self.create_import_export_ids_if_needed(&context)?;
+
         Ok(ObjDefLoaderResults {
             commit: !options.dry_run,
             conflicts: self.conflicts.clone(),
@@ -1181,6 +1184,138 @@ impl<'a> ObjectDefinitionLoader<'a> {
             num_loaded_property_definitions,
             num_loaded_property_overrides,
         })
+    }
+
+    /// Create import_export_id properties for all loaded objects if they don't already exist.
+    /// This is called after loading using the #0 heuristic to establish stable IDs for future dumps.
+    fn create_import_export_ids_if_needed(
+        &mut self,
+        context: &ObjFileContext,
+    ) -> Result<(), ObjdefLoaderError> {
+        use moor_common::util::BitEnum;
+        use moor_var::v_string;
+
+        let import_export_id_sym = crate::import_export_id();
+
+        // Check if ANY objects already have import_export_id
+        let any_have_id = self.object_definitions.values().any(|(_, def)| {
+            def.property_definitions
+                .iter()
+                .any(|pd| pd.name == import_export_id_sym)
+                || def
+                    .property_overrides
+                    .iter()
+                    .any(|po| po.name == import_export_id_sym)
+        });
+
+        // If any object has it, assume they all should and we don't need to auto-create
+        if any_have_id {
+            return Ok(());
+        }
+
+        // Extract the constant names from the context (these come from constants.moo)
+        let constants = context.constants();
+
+        // Build a map of Obj -> constant_name from the constants
+        let mut obj_to_constant: std::collections::HashMap<Obj, String> =
+            std::collections::HashMap::new();
+        for (name, value) in constants.iter() {
+            if let Some(obj) = value.as_object() {
+                obj_to_constant.insert(obj, name.to_string().to_lowercase());
+            }
+        }
+
+        // Build parent map to check inheritance
+        let parent_map: std::collections::HashMap<Obj, Obj> = self
+            .object_definitions
+            .values()
+            .map(|(_, def)| (def.oid, def.parent))
+            .collect();
+
+        // Helper to check if any ancestor will define the property
+        let has_ancestor_defining = |obj: &Obj| -> bool {
+            let mut current = *obj;
+            while let Some(&parent) = parent_map.get(&current) {
+                if parent == NOTHING {
+                    break;
+                }
+                if obj_to_constant.contains_key(&parent) {
+                    return true;
+                }
+                current = parent;
+            }
+            false
+        };
+
+        // Sort objects by hierarchy depth (parents before children)
+        // Calculate depth for each object
+        let mut obj_depths: std::collections::HashMap<Obj, usize> =
+            std::collections::HashMap::new();
+        for obj in self.object_definitions.keys() {
+            let mut depth = 0;
+            let mut current = *obj;
+            while let Some(&parent) = parent_map.get(&current) {
+                if parent == NOTHING {
+                    break;
+                }
+                depth += 1;
+                current = parent;
+            }
+            obj_depths.insert(*obj, depth);
+        }
+
+        // Sort objects by depth (shallowest first)
+        let mut sorted_objs: Vec<_> = self.object_definitions.keys().copied().collect();
+        sorted_objs.sort_by_key(|obj| obj_depths.get(obj).copied().unwrap_or(0));
+
+        // For each loaded object (in dependency order), create the import_export_id property
+        for obj in sorted_objs {
+            if let Some(constant_name) = obj_to_constant.get(&obj) {
+                let def = &self.object_definitions[&obj].1;
+
+                // Check if a parent has already defined this property
+                if has_ancestor_defining(&obj) {
+                    // Parent defines it, so we need to set (override) the value
+                    self.loader
+                        .set_property(
+                            &obj,
+                            import_export_id_sym,
+                            None, // Keep parent's owner
+                            None, // Keep parent's flags
+                            Some(v_string(constant_name.clone())),
+                        )
+                        .map_err(|wse| {
+                            ObjdefLoaderError::CouldNotDefineProperty(
+                                "<import_export_id>".to_string(),
+                                obj,
+                                "import_export_id".to_string(),
+                                wse,
+                            )
+                        })?;
+                } else {
+                    // No parent defines it, so we define it
+                    self.loader
+                        .define_property(
+                            &obj,
+                            &obj,
+                            import_export_id_sym,
+                            &def.owner,
+                            BitEnum::new_with(PropFlag::Read),
+                            Some(v_string(constant_name.clone())),
+                        )
+                        .map_err(|wse| {
+                            ObjdefLoaderError::CouldNotDefineProperty(
+                                "<import_export_id>".to_string(),
+                                obj,
+                                "import_export_id".to_string(),
+                                wse,
+                            )
+                        })?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

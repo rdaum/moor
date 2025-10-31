@@ -10,7 +10,7 @@ object WIZ_UTILS
   property chparent_restricted (owner: #2, flags: "") = {};
   property default_player_quota (owner: #2, flags: "rc") = 7;
   property default_programmer_quota (owner: #2, flags: "rc") = 7;
-  property expiration_progress (owner: #2, flags: "rc") = LOCAL;
+  property expiration_progress (owner: #2, flags: "rc") = #-1;
   property expiration_recipient (owner: #2, flags: "rc") = {#2};
   property missed_help_counters (owner: #2, flags: "r") = {};
   property missed_help_strings (owner: #2, flags: "r") = {};
@@ -214,6 +214,7 @@ object WIZ_UTILS
     "    *all descendants*.  property ownership is changed on descendants ",
     "    where necessary."
   };
+  override import_export_id = "wiz_utils";
   override object_size = {55744, 1084848672};
 
   verb set_programmer (this none this) owner: #2 flags: "rxd"

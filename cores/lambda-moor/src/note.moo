@@ -11,6 +11,7 @@ object NOTE
 
   override aliases = {"generic note"};
   override description = "There appears to be some writing on the note ...";
+  override import_export_id = "note";
   override object_size = {6265, 1084848672};
 
   verb "r*ead" (this none none) owner: #2 flags: "rxd"

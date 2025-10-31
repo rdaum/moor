@@ -8,6 +8,7 @@ object NEW_PROG_LOG
 
   override aliases (owner: HACKER, flags: "r") = {"New-Prog-Log", "New_Prog_Log", "NPL"};
   override description = "Record of who's been made a @programmer.";
+  override import_export_id = "new_prog_log";
   override mail_forward = {};
   override mail_notify = {#2};
   override moderated = 1;

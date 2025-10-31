@@ -1149,6 +1149,7 @@ object HELP
     "",
     "See the description of $generic_help for more detail."
   };
+  override import_export_id = "help";
   override index_cache = {"gen-index"};
   override object_size = {82127, 1084848672};
 

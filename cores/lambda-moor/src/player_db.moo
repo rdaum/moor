@@ -47,6 +47,7 @@ object PLAYER_DB
     "A database containing all player names and aliases.  ",
     "See `help $player_db' for more information."
   };
+  override import_export_id = "player_db";
   override object_size = {8069, 1084848672};
 
   verb load (this none this) owner: HACKER flags: "rxd"

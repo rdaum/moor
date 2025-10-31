@@ -5,6 +5,7 @@ object PLAYER_START
   readable: true
 
   override description = "This is all there is right now.";
+  override import_export_id = "player_start";
   override object_size = {4407, 1084848672};
 
   verb disfunc (this none this) owner: #2 flags: "rxd"

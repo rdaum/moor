@@ -16,6 +16,7 @@ object DISPLAY_OPTIONS
 
   override _namelist = "!blank_tnt!shortprep!thisonly!";
   override aliases = {"Display Options"};
+  override import_export_id = "display_options";
   override names = {"blank_tnt", "shortprep", "thisonly"};
   override object_size = {809, 1084848672};
 endobject

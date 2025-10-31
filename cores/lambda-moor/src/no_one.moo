@@ -10,7 +10,8 @@ object NO_ONE
 
   override aliases (owner: #2, flags: "r") = {"Everyman", "everyone", "no_one", "noone"};
   override description = "The character used for \"safe\" evals.";
-  override home = LOCAL;
+  override home = #-1;
+  override import_export_id = "no_one";
   override last_disconnect_time = 2147483647;
   override mail_forward = "Everyman ($no_one) can not receive mail.";
   override object_size = {5625, 1084848672};

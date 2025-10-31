@@ -15,12 +15,22 @@
 mod dump;
 mod load;
 
+use moor_var::Symbol;
+use std::sync::OnceLock;
+
+/// Property name used to determine object's constant name and filename in objdef dumps
+pub static IMPORT_EXPORT_ID: OnceLock<Symbol> = OnceLock::new();
+
+fn import_export_id() -> Symbol {
+    *IMPORT_EXPORT_ID.get_or_init(|| Symbol::mk("import_export_id"))
+}
+
 #[cfg(test)]
 mod conflict_tests;
 
 use moor_common::model::{CompileError, WorldStateError};
 use moor_compiler::ObjDefParseError;
-use moor_var::{Obj, Symbol};
+use moor_var::Obj;
 use std::{io, path::PathBuf};
 
 pub use dump::{collect_object, collect_object_definitions, dump_object, dump_object_definitions};

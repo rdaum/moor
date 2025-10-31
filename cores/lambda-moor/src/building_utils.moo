@@ -39,6 +39,7 @@ object BUILDING_UTILS
     "recreate(object, newparent) - effectively recycle and recreate object",
     "          as a child of newparent"
   };
+  override import_export_id = "building_utils";
   override object_size = {12705, 1084848672};
 
   verb make_exit (this none this) owner: #2 flags: "rxd"

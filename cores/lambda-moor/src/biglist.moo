@@ -102,6 +102,7 @@ object BIGLIST
     "     destroys all nodes used by biglist.  ",
     "     Calls home:leafkiller on each element."
   };
+  override import_export_id = "biglist";
   override object_size = {22666, 1084848672};
 
   verb length (this none this) owner: HACKER flags: "rxd"

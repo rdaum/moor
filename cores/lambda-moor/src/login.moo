@@ -11,7 +11,7 @@ object LOGIN
   property checkpoint_in_progress (owner: #2, flags: "rc") = 0;
   property connection_limit_msg (owner: HACKER, flags: "r") = "*** The MOO is too busy! The current lag is %l; there are %n connected.  WAIT FIVE MINUTES BEFORE TRYING AGAIN.";
   property create_enabled (owner: #2, flags: "rc") = 1;
-  property current_connections (owner: #2, flags: "rc") = {AMBIGUOUS_MATCH};
+  property current_connections (owner: #2, flags: "rc") = {#-2};
   property current_lag (owner: #2, flags: "r") = 0;
   property current_numcommands (owner: #2, flags: "rc") = {1};
   property downtimes (owner: #2, flags: "rc") = {{1529543472, 0}, {1529444307, 0}};
@@ -42,20 +42,7 @@ object LOGIN
     "For assistance either now or later, type `help'."
   };
   property graylist (owner: #2, flags: "") = {{}, {}};
-  property help_message (owner: #2, flags: "rc") = "# Getting Started
-
-To sign in to an existing account, use your **player name** and **password**.
-
-To create a new account, choose a unique player name and password.
-
-## Available commands (for telnet users)
-
-- `connect <name> <password>` - Sign in to an existing account
-- `create <name> <password>` - Create a new account
-- `who` - See who is currently connected
-- `quit` - Disconnect from the server
-
-For more detailed help once you're logged in, type `help` after connecting.";
+  property help_message (owner: #2, flags: "rc") = "# Getting Started\n\nTo sign in to an existing account, use your **player name** and **password**.\n\nTo create a new account, choose a unique player name and password.\n\n## Available commands (for telnet users)\n\n- `connect <name> <password>` - Sign in to an existing account\n- `create <name> <password>` - Create a new account\n- `who` - See who is currently connected\n- `quit` - Disconnect from the server\n\nFor more detailed help once you're logged in, type `help` after connecting.";
   property help_message_content_type (owner: #2, flags: "rc") = "text/djot";
   property ignored (owner: #2, flags: "rc") = {};
   property intercepted_actions (owner: HACKER, flags: "") = {};
@@ -81,20 +68,13 @@ For more detailed help once you're logged in, type `help` after connecting.";
   property temporary_newts (owner: #2, flags: "c") = {};
   property temporary_redlist (owner: #2, flags: "") = {{}, {}};
   property temporary_spooflist (owner: #2, flags: "") = {{}, {}};
-  property welcome_message (owner: #2, flags: "rc") = "# Welcome to the LambdaCore database
-
-To get started, either **sign in** to an existing account or **create a new one**.
-
-For more information, tap the help button or type `help`.
-
----
-
-_Administrators: You may want to customize this text and the help message, which are stored in `$login.welcome_message` and `$login.help_message`._";
+  property welcome_message (owner: #2, flags: "rc") = "# Welcome to the LambdaCore database\n\nTo get started, either **sign in** to an existing account or **create a new one**.\n\nFor more information, tap the help button or type `help`.\n\n---\n\n_Administrators: You may want to customize this text and the help message, which are stored in `$login.welcome_message` and `$login.help_message`._";
   property welcome_message_content_type (owner: #2, flags: "rc") = "text/djot";
   property who_masks_wizards (owner: #2, flags: "") = 0;
 
   override aliases = {"Login Commands"};
   override description = "This provides everything needed by #0:do_login_command.  See `help $login' on $core_help for details.";
+  override import_export_id = "login";
   override object_size = {42064, 1084848672};
 
   verb "?" (any none any) owner: #2 flags: "rxd"

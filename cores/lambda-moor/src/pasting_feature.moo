@@ -9,6 +9,7 @@ object PASTING_FEATURE
   override description = "Verbs useful to people using a windowing system to paste text at people.";
   override feature_verbs = {"@paste", "|", "@paste-to"};
   override help_msg = "The Pasting Feature is mostly useful to people with fancy clients (such as Emacs) or who connect using a windowing system that allows them to copy text they've already seen.  It's intended to give people a way to quote verbatim text at other people in the room.";
+  override import_export_id = "pasting_feature";
   override object_size = {4210, 1084848672};
 
   verb "@paste" (any any any) owner: HACKER flags: "rx"

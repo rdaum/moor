@@ -36,6 +36,7 @@ object FRAND_CLASS
   override description = "You see a player who should type '@describe me as ...'.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override help = FRAND_HELP;
+  override import_export_id = "frand_class";
   override mail_notify (owner: HACKER, flags: "rc");
   override object_size = {69955, 1084848672};
   override size_quota = {50000, 0, 0, 1};

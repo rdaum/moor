@@ -26,6 +26,7 @@ object MAIL_RECIPIENT
 
   override aliases = {"Generic Mail Recipient"};
   override description = "This can either be a mailing list or a mail folder, depending on what mood you're in...";
+  override import_export_id = "mail_recipient";
   override object_size = {30900, 1084848672};
 
   verb set_aliases (this none this) owner: HACKER flags: "rxd"

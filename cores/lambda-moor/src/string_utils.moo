@@ -114,6 +114,7 @@ object STRING_UTILS
     "Suspended versions (with _suspended at end of name) for",
     "     :print     :from_value     :columnize/se      :match"
   };
+  override import_export_id = "string_utils";
   override object_size = {76712, 1084848672};
 
   verb space (this none this) owner: HACKER flags: "rxd"

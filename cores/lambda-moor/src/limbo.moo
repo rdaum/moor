@@ -5,6 +5,7 @@ object LIMBO
   readable: true
 
   override aliases = {"The Body Bag"};
+  override import_export_id = "limbo";
   override object_size = {2330, 1084848672};
 
   verb acceptable (this none this) owner: #2 flags: "rxd"

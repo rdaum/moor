@@ -11,5 +11,6 @@ object GENERIC_UTILS
 
   override aliases = {"Generic Utilities Package"};
   override description = "This is a placeholder parent for all the $..._utils packages, to more easily find them and manipulate them. At present this object defines no useful verbs or properties. (Filfre.)";
+  override import_export_id = "generic_utils";
   override object_size = {579, 1084848672};
 endobject

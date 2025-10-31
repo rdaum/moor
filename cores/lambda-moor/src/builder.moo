@@ -11,6 +11,7 @@ object BUILDER
   override description = "You see a player who should type '@describe me as ...'.";
   override features = {PASTING_FEATURE, STAGE_TALK};
   override help = BUILDER_HELP;
+  override import_export_id = "builder";
   override object_size = {36256, 1084848672};
 
   verb "@quota" (any none none) owner: #2 flags: "rd"

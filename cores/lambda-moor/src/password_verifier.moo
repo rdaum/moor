@@ -25,6 +25,7 @@ object PASSWORD_VERIFIER
 
   override aliases = {"password verifier", "password", "verifier", "pwd"};
   override description = "The password verifier verifies passwords.";
+  override import_export_id = "password_verifier";
   override object_size = {10921, 1084848672};
 
   verb help_msg (this none this) owner: HACKER flags: "rxd"

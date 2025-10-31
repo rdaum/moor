@@ -27,6 +27,7 @@ object LOCK_UTILS
     "",
     "For more information on keys and locking, read `help locking', `help keys', and `help @lock'."
   };
+  override import_export_id = "lock_utils";
   override object_size = {9664, 1084848672};
 
   verb init_scanner (this none this) owner: #2 flags: "rxd"

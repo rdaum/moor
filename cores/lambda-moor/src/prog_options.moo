@@ -28,6 +28,7 @@ object PROG_OPTIONS
   override aliases = {"Programmer Options"};
   override description = {"Option package for $prog commands.  See `help @prog-options'."};
   override extras = {"list_numbers"};
+  override import_export_id = "prog_options";
   override names = {
     "list_all_parens",
     "list_no_numbers",

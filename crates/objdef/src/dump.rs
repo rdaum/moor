@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::import_export_id;
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, loader::SnapshotInterface,
     prop_flags_string, verb_perms_string,
@@ -197,6 +198,72 @@ fn propname(pname: Symbol) -> String {
 fn extract_system_object_references(
     object_defs: &[ObjectDefinition],
 ) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
+    // First, check if ANY objects have import_export_id property
+    let import_export_id = import_export_id();
+    let has_import_export_ids = object_defs.iter().any(|od| {
+        od.property_definitions
+            .iter()
+            .any(|pd| pd.name == import_export_id)
+            || od
+                .property_overrides
+                .iter()
+                .any(|po| po.name == import_export_id)
+    });
+
+    if has_import_export_ids {
+        // Use import_export_id properties for constants
+        extract_from_import_export_ids(object_defs)
+    } else {
+        // Fall back to #0 heuristic for legacy/textdump compatibility
+        extract_from_sysobj_heuristic(object_defs)
+    }
+}
+
+fn extract_from_import_export_ids(
+    object_defs: &[ObjectDefinition],
+) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
+    let mut index_names = HashMap::new();
+    let mut file_names = HashMap::new();
+    let import_export_id_sym = import_export_id();
+
+    for od in object_defs {
+        // Look for import_export_id in both definitions and overrides
+        let import_export_id_value = od
+            .property_definitions
+            .iter()
+            .find(|pd| pd.name == import_export_id_sym)
+            .and_then(|pd| pd.value.as_ref())
+            .or_else(|| {
+                od.property_overrides
+                    .iter()
+                    .find(|po| po.name == import_export_id_sym)
+                    .and_then(|po| po.value.as_ref())
+            });
+
+        if let Some(id_value) = import_export_id_value {
+            // Extract the string value (Symbol or String)
+            let id_str = if let Some(s) = id_value.as_string() {
+                s.to_string()
+            } else if let Ok(sym) = id_value.as_symbol() {
+                sym.as_arc_string().to_string()
+            } else {
+                continue;
+            };
+            {
+                let constant_name = id_str.to_ascii_uppercase();
+                let file_name = id_str.to_lowercase();
+                index_names.insert(od.oid, constant_name);
+                file_names.insert(od.oid, file_name);
+            }
+        }
+    }
+
+    (index_names, file_names)
+}
+
+fn extract_from_sysobj_heuristic(
+    object_defs: &[ObjectDefinition],
+) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
     // Collect all potential constants from direct properties
     let mut all_candidates = Vec::new();
 
@@ -323,9 +390,7 @@ pub fn dump_object_definitions(
     object_defs: &[ObjectDefinition],
     directory_path: &Path,
 ) -> Result<(), ObjectDumpError> {
-    // Find #0 in the object_defs, and look at its properties to find $names for certain objects
-    // we'll use those for filenames when we can
-    // We intentionally skip nested values to avoid assigning misleading constant names
+    // Extract constant names and file names
     let (index_names, file_names) = extract_system_object_references(object_defs);
 
     // Separate anonymous objects from regular objects
@@ -831,6 +896,246 @@ mod tests {
                     "Second captured var should be 123"
                 );
             }
+        }
+    }
+
+    /// Test that import_export_id properties are auto-created on first dump
+    #[test]
+    fn test_import_export_id_auto_creation() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmpdir_path = tmpdir.path();
+
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
+        let db = Arc::new(db);
+
+        // Create a simple hierarchy: #0 (system) -> #1 (parent) -> #2 (child)
+        {
+            let mut tx = db.new_world_state().unwrap();
+
+            // Create system object
+            let system_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &Obj::mk_id(-1),
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            // Create parent object
+            let parent_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(parent_obj, Obj::mk_id(1));
+
+            // Create child object
+            let child_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &parent_obj,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(child_obj, Obj::mk_id(2));
+
+            // Add a property to system object that references parent (so parent gets a constant)
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("parent_ref"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
+                Some(v_obj(parent_obj)),
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+        }
+
+        // Dump to objdef
+        {
+            let snapshot = db.create_snapshot().unwrap();
+            let object_defs = collect_object_definitions(snapshot.as_ref()).unwrap();
+            dump_object_definitions(&object_defs, tmpdir_path).unwrap();
+        }
+    }
+
+    /// Test that import_export_id properties work correctly with inheritance
+    #[test]
+    fn test_import_export_id_inheritance_roundtrip() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmpdir_path = tmpdir.path();
+
+        let (db1, _) = TxDB::open(None, DatabaseConfig::default());
+        let db1 = Arc::new(db1);
+
+        // Create hierarchy: #0 -> #1 -> #2 -> #3
+        {
+            let mut tx = db1.new_world_state().unwrap();
+
+            let system_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &Obj::mk_id(-1),
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+            assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            let obj1 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+
+            let obj2 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &obj1,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+
+            let obj3 = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &obj2,
+                    &SYSTEM_OBJECT,
+                    BitEnum::new(),
+                    ObjectKind::NextObjid,
+                )
+                .unwrap();
+
+            // Make all objects get constants by referencing them from #0
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("obj1"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read),
+                Some(v_obj(obj1)),
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("obj2"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read),
+                Some(v_obj(obj2)),
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("obj3"),
+                &SYSTEM_OBJECT,
+                BitEnum::new_with(PropFlag::Read),
+                Some(v_obj(obj3)),
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+        }
+
+        // Dump
+        {
+            let snapshot = db1.create_snapshot().unwrap();
+            let object_defs = collect_object_definitions(snapshot.as_ref()).unwrap();
+            dump_object_definitions(&object_defs, tmpdir_path).unwrap();
+        }
+
+        // Load into new database
+        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
+        let db2 = Arc::new(db2);
+
+        {
+            let mut loader = db2.loader_client().unwrap();
+            let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
+            let options = crate::ObjDefLoaderOptions {
+                dry_run: false,
+                conflict_mode: crate::ConflictMode::Clobber,
+                object_kind: None,
+                constants: None,
+                overrides: vec![],
+                validate_parent_changes: false,
+            };
+            defloader
+                .load_objdef_directory(CompileOptions::default(), tmpdir_path, options)
+                .unwrap();
+            loader.commit().unwrap();
+        }
+
+        // Verify loaded correctly
+        {
+            let tx = db2.new_world_state().unwrap();
+
+            // Check that all objects exist
+            assert!(tx.valid(&SYSTEM_OBJECT).unwrap());
+            assert!(tx.valid(&Obj::mk_id(1)).unwrap());
+            assert!(tx.valid(&Obj::mk_id(2)).unwrap());
+            assert!(tx.valid(&Obj::mk_id(3)).unwrap());
+
+            // Check hierarchy
+            assert_eq!(
+                tx.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(1)).unwrap(),
+                SYSTEM_OBJECT
+            );
+            assert_eq!(
+                tx.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(2)).unwrap(),
+                Obj::mk_id(1)
+            );
+            assert_eq!(
+                tx.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(3)).unwrap(),
+                Obj::mk_id(2)
+            );
+
+            // Check that import_export_id exists and has correct values
+            let import_export_id_sym = Symbol::mk("import_export_id");
+
+            let sysobj_id = tx
+                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, import_export_id_sym)
+                .unwrap();
+            assert_eq!(sysobj_id.as_string().unwrap(), "sysobj");
+
+            let obj1_id = tx
+                .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(1), import_export_id_sym)
+                .unwrap();
+            assert_eq!(obj1_id.as_string().unwrap(), "obj1");
+
+            let obj2_id = tx
+                .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(2), import_export_id_sym)
+                .unwrap();
+            assert_eq!(obj2_id.as_string().unwrap(), "obj2");
+
+            let obj3_id = tx
+                .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(3), import_export_id_sym)
+                .unwrap();
+            assert_eq!(obj3_id.as_string().unwrap(), "obj3");
         }
     }
 

@@ -7,6 +7,7 @@ object GUEST_LOG
   property max_entries (owner: #2, flags: "") = 511;
 
   override aliases = {"Guest Log"};
+  override import_export_id = "guest_log";
   override object_size = {3738, 1084848672};
 
   verb enter (this none this) owner: #2 flags: "rxd"

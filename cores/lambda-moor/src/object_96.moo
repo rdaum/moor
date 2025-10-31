@@ -7,7 +7,7 @@ object #96
   override aliases (owner: #2, flags: "r") = {"Editor_Owner"};
   override description = "This player owns all editor-related verbs.";
   override features = {PASTING_FEATURE, STAGE_TALK};
-  override home = LOCAL;
+  override home = #-1;
   override last_disconnect_time = 2147483647;
   override mail_forward = {#2};
   override object_size = {2277, 1084848672};

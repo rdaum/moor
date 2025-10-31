@@ -18,6 +18,7 @@ object MAIL_RECIPIENT_CLASS
 
   override aliases = {"Generic Mail Receiving Player"};
   override help = MAIL_HELP;
+  override import_export_id = "mail_recipient_class";
   override object_size = {71323, 1084848672};
 
   verb mail_forward (this none this) owner: #2 flags: "rxd"
