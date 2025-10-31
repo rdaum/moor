@@ -13,11 +13,16 @@
 
 //! Helpers to transform Pest parser errors into user-facing diagnostics.
 
-use std::{borrow::Cow, cmp::min, io::{self, Write}, ops::Range};
+use std::{
+    borrow::Cow,
+    cmp::min,
+    io::{self, Write},
+    ops::Range,
+};
 
 use ariadne::{CharSet, Config, Label, Report, ReportKind, Source};
 use itertools::Itertools;
-use moor_var::{Symbol, v_int, v_list, v_map, v_str, v_sym, Var};
+use moor_var::{Symbol, Var, v_int, v_list, v_map, v_str, v_sym};
 use pest::error::{Error, ErrorVariant, InputLocation};
 
 use crate::parse::moo::Rule;
@@ -65,10 +70,9 @@ pub fn emit_compile_error(
     use_color: bool,
 ) {
     let CompileError::ParseError {
-        message,
-        details,
-        ..
-    } = error else {
+        message, details, ..
+    } = error
+    else {
         eprintln!("Compile error: {}", error);
         return;
     };
@@ -90,10 +94,7 @@ pub fn emit_compile_error(
                 .with_char_set(CharSet::Unicode),
         )
         .with_message(message)
-        .with_label(
-            Label::new((source_name, start..end))
-                .with_message("parser stopped here")
-        )
+        .with_label(Label::new((source_name, start..end)).with_message("parser stopped here"))
         .finish();
 
     let mut stderr = io::stderr().lock();
@@ -205,9 +206,7 @@ fn format_parse_error(
     }
 
     // DiagnosticVerbosity::Detailed
-    let use_graphical = options.use_graphics
-        && source.is_some()
-        && details.span.is_some();
+    let use_graphical = options.use_graphics && source.is_some() && details.span.is_some();
 
     if use_graphical {
         let src = source.unwrap();
@@ -231,7 +230,8 @@ fn summarize_error(error: &Error<Rule>) -> String {
     let ErrorVariant::ParsingError {
         positives,
         negatives,
-    } = &error.variant else {
+    } = &error.variant
+    else {
         return error.variant.message().to_string();
     };
 
@@ -284,7 +284,8 @@ fn extract_expected_tokens(error: &Error<Rule>) -> Vec<String> {
                         token.as_str(),
                         "STR" | "OBJ" | "NUM" | "INT" | "FLOAT" | "LIST" | "ERR"
                     );
-                    if !is_type_literal && token.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+                    if !is_type_literal && token.chars().all(|c| c.is_ascii_uppercase() || c == '_')
+                    {
                         token.to_lowercase()
                     } else {
                         token
@@ -310,9 +311,11 @@ fn collect_notes(program_text: &str, error: &Error<Rule>) -> Vec<String> {
 
     // When we fail at end-of-file, highlight that explicitly.
     if let InputLocation::Pos(pos) = error.location
-        && pos >= program_text.len() && !program_text.ends_with('\n') {
-            notes.push("file ends here; is a terminator missing?".to_string());
-        }
+        && pos >= program_text.len()
+        && !program_text.ends_with('\n')
+    {
+        notes.push("file ends here; is a terminator missing?".to_string());
+    }
 
     dedupe_strings(notes)
 }
@@ -685,7 +688,10 @@ pub fn compile_error_to_map(error: &CompileError, source: Option<&str>, use_symb
                 (sym_or_str("type"), sym_or_str("parse")),
                 (sym_or_str("message"), v_str(message)),
                 (sym_or_str("line"), v_int(error_position.line_col.0 as i64)),
-                (sym_or_str("column"), v_int(error_position.line_col.1 as i64)),
+                (
+                    sym_or_str("column"),
+                    v_int(error_position.line_col.1 as i64),
+                ),
                 (sym_or_str("context"), v_str(context)),
                 (sym_or_str("expected_tokens"), expected_tokens_list),
                 (sym_or_str("notes"), notes_list),

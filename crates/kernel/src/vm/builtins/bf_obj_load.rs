@@ -435,9 +435,7 @@ fn bf_load_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if key_sym == *DIAGNOSTICS_SYM {
             // Parse diagnostic options from a map with "verbosity" and "output_mode" fields
             let Some(diag_map) = value.as_map() else {
-                return Err(BfErr::ErrValue(
-                    E_TYPE.msg("diagnostics must be a map"),
-                ));
+                return Err(BfErr::ErrValue(E_TYPE.msg("diagnostics must be a map")));
             };
 
             let mut verbosity = None;

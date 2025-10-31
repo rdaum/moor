@@ -32,9 +32,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_moot::MootOptions;
-use moor_objdef::{
-    ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
-};
+use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
 use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use std::{

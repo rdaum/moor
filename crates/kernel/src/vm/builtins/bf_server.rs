@@ -1588,12 +1588,15 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 Some(program_code_string.as_str()),
                                 options,
                             );
-                            let error_vars: Vec<Var> = formatted.into_iter().map(v_string).collect();
+                            let error_vars: Vec<Var> =
+                                formatted.into_iter().map(v_string).collect();
                             v_list(error_vars.as_slice())
                         }
-                        DiagnosticOutput::Structured => {
-                            compile_error_to_map(&e, Some(program_code_string.as_str()), bf_args.config.symbol_type)
-                        }
+                        DiagnosticOutput::Structured => compile_error_to_map(
+                            &e,
+                            Some(program_code_string.as_str()),
+                            bf_args.config.symbol_type,
+                        ),
                     };
                     return Ok(Ret(v_list(&[v_int(0), error_result])));
                 }

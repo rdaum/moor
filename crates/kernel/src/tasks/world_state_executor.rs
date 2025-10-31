@@ -264,9 +264,16 @@ impl WorldStateActionExecutor {
                 let object = match_object_ref(&perms, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
-                let (program, verbdef) = self
+                // Use get_verb instead of find_method_verb_on to avoid exec flag requirement
+                // This matches the behavior of bf_verb_code builtin
+                let verbdef = self
                     .tx
-                    .find_method_verb_on(&perms, &object, verb)
+                    .get_verb(&perms, &object, verb)
+                    .map_err(SchedulerError::VerbRetrievalFailed)?;
+
+                let (program, _) = self
+                    .tx
+                    .retrieve_verb(&perms, &object, verbdef.uuid())
                     .map_err(SchedulerError::VerbRetrievalFailed)?;
 
                 // If the binary is empty, just return empty code
