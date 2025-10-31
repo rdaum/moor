@@ -258,18 +258,18 @@ pub fn compilation_error_from_ref(
                 None
             };
 
-            let expected_tokens = match e.expected_tokens().map_err(|_| "Missing expected_tokens")?
-            {
-                Some(tokens_vec) => tokens_vec
-                    .iter()
-                    .map(|token_ref| {
-                        token_ref
-                            .map_err(|e| format!("Failed to read expected token: {e}"))
-                            .map(|token| token.to_string())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                None => Vec::new(),
-            };
+            let expected_tokens =
+                match e.expected_tokens().map_err(|_| "Missing expected_tokens")? {
+                    Some(tokens_vec) => tokens_vec
+                        .iter()
+                        .map(|token_ref| {
+                            token_ref
+                                .map_err(|e| format!("Failed to read expected token: {e}"))
+                                .map(|token| token.to_string())
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    None => Vec::new(),
+                };
 
             let notes = match e.notes().map_err(|_| "Missing notes")? {
                 Some(notes_vec) => notes_vec

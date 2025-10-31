@@ -92,14 +92,12 @@ impl WorldStateActionExecutor {
                 let object = match_object_ref(&player, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
-                let (_, verbdef) = self
+                // Use get_verb here to avoid requiring the exec flag (bf_verb_code and editing tools
+                // should be able to program verbs that are readable but not executable).
+                let verbdef = self
                     .tx
-                    .find_method_verb_on(&perms, &object, verb_name)
+                    .get_verb(&perms, &object, verb_name)
                     .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
-
-                if verbdef.location() != object {
-                    return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
-                }
 
                 let program = compile(
                     code.join("\n").as_str(),

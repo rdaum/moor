@@ -115,6 +115,17 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     // Reset content when initial content changes
     useEffect(() => {
         setContent(initialContent);
+        setErrors([]);
+        setCompileSuccess(false);
+        if (editorRef.current) {
+            const model = editorRef.current.getModel();
+            if (model) {
+                monaco.editor.setModelMarkers(model, "moo-compiler", []);
+            }
+        }
+        if (errorDecorationsRef.current) {
+            errorDecorationsRef.current.clear();
+        }
     }, [initialContent]);
 
     // Cleanup on unmount
