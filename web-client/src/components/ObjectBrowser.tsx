@@ -366,8 +366,10 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
 
             setVerbs(verbList);
+            return propList; // Return the property list for immediate use
         } catch (error) {
             console.error("Failed to load properties/verbs:", error);
+            return []; // Return empty array on error
         } finally {
             setIsLoading(false);
         }
@@ -1991,9 +1993,16 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         : `oid:${selectedProperty.definer}`}
                                     propertyName={selectedProperty.name}
                                     propertyValue={selectedProperty.moorVar}
-                                    onSave={() => {
-                                        // Reload property value after save
-                                        handlePropertySelect(selectedProperty);
+                                    onSave={async () => {
+                                        // Reload properties list to get updated metadata, then reload property value
+                                        if (selectedObject) {
+                                            const freshProps = await loadPropertiesAndVerbs(selectedObject);
+                                            // Find the updated property in the freshly loaded list
+                                            const updatedProp = freshProps.find(p => p.name === selectedProperty.name);
+                                            if (updatedProp) {
+                                                await handlePropertySelect(updatedProp);
+                                            }
+                                        }
                                     }}
                                     onCancel={() => {
                                         setSelectedProperty(null);
@@ -2014,6 +2023,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         writable: selectedProperty.writable,
                                     }}
                                     onNavigateToObject={handleNavigateToObject}
+                                    normalizeObjectInput={normalizeObjectInput}
                                 />
                             )}
                             {selectedProperty && !selectedProperty.moorVar && (

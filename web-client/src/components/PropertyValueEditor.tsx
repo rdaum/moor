@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { VarUnion } from "../generated/moor-var/var-union.js";
 import { MoorVar } from "../lib/MoorVar.js";
-import { updatePropertyFlatBuffer } from "../lib/rpc-fb.js";
+import { performEvalFlatBuffer, updatePropertyFlatBuffer } from "../lib/rpc-fb.js";
 
 // Editor modes
 export type EditorMode =
@@ -38,6 +38,7 @@ export interface PropertyValueEditorProps {
     definer?: string; // Object ID or CURIE of property definer
     permissions?: { readable: boolean; writable: boolean }; // Property permissions
     onNavigateToObject?: (objId: string) => void; // Callback for clicking object references
+    normalizeObjectInput?: (raw: string) => string; // Utility to convert various object formats to MOO expressions
 }
 
 /**
@@ -211,11 +212,25 @@ export function PropertyValueEditor({
     definer,
     permissions,
     onNavigateToObject,
+    normalizeObjectInput,
 }: PropertyValueEditorProps) {
     const [mode, setMode] = useState<EditorMode>(() => detectMode(propertyValue));
     const [value, setValue] = useState<string>(() => toEditorText(propertyValue, detectMode(propertyValue)));
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Property metadata editing state
+    const [isEditingOwner, setIsEditingOwner] = useState(false);
+    const [editOwnerValue, setEditOwnerValue] = useState(owner ? `#${owner}` : "");
+    const [editPermissions, setEditPermissions] = useState(permissions || { readable: false, writable: false });
+    const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+    const [metadataSaveSuccess, setMetadataSaveSuccess] = useState(false);
+
+    // Sync local state when props change (after save refresh)
+    useEffect(() => {
+        setEditOwnerValue(owner ? `#${owner}` : "");
+        setEditPermissions(permissions || { readable: false, writable: false });
+    }, [owner, permissions]);
     const FONT_SIZE_STORAGE_KEY = "moor-code-editor-font-size";
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
@@ -267,8 +282,61 @@ export function PropertyValueEditor({
         }
     };
 
+    const handleSaveMetadata = async () => {
+        if (!normalizeObjectInput) {
+            setError("Cannot save: normalizeObjectInput function not provided");
+            return;
+        }
+
+        setIsSavingMetadata(true);
+        setError(null);
+        setMetadataSaveSuccess(false);
+        try {
+            const permsStr = `${editPermissions.readable ? "r" : ""}${editPermissions.writable ? "w" : ""}`;
+
+            // Use the provided utility to normalize object references
+            const objExpr = normalizeObjectInput(objectCurie);
+            const ownerExpr = normalizeObjectInput(editOwnerValue);
+
+            if (!objExpr || !ownerExpr) {
+                throw new Error("Invalid object reference");
+            }
+
+            // Call: set_property_info(obj, 'propname, {owner, "perms"})
+            const expr = `return set_property_info(${objExpr}, '${propertyName}, {${ownerExpr}, "${permsStr}"});`;
+            await performEvalFlatBuffer(authToken, expr);
+            setIsSavingMetadata(false);
+            setIsEditingOwner(false);
+            setMetadataSaveSuccess(true);
+
+            // Clear success message and reset button visibility after 2 seconds
+            setTimeout(() => {
+                setMetadataSaveSuccess(false);
+            }, 2000);
+
+            // Notify parent to refresh (this will update owner/permissions props)
+            onSave();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save property metadata");
+            setIsSavingMetadata(false);
+        }
+    };
+
+    const handleTogglePermission = (perm: "readable" | "writable") => {
+        setEditPermissions((prev) => ({
+            ...prev,
+            [perm]: !prev[perm],
+        }));
+    };
+
     // Track if content has changed from original
     const hasUnsavedChanges = value !== toEditorText(propertyValue, mode);
+
+    // Track if metadata has changed (compare normalized values) or is being edited
+    const hasMetadataChanges = isEditingOwner
+        || (owner ? `#${owner}` : "") !== editOwnerValue
+        || permissions?.readable !== editPermissions.readable
+        || permissions?.writable !== editPermissions.writable;
 
     // Handle mode changes - warn about unsaved content
     const handleModeChange = (newMode: EditorMode) => {
@@ -624,46 +692,9 @@ export function PropertyValueEditor({
                         alignItems: "center",
                     }}
                 >
-                    {owner && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
-                                Owner:
-                            </span>
-                            {onNavigateToObject
-                                ? (
-                                    <button
-                                        onClick={() => onNavigateToObject(owner)}
-                                        style={{
-                                            background: "none",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            color: "var(--color-text-accent)",
-                                            cursor: "pointer",
-                                            padding: "2px 6px",
-                                            fontFamily: "var(--font-mono)",
-                                            fontSize: "0.95em",
-                                        }}
-                                    >
-                                        #{owner}
-                                    </button>
-                                )
-                                : (
-                                    <span
-                                        style={{
-                                            fontFamily: "var(--font-mono)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            padding: "2px 6px",
-                                            fontSize: "0.95em",
-                                        }}
-                                    >
-                                        #{owner}
-                                    </span>
-                                )}
-                        </div>
-                    )}
+                    {/* Definer - read-only, visually separated */}
                     {definer && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.6 }}>
                             <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
                                 Definer:
                             </span>
@@ -700,24 +731,171 @@ export function PropertyValueEditor({
                                 )}
                         </div>
                     )}
+
+                    {/* Separator bar */}
+                    {definer && (owner || permissions) && (
+                        <div
+                            style={{
+                                width: "1px",
+                                height: "20px",
+                                backgroundColor: "var(--color-border-medium)",
+                            }}
+                        />
+                    )}
+
+                    {/* Owner - editable */}
+                    {owner && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Owner:
+                            </span>
+                            {isEditingOwner
+                                ? (
+                                    <input
+                                        type="text"
+                                        value={editOwnerValue}
+                                        onChange={(e) => setEditOwnerValue(e.target.value)}
+                                        style={{
+                                            fontFamily: "var(--font-mono)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            padding: "2px 6px",
+                                            fontSize: "0.95em",
+                                            width: "80px",
+                                            backgroundColor: "var(--color-bg-input)",
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                handleSaveMetadata();
+                                            } else if (e.key === "Escape") {
+                                                setEditOwnerValue(owner ? `#${owner}` : "");
+                                                setIsEditingOwner(false);
+                                            }
+                                        }}
+                                        autoFocus
+                                    />
+                                )
+                                : (
+                                    <button
+                                        onClick={() => setIsEditingOwner(true)}
+                                        style={{
+                                            background: "none",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            color: "var(--color-text-primary)",
+                                            cursor: "pointer",
+                                            padding: "2px 6px",
+                                            fontFamily: "var(--font-mono)",
+                                            fontSize: "0.95em",
+                                        }}
+                                        title="Click to edit owner"
+                                    >
+                                        #{owner}
+                                    </button>
+                                )}
+                        </div>
+                    )}
+
+                    {/* Permissions - toggle checkboxes */}
                     {permissions && (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                             <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
                                 Perms:
                             </span>
-                            <span
+                            <div
                                 style={{
-                                    fontFamily: "var(--font-mono)",
+                                    display: "flex",
+                                    gap: "4px",
                                     border: "1px solid var(--color-border-medium)",
                                     borderRadius: "var(--radius-sm)",
-                                    padding: "2px 6px",
-                                    fontSize: "0.95em",
+                                    padding: "2px 4px",
                                 }}
                             >
-                                {permissions.readable ? "r" : ""}
-                                {permissions.writable ? "w" : ""}
-                            </span>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "2px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-mono)",
+                                        fontSize: "0.95em",
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.readable}
+                                        onChange={() => handleTogglePermission("readable")}
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                    r
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "2px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-mono)",
+                                        fontSize: "0.95em",
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.writable}
+                                        onChange={() => handleTogglePermission("writable")}
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                    w
+                                </label>
+                            </div>
                         </div>
+                    )}
+
+                    {/* Save/Cancel buttons for metadata changes */}
+                    {(hasMetadataChanges || metadataSaveSuccess) && (
+                        <>
+                            <button
+                                onClick={handleSaveMetadata}
+                                disabled={isSavingMetadata || metadataSaveSuccess}
+                                style={{
+                                    padding: "4px 10px",
+                                    borderRadius: "var(--radius-sm)",
+                                    border: "none",
+                                    backgroundColor: metadataSaveSuccess
+                                        ? "var(--color-bg-success, #28a745)"
+                                        : "var(--color-button-primary)",
+                                    color: "white",
+                                    cursor: isSavingMetadata || metadataSaveSuccess ? "not-allowed" : "pointer",
+                                    fontSize: "0.85em",
+                                    fontWeight: "600",
+                                    opacity: isSavingMetadata ? 0.6 : 1,
+                                }}
+                            >
+                                {isSavingMetadata ? "Saving..." : metadataSaveSuccess ? "Saved ✓" : "Save"}
+                            </button>
+                            {hasMetadataChanges && !metadataSaveSuccess && (
+                                <button
+                                    onClick={() => {
+                                        setEditOwnerValue(owner ? `#${owner}` : "");
+                                        setEditPermissions(permissions || { readable: false, writable: false });
+                                        setIsEditingOwner(false);
+                                    }}
+                                    disabled={isSavingMetadata}
+                                    style={{
+                                        padding: "4px 10px",
+                                        borderRadius: "var(--radius-sm)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        backgroundColor: "transparent",
+                                        color: "var(--color-text-secondary)",
+                                        cursor: isSavingMetadata ? "not-allowed" : "pointer",
+                                        fontSize: "0.85em",
+                                        fontWeight: "600",
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             )}
