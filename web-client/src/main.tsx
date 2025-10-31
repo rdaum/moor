@@ -107,6 +107,21 @@ function AppContent({
     const isMobile = useMediaQuery("(max-width: 768px)");
     const [forceSplitMode, setForceSplitMode] = useState(false);
     const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isMobile);
+    const [narrativeFontSize, setNarrativeFontSize] = useState(() => {
+        const fallback = 14;
+        if (typeof window === "undefined") {
+            return fallback;
+        }
+        const stored = window.localStorage.getItem("moor-narrative-font-size");
+        if (!stored) {
+            return fallback;
+        }
+        const parsed = parseInt(stored, 10);
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+        return Math.min(24, Math.max(10, parsed));
+    });
 
     const toggleSplitMode = useCallback(() => {
         setForceSplitMode(prev => !prev);
@@ -119,11 +134,25 @@ function AppContent({
         setIsObjectBrowserDocked(prev => !prev);
     }, [isMobile]);
 
+    const decreaseNarrativeFontSize = useCallback(() => {
+        setNarrativeFontSize(prev => Math.max(10, prev - 1));
+    }, []);
+
+    const increaseNarrativeFontSize = useCallback(() => {
+        setNarrativeFontSize(prev => Math.min(24, prev + 1));
+    }, []);
+
     useEffect(() => {
         if (isMobile && !isObjectBrowserDocked) {
             setIsObjectBrowserDocked(true);
         }
     }, [isMobile, isObjectBrowserDocked]);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem("moor-narrative-font-size", narrativeFontSize.toString());
+        }
+    }, [narrativeFontSize]);
 
     const handleMessageAppended = useCallback((message: NarrativeMessage) => {
         if (typeof document === "undefined") {
@@ -873,6 +902,9 @@ function AppContent({
                         onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
                             ? handleOpenObjectBrowser
                             : undefined}
+                        narrativeFontSize={narrativeFontSize}
+                        onDecreaseNarrativeFontSize={decreaseNarrativeFontSize}
+                        onIncreaseNarrativeFontSize={increaseNarrativeFontSize}
                     />
                 </>
             )}
@@ -938,6 +970,7 @@ function AppContent({
                                     onLinkClick={onLinkClick}
                                     playerOid={authState.player?.oid}
                                     onMessageAppended={handleMessageAppended}
+                                    fontSize={narrativeFontSize}
                                 />
                             </section>
 

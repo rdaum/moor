@@ -35,6 +35,7 @@ interface NarrativeProps {
     onLinkClick?: (url: string) => void;
     playerOid?: string | null;
     onMessageAppended?: (message: NarrativeMessage) => void;
+    fontSize?: number;
 }
 
 export interface NarrativeRef {
@@ -70,6 +71,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     onLinkClick,
     playerOid,
     onMessageAppended,
+    fontSize,
 }, ref) => {
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -303,6 +305,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                 onLoadMoreHistory={onLoadMoreHistory}
                 isLoadingHistory={isLoadingHistory}
                 onLinkClick={onLinkClick}
+                fontSize={fontSize}
             />
 
             {/* Command input area - fixed at bottom */}

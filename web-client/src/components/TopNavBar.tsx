@@ -19,9 +19,18 @@ import { useTitle } from "../hooks/useTitle";
 interface TopNavBarProps {
     onSettingsToggle: () => void;
     onBrowserToggle?: () => void;
+    narrativeFontSize: number;
+    onDecreaseNarrativeFontSize: () => void;
+    onIncreaseNarrativeFontSize: () => void;
 }
 
-export const TopNavBar: React.FC<TopNavBarProps> = ({ onSettingsToggle, onBrowserToggle }) => {
+export const TopNavBar: React.FC<TopNavBarProps> = ({
+    onSettingsToggle,
+    onBrowserToggle,
+    narrativeFontSize,
+    onDecreaseNarrativeFontSize,
+    onIncreaseNarrativeFontSize,
+}) => {
     const title = useTitle();
 
     return (
@@ -39,6 +48,62 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onSettingsToggle, onBrowse
             <div className="nav-title">{title}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        backgroundColor: "var(--color-bg-secondary)",
+                        border: "1px solid var(--color-border-medium)",
+                        borderRadius: "var(--radius-sm)",
+                        padding: "2px 6px",
+                    }}
+                >
+                    <button
+                        onClick={onDecreaseNarrativeFontSize}
+                        aria-label="Decrease narrative font size"
+                        style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "var(--color-text-secondary)",
+                            cursor: narrativeFontSize <= 10 ? "not-allowed" : "pointer",
+                            opacity: narrativeFontSize <= 10 ? 0.5 : 1,
+                            fontSize: "14px",
+                            padding: "2px 4px",
+                        }}
+                        disabled={narrativeFontSize <= 10}
+                    >
+                        –
+                    </button>
+                    <span
+                        style={{
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "12px",
+                            color: "var(--color-text-secondary)",
+                            minWidth: "38px",
+                            textAlign: "center",
+                        }}
+                        aria-live="polite"
+                    >
+                        {narrativeFontSize}px
+                    </span>
+                    <button
+                        onClick={onIncreaseNarrativeFontSize}
+                        aria-label="Increase narrative font size"
+                        style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "var(--color-text-secondary)",
+                            cursor: narrativeFontSize >= 24 ? "not-allowed" : "pointer",
+                            opacity: narrativeFontSize >= 24 ? 0.5 : 1,
+                            fontSize: "14px",
+                            padding: "2px 4px",
+                        }}
+                        disabled={narrativeFontSize >= 24}
+                    >
+                        +
+                    </button>
+                </div>
                 {onBrowserToggle && (
                     <button
                         className="browser-icon"

@@ -27,6 +27,7 @@ interface OutputWindowProps {
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
     onLinkClick?: (url: string) => void;
+    fontSize?: number;
 }
 
 export const OutputWindow: React.FC<OutputWindowProps> = ({
@@ -34,6 +35,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
     onLoadMoreHistory,
     isLoadingHistory = false,
     onLinkClick,
+    fontSize,
 }) => {
     const outputRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
@@ -141,6 +143,8 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         return baseClass;
     };
 
+    const resolvedFontSize = fontSize ?? 14;
+
     return (
         <div
             ref={outputRef}
@@ -153,6 +157,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
             onScroll={handleScroll}
             style={{
                 paddingBottom: "1rem",
+                fontSize: `${resolvedFontSize}px`,
             }}
         >
             {/* History indicator - "Jump to Now" button */}
