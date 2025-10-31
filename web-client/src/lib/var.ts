@@ -68,17 +68,17 @@ export function matchRef(match: string): ObjMatch {
  * Matches Rust implementation in crates/var/src/obj.rs
  *
  * Format: FFFFFF-FFFFFFFFFF
- * - First group (6 hex): autoincrement (18 bits) << 6 | rng (6 bits)
- * - Second group (10 hex): epoch_ms (38 bits)
+ * - First group (6 hex): autoincrement (16 bits) << 6 | rng (6 bits)
+ * - Second group (10 hex): epoch_ms (40 bits)
  */
 export function uuObjIdToString(packedValue: bigint): string {
     // Extract components from packed 62-bit value
-    // autoincrement: top 18 bits
+    // autoincrement: top 16 bits
     // rng: next 6 bits
-    // epoch_ms: bottom 38 bits
-    const autoincrement = Number((packedValue >> 44n) & 0x3FFFFn);
-    const rng = Number((packedValue >> 38n) & 0x3Fn);
-    const epochMs = Number(packedValue & 0x3FFFFFFFFFn);
+    // epoch_ms: bottom 40 bits
+    const autoincrement = Number((packedValue >> 46n) & 0xFFFFn);
+    const rng = Number((packedValue >> 40n) & 0x3Fn);
+    const epochMs = Number(packedValue & 0xFFFFFFFFFFn);
 
     // Format: FFFFFF-FFFFFFFFFF
     const firstGroup = ((autoincrement << 6) | rng).toString(16).toUpperCase().padStart(6, "0");
