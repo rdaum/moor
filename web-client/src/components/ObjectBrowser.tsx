@@ -150,6 +150,20 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
         return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
     });
+    const [showInheritedProperties, setShowInheritedProperties] = useState(() => {
+        if (typeof window === "undefined") {
+            return true;
+        }
+        const stored = window.localStorage.getItem("moor-object-browser-show-inherited-properties");
+        return stored !== "false";
+    });
+    const [showInheritedVerbs, setShowInheritedVerbs] = useState(() => {
+        if (typeof window === "undefined") {
+            return true;
+        }
+        const stored = window.localStorage.getItem("moor-object-browser-show-inherited-verbs");
+        return stored !== "false";
+    });
     const decreaseFontSize = useCallback(() => {
         setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
     }, []);
@@ -432,13 +446,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
             groups.get(definer)!.push(prop);
         }
-        return Array.from(groups.entries()).sort((a, b) => {
+        let entries = Array.from(groups.entries()).sort((a, b) => {
             // Sort by definer ID (current object first)
             if (selectedObject && a[0] === selectedObject.obj) return -1;
             if (selectedObject && b[0] === selectedObject.obj) return 1;
             return a[0].localeCompare(b[0]);
         });
-    }, [properties, selectedObject, propertyFilter]);
+        if (!showInheritedProperties && selectedObject) {
+            const currentId = selectedObject.obj;
+            entries = entries.filter(([definer]) => definer === currentId);
+        }
+        return entries;
+    }, [properties, selectedObject, propertyFilter, showInheritedProperties]);
 
     // Group verbs by location
     const groupedVerbs = React.useMemo(() => {
@@ -453,13 +472,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
             groups.get(location)!.push(verb);
         }
-        return Array.from(groups.entries()).sort((a, b) => {
+        let entries = Array.from(groups.entries()).sort((a, b) => {
             // Sort by location ID (current object first)
             if (selectedObject && a[0] === selectedObject.obj) return -1;
             if (selectedObject && b[0] === selectedObject.obj) return 1;
             return a[0].localeCompare(b[0]);
         });
-    }, [verbs, selectedObject, verbFilter]);
+        if (!showInheritedVerbs && selectedObject) {
+            const currentId = selectedObject.obj;
+            entries = entries.filter(([location]) => location === currentId);
+        }
+        return entries;
+    }, [verbs, selectedObject, verbFilter, showInheritedVerbs]);
 
     // Add global mouse event listeners
     useEffect(() => {
@@ -481,6 +505,24 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             window.localStorage.setItem("moor-object-browser-font-size", fontSize.toString());
         }
     }, [fontSize]);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(
+                "moor-object-browser-show-inherited-properties",
+                showInheritedProperties ? "true" : "false",
+            );
+        }
+    }, [showInheritedProperties]);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(
+                "moor-object-browser-show-inherited-verbs",
+                showInheritedVerbs ? "true" : "false",
+            );
+        }
+    }, [showInheritedVerbs]);
 
     if (!visible) {
         return null;
@@ -510,6 +552,20 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         minHeight: "100px",
         boxShadow: "inset 0 1px 0 color-mix(in srgb, var(--color-border-light) 60%, transparent)",
     } as const;
+    const inheritedToggleButtonStyle = (active: boolean): React.CSSProperties => ({
+        width: "22px",
+        height: "22px",
+        borderRadius: "50%",
+        border: "1px solid var(--color-border-medium)",
+        backgroundColor: active ? "var(--color-text-primary)" : "transparent",
+        color: active ? "var(--color-bg-input)" : "var(--color-text-secondary)",
+        cursor: "pointer",
+        fontSize: "11px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "background-color 0.2s ease",
+    });
 
     // Helper to check if object ID is UUID-based
     const isUuidObject = (objId: string): boolean => {
@@ -729,6 +785,52 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             disabled={fontSize >= MAX_FONT_SIZE}
                         >
                             +
+                        </button>
+                    </div>
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            backgroundColor: "var(--color-bg-secondary)",
+                            border: "1px solid var(--color-border-medium)",
+                            borderRadius: "999px",
+                            padding: "4px 8px",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <span
+                            style={{
+                                fontSize: "10px",
+                                color: "var(--color-text-secondary)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                                fontWeight: 600,
+                                fontFamily: "var(--font-sans)",
+                                opacity: 0.8,
+                            }}
+                        >
+                            Inherited
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setShowInheritedProperties(prev => !prev)}
+                            aria-label={showInheritedProperties
+                                ? "Hide inherited properties"
+                                : "Show inherited properties"}
+                            title={showInheritedProperties ? "Hide inherited properties" : "Show inherited properties"}
+                            style={inheritedToggleButtonStyle(showInheritedProperties)}
+                        >
+                            P
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowInheritedVerbs(prev => !prev)}
+                            aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                            title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                            style={inheritedToggleButtonStyle(showInheritedVerbs)}
+                        >
+                            V
                         </button>
                     </div>
                     {/* Split/Float toggle button - only on desktop */}
@@ -1075,7 +1177,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 : (
                                     groupedProperties.map(([definer, props], groupIdx) => (
                                         <div key={definer}>
-                                            {groupIdx > 0 && (
+                                            {groupIdx > 0 && showInheritedProperties && (
                                                 <div style={inheritedLabelStyle}>
                                                     from {normalizeObjectRef(definer).display}
                                                 </div>
@@ -1254,7 +1356,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 : (
                                     groupedVerbs.map(([location, verbList], groupIdx) => (
                                         <div key={location}>
-                                            {groupIdx > 0 && (
+                                            {groupIdx > 0 && showInheritedVerbs && (
                                                 <div style={inheritedLabelStyle}>
                                                     from {normalizeObjectRef(location).display}
                                                 </div>
