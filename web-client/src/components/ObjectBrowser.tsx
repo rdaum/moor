@@ -1521,21 +1521,88 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             {!splitMode && (
                 <div
                     onMouseDown={handleResizeMouseDown}
+                    onTouchStart={(e) => {
+                        if (e.touches.length === 1) {
+                            const touch = e.touches[0];
+                            handleResizeMouseDown({
+                                ...e,
+                                button: 0,
+                                clientX: touch.clientX,
+                                clientY: touch.clientY,
+                                preventDefault: () => e.preventDefault(),
+                                stopPropagation: () => e.stopPropagation(),
+                            } as unknown as React.MouseEvent);
+                        }
+                    }}
                     tabIndex={0}
                     role="button"
                     aria-label="Resize browser window"
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleResizeMouseDown({
+                                ...e,
+                                clientX: size.width + position.x,
+                                clientY: size.height + position.y,
+                                button: 0,
+                            } as any);
+                        }
+                    }}
                     style={{
                         position: "absolute",
                         bottom: 0,
                         right: 0,
-                        width: "16px",
-                        height: "16px",
-                        cursor: "nw-resize",
-                        background:
-                            "linear-gradient(-45deg, transparent 0%, transparent 30%, var(--color-border-medium) 30%, var(--color-border-medium) 70%, transparent 70%)",
+                        width: "22px",
+                        height: "22px",
+                        cursor: "nwse-resize",
                         borderBottomRightRadius: "var(--radius-lg)",
+                        borderTopLeftRadius: "6px",
+                        backgroundColor: "var(--color-surface-raised)",
+                        borderTop: "1px solid var(--color-border-medium)",
+                        borderLeft: "1px solid var(--color-border-medium)",
+                        boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.1)",
+                        zIndex: 5,
                     }}
-                />
+                >
+                    <div
+                        style={{
+                            position: "absolute",
+                            inset: "4px",
+                            borderBottom: "2px solid var(--color-border-strong)",
+                            borderRight: "2px solid var(--color-border-strong)",
+                            borderBottomRightRadius: "4px",
+                            pointerEvents: "none",
+                        }}
+                    />
+                    <div
+                        style={{
+                            position: "absolute",
+                            right: "6px",
+                            bottom: "6px",
+                            width: "10px",
+                            height: "10px",
+                            clipPath: "polygon(0 100%, 100% 0, 100% 100%)",
+                            background:
+                                "linear-gradient(135deg, transparent 0%, transparent 30%, var(--color-border-strong) 30%, var(--color-border-strong) 50%, transparent 50%)",
+                            pointerEvents: "none",
+                        }}
+                    />
+                    <span
+                        aria-hidden="true"
+                        style={{
+                            position: "absolute",
+                            right: "4px",
+                            bottom: "2px",
+                            fontSize: "14px",
+                            color: "var(--color-border-strong)",
+                            lineHeight: 1,
+                            pointerEvents: "none",
+                            userSelect: "none",
+                        }}
+                    >
+                        ↘
+                    </span>
+                </div>
             )}
         </div>
     );
