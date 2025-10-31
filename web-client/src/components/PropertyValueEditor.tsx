@@ -412,12 +412,12 @@ export function PropertyValueEditor({
                     </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-                    {/* Delete button - only shown if onDelete handler provided */}
+                    {/* Remove button - only shown if onDelete handler provided */}
                     {onDelete && (
                         <button
                             onClick={onDelete}
-                            aria-label="Delete property"
-                            title="Delete property"
+                            aria-label="Remove property"
+                            title="Remove property"
                             style={{
                                 backgroundColor:
                                     "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
@@ -430,7 +430,7 @@ export function PropertyValueEditor({
                                 fontWeight: "600",
                             }}
                         >
-                            Delete
+                            Remove
                         </button>
                     )}
                     <div

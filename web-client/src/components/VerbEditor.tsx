@@ -15,6 +15,7 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
 import { objToString } from "../lib/var.js";
 
 interface VerbEditorProps {
@@ -32,6 +33,14 @@ interface VerbEditorProps {
     onSplitTouchStart?: (e: React.TouchEvent) => void; // Handler for split touch dragging in split mode
     onToggleSplitMode?: () => void; // Handler to toggle between split and floating modes
     isInSplitMode?: boolean; // Whether currently in split mode (for icon display)
+    // Verb metadata
+    owner?: string;
+    definer?: string;
+    permissions?: { readable: boolean; writable: boolean; executable: boolean; debug: boolean };
+    argspec?: { dobj: string; prep: string; iobj: string };
+    onSave?: () => void; // Callback to refresh verb data after metadata save
+    onDelete?: () => void; // Callback to delete verb
+    normalizeObjectInput?: (raw: string) => string; // Utility to convert object references to MOO expressions
 }
 
 interface CompileError {
@@ -64,6 +73,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     onSplitTouchStart,
     onToggleSplitMode,
     isInSplitMode = false,
+    owner,
+    definer,
+    permissions,
+    argspec,
+    onSave,
+    onDelete,
+    normalizeObjectInput,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const [content, setContent] = useState(initialContent);
@@ -98,6 +114,22 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         }
         return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
     });
+
+    // Verb metadata editing state
+    const [isEditingOwner, setIsEditingOwner] = useState(false);
+    const [editOwnerValue, setEditOwnerValue] = useState(owner ? `#${owner}` : "");
+    const [editPermissions, setEditPermissions] = useState(
+        permissions || { readable: false, writable: false, executable: false, debug: false },
+    );
+    const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+    const [metadataSaveSuccess, setMetadataSaveSuccess] = useState(false);
+
+    // Sync local state when props change, but don't clear the success state
+    useEffect(() => {
+        setEditOwnerValue(owner ? `#${owner}` : "");
+        setEditPermissions(permissions || { readable: false, writable: false, executable: false, debug: false });
+        // Don't clear metadataSaveSuccess - let the timeout handle it
+    }, [owner, permissions]);
 
     // Parse actual object ID from uploadAction and create enhanced title
     const enhancedTitle = React.useMemo(() => {
@@ -144,6 +176,71 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             }
         };
     }, []);
+
+    // Verb metadata editing handlers
+    const handleTogglePermission = (perm: "readable" | "writable" | "executable" | "debug") => {
+        setEditPermissions((prev) => ({
+            ...prev,
+            [perm]: !prev[perm],
+        }));
+    };
+
+    const handleSaveMetadata = async () => {
+        if (!normalizeObjectInput) {
+            console.error("Cannot save metadata: normalizeObjectInput function not provided");
+            return;
+        }
+
+        setIsSavingMetadata(true);
+        setMetadataSaveSuccess(false);
+
+        try {
+            const permsStr = `${editPermissions.readable ? "r" : ""}${editPermissions.writable ? "w" : ""}${
+                editPermissions.executable ? "x" : ""
+            }${editPermissions.debug ? "d" : ""}`;
+
+            // Use the provided utility to normalize object references
+            const objExpr = normalizeObjectInput(objectCurie);
+            const ownerExpr = normalizeObjectInput(editOwnerValue);
+
+            if (!objExpr || !ownerExpr) {
+                throw new Error("Invalid object reference");
+            }
+
+            // Call: set_verb_info(obj, verbname, {owner, "perms", verbname})
+            // Note: We keep the same verb name for now (not editing names yet)
+            const expr =
+                `return set_verb_info(${objExpr}, "${verbName}", {${ownerExpr}, "${permsStr}", "${verbName}"});`;
+
+            console.debug("Evaluating set_verb_info expression:", expr);
+            await performEvalFlatBuffer(authToken, expr);
+
+            setIsSavingMetadata(false);
+            setIsEditingOwner(false);
+            setMetadataSaveSuccess(true);
+
+            // Clear success message after 2 seconds
+            setTimeout(() => {
+                setMetadataSaveSuccess(false);
+            }, 2000);
+
+            // Notify parent to refresh
+            if (onSave) {
+                onSave();
+            }
+        } catch (err) {
+            console.error("Failed to save verb metadata:", err);
+            setIsSavingMetadata(false);
+        }
+    };
+
+    // Track if metadata has changed
+    const hasMetadataChanges = isEditingOwner
+        || (owner ? `#${owner}` : "") !== editOwnerValue
+        || permissions?.readable !== editPermissions.readable
+        || permissions?.writable !== editPermissions.writable
+        || permissions?.executable !== editPermissions.executable
+        || permissions?.debug !== editPermissions.debug;
 
     // Mouse event handlers for dragging
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1386,6 +1483,30 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    {/* Remove button - only shown if onDelete handler provided */}
+                    {onDelete && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent drag handler from firing
+                                onDelete();
+                            }}
+                            aria-label="Remove verb"
+                            title="Remove verb"
+                            style={{
+                                backgroundColor:
+                                    "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
+                                color: "var(--color-text-primary)",
+                                border: "1px solid var(--color-border-medium)",
+                                padding: "6px 12px",
+                                borderRadius: "var(--radius-sm)",
+                                cursor: "pointer",
+                                fontSize: "12px",
+                                fontWeight: "600",
+                            }}
+                        >
+                            Remove
+                        </button>
+                    )}
                     <div
                         style={{
                             display: "flex",
@@ -1561,6 +1682,272 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     <span style={{ color: "white", fontWeight: "600" }}>
                         Verb compiled successfully
                     </span>
+                </div>
+            )}
+
+            {/* Verb metadata info panel */}
+            {(owner || definer || permissions || argspec) && (
+                <div
+                    style={{
+                        padding: "var(--space-sm) var(--space-md)",
+                        backgroundColor: "var(--color-bg-tertiary)",
+                        borderTop: "1px solid var(--color-border-light)",
+                        borderBottom: "1px solid var(--color-border-light)",
+                        fontSize: "0.9em",
+                        display: "flex",
+                        gap: "var(--space-md)",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                    }}
+                >
+                    {/* Definer - read-only, visually separated */}
+                    {definer && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.6 }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Definer:
+                            </span>
+                            <span
+                                style={{
+                                    fontFamily: "var(--font-mono)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    borderRadius: "var(--radius-sm)",
+                                    padding: "2px 6px",
+                                    fontSize: "0.95em",
+                                }}
+                            >
+                                #{definer}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Separator bar */}
+                    {definer && (owner || permissions || argspec) && (
+                        <div
+                            style={{
+                                width: "1px",
+                                height: "20px",
+                                backgroundColor: "var(--color-border-medium)",
+                            }}
+                        />
+                    )}
+
+                    {/* Owner - editable */}
+                    {owner && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Owner:
+                            </span>
+                            {isEditingOwner
+                                ? (
+                                    <input
+                                        type="text"
+                                        value={editOwnerValue}
+                                        onChange={(e) => setEditOwnerValue(e.target.value)}
+                                        style={{
+                                            fontFamily: "var(--font-mono)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            padding: "2px 6px",
+                                            fontSize: "0.95em",
+                                            width: "80px",
+                                            backgroundColor: "var(--color-bg-input)",
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                handleSaveMetadata();
+                                            } else if (e.key === "Escape") {
+                                                setEditOwnerValue(owner ? `#${owner}` : "");
+                                                setIsEditingOwner(false);
+                                            }
+                                        }}
+                                        autoFocus
+                                    />
+                                )
+                                : (
+                                    <button
+                                        onClick={() => setIsEditingOwner(true)}
+                                        style={{
+                                            background: "none",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            color: "var(--color-text-primary)",
+                                            cursor: "pointer",
+                                            padding: "2px 6px",
+                                            fontFamily: "var(--font-mono)",
+                                            fontSize: "0.95em",
+                                        }}
+                                    >
+                                        #{owner}
+                                    </button>
+                                )}
+                        </div>
+                    )}
+
+                    {/* Permissions - editable */}
+                    {permissions && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Perms:
+                            </span>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: "4px",
+                                    border: "1px solid var(--color-border-medium)",
+                                    borderRadius: "var(--radius-sm)",
+                                    padding: "2px 4px",
+                                }}
+                            >
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "2px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-mono)",
+                                        fontSize: "0.95em",
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.readable}
+                                        onChange={() => handleTogglePermission("readable")}
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                    r
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "2px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-mono)",
+                                        fontSize: "0.95em",
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.writable}
+                                        onChange={() => handleTogglePermission("writable")}
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                    w
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "2px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-mono)",
+                                        fontSize: "0.95em",
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.executable}
+                                        onChange={() => handleTogglePermission("executable")}
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                    x
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "2px",
+                                        cursor: "pointer",
+                                        fontFamily: "var(--font-mono)",
+                                        fontSize: "0.95em",
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.debug}
+                                        onChange={() => handleTogglePermission("debug")}
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                    d
+                                </label>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Argspec - read-only for now */}
+                    {argspec && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Argspec:
+                            </span>
+                            <span
+                                style={{
+                                    fontFamily: "var(--font-mono)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    borderRadius: "var(--radius-sm)",
+                                    padding: "2px 6px",
+                                    fontSize: "0.95em",
+                                }}
+                            >
+                                {argspec.dobj} {argspec.prep} {argspec.iobj}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Save/Cancel buttons for metadata changes */}
+                    {(hasMetadataChanges || metadataSaveSuccess) && (
+                        <>
+                            <button
+                                onClick={handleSaveMetadata}
+                                disabled={isSavingMetadata || metadataSaveSuccess}
+                                style={{
+                                    padding: "4px 10px",
+                                    borderRadius: "var(--radius-sm)",
+                                    border: "none",
+                                    backgroundColor: metadataSaveSuccess
+                                        ? "var(--color-bg-success, #28a745)"
+                                        : "var(--color-button-primary)",
+                                    color: "white",
+                                    cursor: isSavingMetadata || metadataSaveSuccess ? "not-allowed" : "pointer",
+                                    fontSize: "0.85em",
+                                    fontWeight: "600",
+                                    opacity: isSavingMetadata ? 0.6 : 1,
+                                }}
+                            >
+                                {isSavingMetadata ? "Saving..." : metadataSaveSuccess ? "Saved ✓" : "Save"}
+                            </button>
+                            {hasMetadataChanges && !metadataSaveSuccess && (
+                                <button
+                                    onClick={() => {
+                                        setEditOwnerValue(owner ? `#${owner}` : "");
+                                        setEditPermissions(
+                                            permissions
+                                                || {
+                                                    readable: false,
+                                                    writable: false,
+                                                    executable: false,
+                                                    debug: false,
+                                                },
+                                        );
+                                        setIsEditingOwner(false);
+                                    }}
+                                    disabled={isSavingMetadata}
+                                    style={{
+                                        padding: "4px 10px",
+                                        borderRadius: "var(--radius-sm)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        backgroundColor: "transparent",
+                                        color: "var(--color-text-secondary)",
+                                        cursor: isSavingMetadata ? "not-allowed" : "pointer",
+                                        fontSize: "0.85em",
+                                        fontWeight: "600",
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                        </>
+                    )}
                 </div>
             )}
 

@@ -85,18 +85,18 @@ interface AddPropertyFormValues {
     perms: string;
 }
 
-// Helper to decode object flags to readable string
-function formatObjectFlags(flags: number): string {
-    const parts: string[] = [];
-    if (flags & 8) parts.push("r"); // Read
-    if (flags & 16) parts.push("w"); // Write
-    if (flags & 32) parts.push("f"); // Fertile
-    return parts.length > 0 ? parts.join("") : "";
+interface AddVerbFormValues {
+    names: string;
+    owner: string;
+    perms: string;
+    dobj: string;
+    prep: string;
+    iobj: string;
 }
 
-// Helper to format ArgSpec enum value
-function formatArgSpec(argSpec: number): string {
-    switch (argSpec) {
+// Helper to convert ArgSpec enum to string
+function argSpecToString(val: number): string {
+    switch (val) {
         case 0:
             return "none";
         case 1:
@@ -104,13 +104,42 @@ function formatArgSpec(argSpec: number): string {
         case 2:
             return "this";
         default:
-            return "?";
+            return "none";
     }
 }
 
-// Helper to format PrepSpec value (just the numeric preposition ID for now)
-function formatPrepSpec(prep: number): string {
-    return prep === 0 ? "none" : prep.toString();
+// Helper to convert PrepSpec value to string
+function prepSpecToString(val: number): string {
+    if (val === -2) return "any";
+    if (val === -1) return "none";
+    // Numeric preposition IDs map to specific prepositions
+    const preps = [
+        "with",
+        "at",
+        "in-front-of",
+        "in",
+        "on",
+        "from",
+        "over",
+        "through",
+        "under",
+        "behind",
+        "beside",
+        "for",
+        "is",
+        "as",
+        "off",
+    ];
+    return preps[val] || "none";
+}
+
+// Helper to decode object flags to readable string
+function formatObjectFlags(flags: number): string {
+    const parts: string[] = [];
+    if (flags & 8) parts.push("r"); // Read
+    if (flags & 16) parts.push("w"); // Write
+    if (flags & 32) parts.push("f"); // Fertile
+    return parts.length > 0 ? parts.join("") : "";
 }
 
 export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
@@ -145,6 +174,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [selectedVerb, setSelectedVerb] = useState<VerbData | null>(null);
     const [verbCode, setVerbCode] = useState<string>("");
     const [editorVisible, setEditorVisible] = useState(false);
+
+    // Sync selectedVerb when verbs array updates (e.g., after metadata save)
+    useEffect(() => {
+        if (selectedVerb) {
+            const updatedVerb = verbs.find(v =>
+                v.names[0] === selectedVerb.names[0] && v.location === selectedVerb.location
+            );
+            if (updatedVerb) {
+                setSelectedVerb(updatedVerb);
+            }
+        }
+    }, [verbs]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Editor split state
     const [editorSplitPosition, setEditorSplitPosition] = useState(0.5); // 0.5 = 50% top, 50% bottom
@@ -185,18 +226,25 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [showRecycleDialog, setShowRecycleDialog] = useState(false);
     const [showAddPropertyDialog, setShowAddPropertyDialog] = useState(false);
     const [showDeletePropertyDialog, setShowDeletePropertyDialog] = useState(false);
+    const [showAddVerbDialog, setShowAddVerbDialog] = useState(false);
+    const [showDeleteVerbDialog, setShowDeleteVerbDialog] = useState(false);
     const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
     const [isSubmittingRecycle, setIsSubmittingRecycle] = useState(false);
     const [isSubmittingAddProperty, setIsSubmittingAddProperty] = useState(false);
     const [isSubmittingDeleteProperty, setIsSubmittingDeleteProperty] = useState(false);
+    const [isSubmittingAddVerb, setIsSubmittingAddVerb] = useState(false);
+    const [isSubmittingDeleteVerb, setIsSubmittingDeleteVerb] = useState(false);
     const [createDialogError, setCreateDialogError] = useState<string | null>(null);
     const [recycleDialogError, setRecycleDialogError] = useState<string | null>(null);
     const [addPropertyDialogError, setAddPropertyDialogError] = useState<string | null>(null);
     const [deletePropertyDialogError, setDeletePropertyDialogError] = useState<string | null>(null);
+    const [addVerbDialogError, setAddVerbDialogError] = useState<string | null>(null);
+    const [deleteVerbDialogError, setDeleteVerbDialogError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [editingName, setEditingName] = useState<string>("");
     const [isSavingName, setIsSavingName] = useState(false);
     const [propertyToDelete, setPropertyToDelete] = useState<PropertyData | null>(null);
+    const [verbToDelete, setVerbToDelete] = useState<VerbData | null>(null);
     const decreaseFontSize = useCallback(() => {
         setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
     }, []);
@@ -631,6 +679,104 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             setAddPropertyDialogError(error instanceof Error ? error.message : String(error));
         } finally {
             setIsSubmittingAddProperty(false);
+        }
+    };
+
+    const handleAddVerbSubmit = async (form: AddVerbFormValues) => {
+        if (!selectedObject) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setAddVerbDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        setIsSubmittingAddVerb(true);
+        setAddVerbDialogError(null);
+
+        try {
+            // Validate and normalize verb names
+            const verbNames = form.names.trim();
+            if (!verbNames) {
+                throw new Error("Verb names cannot be empty");
+            }
+
+            const ownerExpr = normalizeObjectInput(form.owner || "player") || "player";
+            const perms = form.perms.trim() || "rxd";
+
+            // Validate perms string for verbs (r, w, x, d)
+            if (!/^[rwxd]*$/.test(perms)) {
+                throw new Error("Invalid permissions. Use r, w, x, and/or d");
+            }
+
+            // Normalize argument specs
+            const dobj = form.dobj.trim() || "this";
+            const prep = form.prep.trim() || "none";
+            const iobj = form.iobj.trim() || "none";
+
+            // Build the add_verb call
+            // add_verb(obj, {owner, "perms", "names"}, {"dobj", "prep", "iobj"})
+            const expr =
+                `return add_verb(${objectExpr}, {${ownerExpr}, "${perms}", "${verbNames}"}, {"${dobj}", "${prep}", "${iobj}"});`;
+
+            console.debug("Evaluating add_verb expression:", expr);
+            const result = await performEvalFlatBuffer(authToken, expr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "add_verb() failed";
+                throw new Error(msg);
+            }
+
+            // Reload verbs list
+            await loadPropertiesAndVerbs(selectedObject);
+
+            setShowAddVerbDialog(false);
+            setActionMessage(`Added verb "${verbNames}" to ${describeObject(selectedObject)}`);
+        } catch (error) {
+            setAddVerbDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingAddVerb(false);
+        }
+    };
+
+    const handleDeleteVerbConfirm = async () => {
+        if (!selectedObject || !verbToDelete) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setDeleteVerbDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        setIsSubmittingDeleteVerb(true);
+        setDeleteVerbDialogError(null);
+
+        try {
+            // delete_verb(obj, verbname)
+            const verbName = verbToDelete.names[0];
+            const expr = `return delete_verb(${objectExpr}, "${verbName}");`;
+
+            console.debug("Evaluating delete_verb expression:", expr);
+            const result = await performEvalFlatBuffer(authToken, expr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "delete_verb() failed";
+                throw new Error(msg);
+            }
+
+            // Reload verbs list
+            await loadPropertiesAndVerbs(selectedObject);
+
+            setShowDeleteVerbDialog(false);
+            setVerbToDelete(null);
+            setSelectedVerb(null);
+            setEditorVisible(false);
+
+            setActionMessage(`Removed verb "${verbName}" from ${describeObject(selectedObject)}`);
+        } catch (error) {
+            setDeleteVerbDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingDeleteVerb(false);
         }
     };
 
@@ -1822,6 +1968,32 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 >
                                     Verbs
                                 </span>
+                                {selectedObject && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setAddVerbDialogError(null);
+                                            setActionMessage(null);
+                                            setShowAddVerbDialog(true);
+                                        }}
+                                        disabled={isSubmittingAddVerb}
+                                        aria-label="Add verb"
+                                        title="Add verb"
+                                        style={{
+                                            padding: "4px 8px",
+                                            borderRadius: "var(--radius-sm)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            backgroundColor: "var(--color-bg-secondary)",
+                                            color: "var(--color-text-primary)",
+                                            cursor: isSubmittingAddVerb ? "not-allowed" : "pointer",
+                                            opacity: isSubmittingAddVerb ? 0.6 : 1,
+                                            fontSize: `${secondaryFontSize}px`,
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        + Add
+                                    </button>
+                                )}
                             </div>
                             <div
                                 style={{
@@ -1930,27 +2102,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         ))
                                     )}
                             </div>
-                            {/* Verb info panel */}
-                            {selectedVerb && (
-                                <div style={infoPanelStyle}>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Names:</strong> {selectedVerb.names.join(" ")}
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Args:</strong> {formatArgSpec(selectedVerb.dobj)} /{" "}
-                                        {formatPrepSpec(selectedVerb.prep)} / {formatArgSpec(selectedVerb.iobj)}
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Owner:</strong>{" "}
-                                        {renderObjectRef(selectedVerb.owner, handleNavigateToObject)}
-                                    </div>
-                                    <div>
-                                        <strong>Perms:</strong> {selectedVerb.readable ? "r" : ""}
-                                        {selectedVerb.writable ? "w" : ""}
-                                        {selectedVerb.executable ? "x" : ""}
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
 
@@ -2050,6 +2201,30 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     initialContent={verbCode}
                                     authToken={authToken}
                                     splitMode={true}
+                                    owner={selectedVerb.owner}
+                                    definer={selectedVerb.location}
+                                    permissions={{
+                                        readable: selectedVerb.readable,
+                                        writable: selectedVerb.writable,
+                                        executable: selectedVerb.executable,
+                                        debug: false, // TODO: Need to add debug field to VerbData
+                                    }}
+                                    argspec={{
+                                        dobj: argSpecToString(selectedVerb.dobj),
+                                        prep: prepSpecToString(selectedVerb.prep),
+                                        iobj: argSpecToString(selectedVerb.iobj),
+                                    }}
+                                    onSave={() => {
+                                        // Reload verbs list in background to update the list
+                                        if (selectedObject) {
+                                            loadPropertiesAndVerbs(selectedObject);
+                                        }
+                                    }}
+                                    onDelete={() => {
+                                        setVerbToDelete(selectedVerb);
+                                        setShowDeleteVerbDialog(true);
+                                    }}
+                                    normalizeObjectInput={normalizeObjectInput}
                                 />
                             )}
                         </div>
@@ -2191,6 +2366,32 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     onConfirm={handleDeletePropertyConfirm}
                     isSubmitting={isSubmittingDeleteProperty}
                     errorMessage={deletePropertyDialogError}
+                />
+            )}
+            {showAddVerbDialog && selectedObject && (
+                <AddVerbDialog
+                    key={`add-verb-${selectedObject.obj}`}
+                    objectLabel={describeObject(selectedObject)}
+                    defaultOwner={normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "")
+                        || "player"}
+                    onCancel={() => setShowAddVerbDialog(false)}
+                    onSubmit={handleAddVerbSubmit}
+                    isSubmitting={isSubmittingAddVerb}
+                    errorMessage={addVerbDialogError}
+                />
+            )}
+            {showDeleteVerbDialog && verbToDelete && selectedObject && (
+                <DeleteVerbDialog
+                    key={`delete-verb-${verbToDelete.names[0]}`}
+                    verbName={verbToDelete.names.join(" ")}
+                    objectLabel={describeObject(selectedObject)}
+                    onCancel={() => {
+                        setShowDeleteVerbDialog(false);
+                        setVerbToDelete(null);
+                    }}
+                    onConfirm={handleDeleteVerbConfirm}
+                    isSubmitting={isSubmittingDeleteVerb}
+                    errorMessage={deleteVerbDialogError}
                 />
             )}
         </>
@@ -2477,13 +2678,13 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
     const [name, setName] = useState("");
     const [value, setValue] = useState("0");
     const [owner, setOwner] = useState(defaultOwner);
-    const [perms, setPerms] = useState("rw");
+    const [perms, setPerms] = useState("r");
 
     useEffect(() => {
         setName("");
         setValue("0");
         setOwner(defaultOwner);
-        setPerms("rw");
+        setPerms("r");
     }, [defaultOwner]);
 
     const handleSubmit = (event: React.FormEvent) => {
@@ -2559,25 +2760,64 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                             }}
                         />
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
                         <span style={{ fontWeight: 600 }}>Permissions</span>
-                        <input
-                            type="text"
-                            value={perms}
-                            onChange={(e) => setPerms(e.target.value)}
-                            placeholder="rw"
-                            pattern="[rwc]*"
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                            r=read, w=write, c=chown
+                        </span>
+                        <div
                             style={{
+                                display: "flex",
+                                gap: "0.75em",
                                 padding: "0.5em",
                                 borderRadius: "var(--radius-sm)",
                                 border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
                             }}
-                        />
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
-                            Use r (read), w (write), and/or c (chown). Example: <code>rw</code>
-                        </span>
-                    </label>
+                        >
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("r")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "r");
+                                        } else {
+                                            setPerms(perms.replace("r", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>r</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("w")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "w");
+                                        } else {
+                                            setPerms(perms.replace("w", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>w</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("c")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "c");
+                                        } else {
+                                            setPerms(perms.replace("c", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>c</span>
+                            </label>
+                        </div>
+                    </div>
                     {errorMessage && (
                         <div
                             role="alert"
@@ -2627,6 +2867,458 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                         </button>
                     </div>
                 </form>
+            </div>
+        </>
+    );
+};
+
+interface AddVerbDialogProps {
+    objectLabel: string;
+    defaultOwner: string;
+    onCancel: () => void;
+    onSubmit: (form: AddVerbFormValues) => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
+    objectLabel,
+    defaultOwner,
+    onCancel,
+    onSubmit,
+    isSubmitting,
+    errorMessage,
+}) => {
+    const [verbType, setVerbType] = useState<"method" | "command">("method");
+    const [names, setNames] = useState("");
+    const [owner, setOwner] = useState(defaultOwner);
+    const [perms, setPerms] = useState("rxd");
+    const [dobj, setDobj] = useState("this");
+    const [prep, setPrep] = useState("none");
+    const [iobj, setIobj] = useState("this");
+
+    useEffect(() => {
+        setNames("");
+        setOwner(defaultOwner);
+        setVerbType("method");
+        setPerms("rxd");
+        setDobj("this");
+        setPrep("none");
+        setIobj("this");
+    }, [defaultOwner]);
+
+    // Update argspec and perms when verb type changes
+    const handleVerbTypeChange = (type: "method" | "command") => {
+        setVerbType(type);
+        if (type === "method") {
+            setPerms("rxd");
+            setDobj("this");
+            setPrep("none");
+            setIobj("this");
+        } else {
+            setPerms("rd");
+            setDobj("this");
+            setPrep("none");
+            setIobj("none");
+        }
+    };
+
+    const handleSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        onSubmit({ names, owner, perms, dobj, prep, iobj });
+    };
+
+    return (
+        <>
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="dialog-sheet"
+                style={{ maxWidth: "520px" }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="add-verb-title"
+            >
+                <div className="dialog-sheet-header">
+                    <h2 id="add-verb-title">Add Verb</h2>
+                </div>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
+                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                        Add a new verb to <strong>{objectLabel}</strong>.
+                    </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Verb type</span>
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: "1.5em",
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                            }}
+                        >
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="radio"
+                                    name="verbType"
+                                    checked={verbType === "method"}
+                                    onChange={() => handleVerbTypeChange("method")}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column" }}>
+                                    <span style={{ fontWeight: 600 }}>Method</span>
+                                    <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>
+                                        Called from code (<code>this none this</code>, with <code>x</code>)
+                                    </span>
+                                </div>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="radio"
+                                    name="verbType"
+                                    checked={verbType === "command"}
+                                    onChange={() => handleVerbTypeChange("command")}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column" }}>
+                                    <span style={{ fontWeight: 600 }}>Command</span>
+                                    <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>
+                                        Player command (e.g. <code>this none none</code>, no <code>x</code>)
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Verb names (space-separated)</span>
+                        <input
+                            type="text"
+                            value={names}
+                            onChange={(e) => setNames(e.target.value)}
+                            placeholder="get take grab"
+                            autoFocus
+                            required
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                            Example: <code>get take grab</code> creates aliases for the same verb
+                        </span>
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
+                        <input
+                            type="text"
+                            value={owner}
+                            onChange={(e) => setOwner(e.target.value)}
+                            placeholder="player"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                    </label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Permissions</span>
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                            r=read, w=write, x=exec, d=raise errors (usually keep on)
+                        </span>
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: "0.75em",
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                            }}
+                        >
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("r")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "r");
+                                        } else {
+                                            setPerms(perms.replace("r", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>r</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("w")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "w");
+                                        } else {
+                                            setPerms(perms.replace("w", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>w</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("x")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "x");
+                                        } else {
+                                            setPerms(perms.replace("x", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>x</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={perms.includes("d")}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPerms(perms + "d");
+                                        } else {
+                                            setPerms(perms.replace("d", ""));
+                                        }
+                                    }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)" }}>d</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Verb argument specification</span>
+                        <div style={{ display: "flex", gap: "0.5em", alignItems: "center" }}>
+                            <label style={{ display: "flex", flexDirection: "column", gap: "0.25em", flex: 1 }}>
+                                <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>dobj</span>
+                                <select
+                                    value={dobj}
+                                    onChange={(e) => setDobj(e.target.value)}
+                                    style={{
+                                        padding: "0.5em",
+                                        borderRadius: "var(--radius-sm)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        fontFamily: "var(--font-mono)",
+                                        backgroundColor: "var(--color-bg-input)",
+                                        color: "var(--color-text-primary)",
+                                    }}
+                                >
+                                    <option value="none">none</option>
+                                    <option value="any">any</option>
+                                    <option value="this">this</option>
+                                </select>
+                            </label>
+                            <label style={{ display: "flex", flexDirection: "column", gap: "0.25em", flex: 1 }}>
+                                <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>prep</span>
+                                <select
+                                    value={prep}
+                                    onChange={(e) => setPrep(e.target.value)}
+                                    style={{
+                                        padding: "0.5em",
+                                        borderRadius: "var(--radius-sm)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        fontFamily: "var(--font-mono)",
+                                        backgroundColor: "var(--color-bg-input)",
+                                        color: "var(--color-text-primary)",
+                                    }}
+                                >
+                                    <option value="none">none</option>
+                                    <option value="any">any</option>
+                                    <option value="with">with</option>
+                                    <option value="at">at</option>
+                                    <option value="in-front-of">in-front-of</option>
+                                    <option value="in">in</option>
+                                    <option value="on">on</option>
+                                    <option value="from">from (out of)</option>
+                                    <option value="over">over</option>
+                                    <option value="through">through</option>
+                                    <option value="under">under</option>
+                                    <option value="behind">behind</option>
+                                    <option value="beside">beside</option>
+                                    <option value="for">for</option>
+                                    <option value="is">is</option>
+                                    <option value="as">as</option>
+                                    <option value="off">off</option>
+                                </select>
+                            </label>
+                            <label style={{ display: "flex", flexDirection: "column", gap: "0.25em", flex: 1 }}>
+                                <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>iobj</span>
+                                <select
+                                    value={iobj}
+                                    onChange={(e) => setIobj(e.target.value)}
+                                    style={{
+                                        padding: "0.5em",
+                                        borderRadius: "var(--radius-sm)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        fontFamily: "var(--font-mono)",
+                                        backgroundColor: "var(--color-bg-input)",
+                                        color: "var(--color-text-primary)",
+                                    }}
+                                >
+                                    <option value="none">none</option>
+                                    <option value="any">any</option>
+                                    <option value="this">this</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-text-error)",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                color: "var(--color-text-primary)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-text-accent)",
+                                color: "var(--color-bg-base)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Adding…" : "Add Verb"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </>
+    );
+};
+
+interface DeleteVerbDialogProps {
+    verbName: string;
+    objectLabel: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const DeleteVerbDialog: React.FC<DeleteVerbDialogProps> = ({
+    verbName,
+    objectLabel,
+    onCancel,
+    onConfirm,
+    isSubmitting,
+    errorMessage,
+}) => {
+    return (
+        <>
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="dialog-sheet"
+                style={{ maxWidth: "480px" }}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="delete-verb-title"
+            >
+                <div className="dialog-sheet-header">
+                    <h2 id="delete-verb-title">Remove Verb?</h2>
+                </div>
+                <div className="dialog-sheet-content" style={{ gap: "1em" }}>
+                    <div
+                        style={{
+                            padding: "0.75em",
+                            borderRadius: "var(--radius-sm)",
+                            border: "1px solid var(--color-text-error)",
+                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                            color: "var(--color-text-primary)",
+                            fontFamily: "inherit",
+                        }}
+                    >
+                        <p style={{ margin: 0 }}>
+                            Remove verb <code>{verbName}</code> from{" "}
+                            <strong>{objectLabel}</strong>? This action cannot be undone.
+                        </p>
+                    </div>
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-text-error)",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                color: "var(--color-text-primary)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-text-error)",
+                                color: "var(--color-bg-base)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Removing…" : "Remove Verb"}
+                        </button>
+                    </div>
+                </div>
             </div>
         </>
     );

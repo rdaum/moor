@@ -2,6 +2,7 @@ import { FlatCompat } from "@eslint/eslintrc";
 import js from "@eslint/js";
 import typescriptEslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import reactHooks from "eslint-plugin-react-hooks";
 import { defineConfig, globalIgnores } from "eslint/config";
 import globals from "globals";
 import path from "node:path";
@@ -25,6 +26,7 @@ export default defineConfig([
 
         plugins: {
             "@typescript-eslint": typescriptEslint,
+            "react-hooks": reactHooks,
         },
 
         languageOptions: {
@@ -51,6 +53,8 @@ export default defineConfig([
             "@typescript-eslint/no-explicit-any": "warn",
             "prefer-const": "error",
             "no-var": "error",
+            "react-hooks/rules-of-hooks": "error",
+            "react-hooks/exhaustive-deps": "warn",
         },
     },
 ]);
