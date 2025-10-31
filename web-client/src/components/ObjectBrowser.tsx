@@ -181,6 +181,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [createDialogError, setCreateDialogError] = useState<string | null>(null);
     const [recycleDialogError, setRecycleDialogError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [editingName, setEditingName] = useState<string>("");
+    const [isSavingName, setIsSavingName] = useState(false);
     const decreaseFontSize = useCallback(() => {
         setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
     }, []);
@@ -358,6 +360,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const handleObjectSelect = (obj: ObjectData) => {
         setActionMessage(null);
         setSelectedObject(obj);
+        setEditingName(obj.name);
         setSelectedProperty(null);
         setSelectedVerb(null);
         setEditorVisible(false);
@@ -411,6 +414,42 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         } catch (error) {
             console.error("Failed to load verb code:", error);
             setVerbCode("// Failed to load verb code");
+        }
+    };
+
+    const handleNameSave = async () => {
+        if (!selectedObject) return;
+
+        setIsSavingName(true);
+        try {
+            const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+            if (!objectExpr || objectExpr === "#-1") {
+                throw new Error("Invalid object reference");
+            }
+
+            // Escape the name string for MOO
+            const escapedName = editingName.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+            const expr = `${objectExpr}.name = "${escapedName}"; return ${objectExpr}.name;`;
+
+            await performEvalFlatBuffer(authToken, expr);
+
+            // Update local state
+            setSelectedObject({ ...selectedObject, name: editingName });
+
+            // Reload the objects list to reflect the change
+            const updated = await loadObjects();
+            const updatedObj = updated.find(obj => obj.obj === selectedObject.obj);
+            if (updatedObj) {
+                setSelectedObject(updatedObj);
+                setEditingName(updatedObj.name);
+            }
+
+            setActionMessage("Name updated successfully");
+        } catch (error) {
+            console.error("Failed to save name:", error);
+            setActionMessage("Failed to update name: " + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            setIsSavingName(false);
         }
     };
 
@@ -1312,6 +1351,59 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             {/* Object info panel */}
                             {selectedObject && (
                                 <div style={infoPanelStyle}>
+                                    <div
+                                        style={{
+                                            marginBottom: "var(--space-xs)",
+                                            display: "flex",
+                                            gap: "4px",
+                                            alignItems: "center",
+                                        }}
+                                    >
+                                        <strong>Name:</strong>
+                                        <input
+                                            type="text"
+                                            value={editingName}
+                                            onChange={(e) => setEditingName(e.target.value)}
+                                            disabled={isSavingName}
+                                            style={{
+                                                flex: 1,
+                                                padding: "4px 6px",
+                                                fontSize: `${secondaryFontSize}px`,
+                                                fontFamily: "var(--font-mono)",
+                                                backgroundColor: "var(--color-bg-input)",
+                                                border: "1px solid var(--color-border-medium)",
+                                                borderRadius: "var(--radius-sm)",
+                                                color: "var(--color-text-primary)",
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                    handleNameSave();
+                                                } else if (e.key === "Escape") {
+                                                    setEditingName(selectedObject.name);
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleNameSave}
+                                            disabled={isSavingName || editingName === selectedObject.name}
+                                            style={{
+                                                padding: "4px 8px",
+                                                fontSize: `${secondaryFontSize}px`,
+                                                fontWeight: 600,
+                                                borderRadius: "var(--radius-sm)",
+                                                border: "1px solid var(--color-border-medium)",
+                                                backgroundColor: "var(--color-bg-secondary)",
+                                                color: "var(--color-text-primary)",
+                                                cursor: isSavingName || editingName === selectedObject.name
+                                                    ? "not-allowed"
+                                                    : "pointer",
+                                                opacity: isSavingName || editingName === selectedObject.name ? 0.6 : 1,
+                                            }}
+                                        >
+                                            {isSavingName ? "Saving..." : "Save"}
+                                        </button>
+                                    </div>
                                     <div style={{ marginBottom: "var(--space-xs)" }}>
                                         <strong>Flags:</strong> {formatObjectFlags(selectedObject.flags) || "none"}
                                     </div>
