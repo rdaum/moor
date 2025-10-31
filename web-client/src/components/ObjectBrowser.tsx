@@ -795,6 +795,55 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     };
 
+    const handleDumpObject = async () => {
+        if (!selectedObject) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setActionMessage("Unable to determine object reference.");
+            return;
+        }
+
+        try {
+            const expr = `return dump_object(${objectExpr});`;
+            console.debug("Evaluating dump_object expression:", expr);
+            const result = await performEvalFlatBuffer(authToken, expr);
+
+            // Check for error
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "dump_object() failed";
+                throw new Error(msg);
+            }
+
+            // Result should be an array of strings
+            if (!Array.isArray(result)) {
+                throw new Error("dump_object() returned unexpected result");
+            }
+
+            // Join the lines with newlines
+            const content = result.join("\n");
+
+            // Create a blob and download it
+            const blob = new Blob([content], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${objectExpr.replace("#", "")}.moo`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setActionMessage(`Dumped ${describeObject(selectedObject)} to file`);
+            setTimeout(() => setActionMessage(null), 3000);
+        } catch (error) {
+            console.error("Failed to dump object:", error);
+            setActionMessage(`Failed to dump object: ${error instanceof Error ? error.message : String(error)}`);
+            setTimeout(() => setActionMessage(null), 5000);
+        }
+    };
+
     const handleAddPropertySubmit = async (form: AddPropertyFormValues) => {
         if (!selectedObject) return;
 
@@ -2130,6 +2179,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setActionMessage(null);
                                         setShowEditFlagsDialog(true);
                                     }}
+                                    onDumpObject={handleDumpObject}
                                     isSubmittingCreate={isSubmittingCreate}
                                     isSubmittingRecycle={isSubmittingRecycle}
                                     editingName={editingName}
@@ -3755,6 +3805,7 @@ interface ObjectInfoEditorProps {
     onCreateChild: () => void;
     onRecycle: () => void;
     onEditFlags: () => void;
+    onDumpObject: () => void;
     isSubmittingCreate: boolean;
     isSubmittingRecycle: boolean;
     editingName: string;
@@ -3774,6 +3825,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     onCreateChild,
     onRecycle,
     onEditFlags,
+    onDumpObject,
     isSubmittingCreate,
     isSubmittingRecycle,
     editingName,
@@ -4130,6 +4182,25 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                         }}
                     >
                         Recycle
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onDumpObject}
+                        disabled={!object || object.obj === "-1"}
+                        style={{
+                            backgroundColor: "var(--color-bg-tertiary)",
+                            color: "var(--color-text-primary)",
+                            border: "1px solid var(--color-border-medium)",
+                            padding: "6px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: !object || object.obj === "-1" ? "not-allowed" : "pointer",
+                            opacity: !object || object.obj === "-1" ? 0.6 : 1,
+                            fontSize: "12px",
+                            fontWeight: "600",
+                        }}
+                        title="Export object definition to .moo file"
+                    >
+                        Export Objdef
                     </button>
                 </div>
             </div>
