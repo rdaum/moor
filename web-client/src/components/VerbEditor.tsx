@@ -240,7 +240,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/\bE_[A-Z_]+/, "constant.other"],
 
                     // Binary literals (base64-encoded)
-                    [/b"[A-Za-z0-9+/=_-]*"/, "string.regexp"],
+                    [/b"[A-Za-z0-9+/=_-]*"/, "string.binary"],
 
                     // Object references (#123, #-1)
                     [/#-?\d+/, "number.hex"],
@@ -248,11 +248,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     // System properties and verbs ($property)
                     [/\$[a-zA-Z_][a-zA-Z0-9_]*/, "variable.predefined"],
 
+                    // Try expression start delimiter (backtick)
+                    [/`/, { token: "keyword.try", next: "@tryExpression", bracket: "@open" }],
+
                     // Symbols ('symbol)
                     [/'[a-zA-Z_][a-zA-Z0-9_]*/, "string.key"],
-
-                    // Try expressions (backtick to single quote)
-                    [/`[^']*'/, "string.escape"],
 
                     // Range end marker ($)
                     [/\$(?=\s*[\]})])/, "constant.numeric"],
@@ -270,13 +270,21 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/\.\./, "keyword.operator"], // Range operator
                     [/->/, "keyword.operator"], // Map arrow
                     [/=>/, "keyword.operator"], // Lambda arrow
+                    [/>>>/, "operator.bitwise"],
+                    [/>>/, "operator.bitwise"],
+                    [/<<(?!=)/, "operator.bitwise"],
+                    [/&\./, "operator.bitwise"],
+                    [/\|\./, "operator.bitwise"],
+                    [/\^\./, "operator.bitwise"],
                     [/(==|!=|<=|>=)/, "operator.comparison"],
                     [/(&&|\|\|)/, "operator.logical"],
                     [/[<>]/, "operator.comparison"],
                     [/=/, "operator.assignment"],
                     [/!/, "operator.logical"],
+                    [/~/, "operator.bitwise"],
                     [/[+\-*/%^]/, "operator.arithmetic"],
-                    [/[?|]/, "operator.conditional"], // Ternary operators
+                    [/\?/, "operator.conditional"], // Ternary begin
+                    [/\|/, "operator.conditional"], // Ternary separator
                     [/:/, "keyword.operator"], // Verb call
                     [/\./, "operator.accessor"], // Property access
                     [/@/, "keyword.operator"], // Scatter/splat operator
@@ -299,6 +307,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     [/[^/*]+/, "comment"],
                     [/\*\//, "comment", "@pop"],
                     [/[/*]/, "comment"],
+                ],
+
+                tryExpression: [
+                    [/'(?![a-zA-Z_])/, { token: "keyword.try", next: "@pop", bracket: "@close" }],
+                    [/=>/, "keyword.operator"],
+                    [/!/, "keyword.operator"],
+                    { include: "@root" },
                 ],
             },
         });
@@ -644,81 +659,206 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         position,
                         suggestions,
                     );
+                } else {
+                    const letSnippetMatch = beforeCursor.match(/\blet(?:\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*$/);
+                    if (letSnippetMatch) {
+                        const replaceLength = letSnippetMatch[0].length;
+                        const startColumn = Math.max(1, position.column - replaceLength);
+                        const variableName = letSnippetMatch[1] || "name";
+                        const letRange = {
+                            startLineNumber: position.lineNumber,
+                            endLineNumber: position.lineNumber,
+                            startColumn,
+                            endColumn: position.column,
+                        };
+
+                        const letSnippets = [
+                            {
+                                label: "let assignment",
+                                insertText: `let \${1:${variableName}} = \${2:value};`,
+                                documentation: "Bind a local variable to the result of an expression.",
+                                detail: "Bind a single variable",
+                                sortText: "00",
+                            },
+                            {
+                                label: "let scatter assignment",
+                                insertText:
+                                    `let {\${1:${variableName}}, \${2:?optional = default}, \${3:@rest}} = \${4:expr};`,
+                                documentation:
+                                    "Unpack a list (or map) into variables, with optional and rest bindings.",
+                                detail: "Unpack a collection",
+                                sortText: "10",
+                            },
+                        ];
+
+                        for (const snippet of letSnippets) {
+                            suggestions.push({
+                                label: snippet.label,
+                                kind: monaco.languages.CompletionItemKind.Snippet,
+                                insertText: snippet.insertText,
+                                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                documentation: snippet.documentation,
+                                detail: snippet.detail,
+                                range: letRange,
+                                sortText: snippet.sortText,
+                                filterText: "let",
+                            });
+                        }
+
+                        return { suggestions };
+                    }
+
+                    const constSnippetMatch = beforeCursor.match(/\bconst(?:\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*$/);
+                    if (constSnippetMatch) {
+                        const replaceLength = constSnippetMatch[0].length;
+                        const startColumn = Math.max(1, position.column - replaceLength);
+                        const constantName = constSnippetMatch[1] || "NAME";
+                        const constRange = {
+                            startLineNumber: position.lineNumber,
+                            endLineNumber: position.lineNumber,
+                            startColumn,
+                            endColumn: position.column,
+                        };
+
+                        const constSnippets = [
+                            {
+                                label: "const assignment",
+                                insertText: `const \${1:${constantName}} = \${2:value};`,
+                                documentation: "Define a constant value within the current scope.",
+                                detail: "Define a constant",
+                                sortText: "00",
+                            },
+                            {
+                                label: "const scatter assignment",
+                                insertText:
+                                    `const {\${1:${constantName}}, \${2:?optional = default}, \${3:@rest}} = \${4:expr};`,
+                                documentation: "Unpack values into constant bindings; the rest binding remains a list.",
+                                detail: "Unpack to constants",
+                                sortText: "10",
+                            },
+                        ];
+
+                        for (const snippet of constSnippets) {
+                            suggestions.push({
+                                label: snippet.label,
+                                kind: monaco.languages.CompletionItemKind.Snippet,
+                                insertText: snippet.insertText,
+                                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                documentation: snippet.documentation,
+                                detail: snippet.detail,
+                                range: constRange,
+                                sortText: snippet.sortText,
+                                filterText: "const",
+                            });
+                        }
+
+                        return { suggestions };
+                    }
                 } // If no smart completions matched, show block templates
-                else {
+                if (suggestions.length === 0) {
+                    const word = model.getWordUntilPosition(position);
                     const defaultRange = {
                         startLineNumber: position.lineNumber,
                         endLineNumber: position.lineNumber,
-                        startColumn: position.column,
-                        endColumn: position.column,
+                        startColumn: word.startColumn,
+                        endColumn: word.endColumn,
                     };
 
-                    suggestions.push(
+                    const blockSnippets: Array<{
+                        label: string;
+                        insertText: string;
+                        documentation: string;
+                        sortText: string;
+                        detailText?: string;
+                        filterText?: string;
+                    }> = [
                         {
-                            label: "if",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "if (${1:condition})\n\t${2}\nendif",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "if...endif block",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "while",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "while (${1:condition})\n\t${2}\nendwhile",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "while...endwhile block",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "for-in",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "for item in (collection) loop",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "for-range",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "for i in [start..end] range loop",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "try",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "try...endtry block",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "fork",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "fork (${1:0})\n\t${2}\nendfork",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "fork...endfork block",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "fn",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
-                            insertText: "fn ${1:name}(${2:args})\n\t${3}\nendfn",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "fn...endfn block",
-                            range: defaultRange,
-                        },
-                        {
-                            label: "begin",
-                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            label: "begin/end block",
                             insertText: "begin\n\t${1}\nend",
-                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                            documentation: "begin...end block",
-                            range: defaultRange,
+                            documentation: "Wrap statements in a begin...end block to group work or scope locals.",
+                            sortText: "00",
+                            detailText: "Group statements",
+                            filterText: "begin",
                         },
-                    );
+                        {
+                            label: "if/endif conditional",
+                            insertText: "if (${1:condition})\n\t${2}\nendif",
+                            documentation: "Conditional block; fill in optional elseif/else by hand as needed.",
+                            sortText: "10",
+                            detailText: "Branch on a condition",
+                            filterText: "if",
+                        },
+                        {
+                            label: "while loop",
+                            insertText: "while (${1:condition})\n\t${2}\nendwhile",
+                            documentation: "Loop while the condition stays true.",
+                            sortText: "20",
+                            detailText: "Repeat while true",
+                            filterText: "while",
+                        },
+                        {
+                            label: "for ... in (collection)",
+                            insertText: "for ${1:item} in (${2:collection})\n\t${3}\nendfor",
+                            documentation: "Iterate values (and optional index/key) from a collection.",
+                            sortText: "30",
+                            detailText: "Loop over a collection",
+                            filterText: "for",
+                        },
+                        {
+                            label: "for ... in [start..end]",
+                            insertText: "for ${1:i} in [${2:start}..${3:end}]\n\t${4}\nendfor",
+                            documentation: "Iterate across a numeric range inclusive of both ends.",
+                            sortText: "40",
+                            detailText: "Loop over a range",
+                            filterText: "for",
+                        },
+                        {
+                            label: "try/except block",
+                            insertText: "try\n\t${1}\nexcept (${2:E_ANY})\n\t${3}\nendtry",
+                            documentation: "Wrap statements and handle errors in one or more except clauses.",
+                            sortText: "50",
+                            detailText: "Catch errors",
+                            filterText: "try",
+                        },
+                        {
+                            label: "try expression",
+                            insertText: "` ${1:dodgy()} ! ${2:any} => ${3:fallback()}'",
+                            documentation: "Inline try expression of the form ` expr ! codes => handler '.",
+                            sortText: "60",
+                            detailText: "Inline error handling",
+                            filterText: "try",
+                        },
+                        {
+                            label: "fork/endfork block",
+                            insertText: "fork (${1:0})\n\t${2}\nendfork",
+                            documentation: "Run statements in a forked task after an optional delay.",
+                            sortText: "70",
+                            detailText: "Spawn task",
+                            filterText: "fork",
+                        },
+                        {
+                            label: "fn/endfn local function",
+                            insertText: "fn ${1:name}(${2:args})\n\t${3}\nendfn",
+                            documentation: "Define a local function; returns the function value when used in an expr.",
+                            sortText: "80",
+                            detailText: "Define helper function",
+                            filterText: "fn",
+                        },
+                    ];
+
+                    for (const snippet of blockSnippets) {
+                        suggestions.push({
+                            label: snippet.label,
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: snippet.insertText,
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: snippet.documentation,
+                            detail: snippet.detailText,
+                            range: defaultRange,
+                            sortText: snippet.sortText,
+                            filterText: snippet.filterText ?? snippet.label,
+                        });
+                    }
                 }
 
                 return { suggestions };
