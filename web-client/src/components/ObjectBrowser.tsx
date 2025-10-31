@@ -70,6 +70,7 @@ interface VerbData {
     dobj: number; // ArgSpec enum value
     prep: number; // PrepSpec value
     iobj: number; // ArgSpec enum value
+    indexInLocation?: number; // Position of this verb within its location object
 }
 
 interface CreateChildFormValues {
@@ -185,7 +186,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     useEffect(() => {
         if (selectedVerb) {
             const updatedVerb = verbs.find(v =>
-                v.names[0] === selectedVerb.names[0] && v.location === selectedVerb.location
+                v.location === selectedVerb.location && v.indexInLocation === selectedVerb.indexInLocation
             );
             if (updatedVerb) {
                 setSelectedVerb(updatedVerb);
@@ -381,6 +382,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const verbsReply = await getVerbsFlatBuffer(authToken, objectCurie, true);
             const verbsLength = verbsReply.verbsLength();
             const verbList: VerbData[] = [];
+            const locationIndices = new Map<string, number>();
 
             for (let i = 0; i < verbsLength; i++) {
                 const verbInfo = verbsReply.verbs(i);
@@ -398,6 +400,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
                 const location = verbInfo.location();
                 const owner = verbInfo.owner();
+                const locationStr = objToString(location) || "";
+
+                // Track index within each location
+                if (!locationIndices.has(locationStr)) {
+                    locationIndices.set(locationStr, 0);
+                }
+                const indexInLocation = locationIndices.get(locationStr)!;
+                locationIndices.set(locationStr, indexInLocation + 1);
 
                 // arg_spec is a vector of 3 symbols: [dobj, prep, iobj]
                 const argSpecLength = verbInfo.argSpecLength();
@@ -412,13 +422,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 verbList.push({
                     names,
                     owner: objToString(owner) || "",
-                    location: objToString(location) || "",
+                    location: locationStr,
                     readable: verbInfo.r(),
                     writable: verbInfo.w(),
                     executable: verbInfo.x(),
                     dobj: dobjNum,
                     prep: parseInt(prepStr) || 0, // prep is a numeric preposition ID
                     iobj: iobjNum,
+                    indexInLocation,
                 });
             }
 
@@ -1139,6 +1150,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
             groups.get(location)!.push(verb);
         }
+
         let entries = Array.from(groups.entries()).sort((a, b) => {
             // Sort by location ID (current object first)
             if (selectedObject && a[0] === selectedObject.obj) return -1;
@@ -1151,6 +1163,38 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
         return entries;
     }, [verbs, selectedObject, verbFilter, showInheritedVerbs]);
+
+    // Track which verbs are overridden or have duplicate names
+    const verbLabels = React.useMemo(() => {
+        const overridden = new Set<string>(); // Set of "location:index" keys for overridden verbs
+        const duplicateNames = new Set<string>(); // Set of "location:index" keys for duplicate names
+        const seenNamesGlobal = new Set<string>(); // Verb names seen across all locations
+
+        for (const [location, verbList] of groupedVerbs) {
+            const seenNamesInLocation = new Map<string, number>(); // Track name counts per location
+
+            for (const verb of verbList) {
+                const verbName = verb.names[0];
+                const key = `${location}:${verb.indexInLocation}`;
+
+                // Check if this is a duplicate name within the same location
+                if (seenNamesInLocation.has(verbName)) {
+                    duplicateNames.add(key);
+                } else {
+                    seenNamesInLocation.set(verbName, 1);
+                }
+
+                // Check if this verb name was seen in a more-specific location (overridden)
+                if (seenNamesGlobal.has(verbName)) {
+                    overridden.add(key);
+                } else {
+                    seenNamesGlobal.add(verbName);
+                }
+            }
+        }
+
+        return { overridden, duplicateNames };
+    }, [groupedVerbs]);
 
     // Add global mouse event listeners
     useEffect(() => {
@@ -1912,22 +1956,30 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                             padding: "var(--space-xs) var(--space-sm)",
                                                             cursor: "pointer",
                                                             backgroundColor: selectedProperty?.name === prop.name
+                                                                    && selectedProperty?.definer === prop.definer
                                                                 ? "var(--color-text-primary)"
                                                                 : "transparent",
                                                             color: selectedProperty?.name === prop.name
+                                                                    && selectedProperty?.definer === prop.definer
                                                                 ? "var(--color-bg-input)"
                                                                 : "inherit",
                                                             borderBottom: "1px solid var(--color-border-light)",
                                                             fontFamily: "var(--font-mono)",
                                                         }}
                                                         onMouseEnter={(e) => {
-                                                            if (selectedProperty?.name !== prop.name) {
+                                                            if (
+                                                                selectedProperty?.name !== prop.name
+                                                                || selectedProperty?.definer !== prop.definer
+                                                            ) {
                                                                 e.currentTarget.style.backgroundColor =
                                                                     "var(--color-bg-hover)";
                                                             }
                                                         }}
                                                         onMouseLeave={(e) => {
-                                                            if (selectedProperty?.name !== prop.name) {
+                                                            if (
+                                                                selectedProperty?.name !== prop.name
+                                                                || selectedProperty?.definer !== prop.definer
+                                                            ) {
                                                                 e.currentTarget.style.backgroundColor = "transparent";
                                                             }
                                                         }}
@@ -1937,9 +1989,13 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                             <span
                                                                 style={{
                                                                     opacity: selectedProperty?.name === prop.name
+                                                                            && selectedProperty?.definer
+                                                                                === prop.definer
                                                                         ? "0.7"
                                                                         : "1",
                                                                     color: selectedProperty?.name === prop.name
+                                                                            && selectedProperty?.definer
+                                                                                === prop.definer
                                                                         ? "inherit"
                                                                         : "var(--color-text-secondary)",
                                                                     fontWeight: "400",
@@ -2076,23 +2132,35 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                         style={{
                                                             padding: "var(--space-xs) var(--space-sm)",
                                                             cursor: "pointer",
-                                                            backgroundColor: selectedVerb?.names[0] === verb.names[0]
+                                                            backgroundColor: selectedVerb?.location === verb.location
+                                                                    && selectedVerb?.indexInLocation
+                                                                        === verb.indexInLocation
                                                                 ? "var(--color-text-primary)"
                                                                 : "transparent",
-                                                            color: selectedVerb?.names[0] === verb.names[0]
+                                                            color: selectedVerb?.location === verb.location
+                                                                    && selectedVerb?.indexInLocation
+                                                                        === verb.indexInLocation
                                                                 ? "var(--color-bg-input)"
                                                                 : "inherit",
                                                             borderBottom: "1px solid var(--color-border-light)",
                                                             fontFamily: "var(--font-mono)",
                                                         }}
                                                         onMouseEnter={(e) => {
-                                                            if (selectedVerb?.names[0] !== verb.names[0]) {
+                                                            if (
+                                                                selectedVerb?.location !== verb.location
+                                                                || selectedVerb?.indexInLocation
+                                                                    !== verb.indexInLocation
+                                                            ) {
                                                                 e.currentTarget.style.backgroundColor =
                                                                     "var(--color-bg-hover)";
                                                             }
                                                         }}
                                                         onMouseLeave={(e) => {
-                                                            if (selectedVerb?.names[0] !== verb.names[0]) {
+                                                            if (
+                                                                selectedVerb?.location !== verb.location
+                                                                || selectedVerb?.indexInLocation
+                                                                    !== verb.indexInLocation
+                                                            ) {
                                                                 e.currentTarget.style.backgroundColor = "transparent";
                                                             }
                                                         }}
@@ -2101,10 +2169,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                             {verb.names.join(" ")}{" "}
                                                             <span
                                                                 style={{
-                                                                    opacity: selectedVerb?.names[0] === verb.names[0]
+                                                                    opacity: selectedVerb?.location === verb.location
+                                                                            && selectedVerb?.indexInLocation
+                                                                                === verb.indexInLocation
                                                                         ? "0.7"
                                                                         : "1",
-                                                                    color: selectedVerb?.names[0] === verb.names[0]
+                                                                    color: selectedVerb?.location === verb.location
+                                                                            && selectedVerb?.indexInLocation
+                                                                                === verb.indexInLocation
                                                                         ? "inherit"
                                                                         : "var(--color-text-secondary)",
                                                                     fontWeight: "400",
@@ -2114,6 +2186,12 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                 ({verb.readable ? "r" : ""}
                                                                 {verb.writable ? "w" : ""}
                                                                 {verb.executable ? "x" : ""})
+                                                                {verbLabels.duplicateNames.has(
+                                                                    `${location}:${verb.indexInLocation}`,
+                                                                ) && " (duplicate name)"}
+                                                                {verbLabels.overridden.has(
+                                                                    `${location}:${verb.indexInLocation}`,
+                                                                ) && " (overridden)"}
                                                             </span>
                                                         </div>
                                                     </div>
