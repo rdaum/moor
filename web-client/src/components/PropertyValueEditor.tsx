@@ -14,7 +14,7 @@
 // Property value editor for MOO typed values (INT, STR, LIST, MAP, etc.)
 // Phase 1 MVP: Simple input, multiline text, and MOO literal code editor
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { VarUnion } from "../generated/moor-var/var-union.js";
 import { MoorVar } from "../lib/MoorVar.js";
 import { updatePropertyFlatBuffer } from "../lib/rpc-fb.js";
@@ -205,6 +205,38 @@ export function PropertyValueEditor({
     const [value, setValue] = useState<string>(() => toEditorText(propertyValue, detectMode(propertyValue)));
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const FONT_SIZE_STORAGE_KEY = "moor-code-editor-font-size";
+    const MIN_FONT_SIZE = 10;
+    const MAX_FONT_SIZE = 24;
+    const [fontSize, setFontSize] = useState(() => {
+        const fallback = 12;
+        if (typeof window === "undefined") {
+            return fallback;
+        }
+        const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
+        if (!stored) {
+            return fallback;
+        }
+        const parsed = parseInt(stored, 10);
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
+    });
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSize.toString());
+        }
+    }, [fontSize]);
+
+    const decreaseFontSize = useCallback(() => {
+        setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
+    }, []);
+
+    const increaseFontSize = useCallback(() => {
+        setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1));
+    }, []);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -301,6 +333,62 @@ export function PropertyValueEditor({
                     </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            backgroundColor: "var(--color-bg-secondary)",
+                            border: "1px solid var(--color-border-medium)",
+                            borderRadius: "var(--radius-sm)",
+                            padding: "2px 6px",
+                        }}
+                    >
+                        <button
+                            onClick={decreaseFontSize}
+                            aria-label="Decrease editor font size"
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--color-text-secondary)",
+                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
+                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
+                                fontSize: "14px",
+                                padding: "2px 4px",
+                            }}
+                            disabled={fontSize <= MIN_FONT_SIZE}
+                        >
+                            –
+                        </button>
+                        <span
+                            style={{
+                                fontFamily: "var(--font-mono)",
+                                fontSize: "12px",
+                                color: "var(--color-text-secondary)",
+                                minWidth: "38px",
+                                textAlign: "center",
+                            }}
+                            aria-live="polite"
+                        >
+                            {fontSize}px
+                        </span>
+                        <button
+                            onClick={increaseFontSize}
+                            aria-label="Increase editor font size"
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--color-text-secondary)",
+                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
+                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
+                                fontSize: "14px",
+                                padding: "2px 4px",
+                            }}
+                            disabled={fontSize >= MAX_FONT_SIZE}
+                        >
+                            +
+                        </button>
+                    </div>
                     {/* Mode switcher - show based on type */}
                     {propertyValue.typeCode() === VarUnion.VarStr && (
                         <>
@@ -508,7 +596,7 @@ export function PropertyValueEditor({
                         style={{
                             width: "100%",
                             padding: "var(--space-sm)",
-                            fontSize: "13px",
+                            fontSize: `${fontSize}px`,
                             fontFamily: "var(--font-mono)",
                             backgroundColor: "var(--color-bg-input)",
                             border: "1px solid var(--color-border-medium)",
@@ -529,7 +617,7 @@ export function PropertyValueEditor({
                                 flex: 1,
                                 minHeight: "200px",
                                 padding: "var(--space-sm)",
-                                fontSize: "13px",
+                                fontSize: `${fontSize}px`,
                                 fontFamily: "var(--font-mono)",
                                 backgroundColor: "var(--color-bg-input)",
                                 border: "1px solid var(--color-border-medium)",
@@ -565,7 +653,7 @@ export function PropertyValueEditor({
                                 flex: 1,
                                 minHeight: "200px",
                                 padding: "var(--space-sm)",
-                                fontSize: "13px",
+                                fontSize: `${fontSize}px`,
                                 fontFamily: "var(--font-mono)",
                                 backgroundColor: "var(--color-bg-input)",
                                 border: "1px solid var(--color-border-medium)",

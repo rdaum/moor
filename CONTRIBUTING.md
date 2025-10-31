@@ -567,7 +567,8 @@ information.
 5. **Performance Traces (Optional but Helpful)**:
    - For performance issues or panics, consider attaching a trace file
    - See [Performance Tracing](#performance-tracing) section for how to generate traces
-   - Traces can provide detailed insight into what was happening before a crash or performance problem
+   - Traces can provide detailed insight into what was happening before a crash or performance
+     problem
 
 ### Compatibility Baseline
 

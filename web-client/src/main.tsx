@@ -85,7 +85,7 @@ function AppContent({
     const systemTitle = useTitle();
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
     const [historyLoaded, setHistoryLoaded] = useState(false);
-    const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<any[]>([]);
+    const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<NarrativeMessage[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
     const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
@@ -106,10 +106,24 @@ function AppContent({
 
     const isMobile = useMediaQuery("(max-width: 768px)");
     const [forceSplitMode, setForceSplitMode] = useState(false);
+    const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isMobile);
 
     const toggleSplitMode = useCallback(() => {
         setForceSplitMode(prev => !prev);
     }, []);
+
+    const toggleObjectBrowserDock = useCallback(() => {
+        if (isMobile) {
+            return;
+        }
+        setIsObjectBrowserDocked(prev => !prev);
+    }, [isMobile]);
+
+    useEffect(() => {
+        if (isMobile && !isObjectBrowserDocked) {
+            setIsObjectBrowserDocked(true);
+        }
+    }, [isMobile, isObjectBrowserDocked]);
 
     const handleMessageAppended = useCallback((message: NarrativeMessage) => {
         if (typeof document === "undefined") {
@@ -217,6 +231,36 @@ function AppContent({
         closePropertyEditor,
         showPropertyEditor,
     } = usePropertyEditor();
+
+    const handleOpenObjectBrowser = useCallback(() => {
+        if (isMobile) {
+            closeEditor();
+            closePropertyEditor();
+            if (!isObjectBrowserDocked) {
+                setIsObjectBrowserDocked(true);
+            }
+        }
+        setIsObjectBrowserOpen(true);
+    }, [isMobile, closeEditor, closePropertyEditor, isObjectBrowserDocked]);
+
+    useEffect(() => {
+        if (!isMobile) {
+            return;
+        }
+        if (isObjectBrowserOpen) {
+            closeEditor();
+            closePropertyEditor();
+        }
+    }, [isMobile, isObjectBrowserOpen, closeEditor, closePropertyEditor]);
+
+    useEffect(() => {
+        if (!isMobile) {
+            return;
+        }
+        if ((editorSession || propertyEditorSession) && isObjectBrowserOpen) {
+            setIsObjectBrowserOpen(false);
+        }
+    }, [isMobile, editorSession, propertyEditorSession, isObjectBrowserOpen]);
 
     // Notify parent about verb editor availability
     useEffect(() => {
@@ -725,26 +769,37 @@ function AppContent({
             localStorage.setItem("moor-split-ratio", splitRatioRef.current.toString());
         };
 
+        const touchMoveOptions: AddEventListenerOptions = { passive: false, capture: true };
+        const touchEndOptions: EventListenerOptions = { capture: true };
+
         document.addEventListener("mousemove", handleMouseMove);
         document.addEventListener("mouseup", endDrag);
-        document.addEventListener("touchmove", handleTouchMove, { passive: false, capture: true });
-        document.addEventListener("touchend", endDrag, { capture: true });
+        document.addEventListener("touchmove", handleTouchMove, touchMoveOptions);
+        document.addEventListener("touchend", endDrag, touchEndOptions);
         document.body.style.cursor = "row-resize";
         document.body.style.userSelect = "none";
 
         return () => {
             document.removeEventListener("mousemove", handleMouseMove);
             document.removeEventListener("mouseup", endDrag);
-            document.removeEventListener("touchmove", handleTouchMove, { capture: true } as any);
-            document.removeEventListener("touchend", endDrag, { capture: true } as any);
+            document.removeEventListener("touchmove", handleTouchMove, touchMoveOptions);
+            document.removeEventListener("touchend", endDrag, touchEndOptions);
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
         };
     }, [isDraggingSplit]);
 
     const isConnected = authState.player?.connected || false;
-    const hasActiveEditor = editorSession || propertyEditorSession;
-    const isSplitMode = isConnected && hasActiveEditor && (isMobile || forceSplitMode);
+    const verbEditorDocked = !!editorSession && (isMobile || forceSplitMode);
+    const propertyEditorDocked = !!propertyEditorSession && (isMobile || forceSplitMode);
+    const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
+    const isSplitMode = isConnected && (verbEditorDocked || propertyEditorDocked || objectBrowserDocked);
+    const canUseObjectBrowser = Boolean(
+        isConnected
+            && authState.player?.authToken
+            && authState.player?.flags !== undefined
+            && (authState.player.flags & OBJFLAG_PROGRAMMER),
+    );
 
     useEffect(() => {
         if (!isConnected) {
@@ -816,7 +871,7 @@ function AppContent({
                     <TopNavBar
                         onSettingsToggle={() => setIsSettingsOpen(true)}
                         onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
-                            ? () => setIsObjectBrowserOpen(true)
+                            ? handleOpenObjectBrowser
                             : undefined}
                     />
                 </>
@@ -845,10 +900,11 @@ function AppContent({
                     {/* Room/Narrative Section */}
                     <div
                         style={{
-                            height: isSplitMode ? `${splitRatio * 100}%` : "100%",
+                            flex: isSplitMode ? splitRatio : 1,
                             display: "flex",
                             flexDirection: "column",
                             overflow: "hidden",
+                            minHeight: 0,
                         }}
                     >
                         {/* Top dock */}
@@ -904,17 +960,51 @@ function AppContent({
                         </aside>
                     </div>
 
+                    {/* Split handle between narrative and editors */}
+                    {isSplitMode && (
+                        <div
+                            role="separator"
+                            aria-orientation="horizontal"
+                            aria-label="Resize editor split"
+                            onMouseDown={handleSplitMouseDown}
+                            onTouchStart={handleSplitTouchStart}
+                            style={{
+                                height: "8px",
+                                flex: "0 0 auto",
+                                cursor: "row-resize",
+                                background: "var(--color-border-medium)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                touchAction: "none",
+                                borderTop: "1px solid var(--color-border-light)",
+                                borderBottom: "1px solid var(--color-border-light)",
+                            }}
+                        >
+                            <div
+                                aria-hidden="true"
+                                style={{
+                                    width: "40px",
+                                    height: "2px",
+                                    borderRadius: "2px",
+                                    backgroundColor: "var(--color-border-dark)",
+                                }}
+                            />
+                        </div>
+                    )}
+
                     {/* Editor Section (in split mode) */}
                     {isSplitMode && authState.player?.authToken && (
                         <div
                             style={{
-                                height: `${(1 - splitRatio) * 100}%`,
+                                flex: isSplitMode ? (1 - splitRatio) : 0,
                                 display: "flex",
                                 flexDirection: "column",
                                 overflow: "hidden",
+                                minHeight: 0,
                             }}
                         >
-                            {editorSession && (
+                            {verbEditorDocked && editorSession && (
                                 <VerbEditor
                                     visible={true}
                                     onClose={handleVerbEditorClose}
@@ -926,13 +1016,11 @@ function AppContent({
                                     uploadAction={editorSession.uploadAction}
                                     onSendMessage={sendMessage}
                                     splitMode={true}
-                                    onSplitDrag={handleSplitMouseDown}
-                                    onSplitTouchStart={handleSplitTouchStart}
                                     onToggleSplitMode={toggleSplitMode}
                                     isInSplitMode={true}
                                 />
                             )}
-                            {propertyEditorSession && (
+                            {propertyEditorDocked && propertyEditorSession && (
                                 <PropertyEditor
                                     visible={true}
                                     onClose={closePropertyEditor}
@@ -944,11 +1032,19 @@ function AppContent({
                                     uploadAction={propertyEditorSession.uploadAction}
                                     onSendMessage={sendMessage}
                                     splitMode={true}
-                                    onSplitDrag={handleSplitMouseDown}
-                                    onSplitTouchStart={handleSplitTouchStart}
                                     onToggleSplitMode={toggleSplitMode}
                                     isInSplitMode={true}
                                     contentType={propertyEditorSession.contentType}
+                                />
+                            )}
+                            {objectBrowserDocked && canUseObjectBrowser && (
+                                <ObjectBrowser
+                                    visible={isObjectBrowserOpen}
+                                    onClose={() => setIsObjectBrowserOpen(false)}
+                                    authToken={authState.player.authToken}
+                                    splitMode={true}
+                                    onToggleSplitMode={toggleObjectBrowserDock}
+                                    isInSplitMode={true}
                                 />
                             )}
                         </div>
@@ -957,7 +1053,7 @@ function AppContent({
             )}
 
             {/* Editor Modals (fallback for non-split mode) */}
-            {!isSplitMode && editorSession && authState.player?.authToken && (
+            {editorSession && authState.player?.authToken && !verbEditorDocked && (
                 <VerbEditor
                     visible={true}
                     onClose={handleVerbEditorClose}
@@ -972,7 +1068,7 @@ function AppContent({
                     isInSplitMode={false}
                 />
             )}
-            {!isSplitMode && propertyEditorSession && authState.player?.authToken && (
+            {propertyEditorSession && authState.player?.authToken && !propertyEditorDocked && (
                 <PropertyEditor
                     visible={true}
                     onClose={closePropertyEditor}
@@ -1029,13 +1125,14 @@ function AppContent({
                 />
             )}
 
-            {/* Object Browser - only show for Programmer players */}
-            {isConnected && authState.player?.authToken && authState.player.flags
-                && (authState.player.flags & OBJFLAG_PROGRAMMER) && (
+            {/* Object Browser - floating mode */}
+            {isObjectBrowserOpen && !objectBrowserDocked && canUseObjectBrowser && authState.player?.authToken && (
                 <ObjectBrowser
-                    visible={isObjectBrowserOpen}
+                    visible={true}
                     onClose={() => setIsObjectBrowserOpen(false)}
                     authToken={authState.player.authToken}
+                    onToggleSplitMode={toggleObjectBrowserDock}
+                    isInSplitMode={false}
                 />
             )}
         </div>

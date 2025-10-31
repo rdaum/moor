@@ -133,6 +133,29 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     // Editor split state
     const [editorSplitPosition, setEditorSplitPosition] = useState(0.5); // 0.5 = 50% top, 50% bottom
     const [isSplitDragging, setIsSplitDragging] = useState(false);
+    const MIN_FONT_SIZE = 10;
+    const MAX_FONT_SIZE = 20;
+    const [fontSize, setFontSize] = useState(() => {
+        const fallback = isMobile ? 14 : 12;
+        if (typeof window === "undefined") {
+            return fallback;
+        }
+        const stored = window.localStorage.getItem("moor-object-browser-font-size");
+        if (!stored) {
+            return fallback;
+        }
+        const parsed = parseInt(stored, 10);
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
+    });
+    const decreaseFontSize = useCallback(() => {
+        setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
+    }, []);
+    const increaseFontSize = useCallback(() => {
+        setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1));
+    }, []);
 
     // Load objects on mount
     useEffect(() => {
@@ -453,9 +476,40 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     }, [isDragging, isResizing, isSplitDragging, handleMouseMove, handleMouseUp]);
 
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem("moor-object-browser-font-size", fontSize.toString());
+        }
+    }, [fontSize]);
+
     if (!visible) {
         return null;
     }
+
+    const baseFontSize = fontSize;
+    const secondaryFontSize = Math.max(8, fontSize - 1);
+    const inheritedLabelStyle = {
+        padding: "var(--space-xs) var(--space-sm)",
+        backgroundColor: "var(--color-bg-secondary)",
+        borderTop: "1px solid var(--color-border-medium)",
+        borderBottom: "1px solid var(--color-border-light)",
+        fontSize: `${secondaryFontSize}px`,
+        fontWeight: 600,
+        color: "var(--color-text-secondary)",
+        fontFamily: "var(--font-mono)",
+    } as const;
+    const infoPanelStyle = {
+        padding: "var(--space-sm)",
+        border: "1px solid var(--color-border-medium)",
+        backgroundColor: "var(--color-bg-secondary)",
+        fontSize: `${secondaryFontSize}px`,
+        fontFamily: "var(--font-mono)",
+        color: "var(--color-text-secondary)",
+        borderRadius: "var(--radius-sm)",
+        margin: "var(--space-xs) var(--space-sm) var(--space-sm)",
+        minHeight: "100px",
+        boxShadow: "inset 0 1px 0 color-mix(in srgb, var(--color-border-light) 60%, transparent)",
+    } as const;
 
     // Helper to check if object ID is UUID-based
     const isUuidObject = (objId: string): boolean => {
@@ -492,6 +546,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         display: "flex",
         flexDirection: "column" as const,
         overflow: "hidden",
+        fontSize: `${baseFontSize}px`,
     };
 
     // Modal mode styling
@@ -509,7 +564,12 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         display: "flex",
         flexDirection: "column" as const,
         cursor: isDragging ? "grabbing" : "default",
+        fontSize: `${baseFontSize}px`,
     };
+
+    const isSplitDraggable = splitMode && typeof onSplitDrag === "function";
+    const titleMouseDownHandler = isSplitDraggable ? onSplitDrag : (splitMode ? undefined : handleMouseDown);
+    const titleTouchStartHandler = isSplitDraggable ? onSplitTouchStart : undefined;
 
     return (
         <div
@@ -523,8 +583,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         >
             {/* Title bar */}
             <div
-                onMouseDown={splitMode ? onSplitDrag : handleMouseDown}
-                onTouchStart={splitMode ? onSplitTouchStart : undefined}
+                onMouseDown={titleMouseDownHandler}
+                onTouchStart={titleTouchStartHandler}
                 style={{
                     padding: "var(--space-md)",
                     borderBottom: "1px solid var(--color-border-light)",
@@ -533,8 +593,10 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     alignItems: "center",
                     backgroundColor: "var(--color-bg-header)",
                     borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
-                    cursor: splitMode ? "row-resize" : (isDragging ? "grabbing" : "grab"),
-                    touchAction: splitMode ? "none" : "auto",
+                    cursor: isSplitDraggable
+                        ? "row-resize"
+                        : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
+                    touchAction: isSplitDraggable ? "none" : "auto",
                 }}
             >
                 <h3
@@ -548,6 +610,63 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     Object Browser
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            backgroundColor: "var(--color-bg-secondary)",
+                            border: "1px solid var(--color-border-medium)",
+                            borderRadius: "var(--radius-sm)",
+                            padding: "2px 6px",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={decreaseFontSize}
+                            aria-label="Decrease browser font size"
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--color-text-secondary)",
+                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
+                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
+                                fontSize: `${secondaryFontSize}px`,
+                                padding: "2px 4px",
+                            }}
+                            disabled={fontSize <= MIN_FONT_SIZE}
+                        >
+                            –
+                        </button>
+                        <span
+                            style={{
+                                fontFamily: "var(--font-mono)",
+                                fontSize: `${secondaryFontSize}px`,
+                                color: "var(--color-text-secondary)",
+                                minWidth: "38px",
+                                textAlign: "center",
+                            }}
+                            aria-live="polite"
+                        >
+                            {fontSize}px
+                        </span>
+                        <button
+                            onClick={increaseFontSize}
+                            aria-label="Increase browser font size"
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--color-text-secondary)",
+                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
+                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
+                                fontSize: `${secondaryFontSize}px`,
+                                padding: "2px 4px",
+                            }}
+                            disabled={fontSize >= MAX_FONT_SIZE}
+                        >
+                            +
+                        </button>
+                    </div>
                     {/* Split/Float toggle button - only on desktop */}
                     {!isMobile && onToggleSplitMode && (
                         <button
@@ -564,7 +683,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 cursor: "pointer",
                                 color: "var(--color-text-secondary)",
                                 padding: "4px 6px",
-                                fontSize: "12px",
+                                fontSize: `${secondaryFontSize}px`,
                                 display: "flex",
                                 alignItems: "center",
                             }}
@@ -618,6 +737,28 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     >
                         <div
                             style={{
+                                padding: "var(--space-xs) var(--space-sm)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                borderBottom: "1px solid var(--color-border-light)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                            }}
+                        >
+                            <span
+                                style={{
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    fontSize: `${secondaryFontSize}px`,
+                                    color: "var(--color-text-secondary)",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Objects
+                            </span>
+                        </div>
+                        <div
+                            style={{
                                 padding: "var(--space-sm)",
                                 borderBottom: "1px solid var(--color-border-light)",
                                 backgroundColor: "var(--color-bg-secondary)",
@@ -635,7 +776,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     border: "1px solid var(--color-border-medium)",
                                     borderRadius: "var(--radius-sm)",
                                     color: "var(--color-text-primary)",
-                                    fontSize: "12px",
+                                    fontSize: `${baseFontSize}px`,
                                 }}
                             />
                         </div>
@@ -643,7 +784,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             style={{
                                 flex: 1,
                                 overflowY: "auto",
-                                fontSize: "12px",
+                                fontSize: `${baseFontSize}px`,
                             }}
                         >
                             {isLoading
@@ -710,7 +851,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                         backgroundColor: "var(--color-bg-secondary)",
                                                         borderTop: "2px solid var(--color-border-medium)",
                                                         borderBottom: "1px solid var(--color-border-light)",
-                                                        fontSize: "11px",
+                                                        fontSize: `${secondaryFontSize}px`,
                                                         fontWeight: "600",
                                                         color: "var(--color-text-secondary)",
                                                         fontFamily: "var(--font-mono)",
@@ -773,17 +914,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
                         {/* Object info panel */}
                         {selectedObject && (
-                            <div
-                                style={{
-                                    padding: "var(--space-sm)",
-                                    borderTop: "1px solid var(--color-border-light)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    fontSize: "11px",
-                                    fontFamily: "var(--font-mono)",
-                                    color: "var(--color-text-secondary)",
-                                    minHeight: "100px",
-                                }}
-                            >
+                            <div style={infoPanelStyle}>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
                                     <strong>Flags:</strong> {formatObjectFlags(selectedObject.flags) || "none"}
                                 </div>
@@ -812,6 +943,28 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     >
                         <div
                             style={{
+                                padding: "var(--space-xs) var(--space-sm)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                borderBottom: "1px solid var(--color-border-light)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                            }}
+                        >
+                            <span
+                                style={{
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    fontSize: `${secondaryFontSize}px`,
+                                    color: "var(--color-text-secondary)",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Properties
+                            </span>
+                        </div>
+                        <div
+                            style={{
                                 padding: "var(--space-sm)",
                                 borderBottom: "1px solid var(--color-border-light)",
                                 backgroundColor: "var(--color-bg-secondary)",
@@ -829,7 +982,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     border: "1px solid var(--color-border-medium)",
                                     borderRadius: "var(--radius-sm)",
                                     color: "var(--color-text-primary)",
-                                    fontSize: "12px",
+                                    fontSize: `${baseFontSize}px`,
                                 }}
                             />
                         </div>
@@ -837,7 +990,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             style={{
                                 flex: 1,
                                 overflowY: "auto",
-                                fontSize: "12px",
+                                fontSize: `${baseFontSize}px`,
                             }}
                         >
                             {!selectedObject
@@ -856,18 +1009,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     groupedProperties.map(([definer, props], groupIdx) => (
                                         <div key={definer}>
                                             {groupIdx > 0 && (
-                                                <div
-                                                    style={{
-                                                        padding: "var(--space-xs) var(--space-sm)",
-                                                        backgroundColor: "var(--color-bg-secondary)",
-                                                        borderTop: "2px solid var(--color-border-medium)",
-                                                        borderBottom: "1px solid var(--color-border-light)",
-                                                        fontSize: "11px",
-                                                        fontWeight: "600",
-                                                        color: "var(--color-text-secondary)",
-                                                        fontFamily: "var(--font-mono)",
-                                                    }}
-                                                >
+                                                <div style={inheritedLabelStyle}>
                                                     from #{definer}
                                                 </div>
                                             )}
@@ -910,7 +1052,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                     ? "inherit"
                                                                     : "var(--color-text-secondary)",
                                                                 fontWeight: "400",
-                                                                fontSize: "11px",
+                                                                fontSize: `${secondaryFontSize}px`,
                                                             }}
                                                         >
                                                             ({prop.readable ? "r" : ""}
@@ -927,13 +1069,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         {selectedProperty && (
                             <div
                                 style={{
-                                    padding: "var(--space-sm)",
-                                    borderTop: "1px solid var(--color-border-light)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    fontSize: "11px",
-                                    fontFamily: "var(--font-mono)",
-                                    color: "var(--color-text-secondary)",
-                                    minHeight: "100px",
+                                    ...infoPanelStyle,
                                     maxHeight: "150px",
                                     overflowY: "auto",
                                 }}
@@ -984,6 +1120,28 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     >
                         <div
                             style={{
+                                padding: "var(--space-xs) var(--space-sm)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                borderBottom: "1px solid var(--color-border-light)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                            }}
+                        >
+                            <span
+                                style={{
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    fontSize: `${secondaryFontSize}px`,
+                                    color: "var(--color-text-secondary)",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Verbs
+                            </span>
+                        </div>
+                        <div
+                            style={{
                                 padding: "var(--space-sm)",
                                 borderBottom: "1px solid var(--color-border-light)",
                                 backgroundColor: "var(--color-bg-secondary)",
@@ -1001,7 +1159,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     border: "1px solid var(--color-border-medium)",
                                     borderRadius: "var(--radius-sm)",
                                     color: "var(--color-text-primary)",
-                                    fontSize: "12px",
+                                    fontSize: `${baseFontSize}px`,
                                 }}
                             />
                         </div>
@@ -1009,7 +1167,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             style={{
                                 flex: 1,
                                 overflowY: "auto",
-                                fontSize: "12px",
+                                fontSize: `${baseFontSize}px`,
                             }}
                         >
                             {!selectedObject
@@ -1028,18 +1186,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     groupedVerbs.map(([location, verbList], groupIdx) => (
                                         <div key={location}>
                                             {groupIdx > 0 && (
-                                                <div
-                                                    style={{
-                                                        padding: "var(--space-xs) var(--space-sm)",
-                                                        backgroundColor: "var(--color-bg-secondary)",
-                                                        borderTop: "2px solid var(--color-border-medium)",
-                                                        borderBottom: "1px solid var(--color-border-light)",
-                                                        fontSize: "11px",
-                                                        fontWeight: "600",
-                                                        color: "var(--color-text-secondary)",
-                                                        fontFamily: "var(--font-mono)",
-                                                    }}
-                                                >
+                                                <div style={inheritedLabelStyle}>
                                                     from #{location}
                                                 </div>
                                             )}
@@ -1082,7 +1229,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                     ? "inherit"
                                                                     : "var(--color-text-secondary)",
                                                                 fontWeight: "400",
-                                                                fontSize: "11px",
+                                                                fontSize: `${secondaryFontSize}px`,
                                                             }}
                                                         >
                                                             ({verb.readable ? "r" : ""}
@@ -1098,17 +1245,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
                         {/* Verb info panel */}
                         {selectedVerb && (
-                            <div
-                                style={{
-                                    padding: "var(--space-sm)",
-                                    borderTop: "1px solid var(--color-border-light)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    fontSize: "11px",
-                                    fontFamily: "var(--font-mono)",
-                                    color: "var(--color-text-secondary)",
-                                    minHeight: "100px",
-                                }}
-                            >
+                            <div style={infoPanelStyle}>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
                                     <strong>Names:</strong> {selectedVerb.names.join(" ")}
                                 </div>
