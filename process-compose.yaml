@@ -46,7 +46,6 @@ processes:
       --db=development.db
       --import=cores/lambda-moor/src --import-format=objdef
       --export=export --export-format=objdef
-
       --generate-keypair
     restart: on_failure
     depends_on:
