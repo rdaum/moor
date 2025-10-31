@@ -25,6 +25,7 @@ use hickory_resolver::TokioResolver;
 use moor_common::model::ObjectRef;
 use moor_schema::{convert::obj_from_flatbuffer_struct, rpc as moor_rpc};
 use moor_var::{Obj, Symbol};
+use planus::ReadAsRoot;
 use rpc_async_client::{rpc_client::RpcClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_call_system_verb_msg,
@@ -245,7 +246,6 @@ impl WebHost {
             }
         };
 
-        use planus::ReadAsRoot;
         let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
             .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
 
@@ -270,7 +270,7 @@ impl WebHost {
                                 .expect("Failed to convert player");
                             let player = obj_from_flatbuffer_struct(&player_struct)
                                 .expect("Failed to decode player");
-                            info!("Connection authenticated, player: {}", player);
+                            debug!("Connection authenticated, player: {}", player);
                             (client_token, player)
                         } else {
                             warn!("Connection authentication failed from {}", peer_addr);
