@@ -97,6 +97,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const editorThemeListenerRef = useRef<(() => void) | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+    const completionProviderRef = useRef<monaco.IDisposable | null>(null);
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
     const [fontSize, setFontSize] = useState(() => {
@@ -170,6 +171,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             if (editorThemeListenerRef.current) {
                 window.removeEventListener("storage", editorThemeListenerRef.current);
                 editorThemeListenerRef.current = null;
+            }
+            if (completionProviderRef.current) {
+                completionProviderRef.current.dispose();
+                completionProviderRef.current = null;
             }
             if (editorRef.current) {
                 editorRef.current.dispose();
@@ -651,8 +656,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             }
         };
 
+        // Dispose old completion provider if it exists
+        if (completionProviderRef.current) {
+            completionProviderRef.current.dispose();
+        }
+
         // Add completion provider for MOO block structures and smart completions
-        monaco.languages.registerCompletionItemProvider("moo", {
+        completionProviderRef.current = monaco.languages.registerCompletionItemProvider("moo", {
             provideCompletionItems: async (model, position) => {
                 const suggestions: monaco.languages.CompletionItem[] = [];
                 const lineContent = model.getLineContent(position.lineNumber);
