@@ -15,12 +15,15 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
 import { MoorVar } from "../lib/MoorVar.js";
 import {
+    fetchServerFeatures,
     getPropertiesFlatBuffer,
     getPropertyFlatBuffer,
     getVerbCodeFlatBuffer,
     getVerbsFlatBuffer,
     listObjectsFlatBuffer,
+    performEvalFlatBuffer,
 } from "../lib/rpc-fb.js";
+import type { ServerFeatureSet } from "../lib/rpc-fb.js";
 import { objToString } from "../lib/var.js";
 import { PropertyValueEditor } from "./PropertyValueEditor.js";
 import { VerbEditor } from "./VerbEditor.js";
@@ -67,6 +70,12 @@ interface VerbData {
     dobj: number; // ArgSpec enum value
     prep: number; // PrepSpec value
     iobj: number; // ArgSpec enum value
+}
+
+interface CreateChildFormValues {
+    owner: string;
+    objectType: string;
+    initArgs: string;
 }
 
 // Helper to decode object flags to readable string
@@ -164,6 +173,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         const stored = window.localStorage.getItem("moor-object-browser-show-inherited-verbs");
         return stored !== "false";
     });
+    const [serverFeatures, setServerFeatures] = useState<ServerFeatureSet | null>(null);
+    const [showCreateDialog, setShowCreateDialog] = useState(false);
+    const [showRecycleDialog, setShowRecycleDialog] = useState(false);
+    const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
+    const [isSubmittingRecycle, setIsSubmittingRecycle] = useState(false);
+    const [createDialogError, setCreateDialogError] = useState<string | null>(null);
+    const [recycleDialogError, setRecycleDialogError] = useState<string | null>(null);
+    const [actionMessage, setActionMessage] = useState<string | null>(null);
     const decreaseFontSize = useCallback(() => {
         setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
     }, []);
@@ -178,12 +195,39 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     }, [visible, authToken]);
 
-    const loadObjects = async () => {
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
+        let cancelled = false;
+        fetchServerFeatures()
+            .then((features) => {
+                if (!cancelled) {
+                    setServerFeatures(features);
+                }
+            })
+            .catch((error) => {
+                console.error("Failed to fetch server features:", error);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [visible]);
+
+    useEffect(() => {
+        if (!visible) {
+            setShowCreateDialog(false);
+            setShowRecycleDialog(false);
+        }
+    }, [visible]);
+
+    const loadObjects = async (): Promise<ObjectData[]> => {
         setIsLoading(true);
+        let objectList: ObjectData[] = [];
         try {
             const reply = await listObjectsFlatBuffer(authToken);
             const objectsLength = reply.objectsLength();
-            const objectList: ObjectData[] = [];
+            const result: ObjectData[] = [];
 
             for (let i = 0; i < objectsLength; i++) {
                 const objInfo = reply.objects(i);
@@ -196,7 +240,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 const location = objInfo.location();
 
                 const objStr = objToString(obj) || "?";
-                objectList.push({
+                result.push({
                     obj: objStr,
                     name: name?.value() || "",
                     parent: objToString(parent) || "",
@@ -208,12 +252,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 });
             }
 
-            setObjects(objectList);
+            objectList = result;
+            setObjects(result);
         } catch (error) {
             console.error("Failed to load objects:", error);
         } finally {
             setIsLoading(false);
         }
+        return objectList;
     };
 
     const loadPropertiesAndVerbs = async (obj: ObjectData) => {
@@ -310,6 +356,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     };
 
     const handleObjectSelect = (obj: ObjectData) => {
+        setActionMessage(null);
         setSelectedObject(obj);
         setSelectedProperty(null);
         setSelectedVerb(null);
@@ -364,6 +411,117 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         } catch (error) {
             console.error("Failed to load verb code:", error);
             setVerbCode("// Failed to load verb code");
+        }
+    };
+
+    const handleCreateSubmit = async (form: CreateChildFormValues) => {
+        if (!selectedObject) return;
+
+        const parentExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!parentExpr) {
+            setCreateDialogError("Unable to determine parent object reference.");
+            return;
+        }
+
+        const ownerExpr = normalizeObjectInput(form.owner || "player") || "player";
+        const trimmedInit = form.initArgs.trim();
+        const includeType = form.objectType !== "server-default" || trimmedInit.length > 0;
+        const typeExpr = includeType ? resolveObjectTypeValue(form.objectType) : "";
+
+        const args: string[] = [parentExpr, ownerExpr];
+        if (includeType) {
+            args.push(typeExpr);
+        }
+        if (trimmedInit.length > 0) {
+            args.push(trimmedInit);
+        }
+
+        const expr = `return create(${args.join(", ")});`;
+
+        setIsSubmittingCreate(true);
+        setCreateDialogError(null);
+        try {
+            console.debug("Evaluating create expression:", expr);
+            const previousIds = new Set(objects.map(o => o.obj));
+            const result = await performEvalFlatBuffer(authToken, expr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "create() failed";
+                throw new Error(msg);
+            }
+
+            const updated = await loadObjects();
+            const newSelection = updated.find(obj => !previousIds.has(obj.obj))
+                || (selectedObject ? updated.find(obj => obj.obj === selectedObject.obj) : null);
+            if (newSelection && !previousIds.has(newSelection.obj)) {
+                handleObjectSelect(newSelection);
+            }
+
+            setShowCreateDialog(false);
+            if (newSelection && !previousIds.has(newSelection.obj)) {
+                setActionMessage(`Created ${describeObject(newSelection)}`);
+            } else {
+                setActionMessage("Created new object.");
+            }
+        } catch (error) {
+            setCreateDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingCreate(false);
+        }
+    };
+
+    const handleRecycleConfirm = async () => {
+        if (!selectedObject) return;
+        const target = selectedObject;
+        const objectExpr = normalizeObjectInput(target.obj ? `#${target.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setRecycleDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        setIsSubmittingRecycle(true);
+        setRecycleDialogError(null);
+
+        try {
+            const recycleExpr = `return recycle(${objectExpr});`;
+            console.debug("Evaluating recycle expression:", recycleExpr);
+            const result = await performEvalFlatBuffer(authToken, recycleExpr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "recycle() failed";
+                throw new Error(msg);
+            }
+            if (typeof result === "string") {
+                const trimmed = result.trim();
+                if (trimmed.length > 0) {
+                    throw new Error(trimmed);
+                }
+            }
+
+            const updated = await loadObjects();
+            setShowRecycleDialog(false);
+
+            const parentId = target.parent;
+            let navigated = false;
+            if (parentId) {
+                const parentObj = updated.find(obj => obj.obj === parentId);
+                if (parentObj) {
+                    handleObjectSelect(parentObj);
+                    navigated = true;
+                }
+            }
+            if (!navigated) {
+                setSelectedObject(null);
+                setSelectedProperty(null);
+                setSelectedVerb(null);
+                setEditorVisible(false);
+            }
+
+            setActionMessage(`Recycled ${describeObject(target)}`);
+        } catch (error) {
+            setRecycleDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingRecycle(false);
         }
     };
 
@@ -567,6 +725,24 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         transition: "background-color 0.2s ease",
     });
 
+    const objectTypeOptions = (() => {
+        const options: Array<{ value: string; label: string }> = [];
+        options.push({
+            value: "server-default",
+            label: serverFeatures
+                ? `Server default (${serverFeatures.useUuobjids ? "UUID" : "numbered"})`
+                : "Server default",
+        });
+        options.push({ value: "numbered", label: "Numbered (# objects)" });
+        if (serverFeatures?.useUuobjids) {
+            options.push({ value: "uuid", label: "UUID objects" });
+        }
+        if (serverFeatures?.anonymousObjects) {
+            options.push({ value: "anonymous", label: "Anonymous objects" });
+        }
+        return options;
+    })();
+
     // Helper to check if object ID is UUID-based
     const isUuidObject = (objId: string): boolean => {
         return objId.includes("-");
@@ -657,6 +833,52 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     };
 
+    const normalizeObjectInput = (raw: string): string => {
+        if (!raw) return "";
+        const trimmed = raw.trim();
+        if (!trimmed) return "";
+        if (
+            trimmed.startsWith("#") || trimmed.startsWith("$") || trimmed.startsWith("player")
+            || trimmed.startsWith("caller")
+        ) {
+            return trimmed;
+        }
+        if (trimmed.startsWith("oid:")) {
+            return `#${trimmed.substring(4)}`;
+        }
+        if (trimmed.startsWith("uuid:")) {
+            return `#${trimmed.substring(5)}`;
+        }
+        if (/^-?\d+$/.test(trimmed)) {
+            return `#${trimmed}`;
+        }
+        if (/^[0-9A-Za-z-]+$/.test(trimmed)) {
+            return `#${trimmed}`;
+        }
+        return trimmed;
+    };
+
+    const defaultObjectTypeValue = () => (serverFeatures?.useUuobjids ? "2" : "0");
+
+    const resolveObjectTypeValue = (selection: string): string => {
+        switch (selection) {
+            case "numbered":
+                return "0";
+            case "uuid":
+                return "2";
+            case "anonymous":
+                return "1";
+            case "server-default":
+            default:
+                return defaultObjectTypeValue();
+        }
+    };
+
+    const describeObject = (obj: ObjectData): string => {
+        const id = normalizeObjectInput(obj.obj) || "#?";
+        return obj.name ? `${id} ("${obj.name}")` : id;
+    };
+
     // Split mode styling
     const splitStyle = {
         width: "100%",
@@ -692,918 +914,1312 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const titleTouchStartHandler = isSplitDraggable ? onSplitTouchStart : undefined;
 
     return (
-        <div
-            ref={containerRef}
-            className="object_browser_container"
-            role={splitMode ? "region" : "dialog"}
-            aria-modal={splitMode ? undefined : "true"}
-            aria-labelledby="object-browser-title"
-            tabIndex={-1}
-            style={splitMode ? splitStyle : modalStyle}
-        >
-            {/* Title bar */}
+        <>
             <div
-                onMouseDown={titleMouseDownHandler}
-                onTouchStart={titleTouchStartHandler}
-                style={{
-                    padding: "var(--space-md)",
-                    borderBottom: "1px solid var(--color-border-light)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    backgroundColor: "var(--color-bg-header)",
-                    borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
-                    cursor: isSplitDraggable
-                        ? "row-resize"
-                        : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
-                    touchAction: isSplitDraggable ? "none" : "auto",
-                }}
+                ref={containerRef}
+                className="object_browser_container"
+                role={splitMode ? "region" : "dialog"}
+                aria-modal={splitMode ? undefined : "true"}
+                aria-labelledby="object-browser-title"
+                tabIndex={-1}
+                style={splitMode ? splitStyle : modalStyle}
             >
-                <h3
-                    id="object-browser-title"
-                    style={{
-                        margin: 0,
-                        color: "var(--color-text-primary)",
-                        fontWeight: "700",
-                    }}
-                >
-                    Object Browser
-                </h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            backgroundColor: "var(--color-bg-secondary)",
-                            border: "1px solid var(--color-border-medium)",
-                            borderRadius: "var(--radius-sm)",
-                            padding: "2px 6px",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <button
-                            onClick={decreaseFontSize}
-                            aria-label="Decrease browser font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
-                                fontSize: `${secondaryFontSize}px`,
-                                padding: "2px 4px",
-                            }}
-                            disabled={fontSize <= MIN_FONT_SIZE}
-                        >
-                            –
-                        </button>
-                        <span
-                            style={{
-                                fontFamily: "var(--font-mono)",
-                                fontSize: `${secondaryFontSize}px`,
-                                color: "var(--color-text-secondary)",
-                                minWidth: "38px",
-                                textAlign: "center",
-                            }}
-                            aria-live="polite"
-                        >
-                            {fontSize}px
-                        </span>
-                        <button
-                            onClick={increaseFontSize}
-                            aria-label="Increase browser font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
-                                fontSize: `${secondaryFontSize}px`,
-                                padding: "2px 4px",
-                            }}
-                            disabled={fontSize >= MAX_FONT_SIZE}
-                        >
-                            +
-                        </button>
-                    </div>
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            backgroundColor: "var(--color-bg-secondary)",
-                            border: "1px solid var(--color-border-medium)",
-                            borderRadius: "999px",
-                            padding: "4px 8px",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <span
-                            style={{
-                                fontSize: "10px",
-                                color: "var(--color-text-secondary)",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                fontWeight: 600,
-                                fontFamily: "var(--font-sans)",
-                                opacity: 0.8,
-                            }}
-                        >
-                            Inherited
-                        </span>
-                        <button
-                            type="button"
-                            onClick={() => setShowInheritedProperties(prev => !prev)}
-                            aria-label={showInheritedProperties
-                                ? "Hide inherited properties"
-                                : "Show inherited properties"}
-                            title={showInheritedProperties ? "Hide inherited properties" : "Show inherited properties"}
-                            style={inheritedToggleButtonStyle(showInheritedProperties)}
-                        >
-                            P
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setShowInheritedVerbs(prev => !prev)}
-                            aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
-                            title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
-                            style={inheritedToggleButtonStyle(showInheritedVerbs)}
-                        >
-                            V
-                        </button>
-                    </div>
-                    {/* Split/Float toggle button - only on desktop */}
-                    {!isMobile && onToggleSplitMode && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleSplitMode();
-                            }}
-                            aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                            title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                            style={{
-                                background: "transparent",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
-                                cursor: "pointer",
-                                color: "var(--color-text-secondary)",
-                                padding: "4px 6px",
-                                fontSize: `${secondaryFontSize}px`,
-                                display: "flex",
-                                alignItems: "center",
-                            }}
-                        >
-                            {isInSplitMode ? "🪟" : "⇅"}
-                        </button>
-                    )}
-                    <button
-                        onClick={onClose}
-                        aria-label="Close object browser"
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            fontSize: "1.2em",
-                            cursor: "pointer",
-                            color: "var(--color-text-secondary)",
-                            padding: "4px 8px",
-                        }}
-                    >
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-            </div>
-
-            {/* Main content area - 3 panes + editor */}
-            <div
-                style={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
-                }}
-            >
-                {/* Top area - 3 panes */}
+                {/* Title bar */}
                 <div
+                    onMouseDown={titleMouseDownHandler}
+                    onTouchStart={titleTouchStartHandler}
                     style={{
-                        flex: editorVisible ? editorSplitPosition : 1,
+                        padding: "var(--space-md)",
+                        borderBottom: "1px solid var(--color-border-light)",
                         display: "flex",
-                        overflow: "hidden",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        backgroundColor: "var(--color-bg-header)",
+                        borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
+                        cursor: isSplitDraggable
+                            ? "row-resize"
+                            : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
+                        touchAction: isSplitDraggable ? "none" : "auto",
                     }}
                 >
-                    {/* Objects pane */}
-                    <div
+                    <h3
+                        id="object-browser-title"
                         style={{
-                            width: "33.33%",
-                            borderRight: "1px solid var(--color-border-light)",
-                            display: "flex",
-                            flexDirection: "column",
-                            overflow: "hidden",
+                            margin: 0,
+                            color: "var(--color-text-primary)",
+                            fontWeight: "700",
                         }}
                     >
+                        Object Browser
+                    </h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
                         <div
                             style={{
-                                padding: "var(--space-xs) var(--space-sm)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                borderBottom: "1px solid var(--color-border-light)",
                                 display: "flex",
                                 alignItems: "center",
-                                justifyContent: "space-between",
+                                gap: "4px",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                border: "1px solid var(--color-border-medium)",
+                                borderRadius: "var(--radius-sm)",
+                                padding: "2px 6px",
                             }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <button
+                                onClick={decreaseFontSize}
+                                aria-label="Decrease browser font size"
+                                style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "var(--color-text-secondary)",
+                                    cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
+                                    opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
+                                    fontSize: `${secondaryFontSize}px`,
+                                    padding: "2px 4px",
+                                }}
+                                disabled={fontSize <= MIN_FONT_SIZE}
+                            >
+                                –
+                            </button>
+                            <span
+                                style={{
+                                    fontFamily: "var(--font-mono)",
+                                    fontSize: `${secondaryFontSize}px`,
+                                    color: "var(--color-text-secondary)",
+                                    minWidth: "38px",
+                                    textAlign: "center",
+                                }}
+                                aria-live="polite"
+                            >
+                                {fontSize}px
+                            </span>
+                            <button
+                                onClick={increaseFontSize}
+                                aria-label="Increase browser font size"
+                                style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "var(--color-text-secondary)",
+                                    cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
+                                    opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
+                                    fontSize: `${secondaryFontSize}px`,
+                                    padding: "2px 4px",
+                                }}
+                                disabled={fontSize >= MAX_FONT_SIZE}
+                            >
+                                +
+                            </button>
+                        </div>
+                        <div
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                border: "1px solid var(--color-border-medium)",
+                                borderRadius: "999px",
+                                padding: "4px 8px",
+                            }}
+                            onClick={(e) => e.stopPropagation()}
                         >
                             <span
                                 style={{
+                                    fontSize: "10px",
+                                    color: "var(--color-text-secondary)",
                                     textTransform: "uppercase",
                                     letterSpacing: "0.08em",
-                                    fontSize: `${secondaryFontSize}px`,
-                                    color: "var(--color-text-secondary)",
                                     fontWeight: 600,
+                                    fontFamily: "var(--font-sans)",
+                                    opacity: 0.8,
                                 }}
                             >
-                                Objects
+                                Inherited
                             </span>
+                            <button
+                                type="button"
+                                onClick={() => setShowInheritedProperties(prev => !prev)}
+                                aria-label={showInheritedProperties
+                                    ? "Hide inherited properties"
+                                    : "Show inherited properties"}
+                                title={showInheritedProperties
+                                    ? "Hide inherited properties"
+                                    : "Show inherited properties"}
+                                style={inheritedToggleButtonStyle(showInheritedProperties)}
+                            >
+                                P
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowInheritedVerbs(prev => !prev)}
+                                aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                                title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                                style={inheritedToggleButtonStyle(showInheritedVerbs)}
+                            >
+                                V
+                            </button>
                         </div>
-                        <div
-                            style={{
-                                padding: "var(--space-sm)",
-                                borderBottom: "1px solid var(--color-border-light)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                            }}
-                        >
-                            <input
-                                type="text"
-                                placeholder="Filter objects..."
-                                value={filter}
-                                onChange={(e) => setFilter(e.target.value)}
+                        {/* Split/Float toggle button - only on desktop */}
+                        {!isMobile && onToggleSplitMode && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleSplitMode();
+                                }}
+                                aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                                title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                                 style={{
-                                    width: "100%",
-                                    padding: "var(--space-xs)",
-                                    backgroundColor: "var(--color-bg-input)",
+                                    background: "transparent",
                                     border: "1px solid var(--color-border-medium)",
                                     borderRadius: "var(--radius-sm)",
-                                    color: "var(--color-text-primary)",
-                                    fontSize: `${baseFontSize}px`,
+                                    cursor: "pointer",
+                                    color: "var(--color-text-secondary)",
+                                    padding: "4px 6px",
+                                    fontSize: `${secondaryFontSize}px`,
+                                    display: "flex",
+                                    alignItems: "center",
                                 }}
-                            />
-                        </div>
-                        <div
+                            >
+                                {isInSplitMode ? "🪟" : "⇅"}
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            aria-label="Close object browser"
                             style={{
-                                flex: 1,
-                                overflowY: "auto",
-                                fontSize: `${baseFontSize}px`,
+                                background: "transparent",
+                                border: "none",
+                                fontSize: "1.2em",
+                                cursor: "pointer",
+                                color: "var(--color-text-secondary)",
+                                padding: "4px 8px",
                             }}
                         >
-                            {isLoading
-                                ? (
-                                    <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
-                                        Loading objects...
-                                    </div>
-                                )
-                                : (
-                                    <>
-                                        {/* Numeric OID objects */}
-                                        {numericObjects.map((obj) => (
-                                            <div
-                                                key={obj.obj}
-                                                onClick={() => handleObjectSelect(obj)}
-                                                style={{
-                                                    padding: "var(--space-xs) var(--space-sm)",
-                                                    cursor: "pointer",
-                                                    backgroundColor: selectedObject?.obj === obj.obj
-                                                        ? "var(--color-text-primary)"
-                                                        : "transparent",
-                                                    color: selectedObject?.obj === obj.obj
-                                                        ? "var(--color-bg-input)"
-                                                        : "inherit",
-                                                    borderBottom: "1px solid var(--color-border-light)",
-                                                    fontFamily: "var(--font-mono)",
-                                                }}
-                                                onMouseEnter={(e) => {
-                                                    if (selectedObject?.obj !== obj.obj) {
-                                                        e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                                                    }
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                    if (selectedObject?.obj !== obj.obj) {
-                                                        e.currentTarget.style.backgroundColor = "transparent";
-                                                    }
-                                                }}
-                                            >
-                                                <div style={{ fontWeight: "600" }}>
-                                                    #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
-                                                    {formatObjectFlags(obj.flags) && (
-                                                        <span
-                                                            style={{
-                                                                opacity: selectedObject?.obj === obj.obj ? "0.7" : "1",
-                                                                color: selectedObject?.obj === obj.obj
-                                                                    ? "inherit"
-                                                                    : "var(--color-text-secondary)",
-                                                                fontWeight: "400",
-                                                            }}
-                                                        >
-                                                            ({formatObjectFlags(obj.flags)})
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    </div>
+                </div>
 
-                                        {/* Separator and UUID objects section */}
-                                        {uuidObjects.length > 0 && (
-                                            <>
+                {/* Main content area - 3 panes + editor */}
+                <div
+                    style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        overflow: "hidden",
+                    }}
+                >
+                    {/* Top area - 3 panes */}
+                    <div
+                        style={{
+                            flex: editorVisible ? editorSplitPosition : 1,
+                            display: "flex",
+                            overflow: "hidden",
+                        }}
+                    >
+                        {/* Objects pane */}
+                        <div
+                            style={{
+                                width: "33.33%",
+                                borderRight: "1px solid var(--color-border-light)",
+                                display: "flex",
+                                flexDirection: "column",
+                                overflow: "hidden",
+                            }}
+                        >
+                            <div
+                                style={{
+                                    padding: "var(--space-xs) var(--space-sm)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                    borderBottom: "1px solid var(--color-border-light)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.08em",
+                                        fontSize: `${secondaryFontSize}px`,
+                                        color: "var(--color-text-secondary)",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Objects
+                                </span>
+                            </div>
+                            <div
+                                style={{
+                                    padding: "var(--space-sm)",
+                                    borderBottom: "1px solid var(--color-border-light)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                }}
+                            >
+                                <input
+                                    type="text"
+                                    placeholder="Filter objects..."
+                                    value={filter}
+                                    onChange={(e) => setFilter(e.target.value)}
+                                    style={{
+                                        width: "100%",
+                                        padding: "var(--space-xs)",
+                                        backgroundColor: "var(--color-bg-input)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        borderRadius: "var(--radius-sm)",
+                                        color: "var(--color-text-primary)",
+                                        fontSize: `${baseFontSize}px`,
+                                    }}
+                                />
+                            </div>
+                            <div
+                                style={{
+                                    flex: 1,
+                                    overflowY: "auto",
+                                    fontSize: `${baseFontSize}px`,
+                                }}
+                            >
+                                {isLoading
+                                    ? (
+                                        <div
+                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
+                                        >
+                                            Loading objects...
+                                        </div>
+                                    )
+                                    : (
+                                        <>
+                                            {/* Numeric OID objects */}
+                                            {numericObjects.map((obj) => (
                                                 <div
+                                                    key={obj.obj}
+                                                    onClick={() => handleObjectSelect(obj)}
                                                     style={{
                                                         padding: "var(--space-xs) var(--space-sm)",
-                                                        backgroundColor: "var(--color-bg-secondary)",
-                                                        borderTop: "2px solid var(--color-border-medium)",
+                                                        cursor: "pointer",
+                                                        backgroundColor: selectedObject?.obj === obj.obj
+                                                            ? "var(--color-text-primary)"
+                                                            : "transparent",
+                                                        color: selectedObject?.obj === obj.obj
+                                                            ? "var(--color-bg-input)"
+                                                            : "inherit",
                                                         borderBottom: "1px solid var(--color-border-light)",
-                                                        fontSize: `${secondaryFontSize}px`,
-                                                        fontWeight: "600",
-                                                        color: "var(--color-text-secondary)",
                                                         fontFamily: "var(--font-mono)",
                                                     }}
+                                                    onMouseEnter={(e) => {
+                                                        if (selectedObject?.obj !== obj.obj) {
+                                                            e.currentTarget.style.backgroundColor =
+                                                                "var(--color-bg-hover)";
+                                                        }
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (selectedObject?.obj !== obj.obj) {
+                                                            e.currentTarget.style.backgroundColor = "transparent";
+                                                        }
+                                                    }}
                                                 >
-                                                    UUID Objects
+                                                    <div style={{ fontWeight: "600" }}>
+                                                        #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
+                                                        {formatObjectFlags(obj.flags) && (
+                                                            <span
+                                                                style={{
+                                                                    opacity: selectedObject?.obj === obj.obj
+                                                                        ? "0.7"
+                                                                        : "1",
+                                                                    color: selectedObject?.obj === obj.obj
+                                                                        ? "inherit"
+                                                                        : "var(--color-text-secondary)",
+                                                                    fontWeight: "400",
+                                                                }}
+                                                            >
+                                                                ({formatObjectFlags(obj.flags)})
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                {uuidObjects.map((obj) => (
+                                            ))}
+
+                                            {/* Separator and UUID objects section */}
+                                            {uuidObjects.length > 0 && (
+                                                <>
                                                     <div
-                                                        key={obj.obj}
-                                                        onClick={() => handleObjectSelect(obj)}
+                                                        style={{
+                                                            padding: "var(--space-xs) var(--space-sm)",
+                                                            backgroundColor: "var(--color-bg-secondary)",
+                                                            borderTop: "2px solid var(--color-border-medium)",
+                                                            borderBottom: "1px solid var(--color-border-light)",
+                                                            fontSize: `${secondaryFontSize}px`,
+                                                            fontWeight: "600",
+                                                            color: "var(--color-text-secondary)",
+                                                            fontFamily: "var(--font-mono)",
+                                                        }}
+                                                    >
+                                                        UUID Objects
+                                                    </div>
+                                                    {uuidObjects.map((obj) => (
+                                                        <div
+                                                            key={obj.obj}
+                                                            onClick={() => handleObjectSelect(obj)}
+                                                            style={{
+                                                                padding: "var(--space-xs) var(--space-sm)",
+                                                                cursor: "pointer",
+                                                                backgroundColor: selectedObject?.obj === obj.obj
+                                                                    ? "var(--color-text-primary)"
+                                                                    : "transparent",
+                                                                color: selectedObject?.obj === obj.obj
+                                                                    ? "var(--color-bg-input)"
+                                                                    : "inherit",
+                                                                borderBottom: "1px solid var(--color-border-light)",
+                                                                fontFamily: "var(--font-mono)",
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                if (selectedObject?.obj !== obj.obj) {
+                                                                    e.currentTarget.style.backgroundColor =
+                                                                        "var(--color-bg-hover)";
+                                                                }
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                if (selectedObject?.obj !== obj.obj) {
+                                                                    e.currentTarget.style.backgroundColor =
+                                                                        "transparent";
+                                                                }
+                                                            }}
+                                                        >
+                                                            <div style={{ fontWeight: "600" }}>
+                                                                #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
+                                                                {formatObjectFlags(obj.flags) && (
+                                                                    <span
+                                                                        style={{
+                                                                            opacity: selectedObject?.obj === obj.obj
+                                                                                ? "0.7"
+                                                                                : "1",
+                                                                            color: selectedObject?.obj === obj.obj
+                                                                                ? "inherit"
+                                                                                : "var(--color-text-secondary)",
+                                                                            fontWeight: "400",
+                                                                        }}
+                                                                    >
+                                                                        ({formatObjectFlags(obj.flags)})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+                                        </>
+                                    )}
+                            </div>
+                            {/* Object info panel */}
+                            {selectedObject && (
+                                <div style={infoPanelStyle}>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Flags:</strong> {formatObjectFlags(selectedObject.flags) || "none"}
+                                    </div>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Parent:</strong>{" "}
+                                        {renderObjectRef(selectedObject.parent, handleNavigateToObject)}
+                                    </div>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Owner:</strong>{" "}
+                                        {renderObjectRef(selectedObject.owner, handleNavigateToObject)}
+                                    </div>
+                                    <div>
+                                        <strong>Location:</strong>{" "}
+                                        {renderObjectRef(selectedObject.location, handleNavigateToObject)}
+                                    </div>
+                                    <div
+                                        style={{
+                                            marginTop: "var(--space-sm)",
+                                            display: "flex",
+                                            gap: "var(--space-sm)",
+                                            flexWrap: "wrap",
+                                        }}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setCreateDialogError(null);
+                                                setActionMessage(null);
+                                                setShowCreateDialog(true);
+                                            }}
+                                            disabled={!selectedObject || selectedObject.obj === "-1"
+                                                || isSubmittingCreate || isSubmittingRecycle}
+                                            style={{
+                                                padding: "6px 10px",
+                                                borderRadius: "var(--radius-sm)",
+                                                border: "1px solid var(--color-border-medium)",
+                                                backgroundColor: "var(--color-bg-secondary)",
+                                                color: "var(--color-text-primary)",
+                                                cursor: !selectedObject
+                                                        || selectedObject.obj === "-1"
+                                                        || isSubmittingCreate
+                                                        || isSubmittingRecycle
+                                                    ? "not-allowed"
+                                                    : "pointer",
+                                                opacity: !selectedObject
+                                                        || selectedObject.obj === "-1"
+                                                        || isSubmittingCreate
+                                                        || isSubmittingRecycle
+                                                    ? 0.6
+                                                    : 1,
+                                                fontSize: `${secondaryFontSize}px`,
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            Create Child
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setRecycleDialogError(null);
+                                                setActionMessage(null);
+                                                setShowRecycleDialog(true);
+                                            }}
+                                            disabled={!selectedObject
+                                                || selectedObject.obj === "-1"
+                                                || isSubmittingCreate
+                                                || isSubmittingRecycle}
+                                            style={{
+                                                padding: "6px 10px",
+                                                borderRadius: "var(--radius-sm)",
+                                                border: "1px solid var(--color-border-medium)",
+                                                backgroundColor:
+                                                    "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
+                                                color: "var(--color-text-primary)",
+                                                cursor: !selectedObject
+                                                        || selectedObject.obj === "-1"
+                                                        || isSubmittingCreate
+                                                        || isSubmittingRecycle
+                                                    ? "not-allowed"
+                                                    : "pointer",
+                                                opacity: !selectedObject
+                                                        || selectedObject.obj === "-1"
+                                                        || isSubmittingCreate
+                                                        || isSubmittingRecycle
+                                                    ? 0.6
+                                                    : 1,
+                                                fontSize: `${secondaryFontSize}px`,
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            Recycle Object
+                                        </button>
+                                    </div>
+                                    {actionMessage && (
+                                        <div
+                                            style={{
+                                                marginTop: "var(--space-xs)",
+                                                padding: "var(--space-xs) var(--space-sm)",
+                                                borderRadius: "var(--radius-sm)",
+                                                backgroundColor: "rgba(16, 185, 129, 0.15)",
+                                                border: "1px solid rgba(16, 185, 129, 0.35)",
+                                                color: "var(--color-text-primary)",
+                                                fontSize: `${secondaryFontSize}px`,
+                                            }}
+                                        >
+                                            {actionMessage}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Properties pane */}
+                        <div
+                            style={{
+                                width: "33.33%",
+                                borderRight: "1px solid var(--color-border-light)",
+                                display: "flex",
+                                flexDirection: "column",
+                                overflow: "hidden",
+                            }}
+                        >
+                            <div
+                                style={{
+                                    padding: "var(--space-xs) var(--space-sm)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                    borderBottom: "1px solid var(--color-border-light)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.08em",
+                                        fontSize: `${secondaryFontSize}px`,
+                                        color: "var(--color-text-secondary)",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Properties
+                                </span>
+                            </div>
+                            <div
+                                style={{
+                                    padding: "var(--space-sm)",
+                                    borderBottom: "1px solid var(--color-border-light)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                }}
+                            >
+                                <input
+                                    type="text"
+                                    placeholder="Filter properties..."
+                                    value={propertyFilter}
+                                    onChange={(e) => setPropertyFilter(e.target.value)}
+                                    style={{
+                                        width: "100%",
+                                        padding: "var(--space-xs)",
+                                        backgroundColor: "var(--color-bg-input)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        borderRadius: "var(--radius-sm)",
+                                        color: "var(--color-text-primary)",
+                                        fontSize: `${baseFontSize}px`,
+                                    }}
+                                />
+                            </div>
+                            <div
+                                style={{
+                                    flex: 1,
+                                    overflowY: "auto",
+                                    fontSize: `${baseFontSize}px`,
+                                }}
+                            >
+                                {!selectedObject
+                                    ? (
+                                        <div
+                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
+                                        >
+                                            Select an object to view properties
+                                        </div>
+                                    )
+                                    : properties.length === 0
+                                    ? (
+                                        <div
+                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
+                                        >
+                                            No properties
+                                        </div>
+                                    )
+                                    : (
+                                        groupedProperties.map(([definer, props], groupIdx) => (
+                                            <div key={definer}>
+                                                {groupIdx > 0 && showInheritedProperties && (
+                                                    <div style={inheritedLabelStyle}>
+                                                        from {normalizeObjectRef(definer).display}
+                                                    </div>
+                                                )}
+                                                {props.map((prop, idx) => (
+                                                    <div
+                                                        key={`${definer}-${idx}`}
+                                                        onClick={() => handlePropertySelect(prop)}
                                                         style={{
                                                             padding: "var(--space-xs) var(--space-sm)",
                                                             cursor: "pointer",
-                                                            backgroundColor: selectedObject?.obj === obj.obj
+                                                            backgroundColor: selectedProperty?.name === prop.name
                                                                 ? "var(--color-text-primary)"
                                                                 : "transparent",
-                                                            color: selectedObject?.obj === obj.obj
+                                                            color: selectedProperty?.name === prop.name
                                                                 ? "var(--color-bg-input)"
                                                                 : "inherit",
                                                             borderBottom: "1px solid var(--color-border-light)",
                                                             fontFamily: "var(--font-mono)",
                                                         }}
                                                         onMouseEnter={(e) => {
-                                                            if (selectedObject?.obj !== obj.obj) {
+                                                            if (selectedProperty?.name !== prop.name) {
                                                                 e.currentTarget.style.backgroundColor =
                                                                     "var(--color-bg-hover)";
                                                             }
                                                         }}
                                                         onMouseLeave={(e) => {
-                                                            if (selectedObject?.obj !== obj.obj) {
+                                                            if (selectedProperty?.name !== prop.name) {
                                                                 e.currentTarget.style.backgroundColor = "transparent";
                                                             }
                                                         }}
                                                     >
                                                         <div style={{ fontWeight: "600" }}>
-                                                            #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
-                                                            {formatObjectFlags(obj.flags) && (
-                                                                <span
-                                                                    style={{
-                                                                        opacity: selectedObject?.obj === obj.obj
-                                                                            ? "0.7"
-                                                                            : "1",
-                                                                        color: selectedObject?.obj === obj.obj
-                                                                            ? "inherit"
-                                                                            : "var(--color-text-secondary)",
-                                                                        fontWeight: "400",
-                                                                    }}
-                                                                >
-                                                                    ({formatObjectFlags(obj.flags)})
-                                                                </span>
-                                                            )}
+                                                            {prop.name}{" "}
+                                                            <span
+                                                                style={{
+                                                                    opacity: selectedProperty?.name === prop.name
+                                                                        ? "0.7"
+                                                                        : "1",
+                                                                    color: selectedProperty?.name === prop.name
+                                                                        ? "inherit"
+                                                                        : "var(--color-text-secondary)",
+                                                                    fontWeight: "400",
+                                                                    fontSize: `${secondaryFontSize}px`,
+                                                                }}
+                                                            >
+                                                                ({prop.readable ? "r" : ""}
+                                                                {prop.writable ? "w" : ""})
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 ))}
-                                            </>
-                                        )}
-                                    </>
-                                )}
-                        </div>
-                        {/* Object info panel */}
-                        {selectedObject && (
-                            <div style={infoPanelStyle}>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Flags:</strong> {formatObjectFlags(selectedObject.flags) || "none"}
-                                </div>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Parent:</strong>{" "}
-                                    {renderObjectRef(selectedObject.parent, handleNavigateToObject)}
-                                </div>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Owner:</strong>{" "}
-                                    {renderObjectRef(selectedObject.owner, handleNavigateToObject)}
-                                </div>
-                                <div>
-                                    <strong>Location:</strong>{" "}
-                                    {renderObjectRef(selectedObject.location, handleNavigateToObject)}
-                                </div>
+                                            </div>
+                                        ))
+                                    )}
                             </div>
-                        )}
-                    </div>
-
-                    {/* Properties pane */}
-                    <div
-                        style={{
-                            width: "33.33%",
-                            borderRight: "1px solid var(--color-border-light)",
-                            display: "flex",
-                            flexDirection: "column",
-                            overflow: "hidden",
-                        }}
-                    >
-                        <div
-                            style={{
-                                padding: "var(--space-xs) var(--space-sm)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                borderBottom: "1px solid var(--color-border-light)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                            }}
-                        >
-                            <span
-                                style={{
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    fontSize: `${secondaryFontSize}px`,
-                                    color: "var(--color-text-secondary)",
-                                    fontWeight: 600,
-                                }}
-                            >
-                                Properties
-                            </span>
-                        </div>
-                        <div
-                            style={{
-                                padding: "var(--space-sm)",
-                                borderBottom: "1px solid var(--color-border-light)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                            }}
-                        >
-                            <input
-                                type="text"
-                                placeholder="Filter properties..."
-                                value={propertyFilter}
-                                onChange={(e) => setPropertyFilter(e.target.value)}
-                                style={{
-                                    width: "100%",
-                                    padding: "var(--space-xs)",
-                                    backgroundColor: "var(--color-bg-input)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    color: "var(--color-text-primary)",
-                                    fontSize: `${baseFontSize}px`,
-                                }}
-                            />
-                        </div>
-                        <div
-                            style={{
-                                flex: 1,
-                                overflowY: "auto",
-                                fontSize: `${baseFontSize}px`,
-                            }}
-                        >
-                            {!selectedObject
-                                ? (
-                                    <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
-                                        Select an object to view properties
+                            {/* Property info panel */}
+                            {selectedProperty && (
+                                <div
+                                    style={{
+                                        ...infoPanelStyle,
+                                        maxHeight: "150px",
+                                        overflowY: "auto",
+                                    }}
+                                >
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Owner:</strong>{" "}
+                                        {renderObjectRef(selectedProperty.owner, handleNavigateToObject)}
                                     </div>
-                                )
-                                : properties.length === 0
-                                ? (
-                                    <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
-                                        No properties
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Definer:</strong>{" "}
+                                        {renderObjectRef(selectedProperty.definer, handleNavigateToObject)}
                                     </div>
-                                )
-                                : (
-                                    groupedProperties.map(([definer, props], groupIdx) => (
-                                        <div key={definer}>
-                                            {groupIdx > 0 && showInheritedProperties && (
-                                                <div style={inheritedLabelStyle}>
-                                                    from {normalizeObjectRef(definer).display}
-                                                </div>
-                                            )}
-                                            {props.map((prop, idx) => (
-                                                <div
-                                                    key={`${definer}-${idx}`}
-                                                    onClick={() => handlePropertySelect(prop)}
-                                                    style={{
-                                                        padding: "var(--space-xs) var(--space-sm)",
-                                                        cursor: "pointer",
-                                                        backgroundColor: selectedProperty?.name === prop.name
-                                                            ? "var(--color-text-primary)"
-                                                            : "transparent",
-                                                        color: selectedProperty?.name === prop.name
-                                                            ? "var(--color-bg-input)"
-                                                            : "inherit",
-                                                        borderBottom: "1px solid var(--color-border-light)",
-                                                        fontFamily: "var(--font-mono)",
-                                                    }}
-                                                    onMouseEnter={(e) => {
-                                                        if (selectedProperty?.name !== prop.name) {
-                                                            e.currentTarget.style.backgroundColor =
-                                                                "var(--color-bg-hover)";
-                                                        }
-                                                    }}
-                                                    onMouseLeave={(e) => {
-                                                        if (selectedProperty?.name !== prop.name) {
-                                                            e.currentTarget.style.backgroundColor = "transparent";
-                                                        }
-                                                    }}
-                                                >
-                                                    <div style={{ fontWeight: "600" }}>
-                                                        {prop.name}{" "}
-                                                        <span
-                                                            style={{
-                                                                opacity: selectedProperty?.name === prop.name
-                                                                    ? "0.7"
-                                                                    : "1",
-                                                                color: selectedProperty?.name === prop.name
-                                                                    ? "inherit"
-                                                                    : "var(--color-text-secondary)",
-                                                                fontWeight: "400",
-                                                                fontSize: `${secondaryFontSize}px`,
-                                                            }}
-                                                        >
-                                                            ({prop.readable ? "r" : ""}
-                                                            {prop.writable ? "w" : ""})
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))
-                                )}
-                        </div>
-                        {/* Property info panel */}
-                        {selectedProperty && (
-                            <div
-                                style={{
-                                    ...infoPanelStyle,
-                                    maxHeight: "150px",
-                                    overflowY: "auto",
-                                }}
-                            >
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Owner:</strong>{" "}
-                                    {renderObjectRef(selectedProperty.owner, handleNavigateToObject)}
-                                </div>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Definer:</strong>{" "}
-                                    {renderObjectRef(selectedProperty.definer, handleNavigateToObject)}
-                                </div>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Perms:</strong> {selectedProperty.readable ? "r" : ""}
-                                    {selectedProperty.writable ? "w" : ""}
-                                </div>
-                                {selectedProperty.moorVar && (
-                                    <div
-                                        style={{
-                                            marginTop: "var(--space-xs)",
-                                            paddingTop: "var(--space-xs)",
-                                            borderTop: "1px solid var(--color-border-light)",
-                                        }}
-                                    >
-                                        <strong>Value:</strong>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Perms:</strong> {selectedProperty.readable ? "r" : ""}
+                                        {selectedProperty.writable ? "w" : ""}
+                                    </div>
+                                    {selectedProperty.moorVar && (
                                         <div
                                             style={{
-                                                marginTop: "2px",
-                                                wordBreak: "break-word",
-                                                maxHeight: "60px",
-                                                overflowY: "auto",
+                                                marginTop: "var(--space-xs)",
+                                                paddingTop: "var(--space-xs)",
+                                                borderTop: "1px solid var(--color-border-light)",
                                             }}
                                         >
-                                            {selectedProperty.moorVar.toLiteral()}
+                                            <strong>Value:</strong>
+                                            <div
+                                                style={{
+                                                    marginTop: "2px",
+                                                    wordBreak: "break-word",
+                                                    maxHeight: "60px",
+                                                    overflowY: "auto",
+                                                }}
+                                            >
+                                                {selectedProperty.moorVar.toLiteral()}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
 
-                    {/* Verbs pane */}
-                    <div
-                        style={{
-                            width: "33.33%",
-                            display: "flex",
-                            flexDirection: "column",
-                            overflow: "hidden",
-                        }}
-                    >
+                        {/* Verbs pane */}
                         <div
                             style={{
-                                padding: "var(--space-xs) var(--space-sm)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                borderBottom: "1px solid var(--color-border-light)",
+                                width: "33.33%",
                                 display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
+                                flexDirection: "column",
+                                overflow: "hidden",
                             }}
                         >
-                            <span
+                            <div
                                 style={{
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    fontSize: `${secondaryFontSize}px`,
-                                    color: "var(--color-text-secondary)",
-                                    fontWeight: 600,
+                                    padding: "var(--space-xs) var(--space-sm)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                    borderBottom: "1px solid var(--color-border-light)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
                                 }}
                             >
-                                Verbs
-                            </span>
+                                <span
+                                    style={{
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.08em",
+                                        fontSize: `${secondaryFontSize}px`,
+                                        color: "var(--color-text-secondary)",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Verbs
+                                </span>
+                            </div>
+                            <div
+                                style={{
+                                    padding: "var(--space-sm)",
+                                    borderBottom: "1px solid var(--color-border-light)",
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                }}
+                            >
+                                <input
+                                    type="text"
+                                    placeholder="Filter verbs..."
+                                    value={verbFilter}
+                                    onChange={(e) => setVerbFilter(e.target.value)}
+                                    style={{
+                                        width: "100%",
+                                        padding: "var(--space-xs)",
+                                        backgroundColor: "var(--color-bg-input)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        borderRadius: "var(--radius-sm)",
+                                        color: "var(--color-text-primary)",
+                                        fontSize: `${baseFontSize}px`,
+                                    }}
+                                />
+                            </div>
+                            <div
+                                style={{
+                                    flex: 1,
+                                    overflowY: "auto",
+                                    fontSize: `${baseFontSize}px`,
+                                }}
+                            >
+                                {!selectedObject
+                                    ? (
+                                        <div
+                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
+                                        >
+                                            Select an object to view verbs
+                                        </div>
+                                    )
+                                    : verbs.length === 0
+                                    ? (
+                                        <div
+                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
+                                        >
+                                            No verbs
+                                        </div>
+                                    )
+                                    : (
+                                        groupedVerbs.map(([location, verbList], groupIdx) => (
+                                            <div key={location}>
+                                                {groupIdx > 0 && showInheritedVerbs && (
+                                                    <div style={inheritedLabelStyle}>
+                                                        from {normalizeObjectRef(location).display}
+                                                    </div>
+                                                )}
+                                                {verbList.map((verb, idx) => (
+                                                    <div
+                                                        key={`${location}-${idx}`}
+                                                        onClick={() => handleVerbSelect(verb)}
+                                                        style={{
+                                                            padding: "var(--space-xs) var(--space-sm)",
+                                                            cursor: "pointer",
+                                                            backgroundColor: selectedVerb?.names[0] === verb.names[0]
+                                                                ? "var(--color-text-primary)"
+                                                                : "transparent",
+                                                            color: selectedVerb?.names[0] === verb.names[0]
+                                                                ? "var(--color-bg-input)"
+                                                                : "inherit",
+                                                            borderBottom: "1px solid var(--color-border-light)",
+                                                            fontFamily: "var(--font-mono)",
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (selectedVerb?.names[0] !== verb.names[0]) {
+                                                                e.currentTarget.style.backgroundColor =
+                                                                    "var(--color-bg-hover)";
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (selectedVerb?.names[0] !== verb.names[0]) {
+                                                                e.currentTarget.style.backgroundColor = "transparent";
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div style={{ fontWeight: "600" }}>
+                                                            {verb.names.join(" ")}{" "}
+                                                            <span
+                                                                style={{
+                                                                    opacity: selectedVerb?.names[0] === verb.names[0]
+                                                                        ? "0.7"
+                                                                        : "1",
+                                                                    color: selectedVerb?.names[0] === verb.names[0]
+                                                                        ? "inherit"
+                                                                        : "var(--color-text-secondary)",
+                                                                    fontWeight: "400",
+                                                                    fontSize: `${secondaryFontSize}px`,
+                                                                }}
+                                                            >
+                                                                ({verb.readable ? "r" : ""}
+                                                                {verb.writable ? "w" : ""}
+                                                                {verb.executable ? "x" : ""})
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ))
+                                    )}
+                            </div>
+                            {/* Verb info panel */}
+                            {selectedVerb && (
+                                <div style={infoPanelStyle}>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Names:</strong> {selectedVerb.names.join(" ")}
+                                    </div>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Args:</strong> {formatArgSpec(selectedVerb.dobj)} /{" "}
+                                        {formatPrepSpec(selectedVerb.prep)} / {formatArgSpec(selectedVerb.iobj)}
+                                    </div>
+                                    <div style={{ marginBottom: "var(--space-xs)" }}>
+                                        <strong>Owner:</strong>{" "}
+                                        {renderObjectRef(selectedVerb.owner, handleNavigateToObject)}
+                                    </div>
+                                    <div>
+                                        <strong>Perms:</strong> {selectedVerb.readable ? "r" : ""}
+                                        {selectedVerb.writable ? "w" : ""}
+                                        {selectedVerb.executable ? "x" : ""}
+                                    </div>
+                                </div>
+                            )}
                         </div>
+                    </div>
+
+                    {/* Draggable splitter bar */}
+                    {editorVisible && (
+                        <div
+                            onMouseDown={handleSplitDragStart}
+                            style={{
+                                height: "4px",
+                                backgroundColor: "var(--color-border-medium)",
+                                cursor: "row-resize",
+                                position: "relative",
+                                zIndex: 10,
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "var(--color-text-primary)";
+                            }}
+                            onMouseLeave={(e) => {
+                                if (!isSplitDragging) {
+                                    e.currentTarget.style.backgroundColor = "var(--color-border-medium)";
+                                }
+                            }}
+                        />
+                    )}
+
+                    {/* Bottom editor area */}
+                    {editorVisible && (
                         <div
                             style={{
-                                padding: "var(--space-sm)",
-                                borderBottom: "1px solid var(--color-border-light)",
+                                flex: 1 - editorSplitPosition,
+                                overflow: "hidden",
                                 backgroundColor: "var(--color-bg-secondary)",
                             }}
                         >
-                            <input
-                                type="text"
-                                placeholder="Filter verbs..."
-                                value={verbFilter}
-                                onChange={(e) => setVerbFilter(e.target.value)}
-                                style={{
-                                    width: "100%",
-                                    padding: "var(--space-xs)",
-                                    backgroundColor: "var(--color-bg-input)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    color: "var(--color-text-primary)",
-                                    fontSize: `${baseFontSize}px`,
-                                }}
-                            />
+                            {selectedProperty && selectedProperty.moorVar && selectedObject && (
+                                <PropertyValueEditor
+                                    authToken={authToken}
+                                    objectCurie={selectedProperty.definer.includes(":")
+                                        ? selectedProperty.definer
+                                        : `oid:${selectedProperty.definer}`}
+                                    propertyName={selectedProperty.name}
+                                    propertyValue={selectedProperty.moorVar}
+                                    onSave={() => {
+                                        // Reload property value after save
+                                        handlePropertySelect(selectedProperty);
+                                    }}
+                                    onCancel={() => {
+                                        setSelectedProperty(null);
+                                        setEditorVisible(false);
+                                    }}
+                                />
+                            )}
+                            {selectedProperty && !selectedProperty.moorVar && (
+                                <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
+                                    Loading property value...
+                                </div>
+                            )}
+                            {selectedVerb && (
+                                <VerbEditor
+                                    visible={true}
+                                    onClose={() => {
+                                        setSelectedVerb(null);
+                                        setEditorVisible(false);
+                                    }}
+                                    title={`#${selectedVerb.location}:${selectedVerb.names.join(" ")}${
+                                        selectedObject && selectedVerb.location !== selectedObject.obj
+                                            ? ` (inherited from #${selectedVerb.location})`
+                                            : ""
+                                    }`}
+                                    objectCurie={selectedVerb.location.includes(":")
+                                        ? selectedVerb.location
+                                        : `oid:${selectedVerb.location}`}
+                                    verbName={selectedVerb.names[0]}
+                                    initialContent={verbCode}
+                                    authToken={authToken}
+                                    splitMode={true}
+                                />
+                            )}
                         </div>
-                        <div
-                            style={{
-                                flex: 1,
-                                overflowY: "auto",
-                                fontSize: `${baseFontSize}px`,
-                            }}
-                        >
-                            {!selectedObject
-                                ? (
-                                    <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
-                                        Select an object to view verbs
-                                    </div>
-                                )
-                                : verbs.length === 0
-                                ? (
-                                    <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
-                                        No verbs
-                                    </div>
-                                )
-                                : (
-                                    groupedVerbs.map(([location, verbList], groupIdx) => (
-                                        <div key={location}>
-                                            {groupIdx > 0 && showInheritedVerbs && (
-                                                <div style={inheritedLabelStyle}>
-                                                    from {normalizeObjectRef(location).display}
-                                                </div>
-                                            )}
-                                            {verbList.map((verb, idx) => (
-                                                <div
-                                                    key={`${location}-${idx}`}
-                                                    onClick={() => handleVerbSelect(verb)}
-                                                    style={{
-                                                        padding: "var(--space-xs) var(--space-sm)",
-                                                        cursor: "pointer",
-                                                        backgroundColor: selectedVerb?.names[0] === verb.names[0]
-                                                            ? "var(--color-text-primary)"
-                                                            : "transparent",
-                                                        color: selectedVerb?.names[0] === verb.names[0]
-                                                            ? "var(--color-bg-input)"
-                                                            : "inherit",
-                                                        borderBottom: "1px solid var(--color-border-light)",
-                                                        fontFamily: "var(--font-mono)",
-                                                    }}
-                                                    onMouseEnter={(e) => {
-                                                        if (selectedVerb?.names[0] !== verb.names[0]) {
-                                                            e.currentTarget.style.backgroundColor =
-                                                                "var(--color-bg-hover)";
-                                                        }
-                                                    }}
-                                                    onMouseLeave={(e) => {
-                                                        if (selectedVerb?.names[0] !== verb.names[0]) {
-                                                            e.currentTarget.style.backgroundColor = "transparent";
-                                                        }
-                                                    }}
-                                                >
-                                                    <div style={{ fontWeight: "600" }}>
-                                                        {verb.names.join(" ")}{" "}
-                                                        <span
-                                                            style={{
-                                                                opacity: selectedVerb?.names[0] === verb.names[0]
-                                                                    ? "0.7"
-                                                                    : "1",
-                                                                color: selectedVerb?.names[0] === verb.names[0]
-                                                                    ? "inherit"
-                                                                    : "var(--color-text-secondary)",
-                                                                fontWeight: "400",
-                                                                fontSize: `${secondaryFontSize}px`,
-                                                            }}
-                                                        >
-                                                            ({verb.readable ? "r" : ""}
-                                                            {verb.writable ? "w" : ""}
-                                                            {verb.executable ? "x" : ""})
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))
-                                )}
-                        </div>
-                        {/* Verb info panel */}
-                        {selectedVerb && (
-                            <div style={infoPanelStyle}>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Names:</strong> {selectedVerb.names.join(" ")}
-                                </div>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Args:</strong> {formatArgSpec(selectedVerb.dobj)} /{" "}
-                                    {formatPrepSpec(selectedVerb.prep)} / {formatArgSpec(selectedVerb.iobj)}
-                                </div>
-                                <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Owner:</strong>{" "}
-                                    {renderObjectRef(selectedVerb.owner, handleNavigateToObject)}
-                                </div>
-                                <div>
-                                    <strong>Perms:</strong> {selectedVerb.readable ? "r" : ""}
-                                    {selectedVerb.writable ? "w" : ""}
-                                    {selectedVerb.executable ? "x" : ""}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
 
-                {/* Draggable splitter bar */}
-                {editorVisible && (
+                {/* Resize handle - only in modal mode */}
+                {!splitMode && (
                     <div
-                        onMouseDown={handleSplitDragStart}
-                        style={{
-                            height: "4px",
-                            backgroundColor: "var(--color-border-medium)",
-                            cursor: "row-resize",
-                            position: "relative",
-                            zIndex: 10,
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "var(--color-text-primary)";
-                        }}
-                        onMouseLeave={(e) => {
-                            if (!isSplitDragging) {
-                                e.currentTarget.style.backgroundColor = "var(--color-border-medium)";
+                        onMouseDown={handleResizeMouseDown}
+                        onTouchStart={(e) => {
+                            if (e.touches.length === 1) {
+                                const touch = e.touches[0];
+                                handleResizeMouseDown({
+                                    ...e,
+                                    button: 0,
+                                    clientX: touch.clientX,
+                                    clientY: touch.clientY,
+                                    preventDefault: () => e.preventDefault(),
+                                    stopPropagation: () => e.stopPropagation(),
+                                } as unknown as React.MouseEvent<HTMLDivElement>);
                             }
                         }}
-                    />
-                )}
-
-                {/* Bottom editor area */}
-                {editorVisible && (
-                    <div
+                        tabIndex={0}
+                        role="button"
+                        aria-label="Resize browser window"
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleResizeMouseDown({
+                                    ...e,
+                                    clientX: size.width + position.x,
+                                    clientY: size.height + position.y,
+                                    button: 0,
+                                } as unknown as React.MouseEvent<HTMLDivElement>);
+                            }
+                        }}
                         style={{
-                            flex: 1 - editorSplitPosition,
-                            overflow: "hidden",
-                            backgroundColor: "var(--color-bg-secondary)",
+                            position: "absolute",
+                            bottom: 0,
+                            right: 0,
+                            width: "22px",
+                            height: "22px",
+                            cursor: "nwse-resize",
+                            borderBottomRightRadius: "var(--radius-lg)",
+                            borderTopLeftRadius: "6px",
+                            backgroundColor: "var(--color-surface-raised)",
+                            borderTop: "1px solid var(--color-border-medium)",
+                            borderLeft: "1px solid var(--color-border-medium)",
+                            boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.1)",
+                            zIndex: 5,
                         }}
                     >
-                        {selectedProperty && selectedProperty.moorVar && selectedObject && (
-                            <PropertyValueEditor
-                                authToken={authToken}
-                                objectCurie={selectedProperty.definer.includes(":")
-                                    ? selectedProperty.definer
-                                    : `oid:${selectedProperty.definer}`}
-                                propertyName={selectedProperty.name}
-                                propertyValue={selectedProperty.moorVar}
-                                onSave={() => {
-                                    // Reload property value after save
-                                    handlePropertySelect(selectedProperty);
-                                }}
-                                onCancel={() => {
-                                    setSelectedProperty(null);
-                                    setEditorVisible(false);
-                                }}
-                            />
-                        )}
-                        {selectedProperty && !selectedProperty.moorVar && (
-                            <div style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}>
-                                Loading property value...
-                            </div>
-                        )}
-                        {selectedVerb && (
-                            <VerbEditor
-                                visible={true}
-                                onClose={() => {
-                                    setSelectedVerb(null);
-                                    setEditorVisible(false);
-                                }}
-                                title={`#${selectedVerb.location}:${selectedVerb.names.join(" ")}${
-                                    selectedObject && selectedVerb.location !== selectedObject.obj
-                                        ? ` (inherited from #${selectedVerb.location})`
-                                        : ""
-                                }`}
-                                objectCurie={selectedVerb.location.includes(":")
-                                    ? selectedVerb.location
-                                    : `oid:${selectedVerb.location}`}
-                                verbName={selectedVerb.names[0]}
-                                initialContent={verbCode}
-                                authToken={authToken}
-                                splitMode={true}
-                            />
-                        )}
+                        <div
+                            style={{
+                                position: "absolute",
+                                inset: "4px",
+                                borderBottom: "2px solid var(--color-border-strong)",
+                                borderRight: "2px solid var(--color-border-strong)",
+                                borderBottomRightRadius: "4px",
+                                pointerEvents: "none",
+                            }}
+                        />
+                        <div
+                            style={{
+                                position: "absolute",
+                                right: "6px",
+                                bottom: "6px",
+                                width: "10px",
+                                height: "10px",
+                                clipPath: "polygon(0 100%, 100% 0, 100% 100%)",
+                                background:
+                                    "linear-gradient(135deg, transparent 0%, transparent 30%, var(--color-border-strong) 30%, var(--color-border-strong) 50%, transparent 50%)",
+                                pointerEvents: "none",
+                            }}
+                        />
+                        <span
+                            aria-hidden="true"
+                            style={{
+                                position: "absolute",
+                                right: "4px",
+                                bottom: "2px",
+                                fontSize: "14px",
+                                color: "var(--color-border-strong)",
+                                lineHeight: 1,
+                                pointerEvents: "none",
+                                userSelect: "none",
+                            }}
+                        >
+                            ↘
+                        </span>
                     </div>
                 )}
             </div>
+            {showCreateDialog && selectedObject && (
+                <CreateChildDialog
+                    key={selectedObject.obj}
+                    parentLabel={describeObject(selectedObject)}
+                    defaultOwner={normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "")
+                        || "player"}
+                    objectTypeOptions={objectTypeOptions}
+                    onCancel={() => setShowCreateDialog(false)}
+                    onSubmit={handleCreateSubmit}
+                    isSubmitting={isSubmittingCreate}
+                    errorMessage={createDialogError}
+                />
+            )}
+            {showRecycleDialog && selectedObject && (
+                <RecycleObjectDialog
+                    key={`recycle-${selectedObject.obj}`}
+                    objectLabel={describeObject(selectedObject)}
+                    onCancel={() => setShowRecycleDialog(false)}
+                    onConfirm={handleRecycleConfirm}
+                    isSubmitting={isSubmittingRecycle}
+                    errorMessage={recycleDialogError}
+                />
+            )}
+        </>
+    );
+};
 
-            {/* Resize handle - only in modal mode */}
-            {!splitMode && (
-                <div
-                    onMouseDown={handleResizeMouseDown}
-                    onTouchStart={(e) => {
-                        if (e.touches.length === 1) {
-                            const touch = e.touches[0];
-                            handleResizeMouseDown({
-                                ...e,
-                                button: 0,
-                                clientX: touch.clientX,
-                                clientY: touch.clientY,
-                                preventDefault: () => e.preventDefault(),
-                                stopPropagation: () => e.stopPropagation(),
-                            } as unknown as React.MouseEvent<HTMLDivElement>);
-                        }
-                    }}
-                    tabIndex={0}
-                    role="button"
-                    aria-label="Resize browser window"
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            handleResizeMouseDown({
-                                ...e,
-                                clientX: size.width + position.x,
-                                clientY: size.height + position.y,
-                                button: 0,
-                            } as unknown as React.MouseEvent<HTMLDivElement>);
-                        }
-                    }}
-                    style={{
-                        position: "absolute",
-                        bottom: 0,
-                        right: 0,
-                        width: "22px",
-                        height: "22px",
-                        cursor: "nwse-resize",
-                        borderBottomRightRadius: "var(--radius-lg)",
-                        borderTopLeftRadius: "6px",
-                        backgroundColor: "var(--color-surface-raised)",
-                        borderTop: "1px solid var(--color-border-medium)",
-                        borderLeft: "1px solid var(--color-border-medium)",
-                        boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.1)",
-                        zIndex: 5,
-                    }}
-                >
+interface CreateChildDialogProps {
+    parentLabel: string;
+    defaultOwner: string;
+    objectTypeOptions: Array<{ value: string; label: string }>;
+    onCancel: () => void;
+    onSubmit: (form: CreateChildFormValues) => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
+    parentLabel,
+    defaultOwner,
+    objectTypeOptions,
+    onCancel,
+    onSubmit,
+    isSubmitting,
+    errorMessage,
+}) => {
+    const [owner, setOwner] = useState(defaultOwner);
+    const [objectType, setObjectType] = useState<string>("server-default");
+    const [initArgs, setInitArgs] = useState<string>("");
+
+    useEffect(() => {
+        setOwner(defaultOwner);
+        setObjectType("server-default");
+        setInitArgs("");
+    }, [defaultOwner]);
+
+    const handleSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        onSubmit({ owner, objectType, initArgs });
+    };
+
+    return (
+        <>
+            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="settings-panel"
+                style={{ maxWidth: "520px" }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-object-title"
+            >
+                <div className="settings-header">
+                    <h2 id="create-object-title">Create Child Object</h2>
+                </div>
+                <form onSubmit={handleSubmit} className="settings-content" style={{ gap: "1em" }}>
+                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                        The new object will be created as a child of <strong>{parentLabel}</strong>.
+                    </p>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
+                        <input
+                            type="text"
+                            value={owner}
+                            onChange={(e) => setOwner(e.target.value)}
+                            placeholder="player"
+                            autoFocus
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Object type</span>
+                        <select
+                            value={objectType}
+                            onChange={(e) => setObjectType(e.target.value)}
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {objectTypeOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Initialization arguments</span>
+                        <textarea
+                            value={initArgs}
+                            onChange={(e) => setInitArgs(e.target.value)}
+                            placeholder="{}"
+                            rows={3}
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                                resize: "vertical",
+                            }}
+                        />
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                            Provide a MOO list literal (for example <code>{"{}"}</code> or{" "}
+                            <code>{"{"}player{"}"}</code>). Leave blank to skip initialization arguments.
+                        </span>
+                    </label>
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-text-error)",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                color: "var(--color-text-primary)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-text-accent)",
+                                color: "var(--color-bg-base)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Creating…" : "Create"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </>
+    );
+};
+
+interface RecycleObjectDialogProps {
+    objectLabel: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const RecycleObjectDialog: React.FC<RecycleObjectDialogProps> = ({
+    objectLabel,
+    onCancel,
+    onConfirm,
+    isSubmitting,
+    errorMessage,
+}) => {
+    return (
+        <>
+            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="settings-panel"
+                style={{ maxWidth: "480px" }}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="recycle-object-title"
+            >
+                <div className="settings-header">
+                    <h2 id="recycle-object-title">Recycle Object?</h2>
+                </div>
+                <div className="settings-content" style={{ gap: "1em" }}>
                     <div
                         style={{
-                            position: "absolute",
-                            inset: "4px",
-                            borderBottom: "2px solid var(--color-border-strong)",
-                            borderRight: "2px solid var(--color-border-strong)",
-                            borderBottomRightRadius: "4px",
-                            pointerEvents: "none",
-                        }}
-                    />
-                    <div
-                        style={{
-                            position: "absolute",
-                            right: "6px",
-                            bottom: "6px",
-                            width: "10px",
-                            height: "10px",
-                            clipPath: "polygon(0 100%, 100% 0, 100% 100%)",
-                            background:
-                                "linear-gradient(135deg, transparent 0%, transparent 30%, var(--color-border-strong) 30%, var(--color-border-strong) 50%, transparent 50%)",
-                            pointerEvents: "none",
-                        }}
-                    />
-                    <span
-                        aria-hidden="true"
-                        style={{
-                            position: "absolute",
-                            right: "4px",
-                            bottom: "2px",
-                            fontSize: "14px",
-                            color: "var(--color-border-strong)",
-                            lineHeight: 1,
-                            pointerEvents: "none",
-                            userSelect: "none",
+                            padding: "0.75em",
+                            borderRadius: "var(--radius-sm)",
+                            border: "1px solid var(--color-text-error)",
+                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                            color: "var(--color-text-primary)",
+                            fontFamily: "inherit",
                         }}
                     >
-                        ↘
-                    </span>
+                        <p style={{ margin: 0 }}>
+                            Recycling <strong>{objectLabel}</strong> is irreversible. Its contents will move to{" "}
+                            <code>#-1</code>
+                            and <code>:recycle</code> will be invoked if defined.
+                        </p>
+                    </div>
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-text-error)",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                color: "var(--color-text-primary)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-text-error)",
+                                color: "var(--color-bg-base)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Recycling…" : "Recycle"}
+                        </button>
+                    </div>
                 </div>
-            )}
-        </div>
+            </div>
+        </>
     );
 };
