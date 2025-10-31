@@ -1,0 +1,59 @@
+# Docker Compose override for tracing-enabled builds
+# This file enables Chrome Trace Event Format tracing for performance diagnostics
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.tracing.yml up
+
+services:
+  moor-daemon:
+    build:
+      args:
+        TRACE_EVENTS: true
+    environment:
+      - RUST_BACKTRACE=full
+    volumes:
+      # Mount a volume for trace output that's easily accessible
+      - ./traces:/moor/traces
+    command: >
+      ./moor-daemon
+        /db/moor-data
+        --db=development.db
+        --rpc-listen=tcp://0.0.0.0:7899
+        --events-listen=tcp://0.0.0.0:7898
+        --workers-response-listen=tcp://0.0.0.0:7897
+        --workers-request-listen=tcp://0.0.0.0:7896
+        --enrollment-listen=tcp://0.0.0.0:7900
+        --trace-output=/moor/traces/moor-trace.json
+
+        --generate-keypair
+        --import=/db/cores/lambda-moor/src --import-format=objdef
+        --export=/db/export --export-format objdef
+
+  moor-telnet-host:
+    build:
+      args:
+        TRACE_EVENTS: true
+    environment:
+      - RUST_BACKTRACE=full
+
+  moor-web-host:
+    build:
+      args:
+        TRACE_EVENTS: true
+    environment:
+      - RUST_BACKTRACE=full
+
+  moor-curl-worker:
+    build:
+      args:
+        TRACE_EVENTS: true
+    environment:
+      - RUST_BACKTRACE=full
+
+volumes:
+  # Trace output volume - maps ./traces directory on host to /moor/traces in container
+  traces:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./traces
