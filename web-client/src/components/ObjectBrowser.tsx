@@ -537,6 +537,70 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         .filter(obj => isUuidObject(obj.obj))
         .sort((a, b) => a.obj.localeCompare(b.obj));
 
+    const normalizeObjectRef = (raw: string): { display: string; objectId: string | null } => {
+        const value = raw?.trim();
+        if (!value) {
+            return { display: "none", objectId: null };
+        }
+        if (value === "nothing" || value === "-1") {
+            return { display: "#-1", objectId: null };
+        }
+        if (value.startsWith("oid:")) {
+            const id = value.substring(4);
+            return { display: `#${id}`, objectId: id };
+        }
+        if (value.startsWith("uuid:")) {
+            const id = value.substring(5);
+            return { display: `#${id}`, objectId: id };
+        }
+        if (/^-?\d+$/.test(value)) {
+            return { display: `#${value}`, objectId: value };
+        }
+        return { display: value, objectId: null };
+    };
+
+    const renderObjectRef = (raw: string, onNavigate: (objectId: string) => void): React.ReactNode => {
+        const { display, objectId } = normalizeObjectRef(raw);
+        if (!objectId) {
+            return (
+                <span
+                    style={{
+                        fontFamily: "var(--font-mono)",
+                        color: "var(--color-text-secondary)",
+                    }}
+                >
+                    {display}
+                </span>
+            );
+        }
+        return (
+            <button
+                type="button"
+                onClick={() => onNavigate(objectId)}
+                style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    margin: 0,
+                    fontSize: "inherit",
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--color-text-accent)",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                }}
+            >
+                {display}
+            </button>
+        );
+    };
+
+    const handleNavigateToObject = (objectId: string) => {
+        const target = objects.find(obj => obj.obj === objectId);
+        if (target) {
+            handleObjectSelect(target);
+        }
+    };
+
     // Split mode styling
     const splitStyle = {
         width: "100%",
@@ -919,13 +983,16 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     <strong>Flags:</strong> {formatObjectFlags(selectedObject.flags) || "none"}
                                 </div>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Parent:</strong> #{selectedObject.parent || "none"}
+                                    <strong>Parent:</strong>{" "}
+                                    {renderObjectRef(selectedObject.parent, handleNavigateToObject)}
                                 </div>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Owner:</strong> #{selectedObject.owner}
+                                    <strong>Owner:</strong>{" "}
+                                    {renderObjectRef(selectedObject.owner, handleNavigateToObject)}
                                 </div>
                                 <div>
-                                    <strong>Location:</strong> #{selectedObject.location || "none"}
+                                    <strong>Location:</strong>{" "}
+                                    {renderObjectRef(selectedObject.location, handleNavigateToObject)}
                                 </div>
                             </div>
                         )}
@@ -1010,7 +1077,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         <div key={definer}>
                                             {groupIdx > 0 && (
                                                 <div style={inheritedLabelStyle}>
-                                                    from #{definer}
+                                                    from {normalizeObjectRef(definer).display}
                                                 </div>
                                             )}
                                             {props.map((prop, idx) => (
@@ -1075,10 +1142,12 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 }}
                             >
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Owner:</strong> #{selectedProperty.owner}
+                                    <strong>Owner:</strong>{" "}
+                                    {renderObjectRef(selectedProperty.owner, handleNavigateToObject)}
                                 </div>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Definer:</strong> #{selectedProperty.definer}
+                                    <strong>Definer:</strong>{" "}
+                                    {renderObjectRef(selectedProperty.definer, handleNavigateToObject)}
                                 </div>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
                                     <strong>Perms:</strong> {selectedProperty.readable ? "r" : ""}
@@ -1187,7 +1256,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         <div key={location}>
                                             {groupIdx > 0 && (
                                                 <div style={inheritedLabelStyle}>
-                                                    from #{location}
+                                                    from {normalizeObjectRef(location).display}
                                                 </div>
                                             )}
                                             {verbList.map((verb, idx) => (
@@ -1254,7 +1323,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     {formatPrepSpec(selectedVerb.prep)} / {formatArgSpec(selectedVerb.iobj)}
                                 </div>
                                 <div style={{ marginBottom: "var(--space-xs)" }}>
-                                    <strong>Owner:</strong> #{selectedVerb.owner}
+                                    <strong>Owner:</strong>{" "}
+                                    {renderObjectRef(selectedVerb.owner, handleNavigateToObject)}
                                 </div>
                                 <div>
                                     <strong>Perms:</strong> {selectedVerb.readable ? "r" : ""}
