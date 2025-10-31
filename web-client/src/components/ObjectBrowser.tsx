@@ -1788,84 +1788,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         ))
                                     )}
                             </div>
-                            {/* Property info panel */}
-                            {selectedProperty && (
-                                <div
-                                    style={{
-                                        ...infoPanelStyle,
-                                        maxHeight: "150px",
-                                        overflowY: "auto",
-                                    }}
-                                >
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Owner:</strong>{" "}
-                                        {renderObjectRef(selectedProperty.owner, handleNavigateToObject)}
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Definer:</strong>{" "}
-                                        {renderObjectRef(selectedProperty.definer, handleNavigateToObject)}
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Perms:</strong> {selectedProperty.readable ? "r" : ""}
-                                        {selectedProperty.writable ? "w" : ""}
-                                    </div>
-                                    {selectedProperty.moorVar && (
-                                        <div
-                                            style={{
-                                                marginTop: "var(--space-xs)",
-                                                paddingTop: "var(--space-xs)",
-                                                borderTop: "1px solid var(--color-border-light)",
-                                            }}
-                                        >
-                                            <strong>Value:</strong>
-                                            <div
-                                                style={{
-                                                    marginTop: "2px",
-                                                    wordBreak: "break-word",
-                                                    maxHeight: "60px",
-                                                    overflowY: "auto",
-                                                }}
-                                            >
-                                                {selectedProperty.moorVar.toLiteral()}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedObject && selectedProperty.definer === selectedObject.obj && (
-                                        <div
-                                            style={{
-                                                marginTop: "var(--space-sm)",
-                                                display: "flex",
-                                                gap: "var(--space-sm)",
-                                            }}
-                                        >
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setPropertyToDelete(selectedProperty);
-                                                    setDeletePropertyDialogError(null);
-                                                    setActionMessage(null);
-                                                    setShowDeletePropertyDialog(true);
-                                                }}
-                                                disabled={isSubmittingDeleteProperty}
-                                                style={{
-                                                    padding: "6px 10px",
-                                                    borderRadius: "var(--radius-sm)",
-                                                    border: "1px solid var(--color-border-medium)",
-                                                    backgroundColor:
-                                                        "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
-                                                    color: "var(--color-text-primary)",
-                                                    cursor: isSubmittingDeleteProperty ? "not-allowed" : "pointer",
-                                                    opacity: isSubmittingDeleteProperty ? 0.6 : 1,
-                                                    fontSize: `${secondaryFontSize}px`,
-                                                    fontWeight: 600,
-                                                }}
-                                            >
-                                                Delete Property
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
 
                         {/* Verbs pane */}
@@ -2077,6 +1999,21 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setSelectedProperty(null);
                                         setEditorVisible(false);
                                     }}
+                                    onDelete={selectedProperty.definer === selectedObject.obj
+                                        ? () => {
+                                            setPropertyToDelete(selectedProperty);
+                                            setDeletePropertyDialogError(null);
+                                            setActionMessage(null);
+                                            setShowDeletePropertyDialog(true);
+                                        }
+                                        : undefined}
+                                    owner={selectedProperty.owner}
+                                    definer={selectedProperty.definer}
+                                    permissions={{
+                                        readable: selectedProperty.readable,
+                                        writable: selectedProperty.writable,
+                                    }}
+                                    onNavigateToObject={handleNavigateToObject}
                                 />
                             )}
                             {selectedProperty && !selectedProperty.moorVar && (
@@ -2286,18 +2223,18 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
 
     return (
         <>
-            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "520px" }}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="create-object-title"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="create-object-title">Create Child Object</h2>
                 </div>
-                <form onSubmit={handleSubmit} className="settings-content" style={{ gap: "1em" }}>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
                     <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
                         The new object will be created as a child of <strong>{parentLabel}</strong>.
                     </p>
@@ -2427,18 +2364,18 @@ const RecycleObjectDialog: React.FC<RecycleObjectDialogProps> = ({
 }) => {
     return (
         <>
-            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "480px" }}
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="recycle-object-title"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="recycle-object-title">Recycle Object?</h2>
                 </div>
-                <div className="settings-content" style={{ gap: "1em" }}>
+                <div className="dialog-sheet-content" style={{ gap: "1em" }}>
                     <div
                         style={{
                             padding: "0.75em",
@@ -2546,18 +2483,18 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
 
     return (
         <>
-            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "520px" }}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="add-property-title"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="add-property-title">Add Property</h2>
                 </div>
-                <form onSubmit={handleSubmit} className="settings-content" style={{ gap: "1em" }}>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
                     <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
                         Add a new property to <strong>{objectLabel}</strong>.
                     </p>
@@ -2704,18 +2641,18 @@ const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
 }) => {
     return (
         <>
-            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "480px" }}
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="delete-property-title"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="delete-property-title">Delete Property?</h2>
                 </div>
-                <div className="settings-content" style={{ gap: "1em" }}>
+                <div className="dialog-sheet-content" style={{ gap: "1em" }}>
                     <div
                         style={{
                             padding: "0.75em",

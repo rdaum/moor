@@ -67,22 +67,22 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
     return (
         <>
             <div
-                className="settings-backdrop"
+                className="dialog-sheet-backdrop"
                 role="presentation"
                 aria-hidden="true"
             />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "500px" }}
                 role="dialog"
                 aria-labelledby="encryption-unlock-title"
                 aria-describedby="encryption-unlock-description"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="encryption-unlock-title">Enter History Password</h2>
                 </div>
 
-                <div className="settings-content">
+                <div className="dialog-sheet-content">
                     <div
                         id="encryption-unlock-description"
                         style={{

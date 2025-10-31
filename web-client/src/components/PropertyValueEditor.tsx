@@ -32,6 +32,12 @@ export interface PropertyValueEditorProps {
     propertyValue: MoorVar;
     onSave: () => void;
     onCancel: () => void;
+    onDelete?: () => void; // Optional delete handler - only shown if property is locally defined
+    // Property metadata
+    owner?: string; // Object ID or CURIE of property owner
+    definer?: string; // Object ID or CURIE of property definer
+    permissions?: { readable: boolean; writable: boolean }; // Property permissions
+    onNavigateToObject?: (objId: string) => void; // Callback for clicking object references
 }
 
 /**
@@ -200,6 +206,11 @@ export function PropertyValueEditor({
     propertyValue,
     onSave,
     onCancel,
+    onDelete,
+    owner,
+    definer,
+    permissions,
+    onNavigateToObject,
 }: PropertyValueEditorProps) {
     const [mode, setMode] = useState<EditorMode>(() => detectMode(propertyValue));
     const [value, setValue] = useState<string>(() => toEditorText(propertyValue, detectMode(propertyValue)));
@@ -333,6 +344,27 @@ export function PropertyValueEditor({
                     </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    {/* Delete button - only shown if onDelete handler provided */}
+                    {onDelete && (
+                        <button
+                            onClick={onDelete}
+                            aria-label="Delete property"
+                            title="Delete property"
+                            style={{
+                                backgroundColor:
+                                    "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
+                                color: "var(--color-text-primary)",
+                                border: "1px solid var(--color-border-medium)",
+                                padding: "6px 12px",
+                                borderRadius: "var(--radius-sm)",
+                                cursor: "pointer",
+                                fontSize: "12px",
+                                fontWeight: "600",
+                            }}
+                        >
+                            Delete
+                        </button>
+                    )}
                     <div
                         style={{
                             display: "flex",
@@ -575,6 +607,118 @@ export function PropertyValueEditor({
                     >
                         {error}
                     </pre>
+                </div>
+            )}
+
+            {/* Property metadata info panel */}
+            {(owner || definer || permissions) && (
+                <div
+                    style={{
+                        padding: "var(--space-sm) var(--space-md)",
+                        backgroundColor: "var(--color-bg-tertiary)",
+                        borderBottom: "1px solid var(--color-border-light)",
+                        fontSize: "0.9em",
+                        display: "flex",
+                        gap: "var(--space-md)",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                    }}
+                >
+                    {owner && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Owner:
+                            </span>
+                            {onNavigateToObject
+                                ? (
+                                    <button
+                                        onClick={() => onNavigateToObject(owner)}
+                                        style={{
+                                            background: "none",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            color: "var(--color-text-accent)",
+                                            cursor: "pointer",
+                                            padding: "2px 6px",
+                                            fontFamily: "var(--font-mono)",
+                                            fontSize: "0.95em",
+                                        }}
+                                    >
+                                        #{owner}
+                                    </button>
+                                )
+                                : (
+                                    <span
+                                        style={{
+                                            fontFamily: "var(--font-mono)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            padding: "2px 6px",
+                                            fontSize: "0.95em",
+                                        }}
+                                    >
+                                        #{owner}
+                                    </span>
+                                )}
+                        </div>
+                    )}
+                    {definer && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Definer:
+                            </span>
+                            {onNavigateToObject
+                                ? (
+                                    <button
+                                        onClick={() => onNavigateToObject(definer)}
+                                        style={{
+                                            background: "none",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            color: "var(--color-text-accent)",
+                                            cursor: "pointer",
+                                            padding: "2px 6px",
+                                            fontFamily: "var(--font-mono)",
+                                            fontSize: "0.95em",
+                                        }}
+                                    >
+                                        #{definer}
+                                    </button>
+                                )
+                                : (
+                                    <span
+                                        style={{
+                                            fontFamily: "var(--font-mono)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            borderRadius: "var(--radius-sm)",
+                                            padding: "2px 6px",
+                                            fontSize: "0.95em",
+                                        }}
+                                    >
+                                        #{definer}
+                                    </span>
+                                )}
+                        </div>
+                    )}
+                    {permissions && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                                Perms:
+                            </span>
+                            <span
+                                style={{
+                                    fontFamily: "var(--font-mono)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    borderRadius: "var(--radius-sm)",
+                                    padding: "2px 6px",
+                                    fontSize: "0.95em",
+                                }}
+                            >
+                                {permissions.readable ? "r" : ""}
+                                {permissions.writable ? "w" : ""}
+                            </span>
+                        </div>
+                    )}
                 </div>
             )}
 

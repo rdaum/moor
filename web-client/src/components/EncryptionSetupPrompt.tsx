@@ -64,23 +64,23 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
     return (
         <>
             <div
-                className="settings-backdrop"
+                className="dialog-sheet-backdrop"
                 onClick={onSkip}
                 role="presentation"
                 aria-hidden="true"
             />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "500px" }}
                 role="dialog"
                 aria-labelledby="encryption-setup-title"
                 aria-describedby="encryption-setup-description"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="encryption-setup-title">Set Up History Encryption</h2>
                 </div>
 
-                <div className="settings-content">
+                <div className="dialog-sheet-content">
                     <div
                         id="encryption-setup-description"
                         style={{

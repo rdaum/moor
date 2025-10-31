@@ -1365,6 +1365,110 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ====== DIALOG SHEET (Top-sliding) ====== */
+.dialog-sheet-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translate(-50%, -100%);
+  }
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+
+.dialog-sheet {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, 0);
+  width: min(600px, 95vw);
+  max-height: 90vh;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-medium);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px var(--color-shadow);
+  font-family: var(--font-ui);
+  animation: slideDown 0.3s ease;
+}
+
+.dialog-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--color-border-medium);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.dialog-sheet-header h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1.3em;
+  color: var(--color-text-primary);
+}
+
+.dialog-sheet-close {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-sm);
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.dialog-sheet-close:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.dialog-sheet-content {
+  flex: 1;
+  padding: var(--space-lg);
+  overflow-y: auto;
+  font-family: var(--font-ui);
+}
+
+/* Ensure all text elements in dialog sheets inherit properly */
+.dialog-sheet-content p,
+.dialog-sheet-content span,
+.dialog-sheet-content div,
+.dialog-sheet-content label,
+.dialog-sheet-content button,
+.dialog-sheet-content input {
+  font-family: inherit;
+}
+
 /* ====== HELP BUTTON & MODAL ====== */
 
 /* Help button - positioned in top-right of welcome box */

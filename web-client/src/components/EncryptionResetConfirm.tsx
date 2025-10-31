@@ -26,23 +26,23 @@ export const EncryptionResetConfirm: React.FC<EncryptionResetConfirmProps> = ({ 
     return (
         <>
             <div
-                className="settings-backdrop"
+                className="dialog-sheet-backdrop"
                 onClick={onCancel}
                 role="presentation"
                 aria-hidden="true"
             />
             <div
-                className="settings-panel"
+                className="dialog-sheet"
                 style={{ maxWidth: "500px" }}
                 role="alertdialog"
                 aria-labelledby="reset-confirm-title"
                 aria-describedby="reset-confirm-description"
             >
-                <div className="settings-header">
+                <div className="dialog-sheet-header">
                     <h2 id="reset-confirm-title">Reset Encryption?</h2>
                 </div>
 
-                <div className="settings-content">
+                <div className="dialog-sheet-content">
                     <div
                         id="reset-confirm-description"
                         role="alert"
