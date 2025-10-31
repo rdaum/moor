@@ -343,9 +343,17 @@ impl TreeTransformer {
                     let objid = Obj::mk_uuobjid(uuobjid);
                     Ok(Expr::Value(v_obj(objid)))
                 } else {
-                    let oid = i32::from_str(ostr).unwrap();
-                    let objid = Obj::mk_id(oid);
-                    Ok(Expr::Value(v_obj(objid)))
+                    // Parse as OID - must fit in i32 range
+                    match i32::from_str(ostr) {
+                        Ok(oid) => {
+                            let objid = Obj::mk_id(oid);
+                            Ok(Expr::Value(v_obj(objid)))
+                        }
+                        Err(e) => Err(CompileError::StringLexError(
+                            self.compile_context(&pair),
+                            format!("invalid object ID '{}': {}", ostr, e),
+                        )),
+                    }
                 }
             }
             Rule::integer => match pair.as_str().parse::<i64>() {

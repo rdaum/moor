@@ -24,7 +24,7 @@ import {
     performEvalFlatBuffer,
 } from "../lib/rpc-fb.js";
 import type { ServerFeatureSet } from "../lib/rpc-fb.js";
-import { objToString } from "../lib/var.js";
+import { objToString, uuObjIdToString } from "../lib/var.js";
 import { PropertyValueEditor } from "./PropertyValueEditor.js";
 import { VerbEditor } from "./VerbEditor.js";
 
@@ -73,9 +73,12 @@ interface VerbData {
 }
 
 interface CreateChildFormValues {
+    parent: string;
     owner: string;
     objectType: string;
     initArgs: string;
+    name: string;
+    flags: number;
 }
 
 interface AddPropertyFormValues {
@@ -336,7 +339,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     };
 
     const loadPropertiesAndVerbs = async (obj: ObjectData) => {
-        setIsLoading(true);
         try {
             // Convert obj.obj to CURIE format
             // obj.obj could be "#123" or already a CURIE like "oid:123"
@@ -425,8 +427,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         } catch (error) {
             console.error("Failed to load properties/verbs:", error);
             return []; // Return empty array on error
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -615,9 +615,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     };
 
     const handleCreateSubmit = async (form: CreateChildFormValues) => {
-        if (!selectedObject) return;
-
-        const parentExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        const parentExpr = normalizeObjectInput(form.parent || "#-1");
         if (!parentExpr) {
             setCreateDialogError("Unable to determine parent object reference.");
             return;
@@ -644,10 +642,82 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             console.debug("Evaluating create expression:", expr);
             const previousIds = new Set(objects.map(o => o.obj));
             const result = await performEvalFlatBuffer(authToken, expr);
+            console.debug("Create result:", result, "Type:", typeof result);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
                 const msg = errorResult.error?.msg ?? "create() failed";
                 throw new Error(msg);
+            }
+
+            // Extract the created object reference from the result
+            let createdObjExpr: string | null = null;
+            if (result && typeof result === "object") {
+                if ("oid" in result) {
+                    const oidResult = result as { oid?: number };
+                    if (typeof oidResult.oid === "number") {
+                        createdObjExpr = `#${oidResult.oid}`;
+                        console.debug("Extracted OID object reference:", createdObjExpr);
+                    }
+                } else if ("uuid" in result) {
+                    const uuidResult = result as { uuid?: string };
+                    if (typeof uuidResult.uuid === "string") {
+                        // Format UUID properly: FFFFFF-FFFFFFFFFF
+                        const packedValue = BigInt(uuidResult.uuid);
+                        const formattedUuid = uuObjIdToString(packedValue);
+                        createdObjExpr = `#${formattedUuid}`;
+                        console.debug("Extracted UUID object reference:", createdObjExpr);
+                    }
+                }
+            }
+            if (!createdObjExpr) {
+                console.debug("Could not extract object reference from result");
+            }
+
+            // Set name if provided
+            if (createdObjExpr && form.name.trim().length > 0) {
+                const escapedName = form.name.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+                const nameExpr = `${createdObjExpr}.name = "${escapedName}"; return 1;`;
+                console.debug("Setting name:", nameExpr);
+                try {
+                    const nameResult = await performEvalFlatBuffer(authToken, nameExpr);
+                    console.debug("Name set result:", nameResult);
+                } catch (error) {
+                    console.error("Failed to set name:", error);
+                    throw new Error(`Failed to set name: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+
+            // Set flags if any are set
+            if (createdObjExpr && form.flags !== 0) {
+                const assignments: string[] = [];
+                if ((form.flags & (1 << 1)) !== 0) {
+                    assignments.push(`${createdObjExpr}.programmer = 1`);
+                }
+                if ((form.flags & (1 << 2)) !== 0) {
+                    assignments.push(`${createdObjExpr}.wizard = 1`);
+                }
+                if ((form.flags & (1 << 4)) !== 0) {
+                    assignments.push(`${createdObjExpr}.r = 1`);
+                }
+                if ((form.flags & (1 << 5)) !== 0) {
+                    assignments.push(`${createdObjExpr}.w = 1`);
+                }
+                if ((form.flags & (1 << 7)) !== 0) {
+                    assignments.push(`${createdObjExpr}.f = 1`);
+                }
+                if (assignments.length > 0) {
+                    const flagsExpr = assignments.join("; ") + "; return 1;";
+                    console.debug("Setting flags:", flagsExpr);
+                    try {
+                        const flagsResult = await performEvalFlatBuffer(authToken, flagsExpr);
+                        console.debug("Flags set result:", flagsResult);
+                    } catch (error) {
+                        console.error("Failed to set flags:", error);
+                        throw new Error(
+                            `Failed to set flags: ${error instanceof Error ? error.message : String(error)}`,
+                        );
+                    }
+                }
             }
 
             const updated = await loadObjects();
@@ -1490,6 +1560,25 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 >
                                     Objects
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowCreateDialog(true);
+                                    }}
+                                    style={{
+                                        padding: "2px 8px",
+                                        fontSize: `${secondaryFontSize}px`,
+                                        backgroundColor: "var(--color-bg-tertiary)",
+                                        border: "1px solid var(--color-border-medium)",
+                                        borderRadius: "var(--radius-sm)",
+                                        color: "var(--color-text-primary)",
+                                        cursor: "pointer",
+                                        fontWeight: 600,
+                                    }}
+                                    title="Add new object"
+                                >
+                                    Add
+                                </button>
                             </div>
                             <div
                                 style={{
@@ -2233,12 +2322,13 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     </div>
                 )}
             </div>
-            {showCreateDialog && selectedObject && (
+            {showCreateDialog && (
                 <CreateChildDialog
-                    key={selectedObject.obj}
-                    parentLabel={describeObject(selectedObject)}
-                    defaultOwner={normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "")
-                        || "player"}
+                    key={selectedObject?.obj || "new"}
+                    defaultParent={selectedObject ? `#${selectedObject.obj}` : "#-1"}
+                    defaultOwner={selectedObject
+                        ? (normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "") || "player")
+                        : "player"}
                     objectTypeOptions={objectTypeOptions}
                     onCancel={() => setShowCreateDialog(false)}
                     onSubmit={handleCreateSubmit}
@@ -2324,7 +2414,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 };
 
 interface CreateChildDialogProps {
-    parentLabel: string;
+    defaultParent: string;
     defaultOwner: string;
     objectTypeOptions: Array<{ value: string; label: string }>;
     onCancel: () => void;
@@ -2334,7 +2424,7 @@ interface CreateChildDialogProps {
 }
 
 const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
-    parentLabel,
+    defaultParent,
     defaultOwner,
     objectTypeOptions,
     onCancel,
@@ -2342,19 +2432,39 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
     isSubmitting,
     errorMessage,
 }) => {
+    const [parent, setParent] = useState(defaultParent);
     const [owner, setOwner] = useState(defaultOwner);
     const [objectType, setObjectType] = useState<string>("server-default");
     const [initArgs, setInitArgs] = useState<string>("");
+    const [name, setName] = useState<string>("");
+    const [programmer, setProgrammer] = useState(false);
+    const [wizard, setWizard] = useState(false);
+    const [readable, setReadable] = useState(false);
+    const [writable, setWritable] = useState(false);
+    const [fertile, setFertile] = useState(false);
 
     useEffect(() => {
+        setParent(defaultParent);
         setOwner(defaultOwner);
         setObjectType("server-default");
         setInitArgs("");
-    }, [defaultOwner]);
+        setName("");
+        setProgrammer(false);
+        setWizard(false);
+        setReadable(false);
+        setWritable(false);
+        setFertile(false);
+    }, [defaultParent, defaultOwner]);
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        onSubmit({ owner, objectType, initArgs });
+        let flags = 0;
+        if (programmer) flags |= 1 << 1;
+        if (wizard) flags |= 1 << 2;
+        if (readable) flags |= 1 << 4;
+        if (writable) flags |= 1 << 5;
+        if (fertile) flags |= 1 << 7;
+        onSubmit({ parent, owner, objectType, initArgs, name, flags });
     };
 
     return (
@@ -2368,12 +2478,25 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
                 aria-labelledby="create-object-title"
             >
                 <div className="dialog-sheet-header">
-                    <h2 id="create-object-title">Create Child Object</h2>
+                    <h2 id="create-object-title">Create Object</h2>
                 </div>
                 <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
-                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
-                        The new object will be created as a child of <strong>{parentLabel}</strong>.
-                    </p>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Parent (MOO expression)</span>
+                        <input
+                            type="text"
+                            value={parent}
+                            onChange={(e) => setParent(e.target.value)}
+                            placeholder="#-1"
+                            autoFocus
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                    </label>
                     <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
                         <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
                         <input
@@ -2381,7 +2504,6 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
                             value={owner}
                             onChange={(e) => setOwner(e.target.value)}
                             placeholder="player"
-                            autoFocus
                             style={{
                                 padding: "0.5em",
                                 borderRadius: "var(--radius-sm)",
@@ -2426,9 +2548,80 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
                         />
                         <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
                             Provide a MOO list literal (for example <code>{"{}"}</code> or{" "}
-                            <code>{"{"}player{"}"}</code>). Leave blank to skip initialization arguments.
+                            <code>{"{"}player{"}"}</code>). These arguments are passed to the object's{" "}
+                            <code>:initialize</code> verb if it has one. Leave blank to skip initialization.
                         </span>
                     </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Name (optional)</span>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Unnamed Object"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                    </label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                        <span style={{ fontWeight: 600 }}>Flags</span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.4em" }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={programmer}
+                                    onChange={(e) => setProgrammer(e.target.checked)}
+                                    style={{ cursor: "pointer" }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>p</span>
+                                <span style={{ color: "var(--color-text-secondary)" }}>Programmer</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={wizard}
+                                    onChange={(e) => setWizard(e.target.checked)}
+                                    style={{ cursor: "pointer" }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>w</span>
+                                <span style={{ color: "var(--color-text-secondary)" }}>Wizard</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={readable}
+                                    onChange={(e) => setReadable(e.target.checked)}
+                                    style={{ cursor: "pointer" }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>r</span>
+                                <span style={{ color: "var(--color-text-secondary)" }}>Readable</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={writable}
+                                    onChange={(e) => setWritable(e.target.checked)}
+                                    style={{ cursor: "pointer" }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>W</span>
+                                <span style={{ color: "var(--color-text-secondary)" }}>Writable</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={fertile}
+                                    onChange={(e) => setFertile(e.target.checked)}
+                                    style={{ cursor: "pointer" }}
+                                />
+                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>f</span>
+                                <span style={{ color: "var(--color-text-secondary)" }}>Fertile</span>
+                            </label>
+                        </div>
+                    </div>
                     {errorMessage && (
                         <div
                             role="alert"
@@ -3801,6 +3994,11 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
 
     const renderObjectRefSimple = (raw: string): React.ReactNode => {
         const { display, objectId } = normalizeObjectRef(raw);
+
+        // Look up the object name for tooltip
+        const objData = objectId ? objects.find(o => o.obj === objectId) : null;
+        const tooltip = objData?.name || null;
+
         if (!objectId) {
             return (
                 <span
@@ -3812,6 +4010,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                         fontSize: "0.95em",
                         color: "var(--color-text-secondary)",
                     }}
+                    title={tooltip || undefined}
                 >
                     {display}
                 </span>
@@ -3831,6 +4030,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                     color: "var(--color-text-accent)",
                     cursor: "pointer",
                 }}
+                title={tooltip || undefined}
             >
                 {display}
             </button>
@@ -3939,7 +4139,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                 {/* Object metadata section */}
                 <div
                     style={{
-                        padding: "var(--space-sm) var(--space-md)",
+                        padding: "var(--space-md)",
                         backgroundColor: "var(--color-bg-tertiary)",
                         borderTop: "1px solid var(--color-border-light)",
                         borderBottom: "1px solid var(--color-border-light)",
