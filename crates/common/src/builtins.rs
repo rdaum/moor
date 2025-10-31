@@ -70,6 +70,10 @@ fn mk_builtin(
     }
 }
 
+// IMPORTANT: all new functions should be added at the *end* of this table in order to keep stable
+//  ids in existing program assemblies in the database and not require recompilation.
+// If you absolutely have to violate this rule for some reason, it will require an incrementing
+// of the DB version and migration process in `crates/db/src/provider/fjall_migration.rs`
 fn mk_builtin_table() -> Vec<Builtin> {
     vec![
         mk_builtin("disassemble", Q(2), Q(2), vec![Typed(TYPE_OBJ), Any], true),
@@ -660,6 +664,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             Q(1),
             Q(3),
             vec![Typed(TYPE_MAP), Any, Any],
+            true,
+        ),
+        mk_builtin(
+            "explode",
+            Q(1),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
             true,
         ),
     ]

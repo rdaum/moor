@@ -20,7 +20,9 @@ use argon2::{
 use base64::{Engine, engine::general_purpose};
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_str, v_string};
+use moor_var::{
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_list, v_str, v_string,
+};
 use rand::{Rng, distr::Alphanumeric};
 use tracing::warn;
 
@@ -512,6 +514,55 @@ fn bf_binary_from_str(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_binary(binary_data)))
 }
 
+/// MOO: `list explode(str subject [, str break [, bool include-sequential-occurrences]])`
+/// Splits subject into a list of substrings separated by break character.
+/// Only the first character of break is used. Break defaults to space.
+/// If include-sequential-occurrences is true, empty strings are included for consecutive breaks.
+fn bf_explode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(subject) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    // Get break character (default to space)
+    let break_char = if bf_args.args.len() >= 2 {
+        let Some(break_str) = bf_args.args[1].as_string() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        if break_str.is_empty() {
+            ' '
+        } else {
+            break_str.chars().next().unwrap()
+        }
+    } else {
+        ' '
+    };
+
+    // Get include-sequential-occurrences flag (default to false)
+    let include_sequential = if bf_args.args.len() == 3 {
+        bf_args.args[2].is_true()
+    } else {
+        false
+    };
+
+    let parts: Vec<_> = if include_sequential {
+        // Include empty strings for consecutive separators
+        subject.split(break_char).map(|s| v_str(s)).collect()
+    } else {
+        // Filter out empty strings
+        subject
+            .split(break_char)
+            .filter(|s| !s.is_empty())
+            .map(|s| v_str(s))
+            .collect()
+    };
+
+    Ok(Ret(v_list(&parts)))
+}
+
 pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("strsub")] = Box::new(bf_strsub);
     builtins[offset_for_builtin("index")] = Box::new(bf_index);
@@ -528,6 +579,7 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);
     builtins[offset_for_builtin("binary_to_str")] = Box::new(bf_binary_to_str);
     builtins[offset_for_builtin("binary_from_str")] = Box::new(bf_binary_from_str);
+    builtins[offset_for_builtin("explode")] = Box::new(bf_explode);
 }
 
 #[cfg(test)]
