@@ -78,6 +78,13 @@ interface CreateChildFormValues {
     initArgs: string;
 }
 
+interface AddPropertyFormValues {
+    name: string;
+    value: string;
+    owner: string;
+    perms: string;
+}
+
 // Helper to decode object flags to readable string
 function formatObjectFlags(flags: number): string {
     const parts: string[] = [];
@@ -176,13 +183,20 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [serverFeatures, setServerFeatures] = useState<ServerFeatureSet | null>(null);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showRecycleDialog, setShowRecycleDialog] = useState(false);
+    const [showAddPropertyDialog, setShowAddPropertyDialog] = useState(false);
+    const [showDeletePropertyDialog, setShowDeletePropertyDialog] = useState(false);
     const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
     const [isSubmittingRecycle, setIsSubmittingRecycle] = useState(false);
+    const [isSubmittingAddProperty, setIsSubmittingAddProperty] = useState(false);
+    const [isSubmittingDeleteProperty, setIsSubmittingDeleteProperty] = useState(false);
     const [createDialogError, setCreateDialogError] = useState<string | null>(null);
     const [recycleDialogError, setRecycleDialogError] = useState<string | null>(null);
+    const [addPropertyDialogError, setAddPropertyDialogError] = useState<string | null>(null);
+    const [deletePropertyDialogError, setDeletePropertyDialogError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [editingName, setEditingName] = useState<string>("");
     const [isSavingName, setIsSavingName] = useState(false);
+    const [propertyToDelete, setPropertyToDelete] = useState<PropertyData | null>(null);
     const decreaseFontSize = useCallback(() => {
         setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
     }, []);
@@ -220,6 +234,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         if (!visible) {
             setShowCreateDialog(false);
             setShowRecycleDialog(false);
+            setShowAddPropertyDialog(false);
+            setShowDeletePropertyDialog(false);
         }
     }, [visible]);
 
@@ -561,6 +577,98 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             setRecycleDialogError(error instanceof Error ? error.message : String(error));
         } finally {
             setIsSubmittingRecycle(false);
+        }
+    };
+
+    const handleAddPropertySubmit = async (form: AddPropertyFormValues) => {
+        if (!selectedObject) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setAddPropertyDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        setIsSubmittingAddProperty(true);
+        setAddPropertyDialogError(null);
+
+        try {
+            // Escape the property name and value for MOO
+            const escapedName = form.name.trim();
+            if (!escapedName) {
+                throw new Error("Property name cannot be empty");
+            }
+
+            const ownerExpr = normalizeObjectInput(form.owner || "player") || "player";
+            const perms = form.perms.trim() || "rw";
+
+            // Validate perms string
+            if (!/^[rwc]*$/.test(perms)) {
+                throw new Error("Invalid permissions. Use r, w, and/or c");
+            }
+
+            // Build the add_property call
+            // add_property(obj, 'name, value, {owner, "perms"})
+            const expr =
+                `return add_property(${objectExpr}, '${escapedName}, ${form.value}, {${ownerExpr}, "${perms}"});`;
+
+            console.debug("Evaluating add_property expression:", expr);
+            const result = await performEvalFlatBuffer(authToken, expr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "add_property() failed";
+                throw new Error(msg);
+            }
+
+            // Reload properties list
+            await loadPropertiesAndVerbs(selectedObject);
+
+            setShowAddPropertyDialog(false);
+            setActionMessage(`Added property "${escapedName}" to ${describeObject(selectedObject)}`);
+        } catch (error) {
+            setAddPropertyDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingAddProperty(false);
+        }
+    };
+
+    const handleDeletePropertyConfirm = async () => {
+        if (!selectedObject || !propertyToDelete) return;
+
+        const objectExpr = normalizeObjectInput(selectedObject.obj ? `#${selectedObject.obj}` : "");
+        if (!objectExpr || objectExpr === "#-1") {
+            setDeletePropertyDialogError("Unable to determine object reference.");
+            return;
+        }
+
+        setIsSubmittingDeleteProperty(true);
+        setDeletePropertyDialogError(null);
+
+        try {
+            // delete_property(obj, 'name)
+            const expr = `return delete_property(${objectExpr}, '${propertyToDelete.name});`;
+
+            console.debug("Evaluating delete_property expression:", expr);
+            const result = await performEvalFlatBuffer(authToken, expr);
+            if (result && typeof result === "object" && "error" in result) {
+                const errorResult = result as { error?: { msg?: string } };
+                const msg = errorResult.error?.msg ?? "delete_property() failed";
+                throw new Error(msg);
+            }
+
+            // Reload properties list
+            await loadPropertiesAndVerbs(selectedObject);
+
+            setShowDeletePropertyDialog(false);
+            setPropertyToDelete(null);
+            setSelectedProperty(null);
+            setEditorVisible(false);
+
+            setActionMessage(`Deleted property "${propertyToDelete.name}" from ${describeObject(selectedObject)}`);
+        } catch (error) {
+            setDeletePropertyDialogError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSubmittingDeleteProperty(false);
         }
     };
 
@@ -1547,6 +1655,32 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 >
                                     Properties
                                 </span>
+                                {selectedObject && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setAddPropertyDialogError(null);
+                                            setActionMessage(null);
+                                            setShowAddPropertyDialog(true);
+                                        }}
+                                        disabled={isSubmittingAddProperty}
+                                        aria-label="Add property"
+                                        title="Add property"
+                                        style={{
+                                            padding: "4px 8px",
+                                            borderRadius: "var(--radius-sm)",
+                                            border: "1px solid var(--color-border-medium)",
+                                            backgroundColor: "var(--color-bg-secondary)",
+                                            color: "var(--color-text-primary)",
+                                            cursor: isSubmittingAddProperty ? "not-allowed" : "pointer",
+                                            opacity: isSubmittingAddProperty ? 0.6 : 1,
+                                            fontSize: `${secondaryFontSize}px`,
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        + Add
+                                    </button>
+                                )}
                             </div>
                             <div
                                 style={{
@@ -1694,6 +1828,40 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                             >
                                                 {selectedProperty.moorVar.toLiteral()}
                                             </div>
+                                        </div>
+                                    )}
+                                    {selectedObject && selectedProperty.definer === selectedObject.obj && (
+                                        <div
+                                            style={{
+                                                marginTop: "var(--space-sm)",
+                                                display: "flex",
+                                                gap: "var(--space-sm)",
+                                            }}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setPropertyToDelete(selectedProperty);
+                                                    setDeletePropertyDialogError(null);
+                                                    setActionMessage(null);
+                                                    setShowDeletePropertyDialog(true);
+                                                }}
+                                                disabled={isSubmittingDeleteProperty}
+                                                style={{
+                                                    padding: "6px 10px",
+                                                    borderRadius: "var(--radius-sm)",
+                                                    border: "1px solid var(--color-border-medium)",
+                                                    backgroundColor:
+                                                        "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
+                                                    color: "var(--color-text-primary)",
+                                                    cursor: isSubmittingDeleteProperty ? "not-allowed" : "pointer",
+                                                    opacity: isSubmittingDeleteProperty ? 0.6 : 1,
+                                                    fontSize: `${secondaryFontSize}px`,
+                                                    fontWeight: 600,
+                                                }}
+                                            >
+                                                Delete Property
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -2052,6 +2220,32 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     errorMessage={recycleDialogError}
                 />
             )}
+            {showAddPropertyDialog && selectedObject && (
+                <AddPropertyDialog
+                    key={`add-property-${selectedObject.obj}`}
+                    objectLabel={describeObject(selectedObject)}
+                    defaultOwner={normalizeObjectInput(selectedObject.owner ? `#${selectedObject.owner}` : "")
+                        || "player"}
+                    onCancel={() => setShowAddPropertyDialog(false)}
+                    onSubmit={handleAddPropertySubmit}
+                    isSubmitting={isSubmittingAddProperty}
+                    errorMessage={addPropertyDialogError}
+                />
+            )}
+            {showDeletePropertyDialog && propertyToDelete && selectedObject && (
+                <DeletePropertyDialog
+                    key={`delete-property-${propertyToDelete.name}`}
+                    propertyName={propertyToDelete.name}
+                    objectLabel={describeObject(selectedObject)}
+                    onCancel={() => {
+                        setShowDeletePropertyDialog(false);
+                        setPropertyToDelete(null);
+                    }}
+                    onConfirm={handleDeletePropertyConfirm}
+                    isSubmitting={isSubmittingDeleteProperty}
+                    errorMessage={deletePropertyDialogError}
+                />
+            )}
         </>
     );
 };
@@ -2308,6 +2502,282 @@ const RecycleObjectDialog: React.FC<RecycleObjectDialogProps> = ({
                             }}
                         >
                             {isSubmitting ? "Recycling…" : "Recycle"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+};
+
+interface AddPropertyDialogProps {
+    objectLabel: string;
+    defaultOwner: string;
+    onCancel: () => void;
+    onSubmit: (form: AddPropertyFormValues) => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
+    objectLabel,
+    defaultOwner,
+    onCancel,
+    onSubmit,
+    isSubmitting,
+    errorMessage,
+}) => {
+    const [name, setName] = useState("");
+    const [value, setValue] = useState("0");
+    const [owner, setOwner] = useState(defaultOwner);
+    const [perms, setPerms] = useState("rw");
+
+    useEffect(() => {
+        setName("");
+        setValue("0");
+        setOwner(defaultOwner);
+        setPerms("rw");
+    }, [defaultOwner]);
+
+    const handleSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        onSubmit({ name, value, owner, perms });
+    };
+
+    return (
+        <>
+            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="settings-panel"
+                style={{ maxWidth: "520px" }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="add-property-title"
+            >
+                <div className="settings-header">
+                    <h2 id="add-property-title">Add Property</h2>
+                </div>
+                <form onSubmit={handleSubmit} className="settings-content" style={{ gap: "1em" }}>
+                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                        Add a new property to <strong>{objectLabel}</strong>.
+                    </p>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Property name</span>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="prop_name"
+                            autoFocus
+                            required
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Initial value (MOO expression)</span>
+                        <input
+                            type="text"
+                            value={value}
+                            onChange={(e) => setValue(e.target.value)}
+                            placeholder="0"
+                            required
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                            Examples: <code>0</code>, <code>""</code>, <code>{"{}"}</code>, <code>player</code>
+                        </span>
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
+                        <input
+                            type="text"
+                            value={owner}
+                            onChange={(e) => setOwner(e.target.value)}
+                            placeholder="player"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
+                        <span style={{ fontWeight: 600 }}>Permissions</span>
+                        <input
+                            type="text"
+                            value={perms}
+                            onChange={(e) => setPerms(e.target.value)}
+                            placeholder="rw"
+                            pattern="[rwc]*"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        />
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                            Use r (read), w (write), and/or c (chown). Example: <code>rw</code>
+                        </span>
+                    </label>
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-text-error)",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                color: "var(--color-text-primary)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-text-accent)",
+                                color: "var(--color-bg-base)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Adding…" : "Add Property"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </>
+    );
+};
+
+interface DeletePropertyDialogProps {
+    propertyName: string;
+    objectLabel: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+}
+
+const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
+    propertyName,
+    objectLabel,
+    onCancel,
+    onConfirm,
+    isSubmitting,
+    errorMessage,
+}) => {
+    return (
+        <>
+            <div className="settings-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
+            <div
+                className="settings-panel"
+                style={{ maxWidth: "480px" }}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="delete-property-title"
+            >
+                <div className="settings-header">
+                    <h2 id="delete-property-title">Delete Property?</h2>
+                </div>
+                <div className="settings-content" style={{ gap: "1em" }}>
+                    <div
+                        style={{
+                            padding: "0.75em",
+                            borderRadius: "var(--radius-sm)",
+                            border: "1px solid var(--color-text-error)",
+                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                            color: "var(--color-text-primary)",
+                            fontFamily: "inherit",
+                        }}
+                    >
+                        <p style={{ margin: 0 }}>
+                            Delete property <code>{propertyName}</code> from{" "}
+                            <strong>{objectLabel}</strong>? This action cannot be undone.
+                        </p>
+                    </div>
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "0.5em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-text-error)",
+                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                                color: "var(--color-text-primary)",
+                                fontFamily: "var(--font-mono)",
+                            }}
+                        >
+                            {errorMessage}
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: "var(--color-bg-secondary)",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={isSubmitting}
+                            style={{
+                                padding: "0.5em 1em",
+                                borderRadius: "var(--radius-sm)",
+                                border: "none",
+                                backgroundColor: "var(--color-text-error)",
+                                color: "var(--color-bg-base)",
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
+                                opacity: isSubmitting ? 0.6 : 1,
+                                fontWeight: 700,
+                            }}
+                        >
+                            {isSubmitting ? "Deleting…" : "Delete Property"}
                         </button>
                     </div>
                 </div>
