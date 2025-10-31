@@ -136,9 +136,12 @@ function prepSpecToString(val: number): string {
 // Helper to decode object flags to readable string
 function formatObjectFlags(flags: number): string {
     const parts: string[] = [];
-    if (flags & 8) parts.push("r"); // Read
-    if (flags & 16) parts.push("w"); // Write
-    if (flags & 32) parts.push("f"); // Fertile
+    if (flags & (1 << 0)) parts.push("u"); // User (player)
+    if (flags & (1 << 1)) parts.push("p"); // Programmer
+    if (flags & (1 << 2)) parts.push("w"); // Wizard
+    if (flags & (1 << 4)) parts.push("r"); // Readable
+    if (flags & (1 << 5)) parts.push("W"); // Writable (capital W to distinguish from wizard)
+    if (flags & (1 << 7)) parts.push("f"); // Fertile
     return parts.length > 0 ? parts.join("") : "";
 }
 
@@ -257,6 +260,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         if (visible) {
             loadObjects();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible, authToken]);
 
     useEffect(() => {
@@ -511,9 +515,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
 
             setActionMessage("Name updated successfully");
+            setTimeout(() => setActionMessage(null), 3000);
         } catch (error) {
             console.error("Failed to save name:", error);
             setActionMessage("Failed to update name: " + (error instanceof Error ? error.message : String(error)));
+            setTimeout(() => setActionMessage(null), 5000);
         } finally {
             setIsSavingName(false);
         }
@@ -993,18 +999,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         color: "var(--color-text-secondary)",
         fontFamily: "var(--font-mono)",
     } as const;
-    const infoPanelStyle = {
-        padding: "var(--space-sm)",
-        border: "1px solid var(--color-border-medium)",
-        backgroundColor: "var(--color-bg-secondary)",
-        fontSize: `${secondaryFontSize}px`,
-        fontFamily: "var(--font-mono)",
-        color: "var(--color-text-secondary)",
-        borderRadius: "var(--radius-sm)",
-        margin: "var(--space-xs) var(--space-sm) var(--space-sm)",
-        minHeight: "100px",
-        boxShadow: "inset 0 1px 0 color-mix(in srgb, var(--color-border-light) 60%, transparent)",
-    } as const;
     const inheritedToggleButtonStyle = (active: boolean): React.CSSProperties => ({
         width: "22px",
         height: "22px",
@@ -1084,41 +1078,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             return { display: `#${value}`, objectId: value };
         }
         return { display: value, objectId: null };
-    };
-
-    const renderObjectRef = (raw: string, onNavigate: (objectId: string) => void): React.ReactNode => {
-        const { display, objectId } = normalizeObjectRef(raw);
-        if (!objectId) {
-            return (
-                <span
-                    style={{
-                        fontFamily: "var(--font-mono)",
-                        color: "var(--color-text-secondary)",
-                    }}
-                >
-                    {display}
-                </span>
-            );
-        }
-        return (
-            <button
-                type="button"
-                onClick={() => onNavigate(objectId)}
-                style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    margin: 0,
-                    fontSize: "inherit",
-                    fontFamily: "var(--font-mono)",
-                    color: "var(--color-text-accent)",
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                }}
-            >
-                {display}
-            </button>
-        );
     };
 
     const handleNavigateToObject = (objectId: string) => {
@@ -1406,7 +1365,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     {/* Top area - 3 panes */}
                     <div
                         style={{
-                            flex: editorVisible ? editorSplitPosition : 1,
+                            flex: (editorVisible || selectedObject) ? editorSplitPosition : 1,
                             display: "flex",
                             overflow: "hidden",
                         }}
@@ -1604,172 +1563,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         </>
                                     )}
                             </div>
-                            {/* Object info panel */}
-                            {selectedObject && (
-                                <div style={infoPanelStyle}>
-                                    <div
-                                        style={{
-                                            marginBottom: "var(--space-xs)",
-                                            display: "flex",
-                                            gap: "4px",
-                                            alignItems: "center",
-                                        }}
-                                    >
-                                        <strong>Name:</strong>
-                                        <input
-                                            type="text"
-                                            value={editingName}
-                                            onChange={(e) => setEditingName(e.target.value)}
-                                            disabled={isSavingName}
-                                            style={{
-                                                flex: 1,
-                                                padding: "4px 6px",
-                                                fontSize: `${secondaryFontSize}px`,
-                                                fontFamily: "var(--font-mono)",
-                                                backgroundColor: "var(--color-bg-input)",
-                                                border: "1px solid var(--color-border-medium)",
-                                                borderRadius: "var(--radius-sm)",
-                                                color: "var(--color-text-primary)",
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                    handleNameSave();
-                                                } else if (e.key === "Escape") {
-                                                    setEditingName(selectedObject.name);
-                                                }
-                                            }}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleNameSave}
-                                            disabled={isSavingName || editingName === selectedObject.name}
-                                            style={{
-                                                padding: "4px 8px",
-                                                fontSize: `${secondaryFontSize}px`,
-                                                fontWeight: 600,
-                                                borderRadius: "var(--radius-sm)",
-                                                border: "1px solid var(--color-border-medium)",
-                                                backgroundColor: "var(--color-bg-secondary)",
-                                                color: "var(--color-text-primary)",
-                                                cursor: isSavingName || editingName === selectedObject.name
-                                                    ? "not-allowed"
-                                                    : "pointer",
-                                                opacity: isSavingName || editingName === selectedObject.name ? 0.6 : 1,
-                                            }}
-                                        >
-                                            {isSavingName ? "Saving..." : "Save"}
-                                        </button>
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Flags:</strong> {formatObjectFlags(selectedObject.flags) || "none"}
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Parent:</strong>{" "}
-                                        {renderObjectRef(selectedObject.parent, handleNavigateToObject)}
-                                    </div>
-                                    <div style={{ marginBottom: "var(--space-xs)" }}>
-                                        <strong>Owner:</strong>{" "}
-                                        {renderObjectRef(selectedObject.owner, handleNavigateToObject)}
-                                    </div>
-                                    <div>
-                                        <strong>Location:</strong>{" "}
-                                        {renderObjectRef(selectedObject.location, handleNavigateToObject)}
-                                    </div>
-                                    <div
-                                        style={{
-                                            marginTop: "var(--space-sm)",
-                                            display: "flex",
-                                            gap: "var(--space-sm)",
-                                            flexWrap: "wrap",
-                                        }}
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setCreateDialogError(null);
-                                                setActionMessage(null);
-                                                setShowCreateDialog(true);
-                                            }}
-                                            disabled={!selectedObject || selectedObject.obj === "-1"
-                                                || isSubmittingCreate || isSubmittingRecycle}
-                                            style={{
-                                                padding: "6px 10px",
-                                                borderRadius: "var(--radius-sm)",
-                                                border: "1px solid var(--color-border-medium)",
-                                                backgroundColor: "var(--color-bg-secondary)",
-                                                color: "var(--color-text-primary)",
-                                                cursor: !selectedObject
-                                                        || selectedObject.obj === "-1"
-                                                        || isSubmittingCreate
-                                                        || isSubmittingRecycle
-                                                    ? "not-allowed"
-                                                    : "pointer",
-                                                opacity: !selectedObject
-                                                        || selectedObject.obj === "-1"
-                                                        || isSubmittingCreate
-                                                        || isSubmittingRecycle
-                                                    ? 0.6
-                                                    : 1,
-                                                fontSize: `${secondaryFontSize}px`,
-                                                fontWeight: 600,
-                                            }}
-                                        >
-                                            Create Child
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setRecycleDialogError(null);
-                                                setActionMessage(null);
-                                                setShowRecycleDialog(true);
-                                            }}
-                                            disabled={!selectedObject
-                                                || selectedObject.obj === "-1"
-                                                || isSubmittingCreate
-                                                || isSubmittingRecycle}
-                                            style={{
-                                                padding: "6px 10px",
-                                                borderRadius: "var(--radius-sm)",
-                                                border: "1px solid var(--color-border-medium)",
-                                                backgroundColor:
-                                                    "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
-                                                color: "var(--color-text-primary)",
-                                                cursor: !selectedObject
-                                                        || selectedObject.obj === "-1"
-                                                        || isSubmittingCreate
-                                                        || isSubmittingRecycle
-                                                    ? "not-allowed"
-                                                    : "pointer",
-                                                opacity: !selectedObject
-                                                        || selectedObject.obj === "-1"
-                                                        || isSubmittingCreate
-                                                        || isSubmittingRecycle
-                                                    ? 0.6
-                                                    : 1,
-                                                fontSize: `${secondaryFontSize}px`,
-                                                fontWeight: 600,
-                                            }}
-                                        >
-                                            Recycle Object
-                                        </button>
-                                    </div>
-                                    {actionMessage && (
-                                        <div
-                                            style={{
-                                                marginTop: "var(--space-xs)",
-                                                padding: "var(--space-xs) var(--space-sm)",
-                                                borderRadius: "var(--radius-sm)",
-                                                backgroundColor: "rgba(16, 185, 129, 0.15)",
-                                                border: "1px solid rgba(16, 185, 129, 0.35)",
-                                                color: "var(--color-text-primary)",
-                                                fontSize: `${secondaryFontSize}px`,
-                                            }}
-                                        >
-                                            {actionMessage}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
 
                         {/* Properties pane */}
@@ -2106,7 +1899,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     </div>
 
                     {/* Draggable splitter bar */}
-                    {editorVisible && (
+                    {(editorVisible || selectedObject) && (
                         <div
                             onMouseDown={handleSplitDragStart}
                             style={{
@@ -2128,7 +1921,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     )}
 
                     {/* Bottom editor area */}
-                    {editorVisible && (
+                    {(editorVisible || selectedObject) && (
                         <div
                             style={{
                                 flex: 1 - editorSplitPosition,
@@ -2136,6 +1929,33 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 backgroundColor: "var(--color-bg-secondary)",
                             }}
                         >
+                            {selectedObject && !selectedProperty && !selectedVerb && (
+                                <ObjectInfoEditor
+                                    object={selectedObject}
+                                    objects={objects}
+                                    authToken={authToken}
+                                    onNavigate={handleNavigateToObject}
+                                    normalizeObjectRef={normalizeObjectRef}
+                                    normalizeObjectInput={normalizeObjectInput}
+                                    onCreateChild={() => {
+                                        setCreateDialogError(null);
+                                        setActionMessage(null);
+                                        setShowCreateDialog(true);
+                                    }}
+                                    onRecycle={() => {
+                                        setRecycleDialogError(null);
+                                        setActionMessage(null);
+                                        setShowRecycleDialog(true);
+                                    }}
+                                    isSubmittingCreate={isSubmittingCreate}
+                                    isSubmittingRecycle={isSubmittingRecycle}
+                                    editingName={editingName}
+                                    onNameChange={setEditingName}
+                                    onNameSave={handleNameSave}
+                                    isSavingName={isSavingName}
+                                    actionMessage={actionMessage}
+                                />
+                            )}
                             {selectedProperty && selectedProperty.moorVar && selectedObject && (
                                 <PropertyValueEditor
                                     authToken={authToken}
@@ -3422,5 +3242,651 @@ const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
                 </div>
             </div>
         </>
+    );
+};
+
+interface ObjectInfoEditorProps {
+    object: ObjectData;
+    objects: ObjectData[];
+    authToken: string;
+    onNavigate: (objectId: string) => void;
+    normalizeObjectRef: (raw: string) => { display: string; objectId: string | null };
+    normalizeObjectInput: (raw: string) => string;
+    onCreateChild: () => void;
+    onRecycle: () => void;
+    isSubmittingCreate: boolean;
+    isSubmittingRecycle: boolean;
+    editingName: string;
+    onNameChange: (name: string) => void;
+    onNameSave: () => void;
+    isSavingName: boolean;
+    actionMessage: string | null;
+}
+
+const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
+    object,
+    objects,
+    authToken,
+    onNavigate,
+    normalizeObjectRef,
+    normalizeObjectInput: _normalizeObjectInput,
+    onCreateChild,
+    onRecycle,
+    isSubmittingCreate,
+    isSubmittingRecycle,
+    editingName,
+    onNameChange,
+    onNameSave,
+    isSavingName,
+    actionMessage,
+}) => {
+    const [children, setChildren] = useState<string[]>([]);
+    const [ancestors, setAncestors] = useState<string[]>([]);
+    const [descendants, setDescendants] = useState<string[]>([]);
+    const [contents, setContents] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [childrenExpanded, setChildrenExpanded] = useState(true);
+    const [ancestorsExpanded, setAncestorsExpanded] = useState(true);
+    const [descendantsExpanded, setDescendantsExpanded] = useState(true);
+    const [contentsExpanded, setContentsExpanded] = useState(true);
+
+    // Helper to extract object ID from FlatBuffer result
+    const extractObjectId = (obj: unknown): string | null => {
+        if (!obj) return null;
+
+        // The result from performEvalFlatBuffer is already converted via toJS()
+        // For objects, this returns { oid?: number; uuid?: string }
+        if (typeof obj === "object" && obj !== null) {
+            // Check for oid (numbered objects)
+            if ("oid" in obj && obj.oid !== undefined && obj.oid !== null) {
+                return String(obj.oid);
+            }
+            // Check for uuid (UUID objects)
+            if ("uuid" in obj && obj.uuid !== undefined && obj.uuid !== null) {
+                return String(obj.uuid);
+            }
+            // Fallback checks for other formats
+            if ("id" in obj) return String(obj.id);
+            if ("objid" in obj) return String(obj.objid);
+        }
+
+        // Try as number
+        if (typeof obj === "number") {
+            return String(obj);
+        }
+
+        // Try as string (but not "[object Object]")
+        if (typeof obj === "string" && obj !== "[object Object]") {
+            return obj;
+        }
+
+        return null;
+    };
+
+    // Load hierarchy data when object changes
+    useEffect(() => {
+        const loadHierarchy = async () => {
+            setIsLoading(true);
+            try {
+                const objectRef = `#${object.obj}`;
+
+                // Load children
+                const childrenExpr = `return children(${objectRef});`;
+                const childrenResult = await performEvalFlatBuffer(authToken, childrenExpr);
+                if (Array.isArray(childrenResult)) {
+                    const ids = childrenResult.map(extractObjectId).filter((id): id is string => id !== null);
+                    setChildren(ids);
+                } else {
+                    setChildren([]);
+                }
+
+                // Load ancestors
+                const ancestorsExpr = `return ancestors(${objectRef});`;
+                const ancestorsResult = await performEvalFlatBuffer(authToken, ancestorsExpr);
+                if (Array.isArray(ancestorsResult)) {
+                    const ids = ancestorsResult.map(extractObjectId).filter((id): id is string => id !== null);
+                    setAncestors(ids);
+                } else {
+                    setAncestors([]);
+                }
+
+                // Load descendants
+                const descendantsExpr = `return descendants(${objectRef});`;
+                const descendantsResult = await performEvalFlatBuffer(authToken, descendantsExpr);
+                if (Array.isArray(descendantsResult)) {
+                    const ids = descendantsResult.map(extractObjectId).filter((id): id is string => id !== null);
+                    setDescendants(ids);
+                } else {
+                    setDescendants([]);
+                }
+
+                // Load contents
+                const contentsExpr = `return ${objectRef}.contents;`;
+                const contentsResult = await performEvalFlatBuffer(authToken, contentsExpr);
+                if (Array.isArray(contentsResult)) {
+                    const ids = contentsResult.map(extractObjectId).filter((id): id is string => id !== null);
+                    setContents(ids);
+                } else {
+                    setContents([]);
+                }
+            } catch (error) {
+                console.error("Failed to load hierarchy:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadHierarchy();
+    }, [object.obj, authToken]);
+
+    const renderObjectLink = (objId: string) => {
+        const { display, objectId } = normalizeObjectRef(objId);
+
+        // Look up object name from the objects list
+        const objData = objects.find(o => o.obj === objectId);
+        const displayText = objData && objData.name
+            ? `${display} ("${objData.name}")`
+            : display;
+
+        if (!objectId) {
+            return (
+                <span
+                    style={{
+                        fontFamily: "var(--font-mono)",
+                        color: "var(--color-text-secondary)",
+                    }}
+                >
+                    {displayText}
+                </span>
+            );
+        }
+        return (
+            <button
+                type="button"
+                onClick={() => onNavigate(objectId)}
+                style={{
+                    background: "none",
+                    border: "none",
+                    padding: "2px 4px",
+                    margin: "0",
+                    fontSize: "11px",
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--color-text-accent)",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    borderRadius: "var(--radius-sm)",
+                    lineHeight: "1.3",
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                }}
+            >
+                {displayText}
+            </button>
+        );
+    };
+
+    const sectionStyle = {
+        marginBottom: "6px",
+        border: "1px solid var(--color-border-medium)",
+        borderRadius: "var(--radius-sm)",
+        backgroundColor: "var(--color-bg-input)",
+        fontSize: "11px",
+    } as const;
+
+    const sectionHeaderStyle = {
+        fontWeight: 600,
+        color: "var(--color-text-primary)",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.08em",
+        fontSize: "10px",
+        padding: "4px 8px",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+        userSelect: "none" as const,
+        backgroundColor: "var(--color-bg-secondary)",
+        borderBottom: "1px solid var(--color-border-light)",
+    } as const;
+
+    const sectionContentStyle = {
+        padding: "6px 8px",
+    } as const;
+
+    const listStyle = {
+        display: "flex",
+        flexWrap: "wrap" as const,
+        gap: "4px",
+        alignItems: "center",
+        lineHeight: "1.3",
+    } as const;
+
+    const renderCollapsibleSection = (
+        title: string,
+        count: number,
+        isExpanded: boolean,
+        setExpanded: (val: boolean) => void,
+        content: React.ReactNode,
+    ) => (
+        <div style={sectionStyle}>
+            <div
+                style={sectionHeaderStyle}
+                onClick={() => setExpanded(!isExpanded)}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "var(--color-bg-secondary)";
+                }}
+            >
+                <span style={{ fontSize: "9px" }}>{isExpanded ? "▼" : "▶"}</span>
+                <span>{title} ({count})</span>
+            </div>
+            {isExpanded && <div style={sectionContentStyle}>{content}</div>}
+        </div>
+    );
+
+    const renderObjectRefSimple = (raw: string): React.ReactNode => {
+        const { display, objectId } = normalizeObjectRef(raw);
+        if (!objectId) {
+            return (
+                <span
+                    style={{
+                        fontFamily: "var(--font-mono)",
+                        border: "1px solid var(--color-border-medium)",
+                        borderRadius: "var(--radius-sm)",
+                        padding: "2px 6px",
+                        fontSize: "0.95em",
+                        color: "var(--color-text-secondary)",
+                    }}
+                >
+                    {display}
+                </span>
+            );
+        }
+        return (
+            <button
+                type="button"
+                onClick={() => onNavigate(objectId)}
+                style={{
+                    background: "none",
+                    border: "1px solid var(--color-border-medium)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "2px 6px",
+                    fontSize: "0.95em",
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--color-text-accent)",
+                    cursor: "pointer",
+                }}
+            >
+                {display}
+            </button>
+        );
+    };
+
+    return (
+        <div
+            style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: "var(--color-bg-secondary)",
+            }}
+        >
+            {/* Title bar */}
+            <div
+                style={{
+                    padding: "var(--space-md)",
+                    borderBottom: "1px solid var(--color-border-light)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    backgroundColor: "var(--color-bg-header)",
+                }}
+            >
+                <h3
+                    style={{
+                        margin: 0,
+                        color: "var(--color-text-primary)",
+                        display: "flex",
+                        alignItems: "baseline",
+                        flex: 1,
+                    }}
+                >
+                    <span style={{ fontWeight: "700" }}>Object info</span>
+                    <span
+                        style={{
+                            fontSize: "0.9em",
+                            color: "var(--color-text-secondary)",
+                            fontWeight: "normal",
+                            textAlign: "center",
+                            flex: 1,
+                            marginLeft: "var(--space-sm)",
+                            marginRight: "var(--space-sm)",
+                            fontFamily: "monospace",
+                        }}
+                    >
+                        {object.name
+                            ? `${normalizeObjectRef(object.obj).display} ("${object.name}")`
+                            : normalizeObjectRef(object.obj).display}
+                    </span>
+                </h3>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    <button
+                        type="button"
+                        onClick={onCreateChild}
+                        disabled={!object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle}
+                        style={{
+                            backgroundColor:
+                                "color-mix(in srgb, var(--color-text-success) 20%, var(--color-bg-secondary))",
+                            color: "var(--color-text-primary)",
+                            border: "1px solid var(--color-border-medium)",
+                            padding: "6px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
+                                ? 0.6
+                                : 1,
+                            fontSize: "12px",
+                            fontWeight: "600",
+                        }}
+                    >
+                        Create Child
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onRecycle}
+                        disabled={!object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle}
+                        style={{
+                            backgroundColor:
+                                "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
+                            color: "var(--color-text-primary)",
+                            border: "1px solid var(--color-border-medium)",
+                            padding: "6px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
+                                ? 0.6
+                                : 1,
+                            fontSize: "12px",
+                            fontWeight: "600",
+                        }}
+                    >
+                        Recycle
+                    </button>
+                </div>
+            </div>
+
+            {/* Content area with metadata and hierarchy */}
+            <div style={{ flex: 1, overflow: "auto" }}>
+                {/* Object metadata section */}
+                <div
+                    style={{
+                        padding: "var(--space-sm) var(--space-md)",
+                        backgroundColor: "var(--color-bg-tertiary)",
+                        borderTop: "1px solid var(--color-border-light)",
+                        borderBottom: "1px solid var(--color-border-light)",
+                        fontSize: "0.9em",
+                        display: "flex",
+                        gap: "var(--space-md)",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                    }}
+                >
+                    {/* Name editor */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                            Name:
+                        </span>
+                        <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => onNameChange(e.target.value)}
+                            disabled={isSavingName}
+                            style={{
+                                fontFamily: "var(--font-mono)",
+                                border: "1px solid var(--color-border-medium)",
+                                borderRadius: "var(--radius-sm)",
+                                padding: "2px 6px",
+                                fontSize: "0.95em",
+                                minWidth: "120px",
+                                backgroundColor: "var(--color-bg-input)",
+                                color: "var(--color-text-primary)",
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    onNameSave();
+                                } else if (e.key === "Escape") {
+                                    onNameChange(object.name);
+                                }
+                            }}
+                        />
+                        <button
+                            type="button"
+                            onClick={onNameSave}
+                            disabled={isSavingName || editingName === object.name}
+                            style={{
+                                padding: "2px 8px",
+                                fontSize: "0.9em",
+                                fontWeight: 600,
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border-medium)",
+                                backgroundColor: isSavingName || editingName === object.name
+                                    ? "var(--color-bg-secondary)"
+                                    : "var(--color-button-primary)",
+                                color: isSavingName || editingName === object.name
+                                    ? "var(--color-text-secondary)"
+                                    : "white",
+                                cursor: isSavingName || editingName === object.name ? "not-allowed" : "pointer",
+                                opacity: isSavingName || editingName === object.name ? 0.6 : 1,
+                            }}
+                        >
+                            {isSavingName ? "💾" : "💾"}
+                        </button>
+                    </div>
+
+                    {/* Separator bar */}
+                    <div
+                        style={{
+                            width: "1px",
+                            height: "20px",
+                            backgroundColor: "var(--color-border-medium)",
+                        }}
+                    />
+
+                    {/* Flags */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                            Flags:
+                        </span>
+                        <span
+                            style={{
+                                fontFamily: "var(--font-mono)",
+                                border: "1px solid var(--color-border-medium)",
+                                borderRadius: "var(--radius-sm)",
+                                padding: "2px 6px",
+                                fontSize: "0.95em",
+                            }}
+                        >
+                            {formatObjectFlags(object.flags) || "none"}
+                        </span>
+                    </div>
+
+                    {/* Separator bar */}
+                    <div
+                        style={{
+                            width: "1px",
+                            height: "20px",
+                            backgroundColor: "var(--color-border-medium)",
+                        }}
+                    />
+
+                    {/* Owner */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                            Owner:
+                        </span>
+                        {renderObjectRefSimple(object.owner)}
+                    </div>
+
+                    {/* Separator bar */}
+                    <div
+                        style={{
+                            width: "1px",
+                            height: "20px",
+                            backgroundColor: "var(--color-border-medium)",
+                        }}
+                    />
+
+                    {/* Location */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                            Location:
+                        </span>
+                        {renderObjectRefSimple(object.location)}
+                    </div>
+                </div>
+
+                {/* Action message */}
+                {actionMessage && (
+                    <div
+                        style={{
+                            margin: "8px",
+                            marginBottom: "8px",
+                            padding: "6px 8px",
+                            borderRadius: "var(--radius-sm)",
+                            backgroundColor: "rgba(16, 185, 129, 0.15)",
+                            border: "1px solid rgba(16, 185, 129, 0.35)",
+                            color: "var(--color-text-primary)",
+                            fontSize: "11px",
+                        }}
+                    >
+                        {actionMessage}
+                    </div>
+                )}
+
+                {/* Hierarchy sections */}
+                <div style={{ padding: "8px", fontSize: "11px" }}>
+                    {isLoading ? <div style={{ color: "var(--color-text-secondary)" }}>Loading hierarchy...</div> : (
+                        <>
+                            {/* Contents Section */}
+                            {contents.length > 0 && renderCollapsibleSection(
+                                "Contents",
+                                contents.length,
+                                contentsExpanded,
+                                setContentsExpanded,
+                                <div style={listStyle}>
+                                    {contents.map((contentId, idx) => (
+                                        <React.Fragment key={`content-${contentId}-${idx}`}>
+                                            {renderObjectLink(contentId)}
+                                        </React.Fragment>
+                                    ))}
+                                </div>,
+                            )}
+
+                            {/* Parent & Children Section */}
+                            <div style={sectionStyle}>
+                                <div
+                                    style={{
+                                        ...sectionHeaderStyle,
+                                        cursor: "default",
+                                        backgroundColor: "var(--color-bg-secondary)",
+                                    }}
+                                >
+                                    <span>Parent & Children</span>
+                                </div>
+                                <div style={sectionContentStyle}>
+                                    <div style={{ marginBottom: "4px" }}>
+                                        <strong style={{ marginRight: "4px" }}>Parent:</strong>
+                                        {renderObjectLink(object.parent)}
+                                    </div>
+                                    <div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setChildrenExpanded(!childrenExpanded)}
+                                            style={{
+                                                background: "none",
+                                                border: "none",
+                                                padding: "0",
+                                                cursor: "pointer",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "4px",
+                                                color: "var(--color-text-primary)",
+                                                fontWeight: 600,
+                                                fontSize: "11px",
+                                            }}
+                                        >
+                                            <span style={{ fontSize: "9px" }}>{childrenExpanded ? "▼" : "▶"}</span>
+                                            <span>Children ({children.length})</span>
+                                        </button>
+                                        {childrenExpanded && (
+                                            <div style={{ ...listStyle, marginTop: "4px" }}>
+                                                {children.length === 0
+                                                    ? (
+                                                        <span
+                                                            style={{
+                                                                color: "var(--color-text-secondary)",
+                                                                fontStyle: "italic",
+                                                            }}
+                                                        >
+                                                            none
+                                                        </span>
+                                                    )
+                                                    : (
+                                                        children.map((childId, idx) => (
+                                                            <React.Fragment key={`child-${childId}-${idx}`}>
+                                                                {renderObjectLink(childId)}
+                                                            </React.Fragment>
+                                                        ))
+                                                    )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Ancestors Section */}
+                            {ancestors.length > 0 && renderCollapsibleSection(
+                                "Ancestors",
+                                ancestors.length,
+                                ancestorsExpanded,
+                                setAncestorsExpanded,
+                                <div style={listStyle}>
+                                    {ancestors.map((ancestorId, idx) => (
+                                        <React.Fragment key={`ancestor-${ancestorId}-${idx}`}>
+                                            {renderObjectLink(ancestorId)}
+                                        </React.Fragment>
+                                    ))}
+                                </div>,
+                            )}
+
+                            {/* Descendants Section */}
+                            {descendants.length > 0 && renderCollapsibleSection(
+                                "Descendants",
+                                descendants.length,
+                                descendantsExpanded,
+                                setDescendantsExpanded,
+                                <div style={listStyle}>
+                                    {descendants.map((descendantId, idx) => (
+                                        <React.Fragment key={`descendant-${descendantId}-${idx}`}>
+                                            {renderObjectLink(descendantId)}
+                                        </React.Fragment>
+                                    ))}
+                                </div>,
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 };
