@@ -3529,7 +3529,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                     style={{ fontSize: "0.9em", display: "flex", gap: "var(--space-md)", alignItems: "center" }}
                 >
                     {/* Name editor */}
-                    <div className="flex gap-sm" style={{ gap: "6px" }}>
+                    <div className="flex gap-sm items-center" style={{ gap: "6px" }}>
                         <span className="text-secondary" style={{ fontFamily: "var(--font-ui)" }}>
                             Name:
                         </span>
@@ -3576,7 +3576,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                     <div style={{ width: "1px", height: "20px", backgroundColor: "var(--color-border-medium)" }} />
 
                     {/* Flags */}
-                    <div className="flex gap-sm" style={{ gap: "6px" }}>
+                    <div className="flex gap-sm items-center" style={{ gap: "6px" }}>
                         <span className="text-secondary" style={{ fontFamily: "var(--font-ui)" }}>
                             Flags:
                         </span>
