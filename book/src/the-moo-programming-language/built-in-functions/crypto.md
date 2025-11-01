@@ -175,25 +175,115 @@ This can be useful, for example, in certain networking applications: after sendi
 ### `string_hmac`
 
 ```
-str string_hmac(str string, str key [, str algorithm] [, int binary])
+str|binary string_hmac(str text, str key [, symbol algorithm] [, bool binary_output])
 ```
 
 Returns the HMAC (Hash-based Message Authentication Code) of the given string using the provided key.
 
-The `algorithm` parameter can be used to specify different hash algorithms for the HMAC computation.
+**Parameters:**
+- `text`: The string to compute the HMAC for
+- `key`: The secret key to use for the HMAC
+- `algorithm`: Hash algorithm to use. Can be `#sha1` or `#sha256`. Defaults to `#sha256`.
+- `binary_output`: If true, returns the raw binary HMAC. If false, returns hex-encoded string. Defaults to false.
 
-If `binary` is true, returns the raw binary HMAC instead of a hex-encoded string.
+**Returns:** Hex-encoded string or binary data depending on `binary_output`
+
+**Examples:**
+
+```
+string_hmac("hello", "secret")
+=> "88aab3ede8d3adf94d26ab90d3bafd4a2083070c3bcce9c014ee04a443847c0b"
+
+string_hmac("hello", "secret", #sha1)
+=> "2e0e5e2c72b56b2a8c4d9f9f6c2e8e5d3b7f1a4b"
+
+string_hmac("hello", "secret", #sha256, 1)
+=> b"\x88\xaa\xb3\xed\xe8\xd3\xad\xf9..."
+```
 
 ### `binary_hmac`
 
 ```
-str binary_hmac(str bin_string, str key [, str algorithm] [, int binary])
+str|binary binary_hmac(binary data, str key [, symbol algorithm] [, bool binary_output])
 ```
 
-Returns the HMAC (Hash-based Message Authentication Code) of the given binary string using the provided key.
+Returns the HMAC (Hash-based Message Authentication Code) of the given binary data using the provided key.
 
-The `algorithm` parameter can be used to specify different hash algorithms for the HMAC computation.
+**Parameters:**
+- `data`: The binary data to compute the HMAC for (mooR's native Binary type)
+- `key`: The secret key to use for the HMAC
+- `algorithm`: Hash algorithm to use. Can be `#sha1` or `#sha256`. Defaults to `#sha256`.
+- `binary_output`: If true, returns the raw binary HMAC. If false, returns hex-encoded string. Defaults to false.
 
-If `binary` is true, returns the raw binary HMAC instead of a hex-encoded string.
+**Returns:** Hex-encoded string or binary data depending on `binary_output`
 
-This can be useful, for example, in applications that need to verify both the integrity of the message (the text) and the authenticity of the sender (as demonstrated by the possession of the secret key).
+**Compatibility Note:** This function takes mooR's native Binary type, NOT ToastStunt's bin-string format. The two are not compatible. If you pass a string instead of binary data, you will receive a clear error message indicating this.
+
+**Examples:**
+
+```
+binary_hmac(b"\x00\x01\x02", "secret")
+=> "f87a5a8f..."
+
+binary_hmac(b"\x00\x01\x02", "secret", #sha1)
+=> "2e0e5e2c..."
+
+binary_hmac(b"\x00\x01\x02", "secret", #sha256, 1)
+=> b"\xf8\x7a\x5a\x8f..."
+```
+
+This can be useful, for example, in applications that need to verify both the integrity of the message (the text or binary data) and the authenticity of the sender (as demonstrated by the possession of the secret key).
+
+## Encoding Functions
+
+### `encode_base64`
+
+```
+str encode_base64(str|binary data [, bool url_safe] [, bool no_padding])
+```
+
+Encodes the given string or binary data using Base64 encoding.
+
+**Parameters:**
+- `data`: String or binary data to encode
+- `url_safe`: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
+- `no_padding`: If true, omits trailing = padding characters. Defaults to false.
+
+**Returns:** Base64-encoded string
+
+**Examples:**
+
+```
+encode_base64("hello world")
+=> "aGVsbG8gd29ybGQ="
+
+encode_base64("hello world", 1)
+=> "aGVsbG8gd29ybGQ="
+
+encode_base64("hello world", 1, 1)
+=> "aGVsbG8gd29ybGQ"
+```
+
+### `decode_base64`
+
+```
+binary decode_base64(str encoded_text [, bool url_safe])
+```
+
+Decodes Base64-encoded string to binary data.
+
+**Parameters:**
+- `encoded_text`: Base64-encoded string to decode
+- `url_safe`: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
+
+**Returns:** Decoded binary data
+
+**Example:**
+
+```
+decode_base64("aGVsbG8gd29ybGQ=")
+=> b"hello world"
+
+decode_base64("aGVsbG8gd29ybGQ", 1)
+=> b"hello world"
+```

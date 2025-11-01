@@ -18,17 +18,26 @@ use argon2::{
     password_hash::{SaltString, rand_core::OsRng},
 };
 use base64::{Engine, engine::general_purpose};
+use hmac::{Hmac, Mac};
+use lazy_static::lazy_static;
 use md5::Digest;
-use moor_compiler::offset_for_builtin;
+use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
-    E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_int, v_list, v_str, v_string,
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Variant, v_binary, v_int, v_list, v_str, v_string,
 };
 use rand::{Rng, distr::Alphanumeric};
+use sha1::Sha1;
+use sha2::Sha256;
 use tracing::warn;
 
 use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err,
 };
+
+lazy_static! {
+    static ref SHA1_SYM: Symbol = Symbol::mk("sha1");
+    static ref SHA256_SYM: Symbol = Symbol::mk("sha256");
+}
 
 /// Internal helper for string substitution with case sensitivity control.
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
@@ -61,10 +70,7 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
-        let Some(case_matters) = bf_args.args[3].as_integer() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        case_matters == 1
+        bf_args.args[3].is_true()
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -113,10 +119,7 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
-        let Some(case_matters) = bf_args.args[2].as_integer() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        case_matters == 1
+        bf_args.args[2].is_true()
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -138,10 +141,7 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
-        let Some(case_matters) = bf_args.args[2].as_integer() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        case_matters == 1
+        bf_args.args[2].is_true()
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -348,10 +348,12 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(bf_args.v_bool(validated)))
 }
 
-/// MOO: `str encode_base64(str|binary data)`
+/// MOO: `str encode_base64(str|binary data [, bool url_safe] [, bool no_padding])`
 /// Encodes the given string or binary data using Base64 encoding.
+/// - url_safe: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
+/// - no_padding: If true, omits trailing = padding characters. Defaults to false.
 fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -361,13 +363,25 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    let encoded = general_purpose::STANDARD.encode(&bytes);
+    let url_safe = bf_args.args.len() >= 2 && bf_args.args[1].is_true();
+    let no_padding = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
+
+    let encoded = if url_safe && no_padding {
+        general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
+    } else if url_safe {
+        general_purpose::URL_SAFE.encode(&bytes)
+    } else if no_padding {
+        general_purpose::STANDARD_NO_PAD.encode(&bytes)
+    } else {
+        general_purpose::STANDARD.encode(&bytes)
+    };
+
     Ok(Ret(v_string(encoded)))
 }
 
 /// MOO: `binary decode_base64(str encoded_text [, bool url_safe])`
 /// Decodes Base64-encoded string to binary data.
-/// If url_safe is true, uses URL-safe Base64 decoding (defaults to true).
+/// - url_safe: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
 fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -377,12 +391,7 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    // Check if second argument specifies URL-safe decoding
-    let url_safe = if bf_args.args.len() == 2 {
-        bf_args.args[1].is_true()
-    } else {
-        true
-    };
+    let url_safe = bf_args.args.len() >= 2 && bf_args.args[1].is_true();
 
     let decoded_bytes = if url_safe {
         match general_purpose::URL_SAFE.decode(encoded_text.as_bytes()) {
@@ -396,7 +405,6 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     };
 
-    use moor_var::v_binary;
     Ok(Ret(v_binary(decoded_bytes)))
 }
 
@@ -408,49 +416,124 @@ fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Variant::Str(text) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
-    };
-    let Variant::Str(key) = bf_args.args[1].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+    let Some(text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for text argument for string_hmac",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
-    let algo_str = if arg_count > 2 {
-        let Variant::Str(s) = bf_args.args[2].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+    let Some(key) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for key argument for string_hmac",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
+    };
+
+    let algo = if arg_count > 2 {
+        let Ok(kind) = bf_args.args[2].as_symbol() else {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid type for algorithm argument in string_hmac: {})",
+                    to_literal(&bf_args.args[2])
+                )
+            })));
         };
-        s.as_str().to_uppercase()
+        kind
     } else {
-        "SHA256".to_string()
+        *SHA256_SYM
     };
 
-    let binary_output = if arg_count > 3 {
-        let Variant::Int(b) = bf_args.args[3].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+    let binary_output = arg_count > 3 && bf_args.args[3].is_true();
+
+    let result_bytes = if algo == *SHA1_SYM {
+        let mut mac =
+            Hmac::<Sha1>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(text.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else if algo == *SHA256_SYM {
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(text.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.with_msg(|| format!("Invalid algorithm for string_hmac: {algo}")),
+        ));
+    };
+
+    if binary_output {
+        Ok(Ret(v_binary(result_bytes)))
+    } else {
+        let hex_string = result_bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        Ok(Ret(v_str(&hex_string)))
+    }
+}
+
+/// MOO: `str|binary binary_hmac(binary data, str key [, symbol algorithm] [, bool binary_output])`
+/// Computes HMAC of binary data using key with specified algorithm (SHA1, SHA256).
+/// Note: Takes mooR's native Binary type, NOT ToastStunt's bin-string format.
+fn bf_binary_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let arg_count = bf_args.args.len();
+    if !(2..=4).contains(&arg_count) {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(data) = bf_args.args[0].as_binary() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for data argument for binary_hmac (requires mooR Binary type, not string)",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
+    };
+
+    let Some(key) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for key argument for binary_hmac",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
+    };
+
+    let algo = if arg_count > 2 {
+        let Ok(kind) = bf_args.args[2].as_symbol() else {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid type for algorithm argument in binary_hmac: {})",
+                    to_literal(&bf_args.args[2])
+                )
+            })));
         };
-        *b != 0
+        kind
     } else {
-        false
+        *SHA256_SYM
     };
 
-    let result_bytes = match algo_str.as_str() {
-        "SHA1" => {
-            use hmac::{Hmac, Mac};
-            use sha1::Sha1;
-            let mut mac = Hmac::<Sha1>::new_from_slice(key.as_str().as_bytes())
-                .map_err(|_| BfErr::Code(E_INVARG))?;
-            mac.update(text.as_str().as_bytes());
-            mac.finalize().into_bytes().to_vec()
-        }
-        "SHA256" => {
-            use hmac::{Hmac, Mac};
-            use sha2::Sha256;
-            let mut mac = Hmac::<Sha256>::new_from_slice(key.as_str().as_bytes())
-                .map_err(|_| BfErr::Code(E_INVARG))?;
-            mac.update(text.as_str().as_bytes());
-            mac.finalize().into_bytes().to_vec()
-        }
-        _ => return Err(BfErr::Code(E_INVARG)), // Unsupported algorithm
+    let binary_output = arg_count > 3 && bf_args.args[3].is_true();
+
+    let result_bytes = if algo == *SHA1_SYM {
+        let mut mac =
+            Hmac::<Sha1>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(data.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else if algo == *SHA256_SYM {
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(data.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.with_msg(|| format!("Invalid algorithm for binary_hmac: {algo}")),
+        ));
     };
 
     if binary_output {
@@ -574,6 +657,7 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("string_hash")] = Box::new(bf_string_hash);
     builtins[offset_for_builtin("binary_hash")] = Box::new(bf_binary_hash);
     builtins[offset_for_builtin("string_hmac")] = Box::new(bf_string_hmac);
+    builtins[offset_for_builtin("binary_hmac")] = Box::new(bf_binary_hmac);
     builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
     builtins[offset_for_builtin("encode_base64")] = Box::new(bf_encode_base64);
     builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);

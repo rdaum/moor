@@ -523,8 +523,8 @@ Binary values work like other sequence types in MOO - you can:
 
 mooR provides built-in functions for working with binary data:
 
-- `decode_base64(string, [url-safe])` - Converts a base64 string to binary data
-- `encode_base64(binary)` - Converts binary data to a base64 string
+- `decode_base64(string [, url_safe])` - Converts a base64 string to binary data
+- `encode_base64(str|binary [, url_safe] [, no_padding])` - Converts string or binary data to a base64 string
 
 ### When should you use binary values?
 

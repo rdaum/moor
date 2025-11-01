@@ -112,31 +112,52 @@ strtr("xXxX", "xXxX", "1234", 0)    ⇒    "4444"
 strtr("xXxX", "xXxX", "1234", 1)    ⇒    "3434"
 ```
 
-### `decode_base64`
-
-`decode_base64(base64 [, safe])`
-
-Returns the binary string representation of the supplied Base64 encoded string argument.
-
-Raises E_INVARG if base64 is not a properly-formed Base64 string. If `safe` is provided and is true, a URL-safe version
-of
-Base64 is used (see RFC4648). The default is to use the URL-safe version.
-
-```
-decode_base64("AAEC")      ⇒    b"AAEC"
-```
-
 ### `encode_base64`
 
-`encode_base64(binary [, safe])`
+```
+str encode_base64(str|binary data [, bool url_safe] [, bool no_padding])
+```
 
-Returns the Base64 encoded string representation of the supplied binary string argument.
+Encodes the given string or binary data using Base64 encoding.
 
-If `safe` is provided and is true, a URL-safe version of Base64 is used (see RFC4648). The default is to use the
-URL-safe version.
+**Parameters:**
+- `data`: String or binary data to encode
+- `url_safe`: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
+- `no_padding`: If true, omits trailing = padding characters. Defaults to false.
+
+**Returns:** Base64-encoded string
+
+**Examples:**
 
 ```
-encode_base64(b"AAEC")      ⇒    "AAEC"
+encode_base64("hello world")          ⇒    "aGVsbG8gd29ybGQ="
+encode_base64("hello world", 1)       ⇒    "aGVsbG8gd29ybGQ="
+encode_base64("hello world", 1, 1)    ⇒    "aGVsbG8gd29ybGQ"
+encode_base64(b"AAEC")                ⇒    "QUFFQ0=="
+```
+
+### `decode_base64`
+
+```
+binary decode_base64(str encoded_text [, bool url_safe])
+```
+
+Decodes Base64-encoded string to binary data.
+
+**Parameters:**
+- `encoded_text`: Base64-encoded string to decode
+- `url_safe`: If true, uses URL-safe Base64 alphabet (- and _ instead of + and /). Defaults to false.
+
+**Returns:** Decoded binary data
+
+Raises E_INVARG if the input is not a properly-formed Base64 string.
+
+**Examples:**
+
+```
+decode_base64("aGVsbG8gd29ybGQ=")     ⇒    b"hello world"
+decode_base64("aGVsbG8gd29ybGQ", 1)   ⇒    b"hello world"
+decode_base64("QUFFQ0==")             ⇒    b"AAEC"
 ```
 
 ### `binary_to_str`

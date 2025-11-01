@@ -17,7 +17,7 @@ use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use lazy_static::lazy_static;
 use moor_var::{
     Symbol, VarType,
-    VarType::{TYPE_BOOL, TYPE_ERR, TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL},
+    VarType::{TYPE_BINARY, TYPE_BOOL, TYPE_ERR, TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL},
 };
 /// Global registry of built-in function names.
 use std::collections::HashMap;
@@ -671,6 +671,18 @@ fn mk_builtin_table() -> Vec<Builtin> {
             Q(1),
             Q(3),
             vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            true,
+        ),
+        mk_builtin(
+            "binary_hmac",
+            Q(2),
+            Q(4),
+            vec![
+                Typed(TYPE_BINARY),
+                Typed(TYPE_STR),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_BOOL),
+            ],
             true,
         ),
     ]
