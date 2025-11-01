@@ -68,7 +68,7 @@ keywords = [
 license = "GPL-3"
 readme = "README.md"
 repository = "https://github.com/rdaum/moor.git"
-rust-version = "1.88.0"
+rust-version = "1.90.0"
 
 [profile.release]
 # The Rust compiler splits crates into multiple codegen units to parallelize (and thus speed up)

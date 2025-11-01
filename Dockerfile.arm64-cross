@@ -15,7 +15,7 @@ COPY ./.git ./.git
 RUN npm run build
 
 # Backend build stage - runs on native x86_64 platform
-FROM rust:1.88-bookworm AS backend-build
+FROM rust:1.90-bookworm AS backend-build
 
 WORKDIR /moor-build
 
