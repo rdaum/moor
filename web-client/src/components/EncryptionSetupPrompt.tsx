@@ -83,23 +83,22 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                 <div className="dialog-sheet-content">
                     <div
                         id="encryption-setup-description"
+                        className="mb-md"
                         style={{
-                            marginBottom: "1em",
                             color: "var(--color-text-secondary)",
                             lineHeight: "1.5",
-                            fontFamily: "inherit",
                         }}
                     >
-                        <p style={{ marginBottom: "0.75em", fontFamily: "inherit" }}>
+                        <p className="mb-md">
                             Your <strong>history</strong> is a complete record of everything you see and do in{" "}
                             {systemTitle}—conversations, actions, descriptions, and more. It's stored encrypted so only
                             you can read it.
                         </p>
-                        <p style={{ marginBottom: "0.75em", fontFamily: "inherit" }}>
+                        <p className="mb-md">
                             With the same encryption password, your history follows you across devices and persists over
                             time. Sign in on your phone, tablet, or laptop—your history is always there.
                         </p>
-                        <p style={{ marginBottom: "0", fontFamily: "inherit" }}>
+                        <p>
                             This password is <strong>separate from your {systemTitle} login</strong>{" "}
                             and is used only to protect your history.
                         </p>
@@ -115,7 +114,6 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                             borderRadius: "var(--radius-md)",
                             marginBottom: "1em",
                             color: "var(--color-text-primary)",
-                            fontFamily: "inherit",
                         }}
                     >
                         <strong>⚠️ Important:</strong>{" "}
@@ -124,14 +122,12 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                     </div>
 
                     <form onSubmit={handleSubmit} aria-label="History encryption setup form">
-                        <div style={{ marginBottom: "1em" }}>
+                        <div className="mb-md">
                             <label
                                 htmlFor="encryption-password"
+                                className="block mb-sm"
                                 style={{
-                                    display: "block",
-                                    marginBottom: "0.5em",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
                                 }}
                             >
                                 Encryption Password
@@ -156,21 +152,18 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                                     border: "1px solid var(--color-border-medium)",
                                     backgroundColor: "var(--color-bg-input)",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
                                     fontSize: "1em",
                                     outline: "none",
                                 }}
                             />
                         </div>
 
-                        <div style={{ marginBottom: "1em" }}>
+                        <div className="mb-md">
                             <label
                                 htmlFor="encryption-password-confirm"
+                                className="block mb-sm"
                                 style={{
-                                    display: "block",
-                                    marginBottom: "0.5em",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
                                 }}
                             >
                                 Confirm Password
@@ -195,24 +188,20 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                                     border: "1px solid var(--color-border-medium)",
                                     backgroundColor: "var(--color-bg-input)",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
                                     fontSize: "1em",
                                     outline: "none",
                                 }}
                             />
                         </div>
 
-                        <div style={{ marginBottom: "1em" }}>
+                        <div className="mb-md">
                             <label
+                                className="flex flex-start gap-sm"
                                 style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "0.5em",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
-                                    fontSize: "0.95em",
                                     cursor: "pointer",
                                     userSelect: "none",
+                                    fontSize: "0.95em",
                                 }}
                             >
                                 <input
@@ -243,37 +232,19 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                                 id="password-error"
                                 role="alert"
                                 aria-live="assertive"
-                                style={{
-                                    padding: "0.75em",
-                                    backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                    border: "1px solid var(--color-text-error)",
-                                    borderRadius: "var(--radius-md)",
-                                    marginBottom: "1em",
-                                    color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
-                                }}
+                                className="encryption-message-box-error mb-md"
                             >
                                 {error}
                             </div>
                         )}
 
-                        <div style={{ display: "flex", gap: "0.5em", justifyContent: "flex-end" }}>
+                        <div className="flex gap-sm" style={{ justifyContent: "flex-end" }}>
                             <button
                                 type="button"
                                 onClick={onSkip}
                                 disabled={isSubmitting}
                                 aria-label="Skip encryption setup and continue without history encryption"
-                                style={{
-                                    padding: "0.5em 1em",
-                                    borderRadius: "var(--radius-md)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    color: "var(--color-text-primary)",
-                                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                                    fontFamily: "inherit",
-                                    fontSize: "1em",
-                                    transition: "background-color var(--transition-fast)",
-                                }}
+                                className="btn btn-secondary"
                             >
                                 Skip for Now
                             </button>
@@ -284,19 +255,7 @@ export const EncryptionSetupPrompt: React.FC<EncryptionSetupPromptProps> = ({ sy
                                     ? "Set up history encryption with entered password"
                                     : "Cannot set up encryption until you confirm understanding"}
                                 aria-disabled={!understood}
-                                style={{
-                                    padding: "0.5em 1em",
-                                    borderRadius: "var(--radius-md)",
-                                    border: "none",
-                                    backgroundColor: "var(--color-button-primary)",
-                                    color: "var(--color-bg-base)",
-                                    cursor: (isSubmitting || !understood) ? "not-allowed" : "pointer",
-                                    fontFamily: "inherit",
-                                    fontSize: "1em",
-                                    fontWeight: "bold",
-                                    transition: "opacity var(--transition-fast)",
-                                    opacity: understood ? 1 : 0.5,
-                                }}
+                                className="btn btn-primary"
                             >
                                 {isSubmitting ? "Setting up..." : "Set Up Encryption"}
                             </button>

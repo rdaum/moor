@@ -459,85 +459,41 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div
                 onMouseDown={titleMouseDownHandler}
                 onTouchStart={titleTouchStartHandler}
+                className="editor-title-bar"
                 style={{
-                    padding: "var(--space-md)",
-                    borderBottom: "1px solid var(--color-border-light)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    backgroundColor: "var(--color-bg-header)",
                     borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
                     cursor: isSplitDraggable
                         ? "row-resize"
                         : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
-                    touchAction: isSplitDraggable ? "none" : "auto", // Prevent default touch behaviors when in split mode
+                    touchAction: isSplitDraggable ? "none" : "auto",
                 }}
             >
                 <h3
                     id="property-editor-title"
-                    style={{
-                        margin: 0,
-                        color: "var(--color-text-primary)",
-                        display: "flex",
-                        alignItems: "baseline",
-                        width: "100%",
-                    }}
+                    className="editor-title"
                 >
-                    <span style={{ fontWeight: "700" }}>
+                    <span className="editor-title-label">
                         Property editor
                     </span>
-                    <span
-                        style={{
-                            fontSize: "0.9em",
-                            color: "var(--color-text-secondary)",
-                            fontWeight: "normal",
-                            textAlign: "center",
-                            flex: 1,
-                            marginLeft: "var(--space-sm)",
-                            marginRight: "var(--space-sm)",
-                            fontFamily: "monospace",
-                        }}
-                    >
+                    <span className="editor-title-path">
                         {enhancedTitle}
                     </span>
                 </h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                <div className="editor-toolbar">
                     <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            backgroundColor: "var(--color-bg-secondary)",
-                            border: "1px solid var(--color-border-medium)",
-                            borderRadius: "var(--radius-sm)",
-                            padding: "2px 6px",
-                        }}
+                        className="font-size-control"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <button
                             onClick={decreaseFontSize}
                             aria-label="Decrease editor font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
-                                fontSize: "14px",
-                                padding: "2px 4px",
-                            }}
+                            className="font-size-button"
                             disabled={fontSize <= MIN_FONT_SIZE}
                         >
                             –
                         </button>
                         <span
-                            style={{
-                                fontFamily: "var(--font-mono)",
-                                fontSize: "12px",
-                                color: "var(--color-text-secondary)",
-                                minWidth: "38px",
-                                textAlign: "center",
-                            }}
+                            className="font-size-display"
                             aria-live="polite"
                         >
                             {fontSize}px
@@ -545,15 +501,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         <button
                             onClick={increaseFontSize}
                             aria-label="Increase editor font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
-                                fontSize: "14px",
-                                padding: "2px 4px",
-                            }}
+                            className="font-size-button"
                             disabled={fontSize >= MAX_FONT_SIZE}
                         >
                             +
@@ -562,23 +510,13 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     {/* Save button */}
                     <button
                         onClick={(e) => {
-                            e.stopPropagation(); // Prevent drag handler from firing
+                            e.stopPropagation();
                             saveProperty();
                         }}
                         disabled={isSaving}
                         aria-label="Save property"
                         title="Save property"
-                        style={{
-                            backgroundColor: isSaving ? "var(--color-bg-secondary)" : "var(--color-button-primary)",
-                            color: "white",
-                            border: "none",
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-sm)",
-                            cursor: isSaving ? "not-allowed" : "pointer",
-                            opacity: isSaving ? 0.6 : 1,
-                            fontSize: "12px",
-                            fontWeight: "600",
-                        }}
+                        className="editor-btn-save"
                     >
                         {isSaving ? "💾" : "💾"}
                     </button>
@@ -587,22 +525,12 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     {!isMobile && onToggleSplitMode && (
                         <button
                             onClick={(e) => {
-                                e.stopPropagation(); // Prevent drag handler from firing
+                                e.stopPropagation();
                                 onToggleSplitMode();
                             }}
                             aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                             title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                            style={{
-                                background: "transparent",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
-                                cursor: "pointer",
-                                color: "var(--color-text-secondary)",
-                                padding: "4px 6px",
-                                fontSize: "12px",
-                                display: "flex",
-                                alignItems: "center",
-                            }}
+                            className="btn-ghost editor-btn-toggle-split"
                         >
                             {isInSplitMode ? "🪟" : "⇅"}
                         </button>
@@ -610,14 +538,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     <button
                         onClick={onClose}
                         aria-label="Close property editor"
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            fontSize: "1.2em",
-                            cursor: "pointer",
-                            color: "var(--color-text-secondary)",
-                            padding: "4px 8px",
-                        }}
+                        className="editor-btn-close"
                     >
                         <span aria-hidden="true">×</span>
                     </button>
@@ -626,39 +547,15 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
             {/* Error panel */}
             {errors.length > 0 && (
-                <div
-                    className="property_save_errors"
-                    style={{
-                        height: "80px",
-                        padding: "var(--space-sm)",
-                        backgroundColor: "var(--color-bg-error)",
-                        borderTop: "1px solid var(--color-border-light)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                        overflowY: "auto",
-                    }}
-                >
-                    <pre
-                        style={{
-                            margin: 0,
-                            color: "var(--color-text-error)",
-                            fontSize: "0.9em",
-                            fontFamily: "var(--font-mono)",
-                        }}
-                    >
+                <div className="editor-error-list">
+                    <pre className="editor-error-text-pre">
                         {errors.map(formatError).join('\n')}
                     </pre>
                 </div>
             )}
 
             {/* Monaco Editor */}
-            <div
-                style={{
-                    flex: 1,
-                    minHeight: 0,
-                    position: "relative",
-                    overflow: "hidden", // Prevent rendering artifacts
-                }}
-            >
+            <div className="editor-content-area">
                 <Editor
                     value={content}
                     language={getLanguage(contentType)}
@@ -732,58 +629,11 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                             } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
-                    style={{
-                        position: "absolute",
-                        bottom: 0,
-                        right: 0,
-                        width: "22px",
-                        height: "22px",
-                        cursor: "nwse-resize",
-                        borderBottomRightRadius: "var(--radius-lg)",
-                        borderTopLeftRadius: "6px",
-                        backgroundColor: "var(--color-surface-raised)",
-                        borderTop: "1px solid var(--color-border-medium)",
-                        borderLeft: "1px solid var(--color-border-medium)",
-                        boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.1)",
-                        zIndex: 5,
-                    }}
+                    className="editor-resize-handle"
                 >
-                    <div
-                        style={{
-                            position: "absolute",
-                            inset: "4px",
-                            borderBottom: "2px solid var(--color-border-strong)",
-                            borderRight: "2px solid var(--color-border-strong)",
-                            borderBottomRightRadius: "4px",
-                            pointerEvents: "none",
-                        }}
-                    />
-                    <div
-                        style={{
-                            position: "absolute",
-                            right: "6px",
-                            bottom: "6px",
-                            width: "10px",
-                            height: "10px",
-                            clipPath: "polygon(0 100%, 100% 0, 100% 100%)",
-                            background:
-                                "linear-gradient(135deg, transparent 0%, transparent 30%, var(--color-border-strong) 30%, var(--color-border-strong) 50%, transparent 50%)",
-                            pointerEvents: "none",
-                        }}
-                    />
-                    <span
-                        aria-hidden="true"
-                        style={{
-                            position: "absolute",
-                            right: "4px",
-                            bottom: "2px",
-                            fontSize: "14px",
-                            color: "var(--color-border-strong)",
-                            lineHeight: 1,
-                            pointerEvents: "none",
-                            userSelect: "none",
-                        }}
-                    >
+                    <div className="editor-resize-handle-inner" />
+                    <div className="editor-resize-handle-triangle" />
+                    <span aria-hidden="true" className="editor-resize-handle-symbol">
                         ↘
                     </span>
                 </div>

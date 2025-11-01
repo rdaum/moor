@@ -62,12 +62,9 @@ export const MessageBoard: React.FC<
         visible: boolean;
     }
 > = ({ message, visible, className = "" }) => {
-    const displayStyle = visible ? "block" : "none";
-
     return (
         <div
-            className={`message_board ${className}`}
-            style={{ display: displayStyle }}
+            className={`message_board ${className} ${!visible ? "hidden" : ""}`}
             role="status"
             aria-live="polite"
             aria-atomic="true"

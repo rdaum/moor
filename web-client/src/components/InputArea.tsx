@@ -232,7 +232,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
     }
 
     return (
-        <div style={{ width: "100%" }}>
+        <div className="w-full">
             <textarea
                 ref={textareaRef}
                 id="input_area"
@@ -248,14 +248,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 aria-label="Command input"
                 aria-describedby="input-help"
                 aria-multiline="true"
-                style={{
-                    minHeight: "3rem",
-                    height: "auto",
-                    maxHeight: "8rem",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    resize: "none",
-                }}
             />
             <div id="input-help" className="sr-only">
                 Use Shift+Enter for new lines. Arrow keys navigate command history when at start or end of input.

@@ -124,31 +124,18 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
     if (!isAvailable) {
         return (
             <div className="settings-item" role="region" aria-labelledby="encryption-settings-label">
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5em", width: "100%" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="settings-stack">
+                    <div className="settings-header">
                         <span id="encryption-settings-label">History Encryption</span>
                         <span
                             role="status"
                             aria-label="History features disabled"
-                            style={{
-                                padding: "0.25em 0.5em",
-                                borderRadius: "var(--radius-md)",
-                                fontSize: "0.85em",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 20%, transparent)",
-                                color: "var(--color-text-primary)",
-                            }}
+                            className="settings-badge unavailable"
                         >
                             Unavailable
                         </span>
                     </div>
-                    <p
-                        style={{
-                            margin: 0,
-                            color: "var(--color-text-secondary)",
-                            fontSize: "0.95em",
-                            lineHeight: "1.4",
-                        }}
-                    >
+                    <p className="settings-description">
                         Message history is not available on this server.
                     </p>
                 </div>
@@ -158,47 +145,24 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
 
     return (
         <div className="settings-item" role="region" aria-labelledby="encryption-settings-label">
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5em", width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div className="settings-stack">
+                <div className="settings-header">
                     <span id="encryption-settings-label">History Encryption</span>
                     <span
                         role="status"
                         aria-label={`History encryption is ${encryptionState.hasEncryption ? "enabled" : "not set up"}`}
-                        style={{
-                            padding: "0.25em 0.5em",
-                            borderRadius: "var(--radius-md)",
-                            fontSize: "0.85em",
-                            backgroundColor: encryptionState.hasEncryption
-                                ? "color-mix(in srgb, var(--color-text-success) 20%, transparent)"
-                                : "color-mix(in srgb, var(--color-text-accent) 20%, transparent)",
-                            color: "var(--color-text-primary)",
-                            border: `1px solid ${
-                                encryptionState.hasEncryption ? "var(--color-text-success)" : "var(--color-text-accent)"
-                            }`,
-                            fontFamily: "inherit",
-                        }}
+                        className={`settings-badge ${encryptionState.hasEncryption ? "enabled" : "disabled"}`}
                     >
                         {encryptionState.hasEncryption ? "Enabled" : "Not Set Up"}
                     </span>
                 </div>
 
                 {!encryptionState.hasEncryption && (
-                    <div style={{ fontSize: "0.9em", marginTop: "0.5em" }}>
+                    <div className="settings-action-group">
                         <button
                             onClick={() => setShowSetupPrompt(true)}
                             aria-label="Set up history encryption with a password"
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-md)",
-                                border: "none",
-                                backgroundColor: "var(--color-button-primary)",
-                                color: "var(--color-bg-base)",
-                                cursor: "pointer",
-                                fontFamily: "inherit",
-                                fontSize: "1em",
-                                fontWeight: "bold",
-                                transition: "opacity var(--transition-fast)",
-                            }}
+                            className="btn btn-primary"
                         >
                             Set Up Encryption
                         </button>
@@ -206,31 +170,20 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                 )}
 
                 {encryptionState.hasEncryption && (
-                    <div style={{ fontSize: "0.9em", color: "var(--color-text-secondary)" }}>
+                    <div className="encryption-section">
                         {encryptionState.ageIdentity
                             ? (
                                 <>
-                                    <div style={{ marginBottom: "0.5em" }}>
+                                    <div className="mb-sm">
                                         Password saved in browser storage. You won't need to re-enter it on this device.
                                     </div>
-                                    <div style={{ marginTop: "0.5em" }}>
+                                    <div className="mt-sm">
                                         {!showForgetConfirm
                                             ? (
                                                 <button
                                                     onClick={() => setShowForgetConfirm(true)}
                                                     aria-label="Remove saved password from this browser"
-                                                    style={{
-                                                        padding: "0.4em 0.8em",
-                                                        borderRadius: "var(--radius-md)",
-                                                        border: "1px solid var(--color-text-error)",
-                                                        backgroundColor:
-                                                            "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                                        color: "var(--color-text-primary)",
-                                                        cursor: "pointer",
-                                                        fontSize: "0.9em",
-                                                        fontFamily: "inherit",
-                                                        transition: "background-color var(--transition-fast)",
-                                                    }}
+                                                    className="btn btn-danger btn-sm"
                                                 >
                                                     Remove Saved Password
                                                 </button>
@@ -240,60 +193,35 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                                     role="alertdialog"
                                                     aria-labelledby="remove-password-title"
                                                     aria-describedby="remove-password-description"
-                                                    style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}
+                                                    className="encryption-dialog"
                                                 >
                                                     <div
                                                         id="remove-password-description"
-                                                        style={{
-                                                            color: "var(--color-text-primary)",
-                                                            fontSize: "0.95em",
-                                                            lineHeight: "1.4",
-                                                        }}
+                                                        className="encryption-description"
                                                     >
-                                                        <p style={{ marginBottom: "0.5em" }}>
+                                                        <p>
                                                             This will remove the saved password from this browser.
                                                             You'll need to re-enter it next time. Your history on the
                                                             server will remain encrypted and accessible with your
                                                             password.
                                                         </p>
-                                                        <p style={{ marginBottom: "0", fontWeight: "bold" }}>
+                                                        <p className="warning">
                                                             ⚠️ Remember: If you've forgotten your password, there is no
                                                             way to recover it or your history.
                                                         </p>
                                                     </div>
-                                                    <div style={{ display: "flex", gap: "0.5em" }}>
+                                                    <div className="encryption-button-row">
                                                         <button
                                                             onClick={handleForgetKey}
                                                             aria-label="Confirm removal of saved password"
-                                                            style={{
-                                                                padding: "0.4em 0.8em",
-                                                                borderRadius: "var(--radius-md)",
-                                                                border: "1px solid var(--color-text-error)",
-                                                                backgroundColor:
-                                                                    "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                                                color: "var(--color-text-primary)",
-                                                                cursor: "pointer",
-                                                                fontSize: "0.9em",
-                                                                fontFamily: "inherit",
-                                                                transition: "background-color var(--transition-fast)",
-                                                            }}
+                                                            className="btn btn-danger btn-sm"
                                                         >
                                                             Remove Password
                                                         </button>
                                                         <button
                                                             onClick={() => setShowForgetConfirm(false)}
                                                             aria-label="Cancel password removal"
-                                                            style={{
-                                                                padding: "0.4em 0.8em",
-                                                                borderRadius: "var(--radius-md)",
-                                                                border: "1px solid var(--color-border-medium)",
-                                                                backgroundColor: "var(--color-bg-secondary)",
-                                                                color: "var(--color-text-primary)",
-                                                                cursor: "pointer",
-                                                                fontSize: "0.9em",
-                                                                fontFamily: "inherit",
-                                                                transition: "background-color var(--transition-fast)",
-                                                            }}
+                                                            className="btn btn-secondary btn-sm"
                                                         >
                                                             Cancel
                                                         </button>
@@ -305,25 +233,14 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                             )
                             : (
                                 <div role="status">
-                                    <div style={{ marginBottom: "0.75em" }}>
+                                    <div className="mb-md">
                                         History encryption is enabled on the server, but your password isn't saved in
                                         this browser. You'll need to unlock it with your password to view history.
                                     </div>
                                     <button
                                         onClick={() => setShowPasswordPrompt(true)}
                                         aria-label="Unlock history with password"
-                                        style={{
-                                            padding: "0.5em 1em",
-                                            borderRadius: "var(--radius-md)",
-                                            border: "none",
-                                            backgroundColor: "var(--color-button-primary)",
-                                            color: "var(--color-bg-base)",
-                                            cursor: "pointer",
-                                            fontFamily: "inherit",
-                                            fontSize: "1em",
-                                            fontWeight: "bold",
-                                            transition: "opacity var(--transition-fast)",
-                                        }}
+                                        className="btn btn-primary"
                                     >
                                         Unlock History
                                     </button>
@@ -333,69 +250,28 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                 )}
 
                 {encryptionState.hasEncryption && (
-                    <div
-                        style={{
-                            fontSize: "0.9em",
-                            marginTop: "1em",
-                            borderTop: "1px solid var(--color-border-light)",
-                            paddingTop: "1em",
-                        }}
-                    >
-                        <div style={{ marginBottom: "0.5em", fontWeight: "bold" }}>History Management</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                    <div className="encryption-section-title">
+                        <div className="font-semibold mb-sm">History Management</div>
+                        <div className="flex-col gap-sm">
                             {exportState.readyBlob && exportState.readyFilename && (
-                                <div
-                                    style={{
-                                        padding: "0.75em",
-                                        borderRadius: "var(--radius-md)",
-                                        backgroundColor:
-                                            "color-mix(in srgb, var(--color-text-success) 15%, transparent)",
-                                        border: "1px solid var(--color-text-success)",
-                                        fontSize: "0.9em",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            marginBottom: "0.5em",
-                                            fontWeight: "bold",
-                                            color: "var(--color-text-success)",
-                                        }}
-                                    >
+                                <div className="encryption-message-box-success">
+                                    <div className="font-semibold mb-sm" style={{ color: "var(--color-text-success)" }}>
                                         ✓ Export Ready!
                                     </div>
-                                    <div style={{ marginBottom: "0.75em", fontSize: "0.95em" }}>
+                                    <div className="mb-md">
                                         Your history export is ready to download:{" "}
                                         <strong>{exportState.readyFilename}</strong>
                                     </div>
-                                    <div style={{ display: "flex", gap: "0.5em" }}>
+                                    <div className="encryption-button-row">
                                         <button
                                             onClick={downloadReady}
-                                            style={{
-                                                padding: "0.5em 1em",
-                                                borderRadius: "var(--radius-md)",
-                                                border: "none",
-                                                backgroundColor: "var(--color-button-primary)",
-                                                color: "var(--color-bg-base)",
-                                                cursor: "pointer",
-                                                fontFamily: "inherit",
-                                                fontSize: "0.95em",
-                                                fontWeight: "bold",
-                                            }}
+                                            className="btn btn-primary"
                                         >
                                             Download Now
                                         </button>
                                         <button
                                             onClick={dismissReady}
-                                            style={{
-                                                padding: "0.5em 1em",
-                                                borderRadius: "var(--radius-md)",
-                                                border: "1px solid var(--color-border-medium)",
-                                                backgroundColor: "var(--color-bg-secondary)",
-                                                color: "var(--color-text-primary)",
-                                                cursor: "pointer",
-                                                fontFamily: "inherit",
-                                                fontSize: "0.95em",
-                                            }}
+                                            className="btn btn-secondary"
                                         >
                                             Dismiss
                                         </button>
@@ -448,17 +324,8 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                     )}
                                     <button
                                         onClick={cancelExport}
-                                        style={{
-                                            marginTop: "0.5em",
-                                            padding: "0.3em 0.6em",
-                                            borderRadius: "var(--radius-sm)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            backgroundColor: "var(--color-bg-secondary)",
-                                            color: "var(--color-text-primary)",
-                                            cursor: "pointer",
-                                            fontSize: "0.85em",
-                                            fontFamily: "inherit",
-                                        }}
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ marginTop: "0.5em" }}
                                     >
                                         Cancel
                                     </button>
@@ -468,20 +335,7 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                 onClick={handleDownloadHistory}
                                 disabled={exportState.isExporting || !encryptionState.ageIdentity}
                                 aria-label="Download all encrypted event history"
-                                style={{
-                                    padding: "0.5em 1em",
-                                    borderRadius: "var(--radius-md)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    color: "var(--color-text-primary)",
-                                    cursor: (exportState.isExporting || !encryptionState.ageIdentity)
-                                        ? "not-allowed"
-                                        : "pointer",
-                                    fontFamily: "inherit",
-                                    fontSize: "0.95em",
-                                    opacity: (exportState.isExporting || !encryptionState.ageIdentity) ? 0.6 : 1,
-                                    transition: "opacity var(--transition-fast)",
-                                }}
+                                className="btn btn-secondary"
                             >
                                 Download All History (JSON)
                             </button>
@@ -491,46 +345,23 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                     <button
                                         onClick={() => setShowDeleteConfirm(true)}
                                         aria-label="Delete all event history from server"
-                                        style={{
-                                            padding: "0.5em 1em",
-                                            borderRadius: "var(--radius-md)",
-                                            border: "1px solid var(--color-text-error)",
-                                            backgroundColor:
-                                                "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                            color: "var(--color-text-primary)",
-                                            cursor: "pointer",
-                                            fontFamily: "inherit",
-                                            fontSize: "0.95em",
-                                            transition: "background-color var(--transition-fast)",
-                                        }}
+                                        className="btn btn-danger"
                                     >
                                         Delete All History
                                     </button>
                                 )
                                 : (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                                    <div className="flex-col gap-sm">
                                         <div style={{ color: "var(--color-text-error)", fontSize: "0.95em" }}>
                                             ⚠️ This will permanently delete all your event history from the server. This
                                             cannot be undone!
                                         </div>
-                                        <div style={{ display: "flex", gap: "0.5em" }}>
+                                        <div className="encryption-button-row">
                                             <button
                                                 onClick={handleDeleteHistory}
                                                 disabled={isDeleting}
                                                 aria-label="Confirm deletion of all history"
-                                                style={{
-                                                    padding: "0.4em 0.8em",
-                                                    borderRadius: "var(--radius-md)",
-                                                    border: "1px solid var(--color-text-error)",
-                                                    backgroundColor:
-                                                        "color-mix(in srgb, var(--color-text-error) 25%, transparent)",
-                                                    color: "var(--color-text-primary)",
-                                                    cursor: isDeleting ? "wait" : "pointer",
-                                                    fontSize: "0.9em",
-                                                    fontFamily: "inherit",
-                                                    fontWeight: "bold",
-                                                    opacity: isDeleting ? 0.6 : 1,
-                                                }}
+                                                className="btn btn-danger btn-sm"
                                             >
                                                 {isDeleting ? "Deleting..." : "Yes, Delete Everything"}
                                             </button>
@@ -538,17 +369,7 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                                 onClick={() => setShowDeleteConfirm(false)}
                                                 disabled={isDeleting}
                                                 aria-label="Cancel history deletion"
-                                                style={{
-                                                    padding: "0.4em 0.8em",
-                                                    borderRadius: "var(--radius-md)",
-                                                    border: "1px solid var(--color-border-medium)",
-                                                    backgroundColor: "var(--color-bg-secondary)",
-                                                    color: "var(--color-text-primary)",
-                                                    cursor: isDeleting ? "not-allowed" : "pointer",
-                                                    fontSize: "0.9em",
-                                                    fontFamily: "inherit",
-                                                    opacity: isDeleting ? 0.6 : 1,
-                                                }}
+                                                className="btn btn-secondary btn-sm"
                                             >
                                                 Cancel
                                             </button>

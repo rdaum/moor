@@ -47,42 +47,25 @@ export const EncryptionResetConfirm: React.FC<EncryptionResetConfirmProps> = ({ 
                         id="reset-confirm-description"
                         role="alert"
                         aria-live="assertive"
-                        style={{
-                            marginBottom: "1em",
-                            padding: "0.75em",
-                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                            border: "1px solid var(--color-text-error)",
-                            borderRadius: "var(--radius-md)",
-                            color: "var(--color-text-primary)",
-                            lineHeight: "1.5",
-                            fontFamily: "inherit",
-                        }}
+                        className="encryption-message-box-error"
                     >
-                        <p style={{ marginBottom: "0.75em", fontWeight: "bold", fontFamily: "inherit" }}>
+                        <p className="font-semibold mb-md">
                             ⚠️ Warning: You will permanently lose access to your existing history.
                         </p>
-                        <p style={{ marginBottom: "0.75em", fontFamily: "inherit" }}>
+                        <p className="mb-md">
                             Setting up a new encryption password will create a fresh encrypted history. Your old history
                             will remain on the server, but without your old password, it cannot be decrypted.
                         </p>
-                        <p style={{ marginBottom: "0", fontFamily: "inherit" }}>
+                        <p>
                             This action cannot be undone. Your previous conversations, actions, and descriptions will be
                             permanently inaccessible.
                         </p>
                     </div>
 
-                    <div style={{ marginBottom: "1em" }}>
+                    <div className="mb-md">
                         <label
-                            style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: "0.5em",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "inherit",
-                                fontSize: "0.95em",
-                                cursor: "pointer",
-                                userSelect: "none",
-                            }}
+                            className="flex flex-start gap-sm"
+                            style={{ color: "var(--color-text-primary)", cursor: "pointer", userSelect: "none" }}
                         >
                             <input
                                 id="reset-understand-checkbox"
@@ -106,22 +89,12 @@ export const EncryptionResetConfirm: React.FC<EncryptionResetConfirmProps> = ({ 
                         </label>
                     </div>
 
-                    <div style={{ display: "flex", gap: "0.5em", justifyContent: "flex-end" }}>
+                    <div className="flex gap-sm" style={{ justifyContent: "flex-end" }}>
                         <button
                             type="button"
                             onClick={onCancel}
                             aria-label="Cancel and go back"
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-md)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontFamily: "inherit",
-                                fontSize: "1em",
-                                transition: "background-color var(--transition-fast)",
-                            }}
+                            className="btn btn-secondary"
                         >
                             Go Back
                         </button>
@@ -133,19 +106,7 @@ export const EncryptionResetConfirm: React.FC<EncryptionResetConfirmProps> = ({ 
                                 ? "Confirm reset encryption and lose old history"
                                 : "Cannot reset until you confirm understanding"}
                             aria-disabled={!understood}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-md)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-error)",
-                                color: "var(--color-bg-base)",
-                                cursor: understood ? "pointer" : "not-allowed",
-                                fontFamily: "inherit",
-                                fontSize: "1em",
-                                fontWeight: "bold",
-                                transition: "opacity var(--transition-fast)",
-                                opacity: understood ? 1 : 0.5,
-                            }}
+                            className="btn btn-danger"
                         >
                             Reset Encryption
                         </button>

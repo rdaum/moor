@@ -73,19 +73,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, o
                         {onLogout && (
                             <div className="settings-item">
                                 <button
-                                    className="logout-button"
+                                    className="btn btn-secondary"
                                     onClick={() => {
                                         onLogout();
                                         onClose();
-                                    }}
-                                    style={{
-                                        padding: "8px 16px",
-                                        backgroundColor: "#dc3545",
-                                        color: "white",
-                                        border: "none",
-                                        borderRadius: "4px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-ui)",
                                     }}
                                 >
                                     Logout
@@ -98,13 +89,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, o
                         <h3>About</h3>
                         <div className="settings-item">
                             <span>Version</span>
-                            <span
-                                style={{
-                                    fontFamily: "var(--font-mono)",
-                                    fontSize: "0.9em",
-                                    color: "var(--color-text-secondary)",
-                                }}
-                            >
+                            <span className="font-mono text-sm text-secondary">
                                 {__GIT_HASH__}
                             </span>
                         </div>

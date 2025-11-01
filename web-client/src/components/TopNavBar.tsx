@@ -47,42 +47,18 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
             <div className="nav-title">{title}</div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <div
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        backgroundColor: "var(--color-bg-secondary)",
-                        border: "1px solid var(--color-border-medium)",
-                        borderRadius: "var(--radius-sm)",
-                        padding: "2px 6px",
-                    }}
-                >
+            <div className="flex gap-sm items-center">
+                <div className="font-size-control">
                     <button
                         onClick={onDecreaseNarrativeFontSize}
                         aria-label="Decrease narrative font size"
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "var(--color-text-secondary)",
-                            cursor: narrativeFontSize <= 10 ? "not-allowed" : "pointer",
-                            opacity: narrativeFontSize <= 10 ? 0.5 : 1,
-                            fontSize: "14px",
-                            padding: "2px 4px",
-                        }}
+                        className="font-size-button"
                         disabled={narrativeFontSize <= 10}
                     >
                         –
                     </button>
                     <span
-                        style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "12px",
-                            color: "var(--color-text-secondary)",
-                            minWidth: "38px",
-                            textAlign: "center",
-                        }}
+                        className="font-size-display"
                         aria-live="polite"
                     >
                         {narrativeFontSize}px
@@ -90,15 +66,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                     <button
                         onClick={onIncreaseNarrativeFontSize}
                         aria-label="Increase narrative font size"
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "var(--color-text-secondary)",
-                            cursor: narrativeFontSize >= 24 ? "not-allowed" : "pointer",
-                            opacity: narrativeFontSize >= 24 ? 0.5 : 1,
-                            fontSize: "14px",
-                            padding: "2px 4px",
-                        }}
+                        className="font-size-button"
                         disabled={narrativeFontSize >= 24}
                     >
                         +
@@ -106,20 +74,10 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                 </div>
                 {onBrowserToggle && (
                     <button
-                        className="browser-icon"
+                        className="account-icon"
                         onClick={onBrowserToggle}
                         aria-label="Open object browser"
                         title="Object Browser"
-                        style={{
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            padding: "8px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "var(--color-text-primary)",
-                        }}
                     >
                         <svg
                             width="24"

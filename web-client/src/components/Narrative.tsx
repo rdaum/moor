@@ -289,12 +289,6 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             className="narrative"
             id="narrative"
             aria-label="Narrative and input"
-            style={{
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
-                overflow: "hidden",
-            }}
         >
             {/* History viewing indicator - TODO: implement */}
             {/* <HistoryIndicator /> */}
@@ -309,11 +303,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             />
 
             {/* Command input area - fixed at bottom */}
-            <div
-                style={{
-                    flexShrink: 0,
-                }}
-            >
+            <div className="narrative-input-container">
                 <InputArea
                     visible={connected}
                     disabled={!connected}

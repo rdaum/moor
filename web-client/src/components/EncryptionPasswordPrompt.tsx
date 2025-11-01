@@ -85,17 +85,16 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                 <div className="dialog-sheet-content">
                     <div
                         id="encryption-unlock-description"
+                        className="mb-md"
                         style={{
-                            marginBottom: "1em",
                             color: "var(--color-text-secondary)",
                             lineHeight: "1.5",
-                            fontFamily: "inherit",
                         }}
                     >
-                        <p style={{ marginBottom: "0.75em", fontFamily: "inherit" }}>
+                        <p className="mb-md">
                             Your history is encrypted. Enter your encryption password to access it.
                         </p>
-                        <p style={{ marginBottom: "0", fontFamily: "inherit" }}>
+                        <p>
                             This is the password you set up for history encryption, separate from your {systemTitle}
                             {" "}
                             login.
@@ -103,14 +102,12 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                     </div>
 
                     <form onSubmit={handleSubmit} aria-label="History password entry form">
-                        <div style={{ marginBottom: "1em" }}>
+                        <div className="mb-md">
                             <label
                                 htmlFor="unlock-password"
+                                className="block mb-sm"
                                 style={{
-                                    display: "block",
-                                    marginBottom: "0.5em",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
                                 }}
                             >
                                 Encryption Password
@@ -135,7 +132,6 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                                     border: "1px solid var(--color-border-medium)",
                                     backgroundColor: "var(--color-bg-input)",
                                     color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
                                     fontSize: "1em",
                                     outline: "none",
                                 }}
@@ -147,37 +143,18 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                                 id="unlock-error"
                                 role="alert"
                                 aria-live="assertive"
-                                style={{
-                                    padding: "0.75em",
-                                    backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                    border: "1px solid var(--color-text-error)",
-                                    borderRadius: "var(--radius-md)",
-                                    marginBottom: "1em",
-                                    color: "var(--color-text-primary)",
-                                    fontFamily: "inherit",
-                                }}
+                                className="encryption-message-box-error mb-md"
                             >
                                 {error}
                             </div>
                         )}
 
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
+                        <div className="flex-col gap-sm">
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
                                 aria-label="Unlock history with entered password"
-                                style={{
-                                    padding: "0.5em 1em",
-                                    borderRadius: "var(--radius-md)",
-                                    border: "none",
-                                    backgroundColor: "var(--color-button-primary)",
-                                    color: "var(--color-bg-base)",
-                                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                                    fontFamily: "inherit",
-                                    fontSize: "1em",
-                                    fontWeight: "bold",
-                                    transition: "opacity var(--transition-fast)",
-                                }}
+                                className="btn btn-primary"
                             >
                                 {isSubmitting ? "Unlocking..." : "Unlock History"}
                             </button>
@@ -186,17 +163,7 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                                 onClick={() => setShowResetConfirm(true)}
                                 disabled={isSubmitting}
                                 aria-label="I forgot my password - set up new encryption and lose access to old history"
-                                style={{
-                                    padding: "0.5em 1em",
-                                    borderRadius: "var(--radius-md)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    color: "var(--color-text-primary)",
-                                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                                    fontFamily: "inherit",
-                                    fontSize: "0.9em",
-                                    transition: "background-color var(--transition-fast)",
-                                }}
+                                className="btn btn-secondary btn-sm"
                             >
                                 I Forgot My Password
                             </button>
@@ -205,17 +172,7 @@ export const EncryptionPasswordPrompt: React.FC<EncryptionPasswordPromptProps> =
                                 onClick={onSkip}
                                 disabled={isSubmitting}
                                 aria-label="Skip history decryption for now"
-                                style={{
-                                    padding: "0.5em 1em",
-                                    borderRadius: "var(--radius-md)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    backgroundColor: "transparent",
-                                    color: "var(--color-text-secondary)",
-                                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                                    fontFamily: "inherit",
-                                    fontSize: "0.9em",
-                                    transition: "background-color var(--transition-fast)",
-                                }}
+                                className="btn btn-ghost btn-sm"
                             >
                                 Skip for Now
                             </button>

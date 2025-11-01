@@ -22,43 +22,15 @@ import { OAuth2Buttons } from "./OAuth2Buttons";
  */
 const LoadingSpinner: React.FC<{ message?: string }> = ({ message = "Connecting to server..." }) => (
     <div
-        className="loading_spinner_container"
-        style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "40px",
-            textAlign: "center",
-        }}
+        className="loading-spinner-container"
         role="status"
         aria-live="polite"
         aria-label={message}
     >
-        <div
-            className="loading_spinner"
-            style={{
-                width: "40px",
-                height: "40px",
-                border: "3px solid #f3f3f3",
-                borderTop: "3px solid #4dabf7",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
-                marginBottom: "16px",
-            }}
-            aria-hidden="true"
-        />
-        <div style={{ color: "#666", fontSize: "14px" }}>
+        <div className="loading-spinner" aria-hidden="true" />
+        <div className="loading-spinner-message">
             {message}
         </div>
-        <style>
-            {`
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-            `}
-        </style>
     </div>
 );
 
@@ -484,64 +456,17 @@ export const Login: React.FC<LoginProps> = (
             {/* Loading overlay with spinner - shown during authentication */}
             {authState.isConnecting && (
                 <div
-                    style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: "rgba(0, 0, 0, 0.4)",
-                        zIndex: 1000,
-                        borderRadius: "var(--radius-lg)",
-                    }}
+                    className="login-auth-overlay"
                     role="status"
                     aria-live="assertive"
                     aria-label="Authenticating, please wait"
                 >
-                    <div
-                        style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: "16px",
-                            padding: "32px",
-                            backgroundColor: "var(--color-bg-primary)",
-                            borderRadius: "var(--radius-lg)",
-                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
-                        }}
-                    >
-                        <div
-                            className="loading_spinner"
-                            style={{
-                                width: "48px",
-                                height: "48px",
-                                border: "4px solid #f3f3f3",
-                                borderTop: "4px solid #4dabf7",
-                                borderRadius: "50%",
-                                animation: "spin 0.8s linear infinite",
-                            }}
-                            aria-hidden="true"
-                        />
-                        <div
-                            style={{
-                                color: "var(--color-text-primary)",
-                                fontSize: "16px",
-                                fontWeight: 600,
-                                fontFamily: "var(--font-ui)",
-                            }}
-                        >
+                    <div className="login-auth-spinner-card">
+                        <div className="loading-spinner large" aria-hidden="true" />
+                        <div className="login-auth-spinner-title">
                             Connecting to server...
                         </div>
-                        <div
-                            style={{
-                                color: "var(--color-text-secondary)",
-                                fontSize: "14px",
-                                fontFamily: "var(--font-ui)",
-                            }}
-                        >
+                        <div className="login-auth-spinner-subtitle">
                             Please wait
                         </div>
                     </div>

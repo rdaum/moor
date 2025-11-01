@@ -18,6 +18,14 @@
   resize: none;
   box-sizing: border-box;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.narrative-input-container {
+  flex-shrink: 0;
 }
 
 /* Text styles within narrative */
@@ -67,6 +75,19 @@
   margin: var(--space-sm) 0 !important;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   margin-left: var(--space-md) !important;
+}
+
+/* ====== CONTENT RENDERER ====== */
+/* For HTML and Djot rendered content */
+.content-html {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* For plain text content with whitespace preservation */
+.content-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 /* ====== DOCK CONTAINERS ====== */
@@ -245,6 +266,52 @@
   min-height: 0;
 }
 
+/* History indicator overlay */
+.history_indicator {
+  position: sticky;
+  top: 10px;
+  width: fit-content;
+  margin: 0 auto 10px auto;
+  background: color-mix(in srgb, var(--color-bg-base) 90%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--color-text-primary);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--color-border-medium);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+}
+
+.history_indicator_button {
+  background: var(--color-button-primary);
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  transition: all 0.2s ease;
+}
+
+.history_indicator_button:hover {
+  background: color-mix(in srgb, var(--color-button-primary) 80%, white);
+}
+
+/* Load more history spacer */
+.output_window_load_more {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 0.8em;
+}
+
 .input_area {
   background-color: var(--color-bg-input);
   color: var(--color-text-primary);
@@ -256,8 +323,9 @@
   resize: none;
   overflow: auto;
   min-height: 3rem;
-  height: 3rem;
+  height: auto;
   max-height: 8rem;
+  width: 100%;
   box-sizing: border-box;
 }
 
@@ -1597,4 +1665,84 @@ button:disabled {
     height: 36px;
     font-size: 1.3em;
   }
+}
+
+/* ====== LOADING SPINNER ====== */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #4dabf7;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.loading-spinner.large {
+  width: 48px;
+  height: 48px;
+  border-width: 4px;
+  animation-duration: 0.8s;
+}
+
+.loading-spinner-message {
+  color: #666;
+  font-size: 14px;
+}
+
+/* Login authentication overlay */
+.login-auth-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  border-radius: var(--radius-lg);
+}
+
+.login-auth-spinner-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.login-auth-spinner-title {
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+}
+
+.login-auth-spinner-subtitle {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-family: var(--font-ui);
 }

@@ -202,10 +202,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                 }
                             }
                         }}
-                        style={{
-                            wordWrap: "break-word",
-                            overflowWrap: "break-word",
-                        }}
+                        className="content-html"
                     />
                 );
             }
@@ -325,7 +322,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
                     return (
                         <div
-                            className="text_djot"
+                            className="text_djot content-html"
                             dangerouslySetInnerHTML={{ __html: sanitizedDjotHtml }}
                             onClick={(e) => {
                                 // Handle clicks on moo-link spans
@@ -338,22 +335,13 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                                     }
                                 }
                             }}
-                            style={{
-                                wordWrap: "break-word",
-                                overflowWrap: "break-word",
-                            }}
                         />
                     );
                 } catch (error) {
                     // Fallback to plain text if djot parsing fails
                     console.warn("Failed to parse djot content:", error);
                     return (
-                        <div
-                            style={{
-                                whiteSpace: "pre-wrap",
-                                wordWrap: "break-word",
-                            }}
-                        >
+                        <div className="content-text">
                             {content}
                         </div>
                     );
@@ -388,10 +376,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 return (
                     <div
                         dangerouslySetInnerHTML={{ __html: sanitizedAnsiHtml }}
-                        style={{
-                            whiteSpace: "pre-wrap",
-                            wordWrap: "break-word",
-                        }}
+                        className="content-text"
                     />
                 );
             }

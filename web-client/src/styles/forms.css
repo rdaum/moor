@@ -1,0 +1,240 @@
+/*
+ * Form-related semantic styles for inputs, labels, and form layouts
+ */
+
+/* ====== FORM CONTAINERS ====== */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+}
+
+/* ====== FORM GROUPS ====== */
+/* Stacked label + input groups */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.form-group-label {
+  font-weight: 600;
+}
+
+.form-group-hint {
+  color: var(--color-text-secondary);
+  font-size: 0.85em;
+}
+
+/* ====== CHECKBOX/RADIO GROUPS ====== */
+.checkbox-group,
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.checkbox-item,
+.radio-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+}
+
+.checkbox-label,
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  cursor: pointer;
+}
+
+/* ====== PERMISSION FLAGS ====== */
+.permission-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.permission-flag-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+}
+
+.permission-flag-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+}
+
+.permission-flag-icon {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.permission-flag-text {
+  color: var(--color-text-secondary);
+}
+
+/* ====== PROPERTY PERMISSION CHECKBOXES (Horizontal) ====== */
+.permission-checkboxes {
+  display: flex;
+  gap: 0.75em;
+  padding: 0.5em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-medium);
+}
+
+.permission-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  cursor: pointer;
+}
+
+.permission-checkbox-label {
+  font-family: var(--font-mono);
+}
+
+/* ====== OBJECT PROPERTY LAYOUT ====== */
+.property-row {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.property-row:last-child {
+  border-bottom: none;
+}
+
+.property-label {
+  font-weight: 600;
+  min-width: 8em;
+  flex-shrink: 0;
+}
+
+.property-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* ====== FORM INPUT VARIATIONS ====== */
+.form-input {
+  padding: 0.5em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-medium);
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-family: inherit;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-text-accent);
+  background-color: var(--color-bg-base);
+}
+
+/* ====== VERB TYPE SELECTOR ====== */
+.verb-type-selector {
+  display: flex;
+  gap: 1.5em;
+  padding: 0.5em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-medium);
+}
+
+.verb-type-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+}
+
+.verb-type-description {
+  display: flex;
+  flex-direction: column;
+}
+
+.verb-type-title {
+  font-weight: 600;
+}
+
+.verb-type-subtitle {
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+}
+
+/* ====== VERB ARGUMENT SPECIFICATION ====== */
+.verb-argspec-grid {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+}
+
+.verb-argspec-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  flex: 1;
+}
+
+.verb-argspec-label {
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+}
+
+.verb-argspec-select {
+  padding: 0.5em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-medium);
+  font-family: var(--font-mono);
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+}
+
+/* ====== FLAG CHECKBOX ITEM (For EditFlagsDialog) ====== */
+.flag-checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  margin-bottom: 0.75em;
+}
+
+.flag-checkbox-input {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.flag-checkbox-content {
+  flex: 1;
+}
+
+.flag-checkbox-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375em;
+}
+
+.flag-checkbox-label {
+  font-weight: 600;
+}
+
+.flag-char {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 4px;
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.flag-checkbox-description {
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}

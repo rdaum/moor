@@ -6,5 +6,10 @@
 @import './variables.css';
 @import './base.css';
 @import './layout.css';
+@import './utilities.css';
+@import './controls.css';
+@import './forms.css';
+@import './dialogs.css';
+@import './editors.css';
 @import './components.css';
 @import './themes.css';

@@ -1523,31 +1523,20 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             <div
                 onMouseDown={titleMouseDownHandler}
                 onTouchStart={titleTouchStartHandler}
+                className="editor-title-bar"
                 style={{
-                    padding: "var(--space-md)",
-                    borderBottom: "1px solid var(--color-border-light)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    backgroundColor: "var(--color-bg-header)",
                     borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
                     cursor: isSplitDraggable
                         ? "row-resize"
                         : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
-                    touchAction: isSplitDraggable ? "none" : "auto", // Prevent default touch behaviors when in split mode
+                    touchAction: isSplitDraggable ? "none" : "auto",
                 }}
             >
                 <h3
                     id="verb-editor-title"
-                    style={{
-                        margin: 0,
-                        color: "var(--color-text-primary)",
-                        display: "flex",
-                        alignItems: "baseline",
-                        width: "100%",
-                    }}
+                    className="editor-title"
                 >
-                    <span style={{ fontWeight: "700" }}>
+                    <span className="editor-title-label">
                         Verb editor{hasUnsavedChanges && (
                             <span
                                 style={{ color: "var(--color-text-secondary)", marginLeft: "4px", fontSize: "0.8em" }}
@@ -1556,32 +1545,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             </span>
                         )}
                     </span>
-                    <span
-                        style={{
-                            fontSize: "0.9em",
-                            color: "var(--color-text-secondary)",
-                            fontWeight: "normal",
-                            textAlign: "center",
-                            flex: 1,
-                            marginLeft: "var(--space-sm)",
-                            marginRight: "var(--space-sm)",
-                            fontFamily: "monospace",
-                        }}
-                    >
+                    <span className="editor-title-path">
                         {enhancedTitle}
                     </span>
                 </h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                <div className="editor-toolbar">
                     {/* Navigation arrows for multiple editors (only in split/docked mode) */}
                     {splitMode && editorCount > 1 && onPreviousEditor && onNextEditor && (
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                marginRight: "var(--space-sm)",
-                            }}
-                        >
+                        <div className="editor-nav-controls">
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1589,22 +1560,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 }}
                                 aria-label="Previous editor"
                                 title="Previous editor"
-                                style={{
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    color: "var(--color-text-primary)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    padding: "4px 8px",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    fontSize: "14px",
-                                    lineHeight: "1",
-                                }}
+                                className="editor-nav-button"
                             >
                                 ◀
                             </button>
-                            <span
-                                style={{ fontSize: "12px", color: "var(--color-text-secondary)", userSelect: "none" }}
-                            >
+                            <span className="editor-nav-indicator">
                                 {currentEditorIndex + 1}/{editorCount}
                             </span>
                             <button
@@ -1614,16 +1574,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 }}
                                 aria-label="Next editor"
                                 title="Next editor"
-                                style={{
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    color: "var(--color-text-primary)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    padding: "4px 8px",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    fontSize: "14px",
-                                    lineHeight: "1",
-                                }}
+                                className="editor-nav-button"
                             >
                                 ▶
                             </button>
@@ -1633,62 +1584,30 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     {onDelete && (
                         <button
                             onClick={(e) => {
-                                e.stopPropagation(); // Prevent drag handler from firing
+                                e.stopPropagation();
                                 onDelete();
                             }}
                             aria-label="Remove verb"
                             title="Remove verb"
-                            style={{
-                                backgroundColor:
-                                    "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
-                                color: "var(--color-text-primary)",
-                                border: "1px solid var(--color-border-medium)",
-                                padding: "6px 12px",
-                                borderRadius: "var(--radius-sm)",
-                                cursor: "pointer",
-                                fontSize: "12px",
-                                fontWeight: "600",
-                            }}
+                            className="btn btn-warning btn-sm"
                         >
                             Remove
                         </button>
                     )}
                     <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            backgroundColor: "var(--color-bg-secondary)",
-                            border: "1px solid var(--color-border-medium)",
-                            borderRadius: "var(--radius-sm)",
-                            padding: "2px 6px",
-                        }}
+                        className="font-size-control"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <button
                             onClick={() => setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1))}
                             aria-label="Decrease editor font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
-                                fontSize: "14px",
-                                padding: "2px 4px",
-                            }}
+                            className="font-size-button"
                             disabled={fontSize <= MIN_FONT_SIZE}
                         >
                             –
                         </button>
                         <span
-                            style={{
-                                fontFamily: "var(--font-mono)",
-                                fontSize: "12px",
-                                color: "var(--color-text-secondary)",
-                                minWidth: "38px",
-                                textAlign: "center",
-                            }}
+                            className="font-size-display"
                             aria-live="polite"
                         >
                             {fontSize}px
@@ -1696,15 +1615,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         <button
                             onClick={() => setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1))}
                             aria-label="Increase editor font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
-                                fontSize: "14px",
-                                padding: "2px 4px",
-                            }}
+                            className="font-size-button"
                             disabled={fontSize >= MAX_FONT_SIZE}
                         >
                             +
@@ -1713,23 +1624,13 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     {/* Compile button */}
                     <button
                         onClick={(e) => {
-                            e.stopPropagation(); // Prevent drag handler from firing
+                            e.stopPropagation();
                             compileVerb();
                         }}
                         disabled={isCompiling}
                         aria-label="Compile verb"
                         title="Compile verb"
-                        style={{
-                            backgroundColor: isCompiling ? "var(--color-bg-secondary)" : "var(--color-button-primary)",
-                            color: "white",
-                            border: "none",
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-sm)",
-                            cursor: isCompiling ? "not-allowed" : "pointer",
-                            opacity: isCompiling ? 0.6 : 1,
-                            fontSize: "12px",
-                            fontWeight: "600",
-                        }}
+                        className="btn btn-primary btn-sm"
                     >
                         {isCompiling ? "⏳" : "▶"}
                     </button>
@@ -1743,17 +1644,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             }}
                             aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                             title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                            style={{
-                                background: "transparent",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
-                                cursor: "pointer",
-                                color: "var(--color-text-secondary)",
-                                padding: "4px 6px",
-                                fontSize: "12px",
-                                display: "flex",
-                                alignItems: "center",
-                            }}
+                            className="editor-btn-toggle-split"
                         >
                             {isInSplitMode ? "🪟" : "⇅"}
                         </button>
@@ -1761,14 +1652,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     <button
                         onClick={onClose}
                         aria-label="Close verb editor"
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            fontSize: "1.2em",
-                            cursor: "pointer",
-                            color: "var(--color-text-secondary)",
-                            padding: "4px 8px",
-                        }}
+                        className="editor-btn-close"
                     >
                         <span aria-hidden="true">×</span>
                     </button>
@@ -1777,47 +1661,18 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
             {/* Error panel */}
             {errors.length > 0 && (
-                <div
-                    className="verb_compile_errors"
-                    style={{
-                        maxHeight: "40vh",
-                        padding: "var(--space-sm)",
-                        backgroundColor: "color-mix(in srgb, var(--color-text-error) 12%, var(--color-bg-secondary))",
-                        borderTop: "2px solid color-mix(in srgb, var(--color-text-error) 70%, white)",
-                        borderBottom: "2px solid color-mix(in srgb, var(--color-text-error) 70%, white)",
-                        overflowY: "auto",
-                        overflowX: "hidden",
-                    }}
-                >
-                    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                <div className="verb-compile-errors">
+                    <div className="verb-compile-errors-list">
                         {errors.map((error, index) => {
                             const isExpanded = expandedErrors.has(index);
 
                             return (
-                                <div
-                                    key={`${error.type}-${index}`}
-                                    style={{
-                                        backgroundColor: "var(--color-bg-tertiary)",
-                                        padding: "var(--space-sm)",
-                                        borderRadius: "var(--radius-sm)",
-                                        border: "1px solid color-mix(in srgb, var(--color-text-error) 40%, white)",
-                                    }}
-                                >
+                                <div key={`${error.type}-${index}`} className="verb-compile-error">
                                     {/* Main error message */}
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                        <div
-                                            style={{
-                                                color: "color-mix(in srgb, var(--color-text-error) 60%, white)",
-                                                fontSize: "0.95em",
-                                                fontWeight: "600",
-                                            }}
-                                        >
+                                    <div className="verb-compile-error-content">
+                                        <div className="verb-compile-error-message">
                                             {error.type === "parse" && typeof error.line === "number" && (
-                                                <span
-                                                    style={{
-                                                        color: "color-mix(in srgb, var(--color-text-error) 50%, white)",
-                                                    }}
-                                                >
+                                                <span className="verb-compile-error-location">
                                                     Line {error.line}
                                                     {typeof error.column === "number" && `, col ${error.column}`}:{" "}
                                                 </span>
@@ -1828,53 +1683,20 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                         {/* Details section (expected tokens) */}
                                         {error.type === "parse" && error.expectedTokens
                                             && error.expectedTokens.length > 0 && (
-                                            <div style={{ marginTop: "4px" }}>
+                                            <div className="verb-compile-error-details">
                                                 <button
                                                     onClick={() => toggleErrorExpanded(index)}
-                                                    style={{
-                                                        padding: "3px 8px",
-                                                        backgroundColor: "transparent",
-                                                        color: "color-mix(in srgb, var(--color-text-error) 60%, white)",
-                                                        border:
-                                                            "1px solid color-mix(in srgb, var(--color-text-error) 30%, white)",
-                                                        borderRadius: "var(--radius-sm)",
-                                                        cursor: "pointer",
-                                                        fontSize: "0.85em",
-                                                    }}
+                                                    className="verb-compile-error-toggle"
                                                 >
                                                     {isExpanded ? "▼" : "▶"} {isExpanded ? "Hide" : "Show"} details
                                                 </button>
 
                                                 {isExpanded && (
-                                                    <div
-                                                        style={{
-                                                            marginTop: "8px",
-                                                            padding: "8px",
-                                                            backgroundColor: "var(--color-bg-secondary)",
-                                                            borderRadius: "var(--radius-sm)",
-                                                            fontSize: "0.9em",
-                                                            color: "var(--color-text-primary)",
-                                                            borderLeft:
-                                                                "2px solid color-mix(in srgb, var(--color-text-error) 60%, white)",
-                                                        }}
-                                                    >
-                                                        <div
-                                                            style={{
-                                                                color:
-                                                                    "color-mix(in srgb, var(--color-text-error) 60%, white)",
-                                                                fontWeight: "600",
-                                                                marginBottom: "4px",
-                                                            }}
-                                                        >
+                                                    <div className="verb-compile-error-expanded">
+                                                        <div className="verb-compile-error-expanded-title">
                                                             Expected:
                                                         </div>
-                                                        <div
-                                                            style={{
-                                                                fontFamily: "var(--font-mono)",
-                                                                color: "var(--color-text-primary)",
-                                                                wordBreak: "break-word",
-                                                            }}
-                                                        >
+                                                        <div className="verb-compile-error-tokens">
                                                             {error.expectedTokens.join(", ")}
                                                         </div>
                                                     </div>
@@ -1884,51 +1706,23 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                                         {/* Hints section (notes) */}
                                         {error.type === "parse" && error.notes && error.notes.length > 0 && (
-                                            <div style={{ marginTop: "4px" }}>
+                                            <div className="verb-compile-error-details">
                                                 <button
-                                                    onClick={() =>
-                                                        toggleErrorExpanded(index + 1000)}
-                                                    style={{
-                                                        padding: "3px 8px",
-                                                        backgroundColor: "transparent",
-                                                        color: "var(--color-accent)",
-                                                        border:
-                                                            "1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)",
-                                                        borderRadius: "var(--radius-sm)",
-                                                        cursor: "pointer",
-                                                        fontSize: "0.85em",
-                                                    }}
+                                                    onClick={() => toggleErrorExpanded(index + 1000)}
+                                                    className="verb-compile-error-toggle hints"
                                                 >
                                                     {expandedErrors.has(index + 1000) ? "▼" : "▶"}{" "}
                                                     {expandedErrors.has(index + 1000) ? "Hide" : "Show"} hints
                                                 </button>
 
                                                 {expandedErrors.has(index + 1000) && (
-                                                    <div
-                                                        style={{
-                                                            marginTop: "8px",
-                                                            padding: "8px",
-                                                            backgroundColor: "var(--color-bg-secondary)",
-                                                            borderRadius: "var(--radius-sm)",
-                                                            fontSize: "0.9em",
-                                                            color: "var(--color-text-primary)",
-                                                            borderLeft:
-                                                                "2px solid color-mix(in srgb, var(--color-accent) 80%, white)",
-                                                        }}
-                                                    >
-                                                        <div
-                                                            style={{
-                                                                color:
-                                                                    "color-mix(in srgb, var(--color-accent) 80%, white)",
-                                                                fontWeight: "600",
-                                                                marginBottom: "4px",
-                                                            }}
-                                                        >
+                                                    <div className="verb-compile-error-expanded hints">
+                                                        <div className="verb-compile-error-expanded-title hints">
                                                             Hints:
                                                         </div>
-                                                        <ul style={{ margin: 0, paddingLeft: "20px" }}>
+                                                        <ul className="verb-compile-error-hints">
                                                             {error.notes.map((note, noteIndex) => (
-                                                                <li key={noteIndex} style={{ marginBottom: "4px" }}>
+                                                                <li key={noteIndex} className="verb-compile-error-hint">
                                                                     {note}
                                                                 </li>
                                                             ))}
@@ -1947,19 +1741,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
             {/* Success banner */}
             {compileSuccess && (
-                <div
-                    style={{
-                        padding: "var(--space-sm)",
-                        backgroundColor: "#10b981",
-                        borderTop: "1px solid var(--color-border-light)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-sm)",
-                    }}
-                >
-                    <span style={{ fontSize: "1.2em" }}>✓</span>
-                    <span style={{ color: "white", fontWeight: "600" }}>
+                <div className="verb-compile-success">
+                    <span className="verb-compile-success-icon">✓</span>
+                    <span className="verb-compile-success-text">
                         Verb compiled successfully
                     </span>
                 </div>
@@ -1967,54 +1751,26 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
             {/* Verb metadata info panel */}
             {(owner || definer || permissions || argspec) && (
-                <div
-                    style={{
-                        padding: "var(--space-sm) var(--space-md)",
-                        backgroundColor: "var(--color-bg-tertiary)",
-                        borderTop: "1px solid var(--color-border-light)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                        fontSize: "0.9em",
-                        display: "flex",
-                        gap: "var(--space-md)",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                    }}
-                >
+                <div className="verb-metadata-panel">
                     {/* Definer - read-only, visually separated */}
                     {definer && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.6 }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="verb-metadata-item readonly">
+                            <span className="verb-metadata-label">
                                 Definer:
                             </span>
-                            <span
-                                style={{
-                                    fontFamily: "var(--font-mono)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    padding: "2px 6px",
-                                    fontSize: "0.95em",
-                                }}
-                            >
+                            <span className="verb-metadata-value">
                                 #{definer}
                             </span>
                         </div>
                     )}
 
                     {/* Separator bar */}
-                    {definer && (owner || permissions || argspec) && (
-                        <div
-                            style={{
-                                width: "1px",
-                                height: "20px",
-                                backgroundColor: "var(--color-border-medium)",
-                            }}
-                        />
-                    )}
+                    {definer && (owner || permissions || argspec) && <div className="verb-metadata-separator" />}
 
                     {/* Owner - editable */}
                     {owner && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="verb-metadata-item">
+                            <span className="verb-metadata-label">
                                 Owner:
                             </span>
                             {isEditingOwner
@@ -2023,15 +1779,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                         type="text"
                                         value={editOwnerValue}
                                         onChange={(e) => setEditOwnerValue(e.target.value)}
-                                        style={{
-                                            fontFamily: "var(--font-mono)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            padding: "2px 6px",
-                                            fontSize: "0.95em",
-                                            width: "80px",
-                                            backgroundColor: "var(--color-bg-input)",
-                                        }}
+                                        className="verb-metadata-input"
                                         onKeyDown={(e) => {
                                             if (e.key === "Enter") {
                                                 handleSaveMetadata();
@@ -2046,16 +1794,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 : (
                                     <button
                                         onClick={() => setIsEditingOwner(true)}
-                                        style={{
-                                            background: "none",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            color: "var(--color-text-primary)",
-                                            cursor: "pointer",
-                                            padding: "2px 6px",
-                                            fontFamily: "var(--font-mono)",
-                                            fontSize: "0.95em",
-                                        }}
+                                        className="verb-metadata-button"
                                     >
                                         #{owner}
                                     </button>
@@ -2065,88 +1804,40 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                     {/* Permissions - editable */}
                     {permissions && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="verb-metadata-item">
+                            <span className="verb-metadata-label">
                                 Perms:
                             </span>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    gap: "4px",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    padding: "2px 4px",
-                                }}
-                            >
-                                <label
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "2px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: "0.95em",
-                                    }}
-                                >
+                            <div className="verb-metadata-permissions">
+                                <label className="verb-metadata-permission-label">
                                     <input
                                         type="checkbox"
                                         checked={editPermissions.readable}
                                         onChange={() => handleTogglePermission("readable")}
-                                        style={{ cursor: "pointer" }}
                                     />
                                     r
                                 </label>
-                                <label
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "2px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: "0.95em",
-                                    }}
-                                >
+                                <label className="verb-metadata-permission-label">
                                     <input
                                         type="checkbox"
                                         checked={editPermissions.writable}
                                         onChange={() => handleTogglePermission("writable")}
-                                        style={{ cursor: "pointer" }}
                                     />
                                     w
                                 </label>
-                                <label
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "2px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: "0.95em",
-                                    }}
-                                >
+                                <label className="verb-metadata-permission-label">
                                     <input
                                         type="checkbox"
                                         checked={editPermissions.executable}
                                         onChange={() => handleTogglePermission("executable")}
-                                        style={{ cursor: "pointer" }}
                                     />
                                     x
                                 </label>
-                                <label
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "2px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: "0.95em",
-                                    }}
-                                >
+                                <label className="verb-metadata-permission-label">
                                     <input
                                         type="checkbox"
                                         checked={editPermissions.debug}
                                         onChange={() => handleTogglePermission("debug")}
-                                        style={{ cursor: "pointer" }}
                                     />
                                     d
                                 </label>
@@ -2156,19 +1847,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
                     {/* Argspec - read-only for now */}
                     {argspec && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="verb-metadata-item">
+                            <span className="verb-metadata-label">
                                 Argspec:
                             </span>
-                            <span
-                                style={{
-                                    fontFamily: "var(--font-mono)",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    padding: "2px 6px",
-                                    fontSize: "0.95em",
-                                }}
-                            >
+                            <span className="verb-metadata-value">
                                 {argspec.dobj} {argspec.prep} {argspec.iobj}
                             </span>
                         </div>
@@ -2232,14 +1915,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             )}
 
             {/* Monaco Editor */}
-            <div
-                style={{
-                    flex: 1,
-                    minHeight: 0,
-                    position: "relative",
-                    overflow: "hidden", // Prevent rendering artifacts
-                }}
-            >
+            <div className="editor-monaco-wrapper">
                 <Editor
                     value={content}
                     language="moo"
@@ -2305,58 +1981,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             } as unknown as React.MouseEvent<HTMLDivElement>);
                         }
                     }}
-                    style={{
-                        position: "absolute",
-                        bottom: 0,
-                        right: 0,
-                        width: "22px",
-                        height: "22px",
-                        cursor: "nwse-resize",
-                        borderBottomRightRadius: "var(--radius-lg)",
-                        borderTopLeftRadius: "6px",
-                        backgroundColor: "var(--color-surface-raised)",
-                        borderTop: "1px solid var(--color-border-medium)",
-                        borderLeft: "1px solid var(--color-border-medium)",
-                        boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.1)",
-                        zIndex: 5,
-                    }}
+                    className="editor-resize-handle"
                 >
-                    <div
-                        style={{
-                            position: "absolute",
-                            inset: "4px",
-                            borderBottom: "2px solid var(--color-border-strong)",
-                            borderRight: "2px solid var(--color-border-strong)",
-                            borderBottomRightRadius: "4px",
-                            pointerEvents: "none",
-                        }}
-                    />
-                    <div
-                        style={{
-                            position: "absolute",
-                            right: "6px",
-                            bottom: "6px",
-                            width: "10px",
-                            height: "10px",
-                            clipPath: "polygon(0 100%, 100% 0, 100% 100%)",
-                            background:
-                                "linear-gradient(135deg, transparent 0%, transparent 30%, var(--color-border-strong) 30%, var(--color-border-strong) 50%, transparent 50%)",
-                            pointerEvents: "none",
-                        }}
-                    />
-                    <span
-                        aria-hidden="true"
-                        style={{
-                            position: "absolute",
-                            right: "4px",
-                            bottom: "2px",
-                            fontSize: "14px",
-                            color: "var(--color-border-strong)",
-                            lineHeight: 1,
-                            pointerEvents: "none",
-                            userSelect: "none",
-                        }}
-                    >
+                    <div className="editor-resize-handle-border" />
+                    <div className="editor-resize-handle-grip" />
+                    <span aria-hidden="true" className="editor-resize-handle-icon">
                         ↘
                     </span>
                 </div>

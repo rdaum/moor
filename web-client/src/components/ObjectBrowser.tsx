@@ -1207,30 +1207,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
     const baseFontSize = fontSize;
     const secondaryFontSize = Math.max(8, fontSize - 1);
-    const inheritedLabelStyle = {
-        padding: "var(--space-xs) var(--space-sm)",
-        backgroundColor: "var(--color-bg-secondary)",
-        borderTop: "1px solid var(--color-border-medium)",
-        borderBottom: "1px solid var(--color-border-light)",
-        fontSize: `${secondaryFontSize}px`,
-        fontWeight: 600,
-        color: "var(--color-text-secondary)",
-        fontFamily: "var(--font-mono)",
-    } as const;
-    const inheritedToggleButtonStyle = (active: boolean): React.CSSProperties => ({
-        width: "22px",
-        height: "22px",
-        borderRadius: "50%",
-        border: "1px solid var(--color-border-medium)",
-        backgroundColor: active ? "var(--color-text-primary)" : "transparent",
-        color: active ? "var(--color-bg-input)" : "var(--color-text-secondary)",
-        cursor: "pointer",
-        fontSize: "11px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        transition: "background-color 0.2s ease",
-    });
 
     const objectTypeOptions = (() => {
         const options: Array<{ value: string; label: string }> = [];
@@ -1398,15 +1374,10 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             >
                 {/* Title bar */}
                 <div
+                    className="editor-title-bar"
                     onMouseDown={titleMouseDownHandler}
                     onTouchStart={titleTouchStartHandler}
                     style={{
-                        padding: "var(--space-md)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        backgroundColor: "var(--color-bg-header)",
                         borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
                         cursor: isSplitDraggable
                             ? "row-resize"
@@ -1414,53 +1385,27 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         touchAction: isSplitDraggable ? "none" : "auto",
                     }}
                 >
-                    <h3
-                        id="object-browser-title"
-                        style={{
-                            margin: 0,
-                            color: "var(--color-text-primary)",
-                            fontWeight: "700",
-                        }}
-                    >
+                    <h3 id="object-browser-title" className="editor-title">
                         Object Browser
                     </h3>
-                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
-                                padding: "2px 6px",
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
+                    <div className="flex gap-sm">
+                        <div className="font-size-control" onClick={(e) => e.stopPropagation()}>
                             <button
                                 onClick={decreaseFontSize}
                                 aria-label="Decrease browser font size"
+                                className="font-size-button"
                                 style={{
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "var(--color-text-secondary)",
                                     cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
                                     opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
                                     fontSize: `${secondaryFontSize}px`,
-                                    padding: "2px 4px",
                                 }}
                                 disabled={fontSize <= MIN_FONT_SIZE}
                             >
                                 –
                             </button>
                             <span
-                                style={{
-                                    fontFamily: "var(--font-mono)",
-                                    fontSize: `${secondaryFontSize}px`,
-                                    color: "var(--color-text-secondary)",
-                                    minWidth: "38px",
-                                    textAlign: "center",
-                                }}
+                                className="font-size-display"
+                                style={{ fontSize: `${secondaryFontSize}px` }}
                                 aria-live="polite"
                             >
                                 {fontSize}px
@@ -1468,47 +1413,24 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             <button
                                 onClick={increaseFontSize}
                                 aria-label="Increase browser font size"
+                                className="font-size-button"
                                 style={{
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "var(--color-text-secondary)",
                                     cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
                                     opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
                                     fontSize: `${secondaryFontSize}px`,
-                                    padding: "2px 4px",
                                 }}
                                 disabled={fontSize >= MAX_FONT_SIZE}
                             >
                                 +
                             </button>
                         </div>
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "999px",
-                                padding: "4px 8px",
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <span
-                                style={{
-                                    fontSize: "10px",
-                                    color: "var(--color-text-secondary)",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    fontWeight: 600,
-                                    fontFamily: "var(--font-sans)",
-                                    opacity: 0.8,
-                                }}
-                            >
+                        <div className="browser-inherited-controls" onClick={(e) => e.stopPropagation()}>
+                            <span className="browser-inherited-label-text">
                                 Inherited
                             </span>
                             <button
                                 type="button"
+                                className={`browser-inherited-toggle ${showInheritedProperties ? "active" : ""}`}
                                 onClick={() => setShowInheritedProperties(prev => !prev)}
                                 aria-label={showInheritedProperties
                                     ? "Hide inherited properties"
@@ -1516,16 +1438,15 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 title={showInheritedProperties
                                     ? "Hide inherited properties"
                                     : "Show inherited properties"}
-                                style={inheritedToggleButtonStyle(showInheritedProperties)}
                             >
                                 P
                             </button>
                             <button
                                 type="button"
+                                className={`browser-inherited-toggle ${showInheritedVerbs ? "active" : ""}`}
                                 onClick={() => setShowInheritedVerbs(prev => !prev)}
                                 aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
                                 title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
-                                style={inheritedToggleButtonStyle(showInheritedVerbs)}
                             >
                                 V
                             </button>
@@ -1533,38 +1454,22 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         {/* Split/Float toggle button - only on desktop */}
                         {!isMobile && onToggleSplitMode && (
                             <button
+                                className="browser-mode-toggle"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onToggleSplitMode();
                                 }}
                                 aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                                 title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                                style={{
-                                    background: "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: "var(--color-text-secondary)",
-                                    padding: "4px 6px",
-                                    fontSize: `${secondaryFontSize}px`,
-                                    display: "flex",
-                                    alignItems: "center",
-                                }}
+                                style={{ fontSize: `${secondaryFontSize}px` }}
                             >
                                 {isInSplitMode ? "🪟" : "⇅"}
                             </button>
                         )}
                         <button
+                            className="editor-btn-close"
                             onClick={onClose}
                             aria-label="Close object browser"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                fontSize: "1.2em",
-                                cursor: "pointer",
-                                color: "var(--color-text-secondary)",
-                                padding: "4px 8px",
-                            }}
                         >
                             <span aria-hidden="true">×</span>
                         </button>
@@ -1572,111 +1477,54 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 </div>
 
                 {/* Main content area - 3 panes + editor */}
-                <div
-                    style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        overflow: "hidden",
-                    }}
-                >
+                <div className="browser-content">
                     {/* Top area - 3 panes */}
                     <div
+                        className="browser-panes"
                         style={{
                             height: (editorVisible || selectedObject)
                                 ? `${browserPaneHeight}px`
                                 : "100%",
-                            display: "flex",
-                            overflow: "hidden",
-                            flexShrink: 0,
                         }}
                     >
                         {/* Objects pane */}
-                        <div
-                            style={{
-                                width: "33.33%",
-                                borderRight: "1px solid var(--color-border-light)",
-                                display: "flex",
-                                flexDirection: "column",
-                                overflow: "hidden",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    padding: "var(--space-xs) var(--space-sm)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    borderBottom: "1px solid var(--color-border-light)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                }}
-                            >
+                        <div className="browser-pane">
+                            <div className="browser-pane-header">
                                 <span
-                                    style={{
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        fontSize: `${secondaryFontSize}px`,
-                                        color: "var(--color-text-secondary)",
-                                        fontWeight: 600,
-                                    }}
+                                    className="browser-pane-title"
+                                    style={{ fontSize: `${secondaryFontSize}px` }}
                                 >
                                     Objects
                                 </span>
                                 <button
                                     type="button"
+                                    className="btn btn-sm"
                                     onClick={() => {
                                         setShowCreateDialog(true);
                                     }}
-                                    style={{
-                                        padding: "2px 8px",
-                                        fontSize: `${secondaryFontSize}px`,
-                                        backgroundColor: "var(--color-bg-tertiary)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        borderRadius: "var(--radius-sm)",
-                                        color: "var(--color-text-primary)",
-                                        cursor: "pointer",
-                                        fontWeight: 600,
-                                    }}
+                                    style={{ fontSize: `${secondaryFontSize}px` }}
                                     title="Add new object"
                                 >
-                                    Add
+                                    + Add
                                 </button>
                             </div>
-                            <div
-                                style={{
-                                    padding: "var(--space-sm)",
-                                    borderBottom: "1px solid var(--color-border-light)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                }}
-                            >
+                            <div className="p-sm border-bottom bg-secondary">
                                 <input
                                     type="text"
                                     placeholder="Filter objects..."
                                     value={filter}
                                     onChange={(e) => setFilter(e.target.value)}
-                                    style={{
-                                        width: "100%",
-                                        padding: "var(--space-xs)",
-                                        backgroundColor: "var(--color-bg-input)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        borderRadius: "var(--radius-sm)",
-                                        color: "var(--color-text-primary)",
-                                        fontSize: `${baseFontSize}px`,
-                                    }}
+                                    className="w-full p-xs border rounded-sm"
+                                    style={{ fontSize: `${baseFontSize}px` }}
                                 />
                             </div>
                             <div
-                                style={{
-                                    flex: 1,
-                                    overflowY: "auto",
-                                    fontSize: `${baseFontSize}px`,
-                                }}
+                                className="browser-pane-content"
+                                style={{ fontSize: `${baseFontSize}px` }}
                             >
                                 {isLoading
                                     ? (
-                                        <div
-                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
-                                        >
+                                        <div className="p-md text-secondary">
                                             Loading objects...
                                         </div>
                                     )
@@ -1686,42 +1534,23 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                             {numericObjects.map((obj) => (
                                                 <div
                                                     key={obj.obj}
+                                                    className={`browser-item ${
+                                                        selectedObject?.obj === obj.obj ? "selected" : ""
+                                                    }`}
                                                     onClick={() => handleObjectSelect(obj)}
-                                                    style={{
-                                                        padding: "var(--space-xs) var(--space-sm)",
-                                                        cursor: "pointer",
-                                                        backgroundColor: selectedObject?.obj === obj.obj
-                                                            ? "var(--color-text-primary)"
-                                                            : "transparent",
-                                                        color: selectedObject?.obj === obj.obj
-                                                            ? "var(--color-bg-input)"
-                                                            : "inherit",
-                                                        borderBottom: "1px solid var(--color-border-light)",
-                                                        fontFamily: "var(--font-mono)",
-                                                    }}
-                                                    onMouseEnter={(e) => {
-                                                        if (selectedObject?.obj !== obj.obj) {
-                                                            e.currentTarget.style.backgroundColor =
-                                                                "var(--color-bg-hover)";
-                                                        }
-                                                    }}
-                                                    onMouseLeave={(e) => {
-                                                        if (selectedObject?.obj !== obj.obj) {
-                                                            e.currentTarget.style.backgroundColor = "transparent";
-                                                        }
-                                                    }}
                                                 >
-                                                    <div style={{ fontWeight: "600" }}>
+                                                    <div className="browser-item-name font-bold">
                                                         #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
                                                         {formatObjectFlags(obj.flags) && (
                                                             <span
+                                                                className="text-secondary"
                                                                 style={{
                                                                     opacity: selectedObject?.obj === obj.obj
                                                                         ? "0.7"
                                                                         : "1",
                                                                     color: selectedObject?.obj === obj.obj
                                                                         ? "inherit"
-                                                                        : "var(--color-text-secondary)",
+                                                                        : undefined,
                                                                     fontWeight: "400",
                                                                 }}
                                                             >
@@ -1736,15 +1565,10 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                             {uuidObjects.length > 0 && (
                                                 <>
                                                     <div
+                                                        className="browser-inherited-label"
                                                         style={{
-                                                            padding: "var(--space-xs) var(--space-sm)",
-                                                            backgroundColor: "var(--color-bg-secondary)",
                                                             borderTop: "2px solid var(--color-border-medium)",
-                                                            borderBottom: "1px solid var(--color-border-light)",
                                                             fontSize: `${secondaryFontSize}px`,
-                                                            fontWeight: "600",
-                                                            color: "var(--color-text-secondary)",
-                                                            fontFamily: "var(--font-mono)",
                                                         }}
                                                     >
                                                         UUID Objects
@@ -1752,43 +1576,23 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                     {uuidObjects.map((obj) => (
                                                         <div
                                                             key={obj.obj}
+                                                            className={`browser-item ${
+                                                                selectedObject?.obj === obj.obj ? "selected" : ""
+                                                            }`}
                                                             onClick={() => handleObjectSelect(obj)}
-                                                            style={{
-                                                                padding: "var(--space-xs) var(--space-sm)",
-                                                                cursor: "pointer",
-                                                                backgroundColor: selectedObject?.obj === obj.obj
-                                                                    ? "var(--color-text-primary)"
-                                                                    : "transparent",
-                                                                color: selectedObject?.obj === obj.obj
-                                                                    ? "var(--color-bg-input)"
-                                                                    : "inherit",
-                                                                borderBottom: "1px solid var(--color-border-light)",
-                                                                fontFamily: "var(--font-mono)",
-                                                            }}
-                                                            onMouseEnter={(e) => {
-                                                                if (selectedObject?.obj !== obj.obj) {
-                                                                    e.currentTarget.style.backgroundColor =
-                                                                        "var(--color-bg-hover)";
-                                                                }
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                if (selectedObject?.obj !== obj.obj) {
-                                                                    e.currentTarget.style.backgroundColor =
-                                                                        "transparent";
-                                                                }
-                                                            }}
                                                         >
-                                                            <div style={{ fontWeight: "600" }}>
+                                                            <div className="browser-item-name font-bold">
                                                                 #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
                                                                 {formatObjectFlags(obj.flags) && (
                                                                     <span
+                                                                        className="text-secondary"
                                                                         style={{
                                                                             opacity: selectedObject?.obj === obj.obj
                                                                                 ? "0.7"
                                                                                 : "1",
                                                                             color: selectedObject?.obj === obj.obj
                                                                                 ? "inherit"
-                                                                                : "var(--color-text-secondary)",
+                                                                                : undefined,
                                                                             fontWeight: "400",
                                                                         }}
                                                                     >
@@ -1806,39 +1610,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
 
                         {/* Properties pane */}
-                        <div
-                            style={{
-                                width: "33.33%",
-                                borderRight: "1px solid var(--color-border-light)",
-                                display: "flex",
-                                flexDirection: "column",
-                                overflow: "hidden",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    padding: "var(--space-xs) var(--space-sm)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    borderBottom: "1px solid var(--color-border-light)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                }}
-                            >
+                        <div className="browser-pane">
+                            <div className="browser-pane-header">
                                 <span
-                                    style={{
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        fontSize: `${secondaryFontSize}px`,
-                                        color: "var(--color-text-secondary)",
-                                        fontWeight: 600,
-                                    }}
+                                    className="browser-pane-title"
+                                    style={{ fontSize: `${secondaryFontSize}px` }}
                                 >
                                     Properties
                                 </span>
                                 {selectedObject && (
                                     <button
                                         type="button"
+                                        className="btn btn-sm"
                                         onClick={() => {
                                             setAddPropertyDialogError(null);
                                             setActionMessage(null);
@@ -1848,64 +1631,38 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         aria-label="Add property"
                                         title="Add property"
                                         style={{
-                                            padding: "4px 8px",
-                                            borderRadius: "var(--radius-sm)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            backgroundColor: "var(--color-bg-secondary)",
-                                            color: "var(--color-text-primary)",
                                             cursor: isSubmittingAddProperty ? "not-allowed" : "pointer",
                                             opacity: isSubmittingAddProperty ? 0.6 : 1,
                                             fontSize: `${secondaryFontSize}px`,
-                                            fontWeight: 600,
                                         }}
                                     >
                                         + Add
                                     </button>
                                 )}
                             </div>
-                            <div
-                                style={{
-                                    padding: "var(--space-sm)",
-                                    borderBottom: "1px solid var(--color-border-light)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                }}
-                            >
+                            <div className="p-sm border-bottom bg-secondary">
                                 <input
                                     type="text"
                                     placeholder="Filter properties..."
                                     value={propertyFilter}
                                     onChange={(e) => setPropertyFilter(e.target.value)}
-                                    style={{
-                                        width: "100%",
-                                        padding: "var(--space-xs)",
-                                        backgroundColor: "var(--color-bg-input)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        borderRadius: "var(--radius-sm)",
-                                        color: "var(--color-text-primary)",
-                                        fontSize: `${baseFontSize}px`,
-                                    }}
+                                    className="w-full p-xs border rounded-sm"
+                                    style={{ fontSize: `${baseFontSize}px` }}
                                 />
                             </div>
                             <div
-                                style={{
-                                    flex: 1,
-                                    overflowY: "auto",
-                                    fontSize: `${baseFontSize}px`,
-                                }}
+                                className="browser-pane-content"
+                                style={{ fontSize: `${baseFontSize}px` }}
                             >
                                 {!selectedObject
                                     ? (
-                                        <div
-                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
-                                        >
+                                        <div className="p-md text-secondary">
                                             Select an object to view properties
                                         </div>
                                     )
                                     : properties.length === 0
                                     ? (
-                                        <div
-                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
-                                        >
+                                        <div className="p-md text-secondary">
                                             No properties
                                         </div>
                                     )
@@ -1913,49 +1670,28 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         groupedProperties.map(([definer, props], _groupIdx) => (
                                             <div key={definer}>
                                                 {definer !== selectedObject.obj && showInheritedProperties && (
-                                                    <div style={inheritedLabelStyle}>
+                                                    <div
+                                                        className="browser-inherited-label"
+                                                        style={{ fontSize: `${secondaryFontSize}px` }}
+                                                    >
                                                         from {normalizeObjectRef(definer).display}
                                                     </div>
                                                 )}
                                                 {props.map((prop, idx) => (
                                                     <div
                                                         key={`${definer}-${idx}`}
+                                                        className={`browser-item ${
+                                                            selectedProperty?.name === prop.name
+                                                                && selectedProperty?.definer === prop.definer
+                                                                ? "selected"
+                                                                : ""
+                                                        }`}
                                                         onClick={() => handlePropertySelect(prop)}
-                                                        style={{
-                                                            padding: "var(--space-xs) var(--space-sm)",
-                                                            cursor: "pointer",
-                                                            backgroundColor: selectedProperty?.name === prop.name
-                                                                    && selectedProperty?.definer === prop.definer
-                                                                ? "var(--color-text-primary)"
-                                                                : "transparent",
-                                                            color: selectedProperty?.name === prop.name
-                                                                    && selectedProperty?.definer === prop.definer
-                                                                ? "var(--color-bg-input)"
-                                                                : "inherit",
-                                                            borderBottom: "1px solid var(--color-border-light)",
-                                                            fontFamily: "var(--font-mono)",
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            if (
-                                                                selectedProperty?.name !== prop.name
-                                                                || selectedProperty?.definer !== prop.definer
-                                                            ) {
-                                                                e.currentTarget.style.backgroundColor =
-                                                                    "var(--color-bg-hover)";
-                                                            }
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            if (
-                                                                selectedProperty?.name !== prop.name
-                                                                || selectedProperty?.definer !== prop.definer
-                                                            ) {
-                                                                e.currentTarget.style.backgroundColor = "transparent";
-                                                            }
-                                                        }}
                                                     >
-                                                        <div style={{ fontWeight: "600" }}>
+                                                        <div className="browser-item-name font-bold">
                                                             {prop.name}{" "}
                                                             <span
+                                                                className="text-secondary"
                                                                 style={{
                                                                     opacity: selectedProperty?.name === prop.name
                                                                             && selectedProperty?.definer
@@ -1966,7 +1702,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                             && selectedProperty?.definer
                                                                                 === prop.definer
                                                                         ? "inherit"
-                                                                        : "var(--color-text-secondary)",
+                                                                        : undefined,
                                                                     fontWeight: "400",
                                                                     fontSize: `${secondaryFontSize}px`,
                                                                 }}
@@ -1984,38 +1720,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
 
                         {/* Verbs pane */}
-                        <div
-                            style={{
-                                width: "33.33%",
-                                display: "flex",
-                                flexDirection: "column",
-                                overflow: "hidden",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    padding: "var(--space-xs) var(--space-sm)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                    borderBottom: "1px solid var(--color-border-light)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                }}
-                            >
+                        <div className="browser-pane">
+                            <div className="browser-pane-header">
                                 <span
-                                    style={{
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        fontSize: `${secondaryFontSize}px`,
-                                        color: "var(--color-text-secondary)",
-                                        fontWeight: 600,
-                                    }}
+                                    className="browser-pane-title"
+                                    style={{ fontSize: `${secondaryFontSize}px` }}
                                 >
                                     Verbs
                                 </span>
                                 {selectedObject && (
                                     <button
                                         type="button"
+                                        className="btn btn-sm"
                                         onClick={() => {
                                             setAddVerbDialogError(null);
                                             setActionMessage(null);
@@ -2025,64 +1741,38 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         aria-label="Add verb"
                                         title="Add verb"
                                         style={{
-                                            padding: "4px 8px",
-                                            borderRadius: "var(--radius-sm)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            backgroundColor: "var(--color-bg-secondary)",
-                                            color: "var(--color-text-primary)",
                                             cursor: isSubmittingAddVerb ? "not-allowed" : "pointer",
                                             opacity: isSubmittingAddVerb ? 0.6 : 1,
                                             fontSize: `${secondaryFontSize}px`,
-                                            fontWeight: 600,
                                         }}
                                     >
                                         + Add
                                     </button>
                                 )}
                             </div>
-                            <div
-                                style={{
-                                    padding: "var(--space-sm)",
-                                    borderBottom: "1px solid var(--color-border-light)",
-                                    backgroundColor: "var(--color-bg-secondary)",
-                                }}
-                            >
+                            <div className="p-sm border-bottom bg-secondary">
                                 <input
                                     type="text"
                                     placeholder="Filter verbs..."
                                     value={verbFilter}
                                     onChange={(e) => setVerbFilter(e.target.value)}
-                                    style={{
-                                        width: "100%",
-                                        padding: "var(--space-xs)",
-                                        backgroundColor: "var(--color-bg-input)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        borderRadius: "var(--radius-sm)",
-                                        color: "var(--color-text-primary)",
-                                        fontSize: `${baseFontSize}px`,
-                                    }}
+                                    className="w-full p-xs border rounded-sm"
+                                    style={{ fontSize: `${baseFontSize}px` }}
                                 />
                             </div>
                             <div
-                                style={{
-                                    flex: 1,
-                                    overflowY: "auto",
-                                    fontSize: `${baseFontSize}px`,
-                                }}
+                                className="browser-pane-content"
+                                style={{ fontSize: `${baseFontSize}px` }}
                             >
                                 {!selectedObject
                                     ? (
-                                        <div
-                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
-                                        >
+                                        <div className="p-md text-secondary">
                                             Select an object to view verbs
                                         </div>
                                     )
                                     : verbs.length === 0
                                     ? (
-                                        <div
-                                            style={{ padding: "var(--space-md)", color: "var(--color-text-secondary)" }}
-                                        >
+                                        <div className="p-md text-secondary">
                                             No verbs
                                         </div>
                                     )
@@ -2090,53 +1780,29 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         groupedVerbs.map(([location, verbList], _groupIdx) => (
                                             <div key={location}>
                                                 {location !== selectedObject.obj && showInheritedVerbs && (
-                                                    <div style={inheritedLabelStyle}>
+                                                    <div
+                                                        className="browser-inherited-label"
+                                                        style={{ fontSize: `${secondaryFontSize}px` }}
+                                                    >
                                                         from {normalizeObjectRef(location).display}
                                                     </div>
                                                 )}
                                                 {verbList.map((verb, idx) => (
                                                     <div
                                                         key={`${location}-${idx}`}
+                                                        className={`browser-item ${
+                                                            selectedVerb?.location === verb.location
+                                                                && selectedVerb?.indexInLocation
+                                                                    === verb.indexInLocation
+                                                                ? "selected"
+                                                                : ""
+                                                        }`}
                                                         onClick={() => handleVerbSelect(verb)}
-                                                        style={{
-                                                            padding: "var(--space-xs) var(--space-sm)",
-                                                            cursor: "pointer",
-                                                            backgroundColor: selectedVerb?.location === verb.location
-                                                                    && selectedVerb?.indexInLocation
-                                                                        === verb.indexInLocation
-                                                                ? "var(--color-text-primary)"
-                                                                : "transparent",
-                                                            color: selectedVerb?.location === verb.location
-                                                                    && selectedVerb?.indexInLocation
-                                                                        === verb.indexInLocation
-                                                                ? "var(--color-bg-input)"
-                                                                : "inherit",
-                                                            borderBottom: "1px solid var(--color-border-light)",
-                                                            fontFamily: "var(--font-mono)",
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            if (
-                                                                selectedVerb?.location !== verb.location
-                                                                || selectedVerb?.indexInLocation
-                                                                    !== verb.indexInLocation
-                                                            ) {
-                                                                e.currentTarget.style.backgroundColor =
-                                                                    "var(--color-bg-hover)";
-                                                            }
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            if (
-                                                                selectedVerb?.location !== verb.location
-                                                                || selectedVerb?.indexInLocation
-                                                                    !== verb.indexInLocation
-                                                            ) {
-                                                                e.currentTarget.style.backgroundColor = "transparent";
-                                                            }
-                                                        }}
                                                     >
-                                                        <div style={{ fontWeight: "600" }}>
+                                                        <div className="browser-item-name font-bold">
                                                             {verb.names.join(" ")}{" "}
                                                             <span
+                                                                className="text-secondary"
                                                                 style={{
                                                                     opacity: selectedVerb?.location === verb.location
                                                                             && selectedVerb?.indexInLocation
@@ -2147,7 +1813,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                                             && selectedVerb?.indexInLocation
                                                                                 === verb.indexInLocation
                                                                         ? "inherit"
-                                                                        : "var(--color-text-secondary)",
+                                                                        : undefined,
                                                                     fontWeight: "400",
                                                                     fontSize: `${secondaryFontSize}px`,
                                                                 }}
@@ -2175,34 +1841,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     {/* Draggable splitter bar */}
                     {(editorVisible || selectedObject) && (
                         <div
+                            className={`browser-resize-handle ${isSplitDragging ? "dragging" : ""}`}
                             onMouseDown={handleSplitDragStart}
                             style={{
-                                height: "4px",
-                                backgroundColor: "var(--color-border-medium)",
-                                cursor: "row-resize",
                                 position: "relative",
                                 zIndex: 10,
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--color-text-primary)";
-                            }}
-                            onMouseLeave={(e) => {
-                                if (!isSplitDragging) {
-                                    e.currentTarget.style.backgroundColor = "var(--color-border-medium)";
-                                }
                             }}
                         />
                     )}
 
                     {/* Bottom editor area */}
                     {(editorVisible || selectedObject) && (
-                        <div
-                            style={{
-                                flex: 1,
-                                overflow: "hidden",
-                                backgroundColor: "var(--color-bg-secondary)",
-                            }}
-                        >
+                        <div className="flex-1 overflow-hidden bg-secondary">
                             {selectedObject && !selectedProperty && !selectedVerb && (
                                 <ObjectInfoEditor
                                     object={selectedObject}
@@ -2577,49 +2227,34 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="create-object-title">Create Object</h2>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Parent (MOO expression)</span>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                    <label className="form-group">
+                        <span className="form-group-label">Parent (MOO expression)</span>
                         <input
                             type="text"
                             value={parent}
                             onChange={(e) => setParent(e.target.value)}
                             placeholder="#-1"
                             autoFocus
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Owner (MOO expression)</span>
                         <input
                             type="text"
                             value={owner}
                             onChange={(e) => setOwner(e.target.value)}
                             placeholder="player"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Object type</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Object type</span>
                         <select
                             value={objectType}
                             onChange={(e) => setObjectType(e.target.value)}
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         >
                             {objectTypeOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
@@ -2628,140 +2263,97 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
                             ))}
                         </select>
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Initialization arguments</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Initialization arguments</span>
                         <textarea
                             value={initArgs}
                             onChange={(e) => setInitArgs(e.target.value)}
                             placeholder="{}"
                             rows={3}
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                                resize: "vertical",
-                            }}
+                            className="form-input font-mono"
                         />
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                        <span className="form-group-hint">
                             Provide a MOO list literal (for example <code>{"{}"}</code> or{" "}
                             <code>{"{"}player{"}"}</code>). These arguments are passed to the object's{" "}
                             <code>:initialize</code> verb if it has one. Leave blank to skip initialization.
                         </span>
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Name (optional)</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Name (optional)</span>
                         <input
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Unnamed Object"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
                     </label>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5em" }}>
-                        <span style={{ fontWeight: 600 }}>Flags</span>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.4em" }}>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                    <div className="form-group">
+                        <span className="form-group-label">Flags</span>
+                        <div className="permission-flags">
+                            <label className="permission-flag-item">
                                 <input
                                     type="checkbox"
                                     checked={programmer}
                                     onChange={(e) => setProgrammer(e.target.checked)}
-                                    style={{ cursor: "pointer" }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>p</span>
-                                <span style={{ color: "var(--color-text-secondary)" }}>Programmer</span>
+                                <span className="permission-flag-icon">p</span>
+                                <span className="permission-flag-text">Programmer</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                            <label className="permission-flag-item">
                                 <input
                                     type="checkbox"
                                     checked={wizard}
                                     onChange={(e) => setWizard(e.target.checked)}
-                                    style={{ cursor: "pointer" }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>w</span>
-                                <span style={{ color: "var(--color-text-secondary)" }}>Wizard</span>
+                                <span className="permission-flag-icon">w</span>
+                                <span className="permission-flag-text">Wizard</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                            <label className="permission-flag-item">
                                 <input
                                     type="checkbox"
                                     checked={readable}
                                     onChange={(e) => setReadable(e.target.checked)}
-                                    style={{ cursor: "pointer" }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>r</span>
-                                <span style={{ color: "var(--color-text-secondary)" }}>Readable</span>
+                                <span className="permission-flag-icon">r</span>
+                                <span className="permission-flag-text">Readable</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                            <label className="permission-flag-item">
                                 <input
                                     type="checkbox"
                                     checked={writable}
                                     onChange={(e) => setWritable(e.target.checked)}
-                                    style={{ cursor: "pointer" }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>W</span>
-                                <span style={{ color: "var(--color-text-secondary)" }}>Writable</span>
+                                <span className="permission-flag-icon">W</span>
+                                <span className="permission-flag-text">Writable</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                            <label className="permission-flag-item">
                                 <input
                                     type="checkbox"
                                     checked={fertile}
                                     onChange={(e) => setFertile(e.target.checked)}
-                                    style={{ cursor: "pointer" }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>f</span>
-                                <span style={{ color: "var(--color-text-secondary)" }}>Fertile</span>
+                                <span className="permission-flag-icon">f</span>
+                                <span className="permission-flag-text">Fertile</span>
                             </label>
                         </div>
                     </div>
                     {errorMessage && (
-                        <div
-                            role="alert"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-text-error)",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
+                        <div role="alert" className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
+                    <div className="button-group">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary">
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isSubmitting}
+                            className="btn btn-primary"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-accent)",
-                                color: "var(--color-bg-base)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
-                                fontWeight: 700,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             {isSubmitting ? "Creating…" : "Create"}
@@ -2801,7 +2393,7 @@ const RecycleObjectDialog: React.FC<RecycleObjectDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="recycle-object-title">Recycle Object?</h2>
                 </div>
-                <div className="dialog-sheet-content" style={{ gap: "1em" }}>
+                <div className="dialog-sheet-content form-stack">
                     <div
                         style={{
                             padding: "0.75em",
@@ -2812,56 +2404,29 @@ const RecycleObjectDialog: React.FC<RecycleObjectDialogProps> = ({
                             fontFamily: "inherit",
                         }}
                     >
-                        <p style={{ margin: 0 }}>
+                        <p className="m-0">
                             Recycling <strong>{objectLabel}</strong> is irreversible. Its contents will move to{" "}
                             <code>#-1</code>
                             and <code>:recycle</code> will be invoked if defined.
                         </p>
                     </div>
                     {errorMessage && (
-                        <div
-                            role="alert"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-text-error)",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
+                        <div role="alert" className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
+                    <div className="button-group">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary">
                             Cancel
                         </button>
                         <button
                             type="button"
                             onClick={onConfirm}
                             disabled={isSubmitting}
+                            className="btn btn-danger"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-error)",
-                                color: "var(--color-bg-base)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
-                                fontWeight: 700,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             {isSubmitting ? "Recycling…" : "Recycle"}
@@ -2920,12 +2485,12 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="add-property-title">Add Property</h2>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
-                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                    <p className="m-0 text-secondary">
                         Add a new property to <strong>{objectLabel}</strong>.
                     </p>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Property name</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Property name</span>
                         <input
                             type="text"
                             value={name}
@@ -2933,63 +2498,40 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                             placeholder="prop_name"
                             autoFocus
                             required
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Initial value (MOO expression)</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Initial value (MOO expression)</span>
                         <input
                             type="text"
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             placeholder="0"
                             required
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                        <span className="form-group-hint">
                             Examples: <code>0</code>, <code>""</code>, <code>{"{}"}</code>, <code>player</code>
                         </span>
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Owner (MOO expression)</span>
                         <input
                             type="text"
                             value={owner}
                             onChange={(e) => setOwner(e.target.value)}
                             placeholder="player"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
                     </label>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Permissions</span>
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                    <div className="form-group">
+                        <span className="form-group-label">Permissions</span>
+                        <span className="form-group-hint">
                             r=read, w=write, c=chown
                         </span>
-                        <div
-                            style={{
-                                display: "flex",
-                                gap: "0.75em",
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                            }}
-                        >
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                        <div className="permission-checkboxes">
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("r")}
@@ -3001,9 +2543,9 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>r</span>
+                                <span className="permission-checkbox-label">r</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("w")}
@@ -3015,9 +2557,9 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>w</span>
+                                <span className="permission-checkbox-label">w</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("c")}
@@ -3029,53 +2571,26 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>c</span>
+                                <span className="permission-checkbox-label">c</span>
                             </label>
                         </div>
                     </div>
                     {errorMessage && (
-                        <div
-                            role="alert"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-text-error)",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
+                        <div role="alert" className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
+                    <div className="button-group">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary">
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isSubmitting}
+                            className="btn btn-primary"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-accent)",
-                                color: "var(--color-bg-base)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
-                                fontWeight: 700,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             {isSubmitting ? "Adding…" : "Add Property"}
@@ -3156,53 +2671,45 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="add-verb-title">Add Verb</h2>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
-                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                    <p className="m-0 text-secondary">
                         Add a new verb to <strong>{objectLabel}</strong>.
                     </p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Verb type</span>
-                        <div
-                            style={{
-                                display: "flex",
-                                gap: "1.5em",
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                            }}
-                        >
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                    <div className="form-group">
+                        <span className="form-group-label">Verb type</span>
+                        <div className="verb-type-selector">
+                            <label className="verb-type-option">
                                 <input
                                     type="radio"
                                     name="verbType"
                                     checked={verbType === "method"}
                                     onChange={() => handleVerbTypeChange("method")}
                                 />
-                                <div style={{ display: "flex", flexDirection: "column" }}>
-                                    <span style={{ fontWeight: 600 }}>Method</span>
-                                    <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>
+                                <div className="verb-type-description">
+                                    <span className="verb-type-title">Method</span>
+                                    <span className="verb-type-subtitle">
                                         Called from code (<code>this none this</code>, with <code>x</code>)
                                     </span>
                                 </div>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.5em", cursor: "pointer" }}>
+                            <label className="verb-type-option">
                                 <input
                                     type="radio"
                                     name="verbType"
                                     checked={verbType === "command"}
                                     onChange={() => handleVerbTypeChange("command")}
                                 />
-                                <div style={{ display: "flex", flexDirection: "column" }}>
-                                    <span style={{ fontWeight: 600 }}>Command</span>
-                                    <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>
+                                <div className="verb-type-description">
+                                    <span className="verb-type-title">Command</span>
+                                    <span className="verb-type-subtitle">
                                         Player command (e.g. <code>this none none</code>, no <code>x</code>)
                                     </span>
                                 </div>
                             </label>
                         </div>
                     </div>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Verb names (space-separated)</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Verb names (space-separated)</span>
                         <input
                             type="text"
                             value={names}
@@ -3210,47 +2717,29 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                             placeholder="get take grab"
                             autoFocus
                             required
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                        <span className="form-group-hint">
                             Example: <code>get take grab</code> creates aliases for the same verb
                         </span>
                     </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Owner (MOO expression)</span>
+                    <label className="form-group">
+                        <span className="form-group-label">Owner (MOO expression)</span>
                         <input
                             type="text"
                             value={owner}
                             onChange={(e) => setOwner(e.target.value)}
                             placeholder="player"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                fontFamily: "var(--font-mono)",
-                            }}
+                            className="form-input font-mono"
                         />
                     </label>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Permissions</span>
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: "0.85em" }}>
+                    <div className="form-group">
+                        <span className="form-group-label">Permissions</span>
+                        <span className="form-group-hint">
                             r=read, w=write, x=exec, d=raise errors (usually keep on)
                         </span>
-                        <div
-                            style={{
-                                display: "flex",
-                                gap: "0.75em",
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                            }}
-                        >
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                        <div className="permission-checkboxes">
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("r")}
@@ -3262,9 +2751,9 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>r</span>
+                                <span className="permission-checkbox-label">r</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("w")}
@@ -3276,9 +2765,9 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>w</span>
+                                <span className="permission-checkbox-label">w</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("x")}
@@ -3290,9 +2779,9 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>x</span>
+                                <span className="permission-checkbox-label">x</span>
                             </label>
-                            <label style={{ display: "flex", alignItems: "center", gap: "0.35em", cursor: "pointer" }}>
+                            <label className="permission-checkbox-item">
                                 <input
                                     type="checkbox"
                                     checked={perms.includes("d")}
@@ -3304,45 +2793,31 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                                         }
                                     }}
                                 />
-                                <span style={{ fontFamily: "var(--font-mono)" }}>d</span>
+                                <span className="permission-checkbox-label">d</span>
                             </label>
                         </div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.35em" }}>
-                        <span style={{ fontWeight: 600 }}>Verb argument specification</span>
-                        <div style={{ display: "flex", gap: "0.5em", alignItems: "center" }}>
-                            <label style={{ display: "flex", flexDirection: "column", gap: "0.25em", flex: 1 }}>
-                                <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>dobj</span>
+                    <div className="form-group">
+                        <span className="form-group-label">Verb argument specification</span>
+                        <div className="verb-argspec-grid">
+                            <label className="verb-argspec-column">
+                                <span className="verb-argspec-label">dobj</span>
                                 <select
                                     value={dobj}
                                     onChange={(e) => setDobj(e.target.value)}
-                                    style={{
-                                        padding: "0.5em",
-                                        borderRadius: "var(--radius-sm)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        fontFamily: "var(--font-mono)",
-                                        backgroundColor: "var(--color-bg-input)",
-                                        color: "var(--color-text-primary)",
-                                    }}
+                                    className="verb-argspec-select"
                                 >
                                     <option value="none">none</option>
                                     <option value="any">any</option>
                                     <option value="this">this</option>
                                 </select>
                             </label>
-                            <label style={{ display: "flex", flexDirection: "column", gap: "0.25em", flex: 1 }}>
-                                <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>prep</span>
+                            <label className="verb-argspec-column">
+                                <span className="verb-argspec-label">prep</span>
                                 <select
                                     value={prep}
                                     onChange={(e) => setPrep(e.target.value)}
-                                    style={{
-                                        padding: "0.5em",
-                                        borderRadius: "var(--radius-sm)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        fontFamily: "var(--font-mono)",
-                                        backgroundColor: "var(--color-bg-input)",
-                                        color: "var(--color-text-primary)",
-                                    }}
+                                    className="verb-argspec-select"
                                 >
                                     <option value="none">none</option>
                                     <option value="any">any</option>
@@ -3363,19 +2838,12 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                                     <option value="off">off</option>
                                 </select>
                             </label>
-                            <label style={{ display: "flex", flexDirection: "column", gap: "0.25em", flex: 1 }}>
-                                <span style={{ fontSize: "0.85em", color: "var(--color-text-secondary)" }}>iobj</span>
+                            <label className="verb-argspec-column">
+                                <span className="verb-argspec-label">iobj</span>
                                 <select
                                     value={iobj}
                                     onChange={(e) => setIobj(e.target.value)}
-                                    style={{
-                                        padding: "0.5em",
-                                        borderRadius: "var(--radius-sm)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        fontFamily: "var(--font-mono)",
-                                        backgroundColor: "var(--color-bg-input)",
-                                        color: "var(--color-text-primary)",
-                                    }}
+                                    className="verb-argspec-select"
                                 >
                                     <option value="none">none</option>
                                     <option value="any">any</option>
@@ -3385,48 +2853,21 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                         </div>
                     </div>
                     {errorMessage && (
-                        <div
-                            role="alert"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-text-error)",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
+                        <div role="alert" className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
+                    <div className="button-group">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary">
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isSubmitting}
+                            className="btn btn-primary"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-accent)",
-                                color: "var(--color-bg-base)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
-                                fontWeight: 700,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             {isSubmitting ? "Adding…" : "Add Verb"}
@@ -3468,7 +2909,7 @@ const DeleteVerbDialog: React.FC<DeleteVerbDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="delete-verb-title">Remove Verb?</h2>
                 </div>
-                <div className="dialog-sheet-content" style={{ gap: "1em" }}>
+                <div className="dialog-sheet-content form-stack">
                     <div
                         style={{
                             padding: "0.75em",
@@ -3479,55 +2920,28 @@ const DeleteVerbDialog: React.FC<DeleteVerbDialogProps> = ({
                             fontFamily: "inherit",
                         }}
                     >
-                        <p style={{ margin: 0 }}>
+                        <p className="m-0">
                             Remove verb <code>{verbName}</code> from{" "}
                             <strong>{objectLabel}</strong>? This action cannot be undone.
                         </p>
                     </div>
                     {errorMessage && (
-                        <div
-                            role="alert"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-text-error)",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
+                        <div role="alert" className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
+                    <div className="button-group">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary">
                             Cancel
                         </button>
                         <button
                             type="button"
                             onClick={onConfirm}
                             disabled={isSubmitting}
+                            className="btn btn-danger"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-error)",
-                                color: "var(--color-bg-base)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
-                                fontWeight: 700,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             {isSubmitting ? "Removing…" : "Remove Verb"}
@@ -3569,7 +2983,7 @@ const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="delete-property-title">Delete Property?</h2>
                 </div>
-                <div className="dialog-sheet-content" style={{ gap: "1em" }}>
+                <div className="dialog-sheet-content form-stack">
                     <div
                         style={{
                             padding: "0.75em",
@@ -3580,55 +2994,28 @@ const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
                             fontFamily: "inherit",
                         }}
                     >
-                        <p style={{ margin: 0 }}>
+                        <p className="m-0">
                             Delete property <code>{propertyName}</code> from{" "}
                             <strong>{objectLabel}</strong>? This action cannot be undone.
                         </p>
                     </div>
                     {errorMessage && (
-                        <div
-                            role="alert"
-                            style={{
-                                padding: "0.5em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-text-error)",
-                                backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                                color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
+                        <div role="alert" className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
+                    <div className="button-group">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary">
                             Cancel
                         </button>
                         <button
                             type="button"
                             onClick={onConfirm}
                             disabled={isSubmitting}
+                            className="btn btn-danger"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-text-error)",
-                                color: "var(--color-bg-base)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
-                                fontWeight: 700,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             {isSubmitting ? "Deleting…" : "Delete Property"}
@@ -3692,32 +3079,20 @@ const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
         onChange: (checked: boolean) => void,
         flagChar: string,
     ) => (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "12px" }}>
+        <div className="flag-checkbox-item">
             <input
                 type="checkbox"
                 checked={checked}
                 onChange={(e) => onChange(e.target.checked)}
                 disabled={isSubmitting}
-                style={{ marginTop: "2px", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+                className="flag-checkbox-input"
             />
-            <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <strong>{label}</strong>
-                    <code
-                        style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.9em",
-                            padding: "1px 4px",
-                            backgroundColor: "var(--color-bg-secondary)",
-                            borderRadius: "var(--radius-sm)",
-                        }}
-                    >
-                        {flagChar}
-                    </code>
+            <div className="flag-checkbox-content">
+                <div className="flag-checkbox-header">
+                    <strong className="flag-checkbox-label">{label}</strong>
+                    <code className="flag-char">{flagChar}</code>
                 </div>
-                <div style={{ fontSize: "0.9em", color: "var(--color-text-secondary)", marginTop: "2px" }}>
-                    {description}
-                </div>
+                <div className="flag-checkbox-description">{description}</div>
             </div>
         </div>
     );
@@ -3735,8 +3110,8 @@ const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
                 <div className="dialog-sheet-header">
                     <h2 id="edit-flags-title">Edit Object Flags</h2>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content" style={{ gap: "1em" }}>
-                    <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                    <p className="m-0 text-secondary">
                         Editing flags for <strong>{objectLabel}</strong>
                     </p>
 
@@ -3789,32 +3164,20 @@ const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
                     )}
 
                     {errorMessage && (
-                        <div
-                            style={{
-                                padding: "0.75em",
-                                backgroundColor: "var(--color-bg-error)",
-                                border: "1px solid var(--color-text-error)",
-                                borderRadius: "var(--radius-sm)",
-                                color: "var(--color-text-error)",
-                            }}
-                        >
+                        <div className="dialog-error">
                             {errorMessage}
                         </div>
                     )}
 
-                    <div style={{ display: "flex", gap: "0.5em", justifyContent: "flex-end", marginTop: "1em" }}>
+                    <div className="button-group" style={{ marginTop: "1em" }}>
                         <button
                             type="button"
                             onClick={onCancel}
                             disabled={isSubmitting}
+                            className="btn btn-secondary"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
-                                backgroundColor: "var(--color-bg-secondary)",
-                                color: "var(--color-text-primary)",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                             }}
                         >
                             Cancel
@@ -3822,14 +3185,10 @@ const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
                         <button
                             type="submit"
                             disabled={isSubmitting}
+                            className="btn btn-primary"
                             style={{
-                                padding: "0.5em 1em",
-                                borderRadius: "var(--radius-sm)",
-                                border: "none",
-                                backgroundColor: "var(--color-button-primary)",
-                                color: "white",
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 opacity: isSubmitting ? 0.6 : 1,
+                                cursor: isSubmitting ? "not-allowed" : "pointer",
                                 fontWeight: 700,
                             }}
                         >
@@ -3991,12 +3350,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
 
         if (!objectId) {
             return (
-                <span
-                    style={{
-                        fontFamily: "var(--font-mono)",
-                        color: "var(--color-text-secondary)",
-                    }}
-                >
+                <span className="font-mono text-secondary">
                     {displayText}
                 </span>
             );
@@ -4004,26 +3358,8 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
         return (
             <button
                 type="button"
+                className="btn-link font-mono"
                 onClick={() => onNavigate(objectId)}
-                style={{
-                    background: "none",
-                    border: "none",
-                    padding: "2px 4px",
-                    margin: "0",
-                    fontSize: "11px",
-                    fontFamily: "var(--font-mono)",
-                    color: "var(--color-text-accent)",
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                    borderRadius: "var(--radius-sm)",
-                    lineHeight: "1.3",
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                }}
             >
                 {displayText}
             </button>
@@ -4073,21 +3409,15 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
         setExpanded: (val: boolean) => void,
         content: React.ReactNode,
     ) => (
-        <div style={sectionStyle}>
+        <div className="browser-section">
             <div
-                style={sectionHeaderStyle}
+                className="browser-section-header"
                 onClick={() => setExpanded(!isExpanded)}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--color-bg-secondary)";
-                }}
             >
                 <span style={{ fontSize: "9px" }}>{isExpanded ? "▼" : "▶"}</span>
                 <span>{title} ({count})</span>
             </div>
-            {isExpanded && <div style={sectionContentStyle}>{content}</div>}
+            {isExpanded && <div className="browser-section-content">{content}</div>}
         </div>
     );
 
@@ -4100,17 +3430,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
 
         if (!objectId) {
             return (
-                <span
-                    style={{
-                        fontFamily: "var(--font-mono)",
-                        border: "1px solid var(--color-border-medium)",
-                        borderRadius: "var(--radius-sm)",
-                        padding: "2px 6px",
-                        fontSize: "0.95em",
-                        color: "var(--color-text-secondary)",
-                    }}
-                    title={tooltip || undefined}
-                >
+                <span className="object-ref-badge" title={tooltip || undefined}>
                     {display}
                 </span>
             );
@@ -4118,17 +3438,8 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
         return (
             <button
                 type="button"
+                className="object-ref-badge clickable"
                 onClick={() => onNavigate(objectId)}
-                style={{
-                    background: "none",
-                    border: "1px solid var(--color-border-medium)",
-                    borderRadius: "var(--radius-sm)",
-                    padding: "2px 6px",
-                    fontSize: "0.95em",
-                    fontFamily: "var(--font-mono)",
-                    color: "var(--color-text-accent)",
-                    cursor: "pointer",
-                }}
                 title={tooltip || undefined}
             >
                 {display}
@@ -4137,45 +3448,20 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     };
 
     return (
-        <div
-            style={{
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                backgroundColor: "var(--color-bg-secondary)",
-            }}
-        >
+        <div className="h-full flex-col bg-secondary">
             {/* Title bar */}
-            <div
-                style={{
-                    padding: "var(--space-md)",
-                    borderBottom: "1px solid var(--color-border-light)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    backgroundColor: "var(--color-bg-header)",
-                }}
-            >
-                <h3
-                    style={{
-                        margin: 0,
-                        color: "var(--color-text-primary)",
-                        display: "flex",
-                        alignItems: "baseline",
-                        flex: 1,
-                    }}
-                >
-                    <span style={{ fontWeight: "700" }}>Object info</span>
+            <div className="editor-title-bar">
+                <h3 className="editor-title" style={{ alignItems: "baseline" }}>
+                    <span className="font-bold">Object info</span>
                     <span
+                        className="text-secondary font-mono"
                         style={{
                             fontSize: "0.9em",
-                            color: "var(--color-text-secondary)",
                             fontWeight: "normal",
                             textAlign: "center",
                             flex: 1,
                             marginLeft: "var(--space-sm)",
                             marginRight: "var(--space-sm)",
-                            fontFamily: "monospace",
                         }}
                     >
                         {object.name
@@ -4183,67 +3469,50 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                             : normalizeObjectRef(object.obj).display}
                     </span>
                 </h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                <div className="flex gap-sm" style={{ flexWrap: "nowrap" }}>
                     <button
                         type="button"
+                        className="btn btn-sm btn-success"
                         onClick={onCreateChild}
                         disabled={!object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle}
                         style={{
-                            backgroundColor:
-                                "color-mix(in srgb, var(--color-text-success) 20%, var(--color-bg-secondary))",
-                            color: "var(--color-text-primary)",
-                            border: "1px solid var(--color-border-medium)",
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-sm)",
                             cursor: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
                                 ? "not-allowed"
                                 : "pointer",
                             opacity: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
                                 ? 0.6
                                 : 1,
-                            fontSize: "12px",
-                            fontWeight: "600",
+                            whiteSpace: "nowrap",
                         }}
                     >
                         Create Child
                     </button>
                     <button
                         type="button"
+                        className="btn btn-sm btn-warning"
                         onClick={onRecycle}
                         disabled={!object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle}
                         style={{
-                            backgroundColor:
-                                "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
-                            color: "var(--color-text-primary)",
-                            border: "1px solid var(--color-border-medium)",
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-sm)",
                             cursor: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
                                 ? "not-allowed"
                                 : "pointer",
                             opacity: !object || object.obj === "-1" || isSubmittingCreate || isSubmittingRecycle
                                 ? 0.6
                                 : 1,
-                            fontSize: "12px",
-                            fontWeight: "600",
+                            whiteSpace: "nowrap",
                         }}
                     >
                         Recycle
                     </button>
                     <button
                         type="button"
+                        className="btn btn-sm"
                         onClick={onDumpObject}
                         disabled={!object || object.obj === "-1"}
                         style={{
-                            backgroundColor: "var(--color-bg-tertiary)",
-                            color: "var(--color-text-primary)",
-                            border: "1px solid var(--color-border-medium)",
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-sm)",
                             cursor: !object || object.obj === "-1" ? "not-allowed" : "pointer",
                             opacity: !object || object.obj === "-1" ? 0.6 : 1,
-                            fontSize: "12px",
-                            fontWeight: "600",
+                            whiteSpace: "nowrap",
                         }}
                         title="Export object definition to .moo file"
                     >
@@ -4253,24 +3522,15 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
             </div>
 
             {/* Content area with metadata and hierarchy */}
-            <div style={{ flex: 1, overflow: "auto" }}>
+            <div className="flex-1 overflow-auto">
                 {/* Object metadata section */}
                 <div
-                    style={{
-                        padding: "var(--space-md)",
-                        backgroundColor: "var(--color-bg-tertiary)",
-                        borderTop: "1px solid var(--color-border-light)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                        fontSize: "0.9em",
-                        display: "flex",
-                        gap: "var(--space-md)",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                    }}
+                    className="p-md bg-tertiary border-top border-bottom flex-wrap"
+                    style={{ fontSize: "0.9em", display: "flex", gap: "var(--space-md)", alignItems: "center" }}
                 >
                     {/* Name editor */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                    <div className="flex gap-sm" style={{ gap: "6px" }}>
+                        <span className="text-secondary" style={{ fontFamily: "var(--font-ui)" }}>
                             Name:
                         </span>
                         <input
@@ -4278,15 +3538,11 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                             value={editingName}
                             onChange={(e) => onNameChange(e.target.value)}
                             disabled={isSavingName}
+                            className="font-mono border rounded-sm"
                             style={{
-                                fontFamily: "var(--font-mono)",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
                                 padding: "2px 6px",
                                 fontSize: "0.95em",
                                 minWidth: "120px",
-                                backgroundColor: "var(--color-bg-input)",
-                                color: "var(--color-text-primary)",
                             }}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") {
@@ -4298,14 +3554,10 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                         />
                         <button
                             type="button"
+                            className="btn btn-sm"
                             onClick={onNameSave}
                             disabled={isSavingName || editingName === object.name}
                             style={{
-                                padding: "2px 8px",
-                                fontSize: "0.9em",
-                                fontWeight: 600,
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border-medium)",
                                 backgroundColor: isSavingName || editingName === object.name
                                     ? "var(--color-bg-secondary)"
                                     : "var(--color-button-primary)",
@@ -4321,17 +3573,11 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                     </div>
 
                     {/* Separator bar */}
-                    <div
-                        style={{
-                            width: "1px",
-                            height: "20px",
-                            backgroundColor: "var(--color-border-medium)",
-                        }}
-                    />
+                    <div style={{ width: "1px", height: "20px", backgroundColor: "var(--color-border-medium)" }} />
 
                     {/* Flags */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                    <div className="flex gap-sm" style={{ gap: "6px" }}>
+                        <span className="text-secondary" style={{ fontFamily: "var(--font-ui)" }}>
                             Flags:
                         </span>
                         <button

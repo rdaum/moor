@@ -162,47 +162,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
         >
             {/* History indicator - "Jump to Now" button */}
             {isViewingHistory && (
-                <div
-                    className="history_indicator"
-                    style={{
-                        position: "sticky",
-                        top: "10px",
-                        width: "fit-content",
-                        margin: "0 auto 10px auto",
-                        background: "color-mix(in srgb, var(--color-bg-base) 90%, transparent)",
-                        backdropFilter: "blur(8px)",
-                        color: "var(--color-text-primary)",
-                        padding: "8px 16px",
-                        borderRadius: "20px",
-                        border: "1px solid var(--color-border-medium)",
-                        zIndex: 1000,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        fontSize: "14px",
-                        fontFamily: "var(--font-sans)",
-                    }}
-                >
+                <div className="history_indicator">
                     <span>Viewing history</span>
                     <button
                         onClick={jumpToNow}
                         aria-label="Return to latest messages"
                         aria-describedby="history-status"
-                        style={{
-                            background: "var(--color-button-primary)",
-                            color: "white",
-                            border: "none",
-                            padding: "4px 12px",
-                            borderRadius: "12px",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                            fontFamily: "var(--font-sans)",
-                            transition: "all 0.2s ease",
-                        }}
-                        onMouseOver={(e) =>
-                            e.currentTarget.style.background =
-                                "color-mix(in srgb, var(--color-button-primary) 80%, white)"}
-                        onMouseOut={(e) => e.currentTarget.style.background = "var(--color-button-primary)"}
+                        className="history_indicator_button"
                     >
                         Jump to Now
                     </button>
@@ -214,16 +180,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
             {/* Add minimal top padding to ensure scrollability */}
             {onLoadMoreHistory && (
-                <div
-                    style={{
-                        height: "50px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--color-text-secondary)",
-                        fontSize: "0.8em",
-                    }}
-                >
+                <div className="output_window_load_more">
                     {isLoadingHistory && (
                         <span role="status" aria-live="polite">
                             Loading more history...

@@ -359,115 +359,50 @@ export function PropertyValueEditor({
 
     return (
         <div
+            className="flex-col"
             style={{
-                display: "flex",
-                flexDirection: "column",
                 height: "100%",
                 backgroundColor: "var(--color-bg-input)",
                 border: "1px solid var(--color-border-medium)",
             }}
         >
             {/* Title bar */}
-            <div
-                style={{
-                    padding: "var(--space-md)",
-                    borderBottom: "1px solid var(--color-border-light)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    backgroundColor: "var(--color-bg-header)",
-                }}
-            >
-                <h3
-                    style={{
-                        margin: 0,
-                        color: "var(--color-text-primary)",
-                        display: "flex",
-                        alignItems: "baseline",
-                        width: "100%",
-                    }}
-                >
-                    <span style={{ fontWeight: "700" }}>
+            <div className="editor-title-bar">
+                <h3 className="editor-title">
+                    <span className="editor-title-label">
                         Property editor{hasUnsavedChanges && (
-                            <span
-                                style={{ color: "var(--color-text-secondary)", marginLeft: "4px", fontSize: "0.8em" }}
-                            >
+                            <span className="editor-title-indicator">
                                 ●
                             </span>
                         )}
                     </span>
-                    <span
-                        style={{
-                            fontSize: "0.9em",
-                            color: "var(--color-text-secondary)",
-                            fontWeight: "normal",
-                            textAlign: "center",
-                            flex: 1,
-                            marginLeft: "var(--space-sm)",
-                            marginRight: "var(--space-sm)",
-                            fontFamily: "monospace",
-                        }}
-                    >
+                    <span className="editor-title-path">
                         {propertyName} ({typeName})
                     </span>
                 </h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                <div className="editor-toolbar">
                     {/* Remove button - only shown if onDelete handler provided */}
                     {onDelete && (
                         <button
                             onClick={onDelete}
                             aria-label="Remove property"
                             title="Remove property"
-                            style={{
-                                backgroundColor:
-                                    "color-mix(in srgb, var(--color-text-error) 20%, var(--color-bg-secondary))",
-                                color: "var(--color-text-primary)",
-                                border: "1px solid var(--color-border-medium)",
-                                padding: "6px 12px",
-                                borderRadius: "var(--radius-sm)",
-                                cursor: "pointer",
-                                fontSize: "12px",
-                                fontWeight: "600",
-                            }}
+                            className="editor-delete-button"
                         >
                             Remove
                         </button>
                     )}
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            backgroundColor: "var(--color-bg-secondary)",
-                            border: "1px solid var(--color-border-medium)",
-                            borderRadius: "var(--radius-sm)",
-                            padding: "2px 6px",
-                        }}
-                    >
+                    <div className="font-size-control">
                         <button
                             onClick={decreaseFontSize}
                             aria-label="Decrease editor font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
-                                fontSize: "14px",
-                                padding: "2px 4px",
-                            }}
+                            className="font-size-button"
                             disabled={fontSize <= MIN_FONT_SIZE}
                         >
                             –
                         </button>
                         <span
-                            style={{
-                                fontFamily: "var(--font-mono)",
-                                fontSize: "12px",
-                                color: "var(--color-text-secondary)",
-                                minWidth: "38px",
-                                textAlign: "center",
-                            }}
+                            className="font-size-display"
                             aria-live="polite"
                         >
                             {fontSize}px
@@ -475,15 +410,7 @@ export function PropertyValueEditor({
                         <button
                             onClick={increaseFontSize}
                             aria-label="Increase editor font size"
-                            style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--color-text-secondary)",
-                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
-                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
-                                fontSize: "14px",
-                                padding: "2px 4px",
-                            }}
+                            className="font-size-button"
                             disabled={fontSize >= MAX_FONT_SIZE}
                         >
                             +
@@ -493,59 +420,26 @@ export function PropertyValueEditor({
                     {propertyValue.typeCode() === VarUnion.VarStr && (
                         <>
                             <button
+                                className={`btn-toggle ${mode === "input" ? "active" : ""}`}
                                 onClick={() => handleModeChange("input")}
                                 aria-label="Input mode"
                                 title="Single-line input mode"
-                                style={{
-                                    background: mode === "input" ? "var(--color-bg-button-hover)" : "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: mode === "input"
-                                        ? "var(--color-text-primary)"
-                                        : "var(--color-text-secondary)",
-                                    fontWeight: mode === "input" ? "600" : "normal",
-                                    padding: "4px 8px",
-                                    fontSize: "11px",
-                                }}
                             >
                                 Input
                             </button>
                             <button
+                                className={`btn-toggle ${mode === "text" ? "active" : ""}`}
                                 onClick={() => handleModeChange("text")}
                                 aria-label="Text editor mode"
                                 title="Text editor mode (lines with \n)"
-                                style={{
-                                    background: mode === "text" ? "var(--color-bg-button-hover)" : "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: mode === "text"
-                                        ? "var(--color-text-primary)"
-                                        : "var(--color-text-secondary)",
-                                    fontWeight: mode === "text" ? "600" : "normal",
-                                    padding: "4px 8px",
-                                    fontSize: "11px",
-                                }}
                             >
                                 Text
                             </button>
                             <button
+                                className={`btn-toggle ${mode === "literal" ? "active" : ""}`}
                                 onClick={() => handleModeChange("literal")}
                                 aria-label="MOO literal mode"
                                 title="MOO literal syntax mode"
-                                style={{
-                                    background: mode === "literal" ? "var(--color-bg-button-hover)" : "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: mode === "literal"
-                                        ? "var(--color-text-primary)"
-                                        : "var(--color-text-secondary)",
-                                    fontWeight: mode === "literal" ? "600" : "normal",
-                                    padding: "4px 8px",
-                                    fontSize: "11px",
-                                }}
                             >
                                 Literal
                             </button>
@@ -554,40 +448,18 @@ export function PropertyValueEditor({
                     {isStringList(propertyValue) && (
                         <>
                             <button
+                                className={`btn-toggle ${mode === "text" ? "active" : ""}`}
                                 onClick={() => handleModeChange("text")}
                                 aria-label="Text editor mode"
                                 title="Text editor mode (one string per line)"
-                                style={{
-                                    background: mode === "text" ? "var(--color-bg-button-hover)" : "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: mode === "text"
-                                        ? "var(--color-text-primary)"
-                                        : "var(--color-text-secondary)",
-                                    fontWeight: mode === "text" ? "600" : "normal",
-                                    padding: "4px 8px",
-                                    fontSize: "11px",
-                                }}
                             >
                                 Text
                             </button>
                             <button
+                                className={`btn-toggle ${mode === "literal" ? "active" : ""}`}
                                 onClick={() => handleModeChange("literal")}
                                 aria-label="MOO literal mode"
                                 title="MOO literal syntax mode"
-                                style={{
-                                    background: mode === "literal" ? "var(--color-bg-button-hover)" : "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: mode === "literal"
-                                        ? "var(--color-text-primary)"
-                                        : "var(--color-text-secondary)",
-                                    fontWeight: mode === "literal" ? "600" : "normal",
-                                    padding: "4px 8px",
-                                    fontSize: "11px",
-                                }}
                             >
                                 Literal
                             </button>
@@ -598,42 +470,21 @@ export function PropertyValueEditor({
                             .includes(propertyValue.typeCode())
                         && (
                             <button
+                                className={`btn-toggle ${mode === "literal" ? "active" : ""}`}
                                 onClick={() => handleModeChange("literal")}
                                 aria-label="MOO literal mode"
                                 title="MOO literal syntax mode"
-                                style={{
-                                    background: mode === "literal" ? "var(--color-bg-button-hover)" : "transparent",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    cursor: "pointer",
-                                    color: mode === "literal"
-                                        ? "var(--color-text-primary)"
-                                        : "var(--color-text-secondary)",
-                                    fontWeight: mode === "literal" ? "600" : "normal",
-                                    padding: "4px 8px",
-                                    fontSize: "11px",
-                                }}
                             >
                                 Literal
                             </button>
                         )}
                     {/* Save button */}
                     <button
+                        className="btn editor-btn-save"
                         onClick={handleSave}
                         disabled={isSaving}
                         aria-label="Save property"
                         title="Save property"
-                        style={{
-                            backgroundColor: isSaving ? "var(--color-bg-secondary)" : "var(--color-button-primary)",
-                            color: "white",
-                            border: "none",
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-sm)",
-                            cursor: isSaving ? "not-allowed" : "pointer",
-                            opacity: isSaving ? 0.6 : 1,
-                            fontSize: "12px",
-                            fontWeight: "600",
-                        }}
                     >
                         {isSaving ? "💾" : "💾"}
                     </button>
@@ -641,14 +492,7 @@ export function PropertyValueEditor({
                     <button
                         onClick={onCancel}
                         aria-label="Close property editor"
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            fontSize: "1.2em",
-                            cursor: "pointer",
-                            color: "var(--color-text-secondary)",
-                            padding: "4px 8px",
-                        }}
+                        className="editor-btn-close"
                     >
                         <span aria-hidden="true">×</span>
                     </button>
@@ -657,22 +501,8 @@ export function PropertyValueEditor({
 
             {/* Error message */}
             {error && (
-                <div
-                    style={{
-                        padding: "var(--space-sm)",
-                        backgroundColor: "var(--color-bg-error)",
-                        borderTop: "1px solid var(--color-border-light)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                    }}
-                >
-                    <pre
-                        style={{
-                            margin: 0,
-                            color: "var(--color-text-error)",
-                            fontSize: "0.9em",
-                            fontFamily: "var(--font-mono)",
-                        }}
-                    >
+                <div className="editor-error">
+                    <pre className="editor-error-text">
                         {error}
                     </pre>
                 </div>
@@ -680,52 +510,24 @@ export function PropertyValueEditor({
 
             {/* Property metadata info panel */}
             {(owner || definer || permissions) && (
-                <div
-                    style={{
-                        padding: "var(--space-sm) var(--space-md)",
-                        backgroundColor: "var(--color-bg-tertiary)",
-                        borderBottom: "1px solid var(--color-border-light)",
-                        fontSize: "0.9em",
-                        display: "flex",
-                        gap: "var(--space-md)",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                    }}
-                >
+                <div className="editor-metadata-panel">
                     {/* Definer - read-only, visually separated */}
                     {definer && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.6 }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="metadata-item metadata-definer">
+                            <span className="metadata-label">
                                 Definer:
                             </span>
                             {onNavigateToObject
                                 ? (
                                     <button
                                         onClick={() => onNavigateToObject(definer)}
-                                        style={{
-                                            background: "none",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            color: "var(--color-text-accent)",
-                                            cursor: "pointer",
-                                            padding: "2px 6px",
-                                            fontFamily: "var(--font-mono)",
-                                            fontSize: "0.95em",
-                                        }}
+                                        className="metadata-object-button"
                                     >
                                         #{definer}
                                     </button>
                                 )
                                 : (
-                                    <span
-                                        style={{
-                                            fontFamily: "var(--font-mono)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            padding: "2px 6px",
-                                            fontSize: "0.95em",
-                                        }}
-                                    >
+                                    <span className="metadata-object-badge">
                                         #{definer}
                                     </span>
                                 )}
@@ -733,20 +535,12 @@ export function PropertyValueEditor({
                     )}
 
                     {/* Separator bar */}
-                    {definer && (owner || permissions) && (
-                        <div
-                            style={{
-                                width: "1px",
-                                height: "20px",
-                                backgroundColor: "var(--color-border-medium)",
-                            }}
-                        />
-                    )}
+                    {definer && (owner || permissions) && <div className="metadata-separator" />}
 
                     {/* Owner - editable */}
                     {owner && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="metadata-item">
+                            <span className="metadata-label">
                                 Owner:
                             </span>
                             {isEditingOwner
@@ -755,15 +549,7 @@ export function PropertyValueEditor({
                                         type="text"
                                         value={editOwnerValue}
                                         onChange={(e) => setEditOwnerValue(e.target.value)}
-                                        style={{
-                                            fontFamily: "var(--font-mono)",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            padding: "2px 6px",
-                                            fontSize: "0.95em",
-                                            width: "80px",
-                                            backgroundColor: "var(--color-bg-input)",
-                                        }}
+                                        className="metadata-object-input"
                                         onKeyDown={(e) => {
                                             if (e.key === "Enter") {
                                                 handleSaveMetadata();
@@ -778,16 +564,7 @@ export function PropertyValueEditor({
                                 : (
                                     <button
                                         onClick={() => setIsEditingOwner(true)}
-                                        style={{
-                                            background: "none",
-                                            border: "1px solid var(--color-border-medium)",
-                                            borderRadius: "var(--radius-sm)",
-                                            color: "var(--color-text-primary)",
-                                            cursor: "pointer",
-                                            padding: "2px 6px",
-                                            fontFamily: "var(--font-mono)",
-                                            fontSize: "0.95em",
-                                        }}
+                                        className="metadata-object-button"
                                         title="Click to edit owner"
                                     >
                                         #{owner}
@@ -798,52 +575,24 @@ export function PropertyValueEditor({
 
                     {/* Permissions - toggle checkboxes */}
                     {permissions && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-ui)" }}>
+                        <div className="metadata-item">
+                            <span className="metadata-label">
                                 Perms:
                             </span>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    gap: "4px",
-                                    border: "1px solid var(--color-border-medium)",
-                                    borderRadius: "var(--radius-sm)",
-                                    padding: "2px 4px",
-                                }}
-                            >
-                                <label
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "2px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: "0.95em",
-                                    }}
-                                >
+                            <div className="metadata-permissions-group">
+                                <label className="metadata-permission-label">
                                     <input
                                         type="checkbox"
                                         checked={editPermissions.readable}
                                         onChange={() => handleTogglePermission("readable")}
-                                        style={{ cursor: "pointer" }}
                                     />
                                     r
                                 </label>
-                                <label
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "2px",
-                                        cursor: "pointer",
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: "0.95em",
-                                    }}
-                                >
+                                <label className="metadata-permission-label">
                                     <input
                                         type="checkbox"
                                         checked={editPermissions.writable}
                                         onChange={() => handleTogglePermission("writable")}
-                                        style={{ cursor: "pointer" }}
                                     />
                                     w
                                 </label>
@@ -857,19 +606,9 @@ export function PropertyValueEditor({
                             <button
                                 onClick={handleSaveMetadata}
                                 disabled={isSavingMetadata || metadataSaveSuccess}
-                                style={{
-                                    padding: "4px 10px",
-                                    borderRadius: "var(--radius-sm)",
-                                    border: "none",
-                                    backgroundColor: metadataSaveSuccess
-                                        ? "var(--color-bg-success, #28a745)"
-                                        : "var(--color-button-primary)",
-                                    color: "white",
-                                    cursor: isSavingMetadata || metadataSaveSuccess ? "not-allowed" : "pointer",
-                                    fontSize: "0.85em",
-                                    fontWeight: "600",
-                                    opacity: isSavingMetadata ? 0.6 : 1,
-                                }}
+                                className={`metadata-action-button save ${metadataSaveSuccess ? "success" : ""} ${
+                                    isSavingMetadata ? "disabled" : ""
+                                }`}
                             >
                                 {isSavingMetadata ? "Saving..." : metadataSaveSuccess ? "Saved ✓" : "Save"}
                             </button>
@@ -881,16 +620,7 @@ export function PropertyValueEditor({
                                         setIsEditingOwner(false);
                                     }}
                                     disabled={isSavingMetadata}
-                                    style={{
-                                        padding: "4px 10px",
-                                        borderRadius: "var(--radius-sm)",
-                                        border: "1px solid var(--color-border-medium)",
-                                        backgroundColor: "transparent",
-                                        color: "var(--color-text-secondary)",
-                                        cursor: isSavingMetadata ? "not-allowed" : "pointer",
-                                        fontSize: "0.85em",
-                                        fontWeight: "600",
-                                    }}
+                                    className="metadata-action-button cancel"
                                 >
                                     Cancel
                                 </button>
@@ -901,63 +631,30 @@ export function PropertyValueEditor({
             )}
 
             {/* Editor content */}
-            <div
-                style={{
-                    flex: 1,
-                    minHeight: 0,
-                    position: "relative",
-                    overflow: "hidden",
-                    padding: "var(--space-md)",
-                }}
-            >
+            <div className="editor-content">
                 {mode === "input" && (
                     <input
                         type="text"
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
-                        style={{
-                            width: "100%",
-                            padding: "var(--space-sm)",
-                            fontSize: `${fontSize}px`,
-                            fontFamily: "var(--font-mono)",
-                            backgroundColor: "var(--color-bg-input)",
-                            border: "1px solid var(--color-border-medium)",
-                            borderRadius: "var(--radius-sm)",
-                            color: "var(--color-text-primary)",
-                        }}
+                        className="editor-input"
+                        style={{ fontSize: `${fontSize}px` }}
                         placeholder={`Enter ${typeName} value...`}
                     />
                 )}
 
                 {mode === "text" && (
-                    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <div className="editor-content-wrapper">
                         <textarea
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
-                            style={{
-                                width: "100%",
-                                flex: 1,
-                                minHeight: "200px",
-                                padding: "var(--space-sm)",
-                                fontSize: `${fontSize}px`,
-                                fontFamily: "var(--font-mono)",
-                                backgroundColor: "var(--color-bg-input)",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
-                                color: "var(--color-text-primary)",
-                                resize: "vertical",
-                            }}
+                            className="editor-textarea"
+                            style={{ fontSize: `${fontSize}px` }}
                             placeholder={propertyValue.typeCode() === VarUnion.VarStr
                                 ? "Enter text (newlines will be preserved as \\n)..."
                                 : "Enter one string per line..."}
                         />
-                        <div
-                            style={{
-                                fontSize: "11px",
-                                color: "var(--color-text-secondary)",
-                                marginTop: "var(--space-xs)",
-                            }}
-                        >
+                        <div className="editor-mode-hint">
                             {propertyValue.typeCode() === VarUnion.VarStr
                                 ? "Each line becomes part of the string with \\n separators"
                                 : "Each line becomes a separate string in the list"}
@@ -966,32 +663,15 @@ export function PropertyValueEditor({
                 )}
 
                 {mode === "literal" && (
-                    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <div className="editor-content-wrapper">
                         <textarea
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
-                            style={{
-                                width: "100%",
-                                flex: 1,
-                                minHeight: "200px",
-                                padding: "var(--space-sm)",
-                                fontSize: `${fontSize}px`,
-                                fontFamily: "var(--font-mono)",
-                                backgroundColor: "var(--color-bg-input)",
-                                border: "1px solid var(--color-border-medium)",
-                                borderRadius: "var(--radius-sm)",
-                                color: "var(--color-text-primary)",
-                                resize: "vertical",
-                            }}
+                            className="editor-textarea"
+                            style={{ fontSize: `${fontSize}px` }}
                             placeholder="Enter MOO literal value (e.g., {1, 2, 3} or [1 -> &quot;a&quot;, 2 -> &quot;b&quot;])..."
                         />
-                        <div
-                            style={{
-                                fontSize: "11px",
-                                color: "var(--color-text-secondary)",
-                                marginTop: "var(--space-xs)",
-                            }}
-                        >
+                        <div className="editor-mode-hint">
                             Use MOO literal syntax: {"{...}"} for lists, {"[k -> v, ...]"} for maps
                         </div>
                     </div>
