@@ -64,11 +64,36 @@ pub fn event_from_ref(event_ref: common::EventRef<'_>) -> Result<Event, String> 
                 .and_then(|ct| symbol_from_ref(ct).ok());
             let no_flush = notify.no_flush().map_err(|_| "Missing no_flush")?;
             let no_newline = notify.no_newline().map_err(|_| "Missing no_newline")?;
+
+            let metadata = match notify.metadata().ok().flatten() {
+                Some(metadata_vec) => {
+                    let mut metadata_result = Vec::new();
+                    for metadata_ref in metadata_vec.iter() {
+                        let metadata_item =
+                            metadata_ref.map_err(|_| "Failed to read metadata item")?;
+                        let key = symbol_from_ref(
+                            metadata_item.key().map_err(|_| "Missing metadata key")?,
+                        )?;
+                        let value_ref = metadata_item
+                            .value()
+                            .map_err(|_| "Missing metadata value")?;
+                        let value_struct = crate::var::Var::try_from(value_ref)
+                            .map_err(|_| "Failed to convert metadata value")?;
+                        let value =
+                            var_from_flatbuffer(&value_struct).map_err(|e| e.to_string())?;
+                        metadata_result.push((key, value));
+                    }
+                    Some(metadata_result)
+                }
+                None => None,
+            };
+
             Ok(Event::Notify {
                 value,
                 content_type,
                 no_flush,
                 no_newline,
+                metadata,
             })
         }
         EventUnionRef::PresentEvent(present) => {
@@ -157,10 +182,35 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
             content_type,
             no_flush,
             no_newline,
+            metadata,
         } => {
             let value_fb = var_to_flatbuffer(value).map_err(|e| {
                 moor_var::EncodingError::CouldNotEncode(format!("Failed to encode value: {e}"))
             })?;
+
+            let metadata_fb = match metadata {
+                Some(metadata_vec) => {
+                    let metadata_result: Result<Vec<_>, _> = metadata_vec
+                        .iter()
+                        .map(|(key, val)| {
+                            let value_fb = var_to_flatbuffer(val).map_err(|e| {
+                                moor_var::EncodingError::CouldNotEncode(format!(
+                                    "Failed to encode metadata value: {e}"
+                                ))
+                            })?;
+                            Ok(common::EventMetadata {
+                                key: Box::new(common::Symbol {
+                                    value: key.as_string(),
+                                }),
+                                value: Box::new(value_fb),
+                            })
+                        })
+                        .collect();
+                    Some(metadata_result?)
+                }
+                None => None,
+            };
+
             common::EventUnion::NotifyEvent(Box::new(common::NotifyEvent {
                 value: Box::new(value_fb),
                 content_type: content_type.as_ref().map(|s| {
@@ -170,6 +220,7 @@ pub fn event_to_flatbuffer_struct(event: &Event) -> Result<common::Event, moor_v
                 }),
                 no_flush: *no_flush,
                 no_newline: *no_newline,
+                metadata: metadata_fb,
             }))
         }
         Event::Present(presentation) => {

@@ -119,11 +119,17 @@ union EventUnion {
     TracebackEvent
 }
 
+table EventMetadata {
+    key: Symbol (required);
+    value: MoorVar.Var (required);
+}
+
 table NotifyEvent {
     value: MoorVar.Var (required);
     content_type: Symbol;  // Optional
     no_flush: bool;
     no_newline: bool;
+    metadata: [EventMetadata];  // Optional semantic metadata
 }
 
 table PresentEvent {

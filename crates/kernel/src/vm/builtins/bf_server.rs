@@ -79,7 +79,7 @@ pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Sends a notification message to a player.
-/// MOO: `none notify(obj player, str message [, int no_flush [, int no_newline [, str content_type]]])`
+/// MOO: `none notify(obj player, str message [, int no_flush [, int no_newline [, str content_type [, list metadata]]]])`
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If in non rich-mode `notify` can only send text.
     // Otherwise, it can send any value, and it's up to the host/client to interpret it.
@@ -94,8 +94,8 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    if bf_args.args.len() < 2 || bf_args.args.len() > 5 {
-        return Err(ErrValue(E_ARGS.msg("notify() requires 2 to 5 arguments")));
+    if bf_args.args.len() < 2 || bf_args.args.len() > 6 {
+        return Err(ErrValue(E_ARGS.msg("notify() requires 2 to 6 arguments")));
     }
 
     let Some(player) = bf_args.args[0].as_object() else {
@@ -122,9 +122,53 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         false
     };
 
-    let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 5 {
+    let content_type = if bf_args.config.rich_notify && bf_args.args.len() >= 5 {
         let content_type = bf_args.args[4].as_symbol().map_err(ErrValue)?;
         Some(content_type)
+    } else {
+        None
+    };
+
+    let metadata = if bf_args.config.rich_notify && bf_args.args.len() == 6 {
+        let metadata_arg = &bf_args.args[5];
+        let mut metadata_vec = Vec::new();
+
+        match metadata_arg.variant() {
+            Variant::Map(m) => {
+                for (key, value) in m.iter() {
+                    let key_sym = key.as_symbol().map_err(ErrValue)?;
+                    metadata_vec.push((key_sym, value));
+                }
+            }
+            Variant::List(l) => {
+                for item in l.iter() {
+                    match item.variant() {
+                        Variant::List(pair) => {
+                            if pair.len() != 2 {
+                                return Err(ErrValue(E_ARGS.msg(
+                                    "notify() metadata alist must contain {key, value} pairs",
+                                )));
+                            }
+                            let key_sym = pair[0].as_symbol().map_err(ErrValue)?;
+                            metadata_vec.push((key_sym, pair[1].clone()));
+                        }
+                        _ => {
+                            return Err(ErrValue(
+                                E_TYPE
+                                    .msg("notify() metadata alist must contain {key, value} pairs"),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(ErrValue(
+                    E_TYPE.msg("notify() metadata must be a map or alist"),
+                ));
+            }
+        }
+
+        Some(metadata_vec)
     } else {
         None
     };
@@ -135,6 +179,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         content_type,
         no_flush,
         no_newline,
+        metadata,
     );
     current_task_scheduler_client().notify(player, Box::new(event));
 

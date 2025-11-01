@@ -2,6 +2,7 @@
 
 import * as flatbuffers from "flatbuffers";
 
+import { EventMetadata } from "../moor-common/event-metadata.js";
 import { Symbol } from "../moor-common/symbol.js";
 import { Var } from "../moor-var/var.js";
 
@@ -43,8 +44,23 @@ export class NotifyEvent {
         return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
     }
 
+    metadata(index: number, obj?: EventMetadata): EventMetadata | null {
+        const offset = this.bb!.__offset(this.bb_pos, 12);
+        return offset
+            ? (obj || new EventMetadata()).__init(
+                this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
+                this.bb!,
+            )
+            : null;
+    }
+
+    metadataLength(): number {
+        const offset = this.bb!.__offset(this.bb_pos, 12);
+        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
+    }
+
     static startNotifyEvent(builder: flatbuffers.Builder) {
-        builder.startObject(4);
+        builder.startObject(5);
     }
 
     static addValue(builder: flatbuffers.Builder, valueOffset: flatbuffers.Offset) {
@@ -61,6 +77,22 @@ export class NotifyEvent {
 
     static addNoNewline(builder: flatbuffers.Builder, noNewline: boolean) {
         builder.addFieldInt8(3, +noNewline, +false);
+    }
+
+    static addMetadata(builder: flatbuffers.Builder, metadataOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(4, metadataOffset, 0);
+    }
+
+    static createMetadataVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
+        builder.startVector(4, data.length, 4);
+        for (let i = data.length - 1; i >= 0; i--) {
+            builder.addOffset(data[i]!);
+        }
+        return builder.endVector();
+    }
+
+    static startMetadataVector(builder: flatbuffers.Builder, numElems: number) {
+        builder.startVector(4, numElems, 4);
     }
 
     static endNotifyEvent(builder: flatbuffers.Builder): flatbuffers.Offset {

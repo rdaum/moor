@@ -15,6 +15,7 @@ export { DuplicateVariable } from "./moor-common/duplicate-variable.js";
 export { DuplicateVerb } from "./moor-common/duplicate-verb.js";
 export { ErrorCode } from "./moor-common/error-code.js";
 export { Error } from "./moor-common/error.js";
+export { EventMetadata } from "./moor-common/event-metadata.js";
 export { EventUnion } from "./moor-common/event-union.js";
 export { Event } from "./moor-common/event.js";
 export { Exception } from "./moor-common/exception.js";

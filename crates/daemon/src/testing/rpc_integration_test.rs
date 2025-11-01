@@ -835,6 +835,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 content_type: None,
                 no_flush: false,
                 no_newline: false,
+                metadata: None,
             },
         });
 
@@ -946,6 +947,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 None,
                 false,
                 false,
+                None,
             ),
             NarrativeEvent::notify(
                 moor_var::v_obj(SYSTEM_OBJECT),
@@ -953,6 +955,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 Some(moor_var::Symbol::mk("text/plain")),
                 false,
                 false,
+                None,
             ),
             NarrativeEvent::notify(
                 moor_var::v_obj(connection_obj),
@@ -960,6 +963,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 None,
                 false,
                 false,
+                None,
             ),
         ];
 

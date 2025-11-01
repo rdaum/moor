@@ -35,12 +35,13 @@ pub struct NarrativeEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// The typical "something happened" descriptive event.
-    /// Value, Content-Type, no_flush, no_newline
+    /// Value, Content-Type, no_flush, no_newline, metadata
     Notify {
         value: Var,
         content_type: Option<Symbol>,
         no_flush: bool,
         no_newline: bool,
+        metadata: Option<Vec<(Symbol, Var)>>,
     },
     /// A "presentation" event, which is a recommendation to the client to present something to the
     /// user in a particular way.
@@ -83,6 +84,7 @@ impl NarrativeEvent {
         content_type: Option<Symbol>,
         no_flush: bool,
         no_newline: bool,
+        metadata: Option<Vec<(Symbol, Var)>>,
     ) -> Self {
         Self {
             event_id: Uuid::now_v7(),
@@ -93,6 +95,7 @@ impl NarrativeEvent {
                 content_type,
                 no_flush,
                 no_newline,
+                metadata,
             },
         }
     }

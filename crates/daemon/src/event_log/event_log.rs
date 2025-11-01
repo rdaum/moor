@@ -1239,6 +1239,7 @@ mod tests {
                 content_type: None,
                 no_flush: false,
                 no_newline: false,
+                metadata: None,
             },
         };
         logged_narrative_event_to_flatbuffer(player, Box::new(event), pubkey)

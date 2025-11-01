@@ -143,6 +143,7 @@ mod tests {
                     content_type: _,
                     no_flush: _,
                     no_newline: _,
+                    metadata: _,
                 } = event
                 {
                     if let Some(str) = content.as_string() {
@@ -608,6 +609,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     content_type: _,
                     no_flush: _,
                     no_newline: _,
+                    metadata: _,
                 } = event
                 {
                     if let Some(str) = content.as_string() {
@@ -964,6 +966,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     content_type: _,
                     no_flush: _,
                     no_newline: _,
+                    metadata: _,
                 } = event
                 {
                     if let Some(str) = content.as_string() {
@@ -1123,6 +1126,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                         content_type: _,
                         no_flush: _,
                         no_newline: _,
+                        metadata: _,
                     } = event
                     {
                         if let Some(str) = content.as_string() {

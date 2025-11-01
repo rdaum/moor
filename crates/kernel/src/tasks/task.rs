@@ -1276,7 +1276,8 @@ mod tests {
                 value: v_str("12345"),
                 content_type: None,
                 no_flush: false,
-                no_newline: false
+                no_newline: false,
+                metadata: None,
             }
         );
 

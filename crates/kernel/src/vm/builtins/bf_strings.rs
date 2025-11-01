@@ -550,13 +550,13 @@ fn bf_explode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let parts: Vec<_> = if include_sequential {
         // Include empty strings for consecutive separators
-        subject.split(break_char).map(|s| v_str(s)).collect()
+        subject.split(break_char).map(v_str).collect()
     } else {
         // Filter out empty strings
         subject
             .split(break_char)
             .filter(|s| !s.is_empty())
-            .map(|s| v_str(s))
+            .map(v_str)
             .collect()
     };
 
