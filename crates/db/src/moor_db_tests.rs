@@ -3115,15 +3115,16 @@ mod tests {
             assert!(tx.get_owned_objects(&new_obj).unwrap().contains(child));
 
             // Verify verbs and properties moved to new object
-            assert!(
-                tx.resolve_verb(
+            let verb_def = tx
+                .resolve_verb(
                     &new_obj,
                     Symbol::mk("test_verb"),
                     None,
-                    Some(BitEnum::new_with(VerbFlag::Exec))
+                    Some(BitEnum::new_with(VerbFlag::Exec)),
                 )
-                .is_ok()
-            );
+                .unwrap();
+            // Critically verify that the verb's location field was updated to new_obj
+            assert_eq!(verb_def.location(), new_obj);
             let (prop, value, _perms, _is_clear) = tx
                 .resolve_property(&new_obj, Symbol::mk("test_prop"))
                 .unwrap();

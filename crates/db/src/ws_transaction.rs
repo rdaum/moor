@@ -1639,8 +1639,25 @@ impl WorldStateTransaction {
             self.object_verbdefs.delete(old_obj).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error deleting old object verbs: {e:?}"))
             })?;
+
+            // Create new VerbDefs with updated location for each verb
+            let mut updated_verbs = Vec::new();
+            for verb in verbdefs.iter() {
+                // Create new VerbDef with updated location
+                let updated_verb = VerbDef::new(
+                    verb.uuid(),
+                    new_obj, // Updated location
+                    verb.owner(),
+                    verb.names(),
+                    verb.flags(),
+                    verb.args(),
+                );
+                updated_verbs.push(updated_verb);
+            }
+            let updated_verbdefs = VerbDefs::from_items(&updated_verbs);
+
             self.object_verbdefs
-                .upsert(new_obj, verbdefs.clone())
+                .upsert(new_obj, updated_verbdefs)
                 .map_err(|e| {
                     WorldStateError::DatabaseError(format!("Error setting new object verbs: {e:?}"))
                 })?;
