@@ -11,19 +11,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// ! Settings panel with theme toggle and other options
+// ! Account menu with user-specific settings and logout
 
 import React from "react";
-import { CommandEchoToggle } from "./CommandEchoToggle";
-import { FontToggle } from "./FontToggle";
-import { ThemeToggle } from "./ThemeToggle";
+import { EncryptionSettings } from "./EncryptionSettings";
 
-interface SettingsPanelProps {
+interface AccountMenuProps {
     isOpen: boolean;
     onClose: () => void;
+    onLogout?: () => void;
+    historyAvailable: boolean;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
+export const AccountMenu: React.FC<AccountMenuProps> = ({ isOpen, onClose, onLogout, historyAvailable }) => {
     if (!isOpen) return null;
 
     return (
@@ -31,14 +31,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose })
             {/* Backdrop */}
             <div className="settings-backdrop" onClick={onClose} />
 
-            {/* Settings panel */}
-            <div className="settings-panel">
+            {/* Account menu */}
+            <div className="account-menu">
                 <div className="settings-header">
-                    <h2>Settings</h2>
+                    <h2>Account</h2>
                     <button
                         className="settings-close"
                         onClick={onClose}
-                        aria-label="Close settings"
+                        aria-label="Close account menu"
                     >
                         ×
                     </button>
@@ -46,24 +46,33 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose })
 
                 <div className="settings-content">
                     <div className="settings-section">
-                        <h3>Appearance</h3>
-                        <ThemeToggle />
-                        <FontToggle />
-                    </div>
-
-                    <div className="settings-section">
-                        <h3>Interface</h3>
-                        <CommandEchoToggle />
-                    </div>
-
-                    <div className="settings-section">
-                        <h3>About</h3>
+                        <h3>Profile</h3>
                         <div className="settings-item">
-                            <span>Version</span>
-                            <span className="font-mono text-sm text-secondary">
-                                {__GIT_HASH__}
-                            </span>
+                            <span>Profile settings</span>
+                            <span className="settings-placeholder">Coming soon</span>
                         </div>
+                    </div>
+
+                    <div className="settings-section">
+                        <h3>Security</h3>
+                        <EncryptionSettings isAvailable={historyAvailable} />
+                    </div>
+
+                    <div className="settings-section">
+                        <h3>Session</h3>
+                        {onLogout && (
+                            <div className="settings-item">
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => {
+                                        onLogout();
+                                        onClose();
+                                    }}
+                                >
+                                    Logout
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

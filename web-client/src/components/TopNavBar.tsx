@@ -18,6 +18,7 @@ import { useTitle } from "../hooks/useTitle";
 
 interface TopNavBarProps {
     onSettingsToggle: () => void;
+    onAccountToggle: () => void;
     onBrowserToggle?: () => void;
     narrativeFontSize: number;
     onDecreaseNarrativeFontSize: () => void;
@@ -26,6 +27,7 @@ interface TopNavBarProps {
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({
     onSettingsToggle,
+    onAccountToggle,
     onBrowserToggle,
     narrativeFontSize,
     onDecreaseNarrativeFontSize,
@@ -97,7 +99,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
 
                 <button
                     className="account-icon"
-                    aria-label="Account settings"
+                    onClick={onAccountToggle}
+                    aria-label="Account menu"
                 >
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="8" r="4" />

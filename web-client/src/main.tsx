@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { AccountMenu } from "./components/AccountMenu";
 import { BottomDock } from "./components/docks/BottomDock";
 import { LeftDock } from "./components/docks/LeftDock";
 import { RightDock } from "./components/docks/RightDock";
@@ -87,6 +88,7 @@ function AppContent({
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<NarrativeMessage[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+    const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
     const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -947,6 +949,7 @@ function AppContent({
                     )}
                     <TopNavBar
                         onSettingsToggle={() => setIsSettingsOpen(true)}
+                        onAccountToggle={() => setIsAccountMenuOpen(true)}
                         onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
                             ? handleOpenObjectBrowser
                             : undefined}
@@ -961,6 +964,12 @@ function AppContent({
             <SettingsPanel
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
+            />
+
+            {/* Account menu */}
+            <AccountMenu
+                isOpen={isAccountMenuOpen}
+                onClose={() => setIsAccountMenuOpen(false)}
                 onLogout={handleLogout}
                 historyAvailable={eventLogEnabled !== false}
             />
