@@ -8,22 +8,11 @@ env:
 jobs:
   consistency_check:
     runs-on: ubuntu-latest
-    container: rust-node:1.88.0
+    container: moor-ci:1.90.0
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
-
-      # Install Java and Leiningen for elle-cli
-      - name: Install Java and Leiningen
-        run: |
-          apt-get update
-          apt-get install -y openjdk-17-jdk-headless wget git graphviz
-          java -version
-          wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein
-          chmod +x lein
-          mv lein /usr/local/bin/
-          lein version
 
       # Clone and build elle-cli
       - name: Build elle-cli
