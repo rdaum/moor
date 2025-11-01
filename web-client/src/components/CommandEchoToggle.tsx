@@ -36,26 +36,25 @@ export const CommandEchoToggle: React.FC = () => {
         setEchoEnabled(prev => !prev);
     };
 
-    // Return full-width clickable row for settings
     return (
-        <button
-            className="theme-toggle-row"
-            onClick={toggleEcho}
-            role="switch"
-            aria-checked={echoEnabled}
-            aria-label={`Command echoing ${echoEnabled ? "enabled" : "disabled"}`}
-            aria-describedby="echo-description"
-            title="Toggle whether typed commands are echoed to the output window"
-        >
+        <div className="settings-item">
             <span>Echo Commands</span>
-            <span className="theme-indicator" aria-live="polite">
+            <button
+                className="settings-value-button"
+                onClick={toggleEcho}
+                role="switch"
+                aria-checked={echoEnabled}
+                aria-label={`Command echoing ${echoEnabled ? "enabled" : "disabled"}`}
+                aria-describedby="echo-description"
+                title="Toggle whether typed commands are echoed to the output window"
+            >
                 {echoEnabled ? "✅ On" : "❌ Off"}
-            </span>
+            </button>
             <span id="echo-description" className="sr-only">
                 Controls whether your typed commands appear in the output window. Helpful for screen readers when
                 disabled.
             </span>
-        </button>
+        </div>
     );
 };
 

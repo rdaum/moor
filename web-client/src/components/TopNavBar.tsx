@@ -20,18 +20,12 @@ interface TopNavBarProps {
     onSettingsToggle: () => void;
     onAccountToggle: () => void;
     onBrowserToggle?: () => void;
-    narrativeFontSize: number;
-    onDecreaseNarrativeFontSize: () => void;
-    onIncreaseNarrativeFontSize: () => void;
 }
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({
     onSettingsToggle,
     onAccountToggle,
     onBrowserToggle,
-    narrativeFontSize,
-    onDecreaseNarrativeFontSize,
-    onIncreaseNarrativeFontSize,
 }) => {
     const title = useTitle();
 
@@ -50,30 +44,6 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
             <div className="nav-title">{title}</div>
 
             <div className="flex gap-sm items-center">
-                <div className="font-size-control">
-                    <button
-                        onClick={onDecreaseNarrativeFontSize}
-                        aria-label="Decrease narrative font size"
-                        className="font-size-button"
-                        disabled={narrativeFontSize <= 10}
-                    >
-                        –
-                    </button>
-                    <span
-                        className="font-size-display"
-                        aria-live="polite"
-                    >
-                        {narrativeFontSize}px
-                    </span>
-                    <button
-                        onClick={onIncreaseNarrativeFontSize}
-                        aria-label="Increase narrative font size"
-                        className="font-size-button"
-                        disabled={narrativeFontSize >= 24}
-                    >
-                        +
-                    </button>
-                </div>
                 {onBrowserToggle && (
                     <button
                         className="account-icon"

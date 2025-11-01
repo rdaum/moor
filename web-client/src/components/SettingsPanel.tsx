@@ -15,15 +15,25 @@
 
 import React from "react";
 import { CommandEchoToggle } from "./CommandEchoToggle";
+import { FontSizeControl } from "./FontSizeControl";
 import { FontToggle } from "./FontToggle";
 import { ThemeToggle } from "./ThemeToggle";
 
 interface SettingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    narrativeFontSize: number;
+    onDecreaseNarrativeFontSize: () => void;
+    onIncreaseNarrativeFontSize: () => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({
+    isOpen,
+    onClose,
+    narrativeFontSize,
+    onDecreaseNarrativeFontSize,
+    onIncreaseNarrativeFontSize,
+}) => {
     if (!isOpen) return null;
 
     return (
@@ -46,9 +56,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose })
 
                 <div className="settings-content">
                     <div className="settings-section">
-                        <h3>Appearance</h3>
+                        <h3>Display</h3>
                         <ThemeToggle />
                         <FontToggle />
+                        <div className="settings-item">
+                            <span>Font size</span>
+                            <FontSizeControl
+                                fontSize={narrativeFontSize}
+                                onDecrease={onDecreaseNarrativeFontSize}
+                                onIncrease={onIncreaseNarrativeFontSize}
+                            />
+                        </div>
                     </div>
 
                     <div className="settings-section">

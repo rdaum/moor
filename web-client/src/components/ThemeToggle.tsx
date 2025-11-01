@@ -45,18 +45,17 @@ export const ThemeToggle: React.FC = () => {
         }
     };
 
-    // Return full-width clickable row for settings
     return (
-        <button
-            className="theme-toggle-row"
-            onClick={cycleTheme}
-            aria-label={`Switch theme (current: ${theme})`}
-            title="Click to cycle through Dark → Light → RetroGreen → RetroAmber themes"
-        >
+        <div className="settings-item">
             <span>Theme</span>
-            <span className="theme-indicator">
+            <button
+                className="settings-value-button"
+                onClick={cycleTheme}
+                aria-label={`Switch theme (current: ${theme})`}
+                title="Click to cycle through themes"
+            >
                 {getThemeDisplay(theme)}
-            </span>
-        </button>
+            </button>
+        </div>
     );
 };

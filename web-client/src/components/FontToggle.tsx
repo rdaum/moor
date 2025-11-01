@@ -42,16 +42,16 @@ export const FontToggle: React.FC = () => {
     };
 
     return (
-        <button
-            className="font-toggle-row"
-            onClick={toggleFont}
-            aria-label={`Switch font style (current: ${fontStyle})`}
-            title="Toggle between proportional and monospace fonts"
-        >
+        <div className="settings-item">
             <span>Font</span>
-            <span className="font-indicator">
+            <button
+                className="settings-value-button"
+                onClick={toggleFont}
+                aria-label={`Switch font style (current: ${fontStyle})`}
+                title="Toggle between proportional and monospace fonts"
+            >
                 {getFontDisplay(fontStyle)}
-            </span>
-        </button>
+            </button>
+        </div>
     );
 };

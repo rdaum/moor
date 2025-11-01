@@ -46,35 +46,24 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ isOpen, onClose, onLog
 
                 <div className="settings-content">
                     <div className="settings-section">
-                        <h3>Profile</h3>
-                        <div className="settings-item">
-                            <span>Profile settings</span>
-                            <span className="settings-placeholder">Coming soon</span>
-                        </div>
-                    </div>
-
-                    <div className="settings-section">
                         <h3>Security</h3>
                         <EncryptionSettings isAvailable={historyAvailable} />
                     </div>
-
-                    <div className="settings-section">
-                        <h3>Session</h3>
-                        {onLogout && (
-                            <div className="settings-item">
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => {
-                                        onLogout();
-                                        onClose();
-                                    }}
-                                >
-                                    Logout
-                                </button>
-                            </div>
-                        )}
-                    </div>
                 </div>
+
+                {onLogout && (
+                    <div className="settings-footer">
+                        <button
+                            className="btn btn-secondary w-full"
+                            onClick={() => {
+                                onLogout();
+                                onClose();
+                            }}
+                        >
+                            Logout
+                        </button>
+                    </div>
+                )}
             </div>
         </>
     );

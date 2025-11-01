@@ -545,3 +545,37 @@
   display: flex;
   gap: 0.5em;
 }
+
+.encryption-progress-container {
+  padding: 0.5em;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-tertiary);
+  font-size: 0.9em;
+}
+
+.encryption-progress-label {
+  margin-bottom: 0.25em;
+}
+
+.encryption-progress-bar-track {
+  width: 100%;
+  height: 4px;
+  background-color: var(--color-border-light);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.encryption-progress-bar-fill {
+  height: 100%;
+  background-color: var(--color-button-primary);
+  transition: width 0.2s ease;
+}
+
+.encryption-warning {
+  color: var(--color-text-error);
+  font-size: 0.95em;
+}
+
+.mb-xs {
+  margin-bottom: 0.25em;
+}

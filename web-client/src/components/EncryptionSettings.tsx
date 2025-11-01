@@ -255,7 +255,7 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                         <div className="flex-col gap-sm">
                             {exportState.readyBlob && exportState.readyFilename && (
                                 <div className="encryption-message-box-success">
-                                    <div className="font-semibold mb-sm" style={{ color: "var(--color-text-success)" }}>
+                                    <div className="font-semibold mb-sm text-success">
                                         ✓ Export Ready!
                                     </div>
                                     <div className="mb-md">
@@ -279,15 +279,8 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                 </div>
                             )}
                             {exportState.isExporting && exportState.progress && (
-                                <div
-                                    style={{
-                                        padding: "0.5em",
-                                        borderRadius: "var(--radius-md)",
-                                        backgroundColor: "var(--color-bg-tertiary)",
-                                        fontSize: "0.9em",
-                                    }}
-                                >
-                                    <div style={{ marginBottom: "0.25em" }}>
+                                <div className="encryption-progress-container">
+                                    <div className="encryption-progress-label">
                                         Exporting history...
                                         {exportState.progress.total && (
                                             <span>
@@ -300,32 +293,21 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                         )}
                                     </div>
                                     {exportState.progress.total && (
-                                        <div
-                                            style={{
-                                                width: "100%",
-                                                height: "4px",
-                                                backgroundColor: "var(--color-border-light)",
-                                                borderRadius: "2px",
-                                                overflow: "hidden",
-                                            }}
-                                        >
+                                        <div className="encryption-progress-bar-track">
                                             <div
+                                                className="encryption-progress-bar-fill"
                                                 style={{
                                                     width: `${
                                                         (exportState.progress.processed / exportState.progress.total)
                                                         * 100
                                                     }%`,
-                                                    height: "100%",
-                                                    backgroundColor: "var(--color-button-primary)",
-                                                    transition: "width 0.2s ease",
                                                 }}
                                             />
                                         </div>
                                     )}
                                     <button
                                         onClick={cancelExport}
-                                        className="btn btn-secondary btn-sm"
-                                        style={{ marginTop: "0.5em" }}
+                                        className="btn btn-secondary btn-sm mt-sm"
                                     >
                                         Cancel
                                     </button>
@@ -352,7 +334,7 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
                                 )
                                 : (
                                     <div className="flex-col gap-sm">
-                                        <div style={{ color: "var(--color-text-error)", fontSize: "0.95em" }}>
+                                        <div className="encryption-warning">
                                             ⚠️ This will permanently delete all your event history from the server. This
                                             cannot be undone!
                                         </div>

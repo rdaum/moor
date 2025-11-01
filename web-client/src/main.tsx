@@ -953,9 +953,6 @@ function AppContent({
                         onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
                             ? handleOpenObjectBrowser
                             : undefined}
-                        narrativeFontSize={narrativeFontSize}
-                        onDecreaseNarrativeFontSize={decreaseNarrativeFontSize}
-                        onIncreaseNarrativeFontSize={increaseNarrativeFontSize}
                     />
                 </>
             )}
@@ -964,6 +961,9 @@ function AppContent({
             <SettingsPanel
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
+                narrativeFontSize={narrativeFontSize}
+                onDecreaseNarrativeFontSize={decreaseNarrativeFontSize}
+                onIncreaseNarrativeFontSize={increaseNarrativeFontSize}
             />
 
             {/* Account menu */}
