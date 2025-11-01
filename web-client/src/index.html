@@ -10,18 +10,6 @@
     <script>
         // Global module object for djot generated links
         window.module = {};
-        
-        // Fetch title from system property
-        fetch('/system_property/login/moo_title')
-            .then(response => response.ok ? response.json() : Promise.reject())
-            .then(data => {
-                if (data && typeof data === 'string') {
-                    document.getElementById('page-title').textContent = data;
-                }
-            })
-            .catch(() => {
-                // Fallback to default title already set
-            });
     </script>
     <script type="module" src="./main.tsx"></script>
 </body>

@@ -14,19 +14,19 @@
 // ! Hook for fetching and managing the MOO title
 
 import { useEffect, useState } from "react";
+import { getSystemPropertyFlatBuffer } from "../lib/rpc-fb";
 
 export const useTitle = () => {
     const [title, setTitle] = useState<string>("mooR");
 
     useEffect(() => {
-        // Fetch title from system property - same call as in index.html
-        fetch("/system_property/login/moo_title")
-            .then(response => response.ok ? response.json() : Promise.reject())
+        // Fetch title from system property using FlatBuffer API
+        getSystemPropertyFlatBuffer(["login"], "moo_title")
             .then(data => {
                 if (data && typeof data === "string") {
                     setTitle(data);
                 } else if (Array.isArray(data) && data.length > 0) {
-                    // Handle array response (like welcome message)
+                    // Handle array response (join lines)
                     setTitle(data.join(" ") || "mooR");
                 }
             })
