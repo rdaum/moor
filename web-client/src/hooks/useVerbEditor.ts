@@ -32,10 +32,12 @@ export interface EditorSession {
     content: string;
     uploadAction?: string; // For MCP-triggered editors
     verbMetadata?: VerbMetadata; // Verb metadata from server
+    presentationId?: string; // ID of the presentation that triggered this editor
 }
 
 export const useVerbEditor = () => {
-    const [editorSession, setEditorSession] = useState<EditorSession | null>(null);
+    const [editorSessions, setEditorSessions] = useState<EditorSession[]>([]);
+    const [activeSessionIndex, setActiveSessionIndex] = useState(0);
 
     // Launch verb editor with specific content
     const launchVerbEditor = useCallback(async (
@@ -43,53 +45,89 @@ export const useVerbEditor = () => {
         objectCurie: string,
         verbName: string,
         authToken: string,
+        presentationId?: string,
     ) => {
         try {
-            // Fetch verb content from server
-            const response = await fetch(`/verbs/${objectCurie}/${encodeURIComponent(verbName)}`, {
-                method: "GET",
-                headers: {
-                    "X-Moor-Auth-Token": authToken,
-                },
-            });
+            // Fetch verb content from server using FlatBuffer API
+            const { getVerbCodeFlatBuffer } = await import("../lib/rpc-fb");
+            const { objToString } = await import("../lib/var");
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch verb: ${response.status} ${response.statusText}`);
+            const verbValue = await getVerbCodeFlatBuffer(authToken, objectCurie, verbName);
+
+            // Extract code from FlatBuffer VerbValue
+            const codeLength = verbValue.codeLength();
+            const codeLines: string[] = [];
+            for (let i = 0; i < codeLength; i++) {
+                const line = verbValue.code(i);
+                if (line) {
+                    codeLines.push(line);
+                }
+            }
+            const content = codeLines.join("\n");
+
+            // Extract verb metadata from VerbInfo
+            const verbInfo = verbValue.verbInfo();
+            if (!verbInfo) {
+                throw new Error("No verb info in response");
             }
 
-            const verbData = await response.json();
+            const location = objToString(verbInfo.location());
+            const owner = objToString(verbInfo.owner());
 
-            // Extract code array and join it into a single string
-            const content = Array.isArray(verbData.code)
-                ? verbData.code.join("\n")
-                : verbData.code || "";
+            const namesLength = verbInfo.namesLength();
+            const names: string[] = [];
+            for (let i = 0; i < namesLength; i++) {
+                const nameSymbol = verbInfo.names(i);
+                const name = nameSymbol?.value();
+                if (name) {
+                    names.push(name);
+                }
+            }
 
-            // Extract verb metadata
+            const argSpecLength = verbInfo.argSpecLength();
+            const argSpec: string[] = [];
+            for (let i = 0; i < argSpecLength; i++) {
+                const argSymbol = verbInfo.argSpec(i);
+                const arg = argSymbol?.value();
+                if (arg) {
+                    argSpec.push(arg);
+                }
+            }
+
             const verbMetadata: VerbMetadata = {
-                location: verbData.location,
-                owner: verbData.owner,
-                names: verbData.names,
-                r: verbData.r,
-                w: verbData.w,
-                x: verbData.x,
-                d: verbData.d,
-                arg_spec: verbData.arg_spec,
+                location: location ? parseInt(location) : 0,
+                owner: owner ? parseInt(owner) : 0,
+                names,
+                r: verbInfo.r(),
+                w: verbInfo.w(),
+                x: verbInfo.x(),
+                d: verbInfo.d(),
+                arg_spec: argSpec,
             };
 
             // Create a more descriptive title using verb metadata
             const verbTitle = `${verbMetadata.names[0]} on #${verbMetadata.location}`;
 
             // Create editor session
-            setEditorSession({
+            const newSession: EditorSession = {
                 id: `${objectCurie}:${verbName}`,
                 title: verbTitle,
                 objectCurie,
                 verbName,
                 content,
                 verbMetadata,
+                presentationId,
+            };
+
+            // Always add to array and set active to the newly added session
+            setEditorSessions(prev => {
+                const newSessions = [...prev, newSession];
+                setActiveSessionIndex(newSessions.length - 1);
+                return newSessions;
             });
         } catch (error) {
             console.error("Error launching verb editor:", error);
+            throw error; // Re-throw to allow caller to handle
         }
     }, []);
 
@@ -101,25 +139,66 @@ export const useVerbEditor = () => {
         content: string,
         uploadAction?: string,
     ) => {
-        setEditorSession({
+        const newSession: EditorSession = {
             id: `${objectCurie}:${verbName}`,
             title,
             objectCurie,
             verbName,
             content,
             uploadAction,
+        };
+
+        // Always add to array and set active to the newly added session
+        setEditorSessions(prev => {
+            const newSessions = [...prev, newSession];
+            setActiveSessionIndex(newSessions.length - 1);
+            return newSessions;
         });
     }, []);
 
-    // Close the editor
-    const closeEditor = useCallback(() => {
-        setEditorSession(null);
+    // Close a specific editor session
+    const closeEditor = useCallback((sessionId?: string) => {
+        if (sessionId) {
+            // Close specific session
+            setEditorSessions(prev => {
+                const newSessions = prev.filter(s => s.id !== sessionId);
+                // Adjust active index if needed
+                setActiveSessionIndex(current => {
+                    if (current >= newSessions.length) {
+                        return Math.max(0, newSessions.length - 1);
+                    }
+                    return current;
+                });
+                return newSessions;
+            });
+        } else {
+            // Close all sessions (for backward compatibility)
+            setEditorSessions([]);
+            setActiveSessionIndex(0);
+        }
     }, []);
+
+    // Navigate to previous session
+    const previousSession = useCallback(() => {
+        setActiveSessionIndex(prev => (prev > 0 ? prev - 1 : editorSessions.length - 1));
+    }, [editorSessions.length]);
+
+    // Navigate to next session
+    const nextSession = useCallback(() => {
+        setActiveSessionIndex(prev => (prev < editorSessions.length - 1 ? prev + 1 : 0));
+    }, [editorSessions.length]);
+
+    // Get the first editor session (for backward compatibility with single-editor mode)
+    const editorSession = editorSessions.length > 0 ? editorSessions[activeSessionIndex] : null;
 
     return {
         editorSession,
+        editorSessions,
+        activeSessionIndex,
         launchVerbEditor,
         showVerbEditor,
         closeEditor,
+        previousSession,
+        nextSession,
     };
 };

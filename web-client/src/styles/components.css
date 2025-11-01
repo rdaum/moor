@@ -775,6 +775,8 @@
   transform: translateX(-50%);
   width: auto;
   box-shadow: 0 4px 16px var(--color-shadow);
+  z-index: 10000;
+  border: 2px solid var(--color-text-error);
 }
 
 /* ====== PRESENTATION WINDOWS ====== */

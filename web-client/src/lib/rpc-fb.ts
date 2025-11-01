@@ -722,12 +722,26 @@ export function handleClientEventFlatBuffer(
                                 contentType = "text/plain";
                             }
 
+                            // Parse attributes
+                            const attributes: Array<[string, string]> = [];
+                            const attributesLength = presentation.attributesLength();
+                            for (let i = 0; i < attributesLength; i++) {
+                                const attr = presentation.attributes(i);
+                                if (attr) {
+                                    const key = attr.key();
+                                    const value = attr.value();
+                                    if (key && value) {
+                                        attributes.push([key, value]);
+                                    }
+                                }
+                            }
+
                             const presentData = {
                                 id: presentation.id(),
                                 content: presentation.content(),
                                 content_type: contentType,
                                 target: presentation.target(),
-                                // TODO: Add attributes if needed
+                                attributes,
                             };
                             onPresentMessage(presentData);
                         }

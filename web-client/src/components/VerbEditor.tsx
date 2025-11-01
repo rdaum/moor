@@ -41,6 +41,11 @@ interface VerbEditorProps {
     onSave?: () => void; // Callback to refresh verb data after metadata save
     onDelete?: () => void; // Callback to delete verb
     normalizeObjectInput?: (raw: string) => string; // Utility to convert object references to MOO expressions
+    // Navigation for multiple editors
+    onPreviousEditor?: () => void; // Navigate to previous editor
+    onNextEditor?: () => void; // Navigate to next editor
+    editorCount?: number; // Total number of editors
+    currentEditorIndex?: number; // Current editor index (0-based)
 }
 
 interface CompileError {
@@ -80,6 +85,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     onSave,
     onDelete,
     normalizeObjectInput,
+    onPreviousEditor,
+    onNextEditor,
+    editorCount = 1,
+    currentEditorIndex = 0,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const [content, setContent] = useState(initialContent);
@@ -1493,6 +1502,63 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     </span>
                 </h3>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    {/* Navigation arrows for multiple editors (only in split/docked mode) */}
+                    {splitMode && editorCount > 1 && onPreviousEditor && onNextEditor && (
+                        <div
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                marginRight: "var(--space-sm)",
+                            }}
+                        >
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPreviousEditor();
+                                }}
+                                aria-label="Previous editor"
+                                title="Previous editor"
+                                style={{
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                    color: "var(--color-text-primary)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    padding: "4px 8px",
+                                    borderRadius: "var(--radius-sm)",
+                                    cursor: "pointer",
+                                    fontSize: "14px",
+                                    lineHeight: "1",
+                                }}
+                            >
+                                ◀
+                            </button>
+                            <span
+                                style={{ fontSize: "12px", color: "var(--color-text-secondary)", userSelect: "none" }}
+                            >
+                                {currentEditorIndex + 1}/{editorCount}
+                            </span>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onNextEditor();
+                                }}
+                                aria-label="Next editor"
+                                title="Next editor"
+                                style={{
+                                    backgroundColor: "var(--color-bg-secondary)",
+                                    color: "var(--color-text-primary)",
+                                    border: "1px solid var(--color-border-medium)",
+                                    padding: "4px 8px",
+                                    borderRadius: "var(--radius-sm)",
+                                    cursor: "pointer",
+                                    fontSize: "14px",
+                                    lineHeight: "1",
+                                }}
+                            >
+                                ▶
+                            </button>
+                        </div>
+                    )}
                     {/* Remove button - only shown if onDelete handler provided */}
                     {onDelete && (
                         <button

@@ -249,9 +249,13 @@ function AppContent({
     // Verb editor state (only used in this component for the modal)
     const {
         editorSession,
+        editorSessions,
+        activeSessionIndex,
         launchVerbEditor,
         closeEditor,
         showVerbEditor,
+        previousSession,
+        nextSession,
     } = useVerbEditor();
 
     // Property editor state
@@ -346,46 +350,90 @@ function AppContent({
 
     // Custom close handler for verb editor that also dismisses presentation
     const handleVerbEditorClose = useCallback(() => {
-        // Find and dismiss any verb editor presentations
-        const verbEditorPresentations = getVerbEditorPresentations();
-        if (verbEditorPresentations.length > 0 && authState.player?.authToken) {
-            verbEditorPresentations.forEach(presentation => {
-                dismissPresentation(presentation.id, authState.player!.authToken);
-            });
+        // If there are multiple sessions, close only the current one
+        if (editorSessions.length > 1 && editorSession) {
+            // Dismiss the presentation for the current session
+            if (editorSession.presentationId && authState.player?.authToken) {
+                dismissPresentation(editorSession.presentationId, authState.player.authToken);
+            }
+            // Close just this session
+            closeEditor(editorSession.id);
+        } else {
+            // Last session - dismiss all presentations and close all
+            const verbEditorPresentations = getVerbEditorPresentations();
+            if (verbEditorPresentations.length > 0 && authState.player?.authToken) {
+                verbEditorPresentations.forEach(presentation => {
+                    dismissPresentation(presentation.id, authState.player!.authToken);
+                });
+            }
+            closeEditor();
         }
-        closeEditor();
-    }, [getVerbEditorPresentations, dismissPresentation, authState.player?.authToken, closeEditor]);
+    }, [
+        editorSessions.length,
+        editorSession,
+        getVerbEditorPresentations,
+        dismissPresentation,
+        authState.player?.authToken,
+        closeEditor,
+    ]);
 
     // Handle verb editor presentations from server
     useEffect(() => {
         const verbEditorPresentations = getVerbEditorPresentations();
 
-        // If we have verb editor presentations and no current editor session, launch the first one
-        if (verbEditorPresentations.length > 0 && !editorSession && authState.player?.authToken) {
-            const presentation = verbEditorPresentations[0];
+        // Process each presentation and launch editors for ones we don't have sessions for
+        if (verbEditorPresentations.length > 0 && authState.player?.authToken) {
+            for (const presentation of verbEditorPresentations) {
+                // Check if we already have a session for this presentation
+                const existingSession = editorSessions.find(s => s.presentationId === presentation.id);
 
-            // Parse presentation attributes to extract object and verb information
-            const objectCurie = presentation.attrs.object || presentation.attrs.objectCurie;
-            const verbName = presentation.attrs.verb || presentation.attrs.verbName;
+                if (!existingSession) {
+                    // Parse presentation attributes to extract object and verb information
+                    const objectCurie = presentation.attrs.object || presentation.attrs.objectCurie;
+                    const verbName = presentation.attrs.verb || presentation.attrs.verbName;
 
-            if (objectCurie && verbName) {
-                // Use launchVerbEditor to fetch content via REST API
-                launchVerbEditor(
-                    presentation.title,
-                    objectCurie,
-                    verbName,
-                    authState.player.authToken,
-                );
+                    if (objectCurie && verbName) {
+                        // Use launchVerbEditor to fetch content via REST API
+                        launchVerbEditor(
+                            presentation.title,
+                            objectCurie,
+                            verbName,
+                            authState.player.authToken,
+                            presentation.id,
+                        ).catch((error) => {
+                            // Show error message
+                            const errorMsg = `Failed to open verb editor: ${error.message}`;
+                            console.log("[VerbEditor] Showing error:", errorMsg);
+                            showMessage(errorMsg, 5);
+                            // Clean up the presentation
+                            if (authState.player?.authToken) {
+                                dismissPresentation(presentation.id, authState.player.authToken);
+                            }
+                        });
+                    }
+                }
             }
         }
 
-        // If editor session exists but no presentations, close the editor
-        // (This handles the case where the presentation was dismissed)
+        // Close any sessions that no longer have a corresponding presentation
         // Only close if this was a presentation-triggered editor (no uploadAction means it came from a presentation)
-        if (editorSession && verbEditorPresentations.length === 0 && !editorSession.uploadAction) {
-            closeEditor();
+        for (const session of editorSessions) {
+            if (session.presentationId && !session.uploadAction) {
+                const hasPresentation = verbEditorPresentations.some(p => p.id === session.presentationId);
+                if (!hasPresentation) {
+                    closeEditor(session.id);
+                }
+            }
         }
-    }, [getVerbEditorPresentations, editorSession, launchVerbEditor, closeEditor, authState.player?.authToken]);
+    }, [
+        getVerbEditorPresentations,
+        editorSessions,
+        launchVerbEditor,
+        closeEditor,
+        authState.player?.authToken,
+        dismissPresentation,
+        showMessage,
+    ]);
 
     // MCP handler for parsing edit commands - passed from parent
     // (We receive the handler instead of creating it here)
@@ -1051,6 +1099,10 @@ function AppContent({
                                     splitMode={true}
                                     onToggleSplitMode={toggleSplitMode}
                                     isInSplitMode={true}
+                                    onPreviousEditor={previousSession}
+                                    onNextEditor={nextSession}
+                                    editorCount={editorSessions.length}
+                                    currentEditorIndex={activeSessionIndex}
                                 />
                             )}
                             {propertyEditorDocked && propertyEditorSession && (
@@ -1085,22 +1137,37 @@ function AppContent({
                 </main>
             )}
 
-            {/* Editor Modals (fallback for non-split mode) */}
-            {editorSession && authState.player?.authToken && !verbEditorDocked && (
-                <VerbEditor
-                    visible={true}
-                    onClose={handleVerbEditorClose}
-                    title={editorSession.title}
-                    objectCurie={editorSession.objectCurie}
-                    verbName={editorSession.verbName}
-                    initialContent={editorSession.content}
-                    authToken={authState.player.authToken}
-                    uploadAction={editorSession.uploadAction}
-                    onSendMessage={sendMessage}
-                    onToggleSplitMode={toggleSplitMode}
-                    isInSplitMode={false}
-                />
-            )}
+            {/* Editor Modals (floating mode) - render all non-docked sessions */}
+            {authState.player?.authToken && !verbEditorDocked && editorSessions.map((session) => {
+                const authToken = authState.player!.authToken;
+                return (
+                    <VerbEditor
+                        key={session.id}
+                        visible={true}
+                        onClose={() => {
+                            // Close this specific session
+                            closeEditor(session.id);
+                            // Also dismiss presentation if it exists
+                            if (session.presentationId && authState.player?.authToken) {
+                                const verbEditorPresentations = getVerbEditorPresentations();
+                                const presentation = verbEditorPresentations.find(p => p.id === session.presentationId);
+                                if (presentation) {
+                                    dismissPresentation(presentation.id, authState.player.authToken);
+                                }
+                            }
+                        }}
+                        title={session.title}
+                        objectCurie={session.objectCurie}
+                        verbName={session.verbName}
+                        initialContent={session.content}
+                        authToken={authToken}
+                        uploadAction={session.uploadAction}
+                        onSendMessage={sendMessage}
+                        onToggleSplitMode={toggleSplitMode}
+                        isInSplitMode={false}
+                    />
+                );
+            })}
             {propertyEditorSession && authState.player?.authToken && !propertyEditorDocked && (
                 <PropertyEditor
                     visible={true}

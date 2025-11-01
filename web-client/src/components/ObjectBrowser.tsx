@@ -1941,7 +1941,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         </div>
                                     )
                                     : (
-                                        groupedProperties.map(([definer, props], groupIdx) => (
+                                        groupedProperties.map(([definer, props], _groupIdx) => (
                                             <div key={definer}>
                                                 {definer !== selectedObject.obj && showInheritedProperties && (
                                                     <div style={inheritedLabelStyle}>
@@ -2118,7 +2118,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         </div>
                                     )
                                     : (
-                                        groupedVerbs.map(([location, verbList], groupIdx) => (
+                                        groupedVerbs.map(([location, verbList], _groupIdx) => (
                                             <div key={location}>
                                                 {location !== selectedObject.obj && showInheritedVerbs && (
                                                     <div style={inheritedLabelStyle}>
