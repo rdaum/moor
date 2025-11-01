@@ -679,6 +679,24 @@ impl Var {
                 }
                 true
             }
+            (Variant::Flyweight(f1), Variant::Flyweight(f2)) => {
+                if f1.delegate() != f2.delegate() {
+                    return false;
+                }
+                let slots1 = f1.slots();
+                let slots2 = f2.slots();
+                if slots1.len() != slots2.len() {
+                    return false;
+                }
+                for ((k1, v1), (k2, v2)) in slots1.iter().zip(slots2.iter()) {
+                    if k1 != k2 || !v1.eq_case_sensitive(v2) {
+                        return false;
+                    }
+                }
+                let contents1 = Var::from_variant(Variant::List(f1.contents().clone()));
+                let contents2 = Var::from_variant(Variant::List(f2.contents().clone()));
+                contents1.eq_case_sensitive(&contents2)
+            }
             _ => self.eq(other),
         }
     }

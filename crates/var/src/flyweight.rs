@@ -43,7 +43,7 @@ pub struct Flyweight(Box<Inner>);
 #[derive(Clone, PartialOrd, Ord, Eq)]
 struct Inner {
     delegate: Obj,
-    slots: imbl::Vector<(Symbol, Var)>,
+    slots: imbl::OrdMap<Symbol, Var>,
     contents: List,
 }
 
@@ -77,7 +77,7 @@ impl Flyweight {
     pub fn mk_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Self {
         Self(Box::new(Inner {
             delegate,
-            slots: imbl::Vector::from(slots),
+            slots: slots.iter().cloned().collect(),
             contents,
         }))
     }
@@ -86,11 +86,11 @@ impl Flyweight {
 impl Flyweight {
     /// Return the slot with the given key, if it exists.
     pub fn get_slot(&self, key: &Symbol) -> Option<&Var> {
-        self.0.slots.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+        self.0.slots.get(key)
     }
 
     pub fn slots(&self) -> Vec<(Symbol, Var)> {
-        self.0.slots.iter().cloned().collect()
+        self.0.slots.iter().map(|(k, v)| (*k, v.clone())).collect()
     }
 
     pub fn delegate(&self) -> &Obj {
@@ -99,6 +99,33 @@ impl Flyweight {
 
     pub fn contents(&self) -> &List {
         &self.0.contents
+    }
+
+    /// Add or update a slot, returning a new Flyweight with the change.
+    pub fn add_slot(&self, key: Symbol, value: Var) -> Self {
+        let mut new_slots = self.0.slots.clone();
+        new_slots.insert(key, value);
+        Self(Box::new(Inner {
+            delegate: self.0.delegate,
+            slots: new_slots,
+            contents: self.0.contents.clone(),
+        }))
+    }
+
+    /// Remove a slot, returning a new Flyweight without that slot.
+    pub fn remove_slot(&self, key: Symbol) -> Self {
+        let mut new_slots = self.0.slots.clone();
+        new_slots.remove(&key);
+        Self(Box::new(Inner {
+            delegate: self.0.delegate,
+            slots: new_slots,
+            contents: self.0.contents.clone(),
+        }))
+    }
+
+    /// Get slots as a map (for the slots() builtin).
+    pub fn slots_as_map(&self) -> imbl::OrdMap<Symbol, Var> {
+        self.0.slots.clone()
     }
 
     pub fn with_new_contents(&self, new_contents: List) -> Var {
@@ -184,5 +211,49 @@ impl Sequence for Flyweight {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Obj, v_int};
+
+    #[test]
+    fn test_add_slot_doesnt_clobber_existing_slots() {
+        // This is the critical test - adding a new slot should not clobber existing slots
+        let sym_dobj = Symbol::mk("dobj");
+        let sym_dobj_name = Symbol::mk("dobj_name");
+        let sym_iobj = Symbol::mk("iobj");
+
+        // Create initial flyweight with multiple slots
+        let initial_slots = vec![(sym_dobj, v_int(12)), (sym_iobj, v_int(13))];
+        let fw = Flyweight::mk_flyweight(Obj::mk_id(0), &initial_slots, List::mk_list(&[]));
+
+        // Add a new slot with a similar name
+        let fw2 = fw.add_slot(sym_dobj_name, v_int(100));
+
+        // Original slots should still have their values
+        assert_eq!(fw2.get_slot(&sym_dobj), Some(&v_int(12)));
+        assert_eq!(fw2.get_slot(&sym_iobj), Some(&v_int(13)));
+        assert_eq!(fw2.get_slot(&sym_dobj_name), Some(&v_int(100)));
+        assert_eq!(fw2.slots().len(), 3);
+    }
+
+    #[test]
+    fn test_add_slot_updates_existing_slot() {
+        // Adding a slot that already exists should update it
+        let sym_a = Symbol::mk("a");
+        let sym_b = Symbol::mk("b");
+
+        let initial_slots = vec![(sym_a, v_int(1)), (sym_b, v_int(2))];
+        let fw = Flyweight::mk_flyweight(Obj::mk_id(0), &initial_slots, List::mk_list(&[]));
+
+        // Update existing slot
+        let fw2 = fw.add_slot(sym_a, v_int(999));
+
+        assert_eq!(fw2.get_slot(&sym_a), Some(&v_int(999)));
+        assert_eq!(fw2.get_slot(&sym_b), Some(&v_int(2)));
+        assert_eq!(fw2.slots().len(), 2);
     }
 }

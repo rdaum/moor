@@ -32,15 +32,15 @@ use crate::{
     vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction},
 };
 
-/// MOO: `int is_member(any value, list|map container)`
+/// MOO: `int is_member(any value, list|map|flyweight container)`
 /// Returns non-zero if value is a member of container, zero otherwise.
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
     }
     let (value, container) = (&bf_args.args[0], &bf_args.args[1]);
-    // `is_member` is overloaded to work on both maps and lists, so `bf_list_sets.rs`
-    // is not *really* a correct place for it, but `bf_list_sets_and_maps_too_i_guess.rs` is a bit silly.
+    // `is_member` is overloaded to work on maps, lists, and flyweights, so `bf_list_sets.rs`
+    // is not *really* a correct place for it, but `bf_list_sets_and_maps_and_flyweights_i_guess.rs` is a bit silly.
     match container.variant() {
         Variant::List(list) => {
             if list
@@ -59,6 +59,18 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .map(|pos| pos + 1)
                 .unwrap_or(0) as i64,
         ))),
+        Variant::Flyweight(flyweight) => {
+            if flyweight
+                .contents()
+                .index_in(value, true)
+                .map_err(BfErr::ErrValue)?
+                .is_some()
+            {
+                Ok(Ret(v_int(1)))
+            } else {
+                Ok(Ret(v_int(0)))
+            }
+        }
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
