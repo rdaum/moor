@@ -15,6 +15,7 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useTouchDevice } from "../hooks/useTouchDevice";
 import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
 import { objToString } from "../lib/var.js";
 
@@ -91,6 +92,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     currentEditorIndex = 0,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
+    const isTouchDevice = useTouchDevice();
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<CompileError[]>([]);
     const [isCompiling, setIsCompiling] = useState(false);
@@ -1635,8 +1637,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         {isCompiling ? "⏳" : "▶"}
                     </button>
 
-                    {/* Split/Float toggle button - only on desktop */}
-                    {!isMobile && onToggleSplitMode && (
+                    {/* Split/Float toggle button - only on non-touch devices */}
+                    {!isTouchDevice && onToggleSplitMode && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation(); // Prevent drag handler from firing
@@ -1646,7 +1648,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                             className="editor-btn-toggle-split"
                         >
-                            {isInSplitMode ? "🪟" : "⇅"}
+                            {isInSplitMode ? "🪟" : "⬌"}
                         </button>
                     )}
                     <button

@@ -35,9 +35,9 @@ import { PresentationProvider, usePresentationContext } from "./context/Presenta
 import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
-import { useMediaQuery } from "./hooks/useMediaQuery";
 import { usePropertyEditor } from "./hooks/usePropertyEditor";
 import { useTitle } from "./hooks/useTitle";
+import { useTouchDevice } from "./hooks/useTouchDevice";
 import { useVerbEditor } from "./hooks/useVerbEditor";
 import { OAuth2UserInfo } from "./lib/oauth2";
 import { MoorRemoteObject } from "./lib/rpc";
@@ -106,9 +106,9 @@ function AppContent({
     const splitRatioRef = useRef(splitRatio);
     splitRatioRef.current = splitRatio;
 
-    const isMobile = useMediaQuery("(max-width: 768px)");
+    const isTouchDevice = useTouchDevice();
     const [forceSplitMode, setForceSplitMode] = useState(false);
-    const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isMobile);
+    const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isTouchDevice);
     const [narrativeFontSize, setNarrativeFontSize] = useState(() => {
         const fallback = 14;
         if (typeof window === "undefined") {
@@ -130,11 +130,11 @@ function AppContent({
     }, []);
 
     const toggleObjectBrowserDock = useCallback(() => {
-        if (isMobile) {
+        if (isTouchDevice) {
             return;
         }
         setIsObjectBrowserDocked(prev => !prev);
-    }, [isMobile]);
+    }, [isTouchDevice]);
 
     const decreaseNarrativeFontSize = useCallback(() => {
         setNarrativeFontSize(prev => Math.max(10, prev - 1));
@@ -145,10 +145,10 @@ function AppContent({
     }, []);
 
     useEffect(() => {
-        if (isMobile && !isObjectBrowserDocked) {
+        if (isTouchDevice && !isObjectBrowserDocked) {
             setIsObjectBrowserDocked(true);
         }
-    }, [isMobile, isObjectBrowserDocked]);
+    }, [isTouchDevice, isObjectBrowserDocked]);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -268,7 +268,7 @@ function AppContent({
     } = usePropertyEditor();
 
     const handleOpenObjectBrowser = useCallback(() => {
-        if (isMobile) {
+        if (isTouchDevice) {
             closeEditor();
             closePropertyEditor();
             if (!isObjectBrowserDocked) {
@@ -276,26 +276,26 @@ function AppContent({
             }
         }
         setIsObjectBrowserOpen(true);
-    }, [isMobile, closeEditor, closePropertyEditor, isObjectBrowserDocked]);
+    }, [isTouchDevice, closeEditor, closePropertyEditor, isObjectBrowserDocked]);
 
     useEffect(() => {
-        if (!isMobile) {
+        if (!isTouchDevice) {
             return;
         }
         if (isObjectBrowserOpen) {
             closeEditor();
             closePropertyEditor();
         }
-    }, [isMobile, isObjectBrowserOpen, closeEditor, closePropertyEditor]);
+    }, [isTouchDevice, isObjectBrowserOpen, closeEditor, closePropertyEditor]);
 
     useEffect(() => {
-        if (!isMobile) {
+        if (!isTouchDevice) {
             return;
         }
         if ((editorSession || propertyEditorSession) && isObjectBrowserOpen) {
             setIsObjectBrowserOpen(false);
         }
-    }, [isMobile, editorSession, propertyEditorSession, isObjectBrowserOpen]);
+    }, [isTouchDevice, editorSession, propertyEditorSession, isObjectBrowserOpen]);
 
     // Notify parent about verb editor availability
     useEffect(() => {
@@ -869,8 +869,8 @@ function AppContent({
     }, [isDraggingSplit]);
 
     const isConnected = authState.player?.connected || false;
-    const verbEditorDocked = !!editorSession && (isMobile || forceSplitMode);
-    const propertyEditorDocked = !!propertyEditorSession && (isMobile || forceSplitMode);
+    const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
+    const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
     const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
     const isSplitMode = isConnected && (verbEditorDocked || propertyEditorDocked || objectBrowserDocked);
     const canUseObjectBrowser = Boolean(

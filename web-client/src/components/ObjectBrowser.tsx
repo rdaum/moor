@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
+import { useTouchDevice } from "../hooks/useTouchDevice.js";
 import { MoorVar } from "../lib/MoorVar.js";
 import {
     fetchServerFeatures,
@@ -121,6 +122,12 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     isInSplitMode = false,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
+    const isTouchDevice = useTouchDevice();
+    // Use tabbed layout on touch devices with mobile-sized screens
+    // The split pane with draggable divider doesn't work well on touch
+    const useTabLayout = isMobile && isTouchDevice;
+    const [activeTab, setActiveTab] = useState<"objects" | "properties" | "verbs">("objects");
+    const [isFullscreen, setIsFullscreen] = useState(useTabLayout); // Start fullscreen on mobile
     const [objects, setObjects] = useState<ObjectData[]>([]);
     const [selectedObject, setSelectedObject] = useState<ObjectData | null>(null);
     const [properties, setProperties] = useState<PropertyData[]>([]);
@@ -1077,6 +1084,33 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         e.stopPropagation();
     }, []);
 
+    const handleSplitTouchStart = useCallback((e: React.TouchEvent) => {
+        setIsSplitDragging(true);
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+    const handleTouchMove = useCallback((e: TouchEvent) => {
+        if (isSplitDragging && containerRef.current) {
+            const touch = e.touches[0];
+            const rect = containerRef.current.getBoundingClientRect();
+            const relativeY = touch.clientY - rect.top;
+            const titleBar = containerRef.current.querySelector("[aria-labelledby=\"object-browser-title\"]")
+                ?.children[0];
+            const titleBarHeight = titleBar ? (titleBar as HTMLElement).offsetHeight : 0;
+            const availableHeight = rect.height - titleBarHeight;
+
+            const minHeight = availableHeight * 0.2;
+            const maxHeight = availableHeight * 0.8;
+            const newHeight = Math.max(minHeight, Math.min(maxHeight, relativeY - titleBarHeight));
+            setBrowserPaneHeight(newHeight);
+        }
+    }, [isSplitDragging]);
+
+    const handleTouchEnd = useCallback(() => {
+        setIsSplitDragging(false);
+    }, []);
+
     // Group properties by definer
     const groupedProperties = React.useMemo(() => {
         const filterLower = propertyFilter.toLowerCase();
@@ -1167,15 +1201,19 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         if (isDragging || isResizing || isSplitDragging) {
             document.addEventListener("mousemove", handleMouseMove);
             document.addEventListener("mouseup", handleMouseUp);
+            document.addEventListener("touchmove", handleTouchMove, { passive: false });
+            document.addEventListener("touchend", handleTouchEnd);
             document.body.style.userSelect = "none";
 
             return () => {
                 document.removeEventListener("mousemove", handleMouseMove);
                 document.removeEventListener("mouseup", handleMouseUp);
+                document.removeEventListener("touchmove", handleTouchMove);
+                document.removeEventListener("touchend", handleTouchEnd);
                 document.body.style.userSelect = "";
             };
         }
-    }, [isDragging, isResizing, isSplitDragging, handleMouseMove, handleMouseUp]);
+    }, [isDragging, isResizing, isSplitDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -1365,7 +1403,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         <>
             <div
                 ref={containerRef}
-                className="object_browser_container"
+                className={`object_browser_container ${isFullscreen ? "fullscreen-mobile" : ""}`}
                 role={splitMode ? "region" : "dialog"}
                 aria-modal={splitMode ? undefined : "true"}
                 aria-labelledby="object-browser-title"
@@ -1451,8 +1489,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 V
                             </button>
                         </div>
-                        {/* Split/Float toggle button - only on desktop */}
-                        {!isMobile && onToggleSplitMode && (
+                        {/* Split/Float toggle button - only on non-touch devices */}
+                        {!isTouchDevice && onToggleSplitMode && (
                             <button
                                 className="browser-mode-toggle"
                                 onClick={(e) => {
@@ -1463,9 +1501,22 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                 title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                                 style={{ fontSize: `${secondaryFontSize}px` }}
                             >
-                                {isInSplitMode ? "🪟" : "⇅"}
+                                {isInSplitMode ? "🪟" : "⬌"}
                             </button>
                         )}
+                        {/* Fullscreen toggle button */}
+                        <button
+                            className="browser-mode-toggle"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsFullscreen(prev => !prev);
+                            }}
+                            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                            style={{ fontSize: `${secondaryFontSize}px` }}
+                        >
+                            {isFullscreen ? "🗗" : "🗖"}
+                        </button>
                         <button
                             className="editor-btn-close"
                             onClick={onClose}
@@ -1478,9 +1529,35 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
                 {/* Main content area - 3 panes + editor */}
                 <div className="browser-content">
+                    {/* Tab navigation for small screens */}
+                    {useTabLayout && (
+                        <div className="browser-tabs">
+                            <button
+                                className={`browser-tab ${activeTab === "objects" ? "active" : ""}`}
+                                onClick={() => setActiveTab("objects")}
+                            >
+                                Objects
+                            </button>
+                            <button
+                                className={`browser-tab ${activeTab === "properties" ? "active" : ""}`}
+                                onClick={() => setActiveTab("properties")}
+                                disabled={!selectedObject}
+                            >
+                                Properties
+                            </button>
+                            <button
+                                className={`browser-tab ${activeTab === "verbs" ? "active" : ""}`}
+                                onClick={() => setActiveTab("verbs")}
+                                disabled={!selectedObject}
+                            >
+                                Verbs
+                            </button>
+                        </div>
+                    )}
+
                     {/* Top area - 3 panes */}
                     <div
-                        className="browser-panes"
+                        className={`browser-panes ${useTabLayout ? "tabbed" : ""}`}
                         style={{
                             height: (editorVisible || selectedObject)
                                 ? `${browserPaneHeight}px`
@@ -1488,7 +1565,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         }}
                     >
                         {/* Objects pane */}
-                        <div className="browser-pane">
+                        <div className={`browser-pane ${!useTabLayout || activeTab === "objects" ? "active" : ""}`}>
                             <div className="browser-pane-header">
                                 <span
                                     className="browser-pane-title"
@@ -1610,7 +1687,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
 
                         {/* Properties pane */}
-                        <div className="browser-pane">
+                        <div className={`browser-pane ${!useTabLayout || activeTab === "properties" ? "active" : ""}`}>
                             <div className="browser-pane-header">
                                 <span
                                     className="browser-pane-title"
@@ -1720,7 +1797,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
 
                         {/* Verbs pane */}
-                        <div className="browser-pane">
+                        <div className={`browser-pane ${!useTabLayout || activeTab === "verbs" ? "active" : ""}`}>
                             <div className="browser-pane-header">
                                 <span
                                     className="browser-pane-title"
@@ -1843,6 +1920,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         <div
                             className={`browser-resize-handle ${isSplitDragging ? "dragging" : ""}`}
                             onMouseDown={handleSplitDragStart}
+                            onTouchStart={handleSplitTouchStart}
                             style={{
                                 position: "relative",
                                 zIndex: 10,

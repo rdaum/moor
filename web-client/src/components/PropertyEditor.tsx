@@ -18,6 +18,7 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useTouchDevice } from "../hooks/useTouchDevice";
 
 interface PropertyEditorProps {
     visible: boolean;
@@ -64,6 +65,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
     contentType = "text/plain",
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
+    const isTouchDevice = useTouchDevice();
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<SaveError[]>([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -521,8 +523,8 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         {isSaving ? "💾" : "💾"}
                     </button>
 
-                    {/* Split/Float toggle button - only on desktop */}
-                    {!isMobile && onToggleSplitMode && (
+                    {/* Split/Float toggle button - only on non-touch devices */}
+                    {!isTouchDevice && onToggleSplitMode && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -532,7 +534,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                             title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                             className="btn-ghost editor-btn-toggle-split"
                         >
-                            {isInSplitMode ? "🪟" : "⇅"}
+                            {isInSplitMode ? "🪟" : "⬌"}
                         </button>
                     )}
                     <button
