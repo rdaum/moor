@@ -67,9 +67,9 @@ interface VerbData {
     readable: boolean;
     writable: boolean;
     executable: boolean;
-    dobj: number; // ArgSpec enum value
-    prep: number; // PrepSpec value
-    iobj: number; // ArgSpec enum value
+    dobj: string; // ArgSpec string (none/any/this)
+    prep: string; // PrepSpec string (none/any/with/at/etc.)
+    iobj: string; // ArgSpec string (none/any/this)
     indexInLocation?: number; // Position of this verb within its location object
 }
 
@@ -96,45 +96,6 @@ interface AddVerbFormValues {
     dobj: string;
     prep: string;
     iobj: string;
-}
-
-// Helper to convert ArgSpec enum to string
-function argSpecToString(val: number): string {
-    switch (val) {
-        case 0:
-            return "none";
-        case 1:
-            return "any";
-        case 2:
-            return "this";
-        default:
-            return "none";
-    }
-}
-
-// Helper to convert PrepSpec value to string
-function prepSpecToString(val: number): string {
-    if (val === -2) return "any";
-    if (val === -1) return "none";
-    // Numeric preposition IDs map to specific prepositions
-    const preps = [
-        "with",
-        "at",
-        "in-front-of",
-        "in",
-        "on",
-        "from",
-        "over",
-        "through",
-        "under",
-        "behind",
-        "beside",
-        "for",
-        "is",
-        "as",
-        "off",
-    ];
-    return preps[val] || "none";
 }
 
 // Helper to decode object flags to readable string
@@ -194,8 +155,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     }, [verbs]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Editor split state
-    const [editorSplitPosition, setEditorSplitPosition] = useState(0.5); // 0.5 = 50% top, 50% bottom
+    // Editor split state - using pixel height instead of percentage
+    const [browserPaneHeight, setBrowserPaneHeight] = useState(350); // Fixed pixel height for browser pane
     const [isSplitDragging, setIsSplitDragging] = useState(false);
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 20;
@@ -411,13 +372,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
                 // arg_spec is a vector of 3 symbols: [dobj, prep, iobj]
                 const argSpecLength = verbInfo.argSpecLength();
-                const dobjStr = argSpecLength > 0 ? verbInfo.argSpec(0)?.value() || "none" : "none";
-                const prepStr = argSpecLength > 1 ? verbInfo.argSpec(1)?.value() || "none" : "none";
-                const iobjStr = argSpecLength > 2 ? verbInfo.argSpec(2)?.value() || "none" : "none";
-
-                // Convert dobj/iobj strings to numbers for storage
-                const dobjNum = dobjStr === "this" ? 2 : (dobjStr === "any" ? 1 : 0);
-                const iobjNum = iobjStr === "this" ? 2 : (iobjStr === "any" ? 1 : 0);
+                const dobj = argSpecLength > 0 ? verbInfo.argSpec(0)?.value() || "none" : "none";
+                const prep = argSpecLength > 1 ? verbInfo.argSpec(1)?.value() || "none" : "none";
+                const iobj = argSpecLength > 2 ? verbInfo.argSpec(2)?.value() || "none" : "none";
 
                 verbList.push({
                     names,
@@ -426,9 +383,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     readable: verbInfo.r(),
                     writable: verbInfo.w(),
                     executable: verbInfo.x(),
-                    dobj: dobjNum,
-                    prep: parseInt(prepStr) || 0, // prep is a numeric preposition ID
-                    iobj: iobjNum,
+                    dobj,
+                    prep,
+                    iobj,
                     indexInLocation,
                 });
             }
@@ -1079,9 +1036,18 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         } else if (isSplitDragging && containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
             const relativeY = e.clientY - rect.top;
-            const containerHeight = rect.height;
-            const newPosition = Math.max(0.2, Math.min(0.8, relativeY / containerHeight));
-            setEditorSplitPosition(newPosition);
+            // Calculate the height for the browser pane, accounting for the title bar
+            // Find the title bar height (we'll subtract it)
+            const titleBar = containerRef.current.querySelector("[aria-labelledby=\"object-browser-title\"]")
+                ?.children[0];
+            const titleBarHeight = titleBar ? (titleBar as HTMLElement).offsetHeight : 0;
+            const availableHeight = rect.height - titleBarHeight;
+
+            // Set minimum and maximum heights (20% to 80% of available height)
+            const minHeight = availableHeight * 0.2;
+            const maxHeight = availableHeight * 0.8;
+            const newHeight = Math.max(minHeight, Math.min(maxHeight, relativeY - titleBarHeight));
+            setBrowserPaneHeight(newHeight);
         }
     }, [isDragging, isResizing, isSplitDragging, dragStart, resizeStart, size]);
 
@@ -1617,9 +1583,12 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     {/* Top area - 3 panes */}
                     <div
                         style={{
-                            flex: (editorVisible || selectedObject) ? editorSplitPosition : 1,
+                            height: (editorVisible || selectedObject)
+                                ? `${browserPaneHeight}px`
+                                : "100%",
                             display: "flex",
                             overflow: "hidden",
+                            flexShrink: 0,
                         }}
                     >
                         {/* Objects pane */}
@@ -2229,7 +2198,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     {(editorVisible || selectedObject) && (
                         <div
                             style={{
-                                flex: 1 - editorSplitPosition,
+                                flex: 1,
                                 overflow: "hidden",
                                 backgroundColor: "var(--color-bg-secondary)",
                             }}
@@ -2341,9 +2310,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         debug: false, // TODO: Need to add debug field to VerbData
                                     }}
                                     argspec={{
-                                        dobj: argSpecToString(selectedVerb.dobj),
-                                        prep: prepSpecToString(selectedVerb.prep),
-                                        iobj: argSpecToString(selectedVerb.iobj),
+                                        dobj: selectedVerb.dobj,
+                                        prep: selectedVerb.prep,
+                                        iobj: selectedVerb.iobj,
                                     }}
                                     onSave={() => {
                                         // Reload verbs list in background to update the list

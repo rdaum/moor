@@ -349,7 +349,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     ],
 
                     // Flow control
-                    [/\b(return|break|continue|pass)\b/, "keyword.control"],
+                    [/\b(return|break|continue|pass|raise)\b/, "keyword.control"],
 
                     // Declaration keywords
                     [/\b(let|const|global|fn|endfn)\b/, "keyword.declaration"],
@@ -363,9 +363,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     // Type constants
                     [/\b(INT|NUM|FLOAT|STR|ERR|OBJ|LIST|MAP|BOOL|FLYWEIGHT|SYM)\b/, "type"],
 
-                    // Error constants with optional message
-                    [/\bE_[A-Z_]+\([^)]*\)/, "constant.other"],
-                    [/\bE_[A-Z_]+/, "constant.other"],
+                    // Error constants (without parentheses, to allow string highlighting inside)
+                    [/\bE_[A-Z_]+\b/, "constant.other"],
 
                     // Binary literals (base64-encoded)
                     [/b"[A-Za-z0-9+/=_-]*"/, "string.binary"],
@@ -979,6 +978,45 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         },
                     ];
 
+                    // Keyword completions for flow control
+                    const keywordCompletions: Array<{
+                        label: string;
+                        insertText: string;
+                        documentation: string;
+                        sortText: string;
+                    }> = [
+                        {
+                            label: "return",
+                            insertText: "return ${1:value};",
+                            documentation: "Return a value from the current verb or function.",
+                            sortText: "90",
+                        },
+                        {
+                            label: "raise",
+                            insertText: "raise(${1:E_INVARG}(${2:\"message\"}));",
+                            documentation: "Raise an error with an optional message.",
+                            sortText: "91",
+                        },
+                        {
+                            label: "break",
+                            insertText: "break;",
+                            documentation: "Exit the current loop immediately.",
+                            sortText: "92",
+                        },
+                        {
+                            label: "continue",
+                            insertText: "continue;",
+                            documentation: "Skip to the next iteration of the current loop.",
+                            sortText: "93",
+                        },
+                        {
+                            label: "pass",
+                            insertText: "pass;",
+                            documentation: "No-op statement; does nothing.",
+                            sortText: "94",
+                        },
+                    ];
+
                     for (const snippet of blockSnippets) {
                         suggestions.push({
                             label: snippet.label,
@@ -990,6 +1028,18 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             range: defaultRange,
                             sortText: snippet.sortText,
                             filterText: snippet.filterText ?? snippet.label,
+                        });
+                    }
+
+                    for (const keyword of keywordCompletions) {
+                        suggestions.push({
+                            label: keyword.label,
+                            kind: monaco.languages.CompletionItemKind.Keyword,
+                            insertText: keyword.insertText,
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: keyword.documentation,
+                            range: defaultRange,
+                            sortText: keyword.sortText,
                         });
                     }
                 }
@@ -1340,6 +1390,26 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         }
         return error.message;
     };
+
+    // Track which errors are expanded
+    const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set());
+
+    const toggleErrorExpanded = (index: number) => {
+        setExpandedErrors(prev => {
+            const next = new Set(prev);
+            if (next.has(index)) {
+                next.delete(index);
+            } else {
+                next.add(index);
+            }
+            return next;
+        });
+    };
+
+    // Reset expanded state when errors change
+    useEffect(() => {
+        setExpandedErrors(new Set());
+    }, [errors]);
 
     // Track if content has changed from original
     const hasUnsavedChanges = content !== initialContent;
@@ -1710,33 +1780,167 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 <div
                     className="verb_compile_errors"
                     style={{
-                        minHeight: "80px",
-                        maxHeight: "180px",
+                        maxHeight: "40vh",
                         padding: "var(--space-sm)",
-                        backgroundColor: "var(--color-bg-error)",
-                        borderTop: "1px solid var(--color-border-light)",
-                        borderBottom: "1px solid var(--color-border-light)",
+                        backgroundColor: "color-mix(in srgb, var(--color-text-error) 12%, var(--color-bg-secondary))",
+                        borderTop: "2px solid color-mix(in srgb, var(--color-text-error) 70%, white)",
+                        borderBottom: "2px solid color-mix(in srgb, var(--color-text-error) 70%, white)",
                         overflowY: "auto",
                         overflowX: "hidden",
                     }}
                 >
                     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-                        {errors.map((error, index) => (
-                            <pre
-                                key={`${error.type}-${index}`}
-                                style={{
-                                    margin: 0,
-                                    color: "var(--color-text-error)",
-                                    fontSize: "0.9em",
-                                    fontFamily: "var(--font-mono)",
-                                    whiteSpace: "pre-wrap",
-                                    wordBreak: "break-word",
-                                    overflowWrap: "anywhere",
-                                }}
-                            >
-                                {formatError(error)}
-                            </pre>
-                        ))}
+                        {errors.map((error, index) => {
+                            const isExpanded = expandedErrors.has(index);
+
+                            return (
+                                <div
+                                    key={`${error.type}-${index}`}
+                                    style={{
+                                        backgroundColor: "var(--color-bg-tertiary)",
+                                        padding: "var(--space-sm)",
+                                        borderRadius: "var(--radius-sm)",
+                                        border: "1px solid color-mix(in srgb, var(--color-text-error) 40%, white)",
+                                    }}
+                                >
+                                    {/* Main error message */}
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                        <div
+                                            style={{
+                                                color: "color-mix(in srgb, var(--color-text-error) 60%, white)",
+                                                fontSize: "0.95em",
+                                                fontWeight: "600",
+                                            }}
+                                        >
+                                            {error.type === "parse" && typeof error.line === "number" && (
+                                                <span
+                                                    style={{
+                                                        color: "color-mix(in srgb, var(--color-text-error) 50%, white)",
+                                                    }}
+                                                >
+                                                    Line {error.line}
+                                                    {typeof error.column === "number" && `, col ${error.column}`}:{" "}
+                                                </span>
+                                            )}
+                                            {error.message}
+                                        </div>
+
+                                        {/* Details section (expected tokens) */}
+                                        {error.type === "parse" && error.expectedTokens
+                                            && error.expectedTokens.length > 0 && (
+                                            <div style={{ marginTop: "4px" }}>
+                                                <button
+                                                    onClick={() => toggleErrorExpanded(index)}
+                                                    style={{
+                                                        padding: "3px 8px",
+                                                        backgroundColor: "transparent",
+                                                        color: "color-mix(in srgb, var(--color-text-error) 60%, white)",
+                                                        border:
+                                                            "1px solid color-mix(in srgb, var(--color-text-error) 30%, white)",
+                                                        borderRadius: "var(--radius-sm)",
+                                                        cursor: "pointer",
+                                                        fontSize: "0.85em",
+                                                    }}
+                                                >
+                                                    {isExpanded ? "▼" : "▶"} {isExpanded ? "Hide" : "Show"} details
+                                                </button>
+
+                                                {isExpanded && (
+                                                    <div
+                                                        style={{
+                                                            marginTop: "8px",
+                                                            padding: "8px",
+                                                            backgroundColor: "var(--color-bg-secondary)",
+                                                            borderRadius: "var(--radius-sm)",
+                                                            fontSize: "0.9em",
+                                                            color: "var(--color-text-primary)",
+                                                            borderLeft:
+                                                                "2px solid color-mix(in srgb, var(--color-text-error) 60%, white)",
+                                                        }}
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                color:
+                                                                    "color-mix(in srgb, var(--color-text-error) 60%, white)",
+                                                                fontWeight: "600",
+                                                                marginBottom: "4px",
+                                                            }}
+                                                        >
+                                                            Expected:
+                                                        </div>
+                                                        <div
+                                                            style={{
+                                                                fontFamily: "var(--font-mono)",
+                                                                color: "var(--color-text-primary)",
+                                                                wordBreak: "break-word",
+                                                            }}
+                                                        >
+                                                            {error.expectedTokens.join(", ")}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Hints section (notes) */}
+                                        {error.type === "parse" && error.notes && error.notes.length > 0 && (
+                                            <div style={{ marginTop: "4px" }}>
+                                                <button
+                                                    onClick={() =>
+                                                        toggleErrorExpanded(index + 1000)}
+                                                    style={{
+                                                        padding: "3px 8px",
+                                                        backgroundColor: "transparent",
+                                                        color: "var(--color-accent)",
+                                                        border:
+                                                            "1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)",
+                                                        borderRadius: "var(--radius-sm)",
+                                                        cursor: "pointer",
+                                                        fontSize: "0.85em",
+                                                    }}
+                                                >
+                                                    {expandedErrors.has(index + 1000) ? "▼" : "▶"}{" "}
+                                                    {expandedErrors.has(index + 1000) ? "Hide" : "Show"} hints
+                                                </button>
+
+                                                {expandedErrors.has(index + 1000) && (
+                                                    <div
+                                                        style={{
+                                                            marginTop: "8px",
+                                                            padding: "8px",
+                                                            backgroundColor: "var(--color-bg-secondary)",
+                                                            borderRadius: "var(--radius-sm)",
+                                                            fontSize: "0.9em",
+                                                            color: "var(--color-text-primary)",
+                                                            borderLeft:
+                                                                "2px solid color-mix(in srgb, var(--color-accent) 80%, white)",
+                                                        }}
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                color:
+                                                                    "color-mix(in srgb, var(--color-accent) 80%, white)",
+                                                                fontWeight: "600",
+                                                                marginBottom: "4px",
+                                                            }}
+                                                        >
+                                                            Hints:
+                                                        </div>
+                                                        <ul style={{ margin: 0, paddingLeft: "20px" }}>
+                                                            {error.notes.map((note, noteIndex) => (
+                                                                <li key={noteIndex} style={{ marginBottom: "4px" }}>
+                                                                    {note}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
