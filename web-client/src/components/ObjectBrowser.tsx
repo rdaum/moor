@@ -465,6 +465,60 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     };
 
+    const handleNavigateToDefinition = useCallback(async (objectId: number, verbName: string) => {
+        try {
+            const objectCurie = `oid:${objectId}`;
+            const verbsReply = await getVerbsFlatBuffer(authToken, objectCurie);
+            const verbsLength = verbsReply.verbsLength();
+
+            // Find the matching verb
+            for (let i = 0; i < verbsLength; i++) {
+                const verbInfo = verbsReply.verbs(i);
+                if (!verbInfo) continue;
+
+                const namesLength = verbInfo.namesLength();
+                for (let j = 0; j < namesLength; j++) {
+                    const nameSymbol = verbInfo.names(j);
+                    const foundVerbName = nameSymbol?.value();
+
+                    if (foundVerbName === verbName) {
+                        // Found it - construct VerbData and load it
+                        const verbData: VerbData = {
+                            names: Array.from({ length: namesLength }, (_, idx) => verbInfo.names(idx)?.value() || ""),
+                            location: objToString(verbInfo.location()) || objectId.toString(),
+                            owner: objToString(verbInfo.owner()) || "",
+                            indexInLocation: i,
+                            readable: verbInfo.r(),
+                            writable: verbInfo.w(),
+                            executable: verbInfo.x(),
+                            dobj: "",
+                            prep: "",
+                            iobj: "",
+                        };
+
+                        setSelectedVerb(verbData);
+                        setEditorVisible(true);
+
+                        // Load verb code
+                        const verbValue = await getVerbCodeFlatBuffer(authToken, objectCurie, verbName);
+                        const codeLength = verbValue.codeLength();
+                        const lines: string[] = [];
+                        for (let i = 0; i < codeLength; i++) {
+                            const line = verbValue.code(i);
+                            if (line) lines.push(line);
+                        }
+                        setVerbCode(lines.join("\n"));
+                        return;
+                    }
+                }
+            }
+
+            console.warn("[ObjectBrowser] Verb not found:", verbName, "on object", objectId);
+        } catch (error) {
+            console.error("[ObjectBrowser] Failed to load verb:", error);
+        }
+    }, [authToken]);
+
     const handleNameSave = async () => {
         if (!selectedObject) return;
 
@@ -2053,6 +2107,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setShowDeleteVerbDialog(true);
                                     }}
                                     normalizeObjectInput={normalizeObjectInput}
+                                    onNavigateToDefinition={handleNavigateToDefinition}
                                 />
                             )}
                         </div>

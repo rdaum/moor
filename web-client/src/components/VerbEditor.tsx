@@ -47,6 +47,8 @@ interface VerbEditorProps {
     onNextEditor?: () => void; // Navigate to next editor
     editorCount?: number; // Total number of editors
     currentEditorIndex?: number; // Current editor index (0-based)
+    // Definition navigation
+    onNavigateToDefinition?: (objectId: number, verbName: string) => void; // Navigate to verb definition
 }
 
 interface CompileError {
@@ -90,6 +92,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     onNextEditor,
     editorCount = 1,
     currentEditorIndex = 0,
+    onNavigateToDefinition,
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const isTouchDevice = useTouchDevice();
@@ -109,6 +112,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const containerRef = useRef<HTMLDivElement | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+    const definitionProviderRef = useRef<monaco.IDisposable | null>(null);
+    const linkOpenerRef = useRef<monaco.IDisposable | null>(null);
+    const completionCacheRef = useRef<
+        Map<string, { verbs?: any; properties?: any; builtins?: any; timestamp: number }>
+    >(
+        new Map(),
+    );
+    const CACHE_TTL = 30000; // 30 seconds
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
     const [fontSize, setFontSize] = useState(() => {
@@ -209,6 +220,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             if (completionProviderRef.current) {
                 completionProviderRef.current.dispose();
                 completionProviderRef.current = null;
+            }
+            if (definitionProviderRef.current) {
+                definitionProviderRef.current.dispose();
+                definitionProviderRef.current = null;
+            }
+            if (linkOpenerRef.current) {
+                linkOpenerRef.current.dispose();
+                linkOpenerRef.current = null;
             }
             if (editorRef.current) {
                 editorRef.current.dispose();
@@ -377,6 +396,84 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             editorRef.current.updateOptions({ minimap: { enabled: minimapEnabled } });
         }
     }, [minimapEnabled]);
+
+    // Pre-populate verb cache for current object and system objects on load
+    useEffect(() => {
+        if (!authToken || !content) return;
+
+        const loadVerbsForCurrentObject = async () => {
+            // Extract object ID from objectCurie (e.g., "oid:123")
+            let targetObjectId: number | null = null;
+
+            const curieMatch = objectCurie.match(/^oid:(\d+)$/);
+            if (curieMatch) {
+                targetObjectId = parseInt(curieMatch[1]);
+            } else if (uploadAction) {
+                // Fallback to uploadAction if curie doesn't match
+                const programMatch = uploadAction.match(/@program\s+#(\d+):/);
+                if (programMatch) {
+                    targetObjectId = parseInt(programMatch[1]);
+                }
+            }
+
+            if (targetObjectId !== null) {
+                const cacheKey = `#${targetObjectId}:verbs`;
+                const cached = completionCacheRef.current.get(cacheKey);
+
+                // Only fetch if not already cached
+                if (!cached || !cached.verbs || Date.now() - cached.timestamp >= CACHE_TTL) {
+                    try {
+                        const { MoorRemoteObject } = await import("../lib/rpc");
+                        const { oidRef } = await import("../lib/var");
+                        const currentObject = new MoorRemoteObject(oidRef(targetObjectId), authToken);
+                        const verbsReply = await currentObject.getVerbs();
+
+                        completionCacheRef.current.set(cacheKey, {
+                            ...cached,
+                            verbs: verbsReply,
+                            timestamp: Date.now(),
+                        });
+                    } catch (error) {
+                        console.warn("[VerbEditor] Failed to pre-populate verb cache:", error);
+                    }
+                }
+            }
+
+            // Scan content for $sysobj: references and pre-populate their caches
+            const sysObjPattern = /\$(\w+):/g;
+            const sysObjsFound = new Set<string>();
+            let match;
+
+            while ((match = sysObjPattern.exec(content)) !== null) {
+                sysObjsFound.add(match[1]);
+            }
+
+            // Load verbs for each system object found
+            for (const sysObjName of sysObjsFound) {
+                const cacheKey = `$${sysObjName}:verbs`;
+                const cached = completionCacheRef.current.get(cacheKey);
+
+                if (!cached || !cached.verbs || Date.now() - cached.timestamp >= CACHE_TTL) {
+                    try {
+                        const { MoorRemoteObject } = await import("../lib/rpc");
+                        const { sysobjRef } = await import("../lib/var");
+                        const sysObject = new MoorRemoteObject(sysobjRef([sysObjName]), authToken);
+                        const verbsReply = await sysObject.getVerbs();
+
+                        completionCacheRef.current.set(cacheKey, {
+                            ...cached,
+                            verbs: verbsReply,
+                            timestamp: Date.now(),
+                        });
+                    } catch (error) {
+                        console.warn(`[VerbEditor] Failed to pre-populate cache for $${sysObjName}:`, error);
+                    }
+                }
+            }
+        };
+
+        loadVerbsForCurrentObject();
+    }, [authToken, uploadAction, objectCurie, content]);
 
     // Configure MOO language for Monaco
     const handleEditorWillMount = useCallback((monaco: Monaco) => {
@@ -577,12 +674,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         editorThemeObserverRef.current = observer; // ref for later disposal
         observer.observe(document.body, { attributes: true });
 
-        // Cache for verb/property lookups to avoid repeated API calls
-        const completionCache = new Map<
-            string,
-            { verbs?: any; properties?: any; timestamp: number }
-        >();
-        const CACHE_TTL = 30000; // 30 seconds
+        // Use shared cache from ref
+        const completionCache = completionCacheRef.current;
 
         const getCachedVerbs = async (cacheKey: string, fetchFn: () => Promise<any>) => {
             const cached = completionCache.get(cacheKey);
@@ -606,11 +699,11 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         const getCachedBuiltins = async (cacheKey: string, fetchFn: () => Promise<any>) => {
             const cached = completionCache.get(cacheKey);
-            if (cached && (cached as any).builtins && Date.now() - cached.timestamp < CACHE_TTL) {
-                return (cached as any).builtins;
+            if (cached && cached.builtins && Date.now() - cached.timestamp < CACHE_TTL) {
+                return cached.builtins;
             }
             const builtins = await fetchFn();
-            completionCache.set(cacheKey, { ...cached, builtins, timestamp: Date.now() } as any);
+            completionCache.set(cacheKey, { ...cached, builtins, timestamp: Date.now() });
             return builtins;
         };
 
@@ -1046,7 +1139,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     // Trigger when typing a word that's not after : or .
                     const word = model.getWordUntilPosition(position);
                     const beforeWord = lineContent.substring(0, word.startColumn - 1);
-                    const isAfterObjectOp = beforeWord.match(/[:\.]$/);
+                    const isAfterObjectOp = beforeWord.match(/[:.]$/);
 
                     if (!isAfterObjectOp && word.word.length > 0) {
                         await addBuiltinCompletions(word.word, word.startColumn, position, suggestions);
@@ -1212,6 +1305,153 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 return { suggestions };
             },
         });
+
+        // Dispose old link provider if it exists
+        if (definitionProviderRef.current) {
+            definitionProviderRef.current.dispose();
+        }
+
+        // Dispose old link opener if it exists
+        if (linkOpenerRef.current) {
+            linkOpenerRef.current.dispose();
+        }
+
+        // Add link opener to handle custom moor-verb: URLs
+        if (onNavigateToDefinition) {
+            linkOpenerRef.current = monaco.editor.registerLinkOpener({
+                open: async (resource: monaco.Uri) => {
+                    const url = decodeURIComponent(resource.toString());
+                    const match = url.match(/^moor-verb:(\d+):(\w+)$/);
+
+                    if (match) {
+                        const targetObjectId = parseInt(match[1]);
+                        const verbName = match[2];
+
+                        // Navigate directly - the handler will fetch the verb code
+                        onNavigateToDefinition(targetObjectId, verbName);
+                        return true; // Handled
+                    }
+
+                    return false; // Not handled
+                },
+            });
+        }
+
+        // Add link provider for Ctrl+Click navigation on verbs
+        if (onNavigateToDefinition) {
+            definitionProviderRef.current = monaco.languages.registerLinkProvider("moo", {
+                provideLinks: async (model) => {
+                    const links: monaco.languages.ILink[] = [];
+
+                    // Scan all lines for verb call patterns
+                    for (let lineNumber = 1; lineNumber <= model.getLineCount(); lineNumber++) {
+                        const lineContent = model.getLineContent(lineNumber);
+
+                        // Match patterns: this:verb, #123:verb, $sysobj:verb
+                        const thisVerbRegex = /\bthis:(\w+)/g;
+                        const objVerbRegex = /#(-?\d+):(\w+)/g;
+                        const sysVerbRegex = /\$(\w+):(\w+)/g;
+
+                        let match;
+
+                        // Find this:verb patterns
+                        while ((match = thisVerbRegex.exec(lineContent)) !== null) {
+                            const verbName = match[1];
+                            const startColumn = match.index + match[0].indexOf(verbName) + 1;
+
+                            // Extract object ID from objectCurie (e.g., "oid:123")
+                            let targetObjectId: number | null = null;
+                            const curieMatch = objectCurie.match(/^oid:(\d+)$/);
+                            if (curieMatch) {
+                                targetObjectId = parseInt(curieMatch[1]);
+                            } else if (uploadAction) {
+                                // Fallback to uploadAction if curie doesn't match
+                                const programMatch = uploadAction.match(/@program\s+#(\d+):/);
+                                if (programMatch) {
+                                    targetObjectId = parseInt(programMatch[1]);
+                                }
+                            }
+
+                            if (targetObjectId !== null) {
+                                links.push({
+                                    range: {
+                                        startLineNumber: lineNumber,
+                                        startColumn,
+                                        endLineNumber: lineNumber,
+                                        endColumn: startColumn + verbName.length,
+                                    },
+                                    url: `moor-verb:${targetObjectId}:${verbName}`,
+                                });
+                            }
+                        }
+
+                        // Find #123:verb patterns
+                        while ((match = objVerbRegex.exec(lineContent)) !== null) {
+                            const objectId = parseInt(match[1]);
+                            const verbName = match[2];
+                            const startColumn = match.index + match[0].indexOf(verbName) + 1;
+
+                            links.push({
+                                range: {
+                                    startLineNumber: lineNumber,
+                                    startColumn,
+                                    endLineNumber: lineNumber,
+                                    endColumn: startColumn + verbName.length,
+                                },
+                                url: `moor-verb:${objectId}:${verbName}`,
+                            });
+                        }
+
+                        // Find $sysobj:verb patterns
+                        while ((match = sysVerbRegex.exec(lineContent)) !== null) {
+                            const sysObjName = match[1];
+                            const verbName = match[2];
+                            const startColumn = match.index + match[0].indexOf(verbName) + 1;
+
+                            // Look up in cache to get the defining object ID
+                            const cacheKey = `$${sysObjName}:verbs`;
+                            const cached = completionCacheRef.current.get(cacheKey);
+
+                            if (cached && cached.verbs && Date.now() - cached.timestamp < CACHE_TTL) {
+                                const verbsReply = cached.verbs;
+                                const verbsLength = verbsReply.verbsLength();
+
+                                // Find the verb to get its location
+                                for (let i = 0; i < verbsLength; i++) {
+                                    const verbInfo = verbsReply.verbs(i);
+                                    if (!verbInfo) continue;
+
+                                    const namesLength = verbInfo.namesLength();
+                                    for (let j = 0; j < namesLength; j++) {
+                                        const nameSymbol = verbInfo.names(j);
+                                        const foundVerbName = nameSymbol?.value();
+
+                                        if (foundVerbName === verbName) {
+                                            const locationId = objToString(verbInfo.location());
+                                            if (locationId) {
+                                                const definingObjectId = parseInt(locationId);
+                                                links.push({
+                                                    range: {
+                                                        startLineNumber: lineNumber,
+                                                        startColumn,
+                                                        endLineNumber: lineNumber,
+                                                        endColumn: startColumn + verbName.length,
+                                                    },
+                                                    url: `moor-verb:${definingObjectId}:${verbName}`,
+                                                });
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    return { links };
+                },
+            });
+        }
 
         // Focus the editor
         editor.focus();

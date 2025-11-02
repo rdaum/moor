@@ -379,6 +379,20 @@ function AppContent({
         closeEditor,
     ]);
 
+    // Handler for navigating to verb definitions (Ctrl+Click in editor)
+    const handleNavigateToDefinition = useCallback((objectId: number, verbName: string) => {
+        if (!authState.player?.authToken) return;
+
+        const objectCurie = `oid:${objectId}`;
+        const title = `#${objectId}:${verbName}`;
+
+        launchVerbEditor(title, objectCurie, verbName, authState.player.authToken).catch((error) => {
+            const errorMsg = `Failed to open verb: ${error.message}`;
+            console.error("[VerbEditor] Navigation error:", errorMsg);
+            showMessage(errorMsg, 5);
+        });
+    }, [authState.player?.authToken, launchVerbEditor, showMessage]);
+
     // Handle verb editor presentations from server
     useEffect(() => {
         const verbEditorPresentations = getVerbEditorPresentations();
@@ -1097,6 +1111,7 @@ function AppContent({
                                     splitMode={true}
                                     onToggleSplitMode={toggleSplitMode}
                                     isInSplitMode={true}
+                                    onNavigateToDefinition={handleNavigateToDefinition}
                                     onPreviousEditor={previousSession}
                                     onNextEditor={nextSession}
                                     editorCount={editorSessions.length}
@@ -1163,6 +1178,7 @@ function AppContent({
                         onSendMessage={sendMessage}
                         onToggleSplitMode={toggleSplitMode}
                         isInSplitMode={false}
+                        onNavigateToDefinition={handleNavigateToDefinition}
                     />
                 );
             })}
