@@ -360,8 +360,15 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin(
             "notify",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Any],
+            Q(6),
+            vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_STR),
+                Typed(TYPE_BOOL),
+                Typed(TYPE_BOOL),
+                Typed(TYPE_SYMBOL),
+                Typed(TYPE_MAP),
+            ],
             true,
         ),
         mk_builtin("boot_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
