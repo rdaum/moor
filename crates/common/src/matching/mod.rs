@@ -36,6 +36,16 @@ pub use ws_match_env::WsMatchEnv;
 
 pub use prepositions::{Preposition, find_preposition, find_preposition_for_command};
 
+/// Result from object name matching, containing both the match result and any ambiguous candidates.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct MatchResult {
+    /// The matched object: Some(Obj) for a match, Some(AMBIGUOUS) for ambiguity,
+    /// Some(FAILED_MATCH) for no match, or None for empty input
+    pub result: Option<Obj>,
+    /// All objects that matched (populated when result is AMBIGUOUS)
+    pub candidates: Vec<Obj>,
+}
+
 /// Output from command matching, which is then used to match against the verb present in the
 /// environment.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -46,12 +56,14 @@ pub struct ParsedCommand {
 
     pub dobjstr: Option<String>,
     pub dobj: Option<Obj>,
+    pub ambiguous_dobj: Option<Vec<Obj>>,
 
     pub prepstr: Option<String>,
     pub prep: PrepSpec,
 
     pub iobjstr: Option<String>,
     pub iobj: Option<Obj>,
+    pub ambiguous_iobj: Option<Vec<Obj>>,
 }
 
 /// The command parser interface. This is used to parse a command string into a ParsedCommand, or
@@ -91,5 +103,5 @@ pub enum ParseCommandError {
 /// Trait for matching names in the environment. This is used by the command parser to find
 /// objects in the world state that match the entities given in the command.
 pub trait ObjectNameMatcher {
-    fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError>;
+    fn match_object(&self, name: &str) -> Result<MatchResult, WorldStateError>;
 }

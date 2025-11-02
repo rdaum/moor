@@ -105,23 +105,39 @@ where
                 }
             }
         };
-        let dobj = match &dobjstr {
-            Some(dobjstr) => command_environment
-                .match_object(dobjstr)
-                .map_err(ParseCommandError::ErrorDuringMatch)?,
-            None => None,
+        let (dobj, ambiguous_dobj) = match &dobjstr {
+            Some(dobjstr) => {
+                let match_result = command_environment
+                    .match_object(dobjstr)
+                    .map_err(ParseCommandError::ErrorDuringMatch)?;
+                let candidates = if !match_result.candidates.is_empty() {
+                    Some(match_result.candidates)
+                } else {
+                    None
+                };
+                (match_result.result, candidates)
+            }
+            None => (None, None),
         };
 
         // Get indirect object string
         let iobjstr = prep_match.as_ref().map(|(j, _)| words[j + 1..].join(" "));
 
         // Get indirect object object
-        let iobj = match (prep, &iobjstr) {
-            (PrepSpec::None, _) => None,
-            (_, Some(iobjstr)) => command_environment
-                .match_object(iobjstr)
-                .map_err(ParseCommandError::ErrorDuringMatch)?,
-            _ => None,
+        let (iobj, ambiguous_iobj) = match (prep, &iobjstr) {
+            (PrepSpec::None, _) => (None, None),
+            (_, Some(iobjstr)) => {
+                let match_result = command_environment
+                    .match_object(iobjstr)
+                    .map_err(ParseCommandError::ErrorDuringMatch)?;
+                let candidates = if !match_result.candidates.is_empty() {
+                    Some(match_result.candidates)
+                } else {
+                    None
+                };
+                (match_result.result, candidates)
+            }
+            _ => (None, None),
         };
 
         // Build and return ParsedCommand
@@ -133,10 +149,12 @@ where
             args,
             dobjstr,
             dobj,
+            ambiguous_dobj,
             prepstr: prep_match.map(|(_, p)| p.to_string()),
             prep,
             iobjstr,
             iobj,
+            ambiguous_iobj,
         })
     }
 }
@@ -193,13 +211,19 @@ mod tests {
         assert_eq!(parse_into_words(input), expected_output);
     }
 
+    use crate::matching::MatchResult;
+
     struct SimpleParseMatcher {}
     impl ObjectNameMatcher for SimpleParseMatcher {
-        fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError> {
-            Ok(match name {
+        fn match_object(&self, name: &str) -> Result<MatchResult, WorldStateError> {
+            let result = match name {
                 "obj" => Some(Obj::mk_id(1)),
                 "player" => Some(Obj::mk_id(2)),
                 _ => None,
+            };
+            Ok(MatchResult {
+                result,
+                candidates: Vec::new(),
             })
         }
     }

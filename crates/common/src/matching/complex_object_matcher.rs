@@ -15,7 +15,8 @@
 
 use crate::{
     matching::{
-        ComplexMatchResult, MatchEnvironment, ObjectNameMatcher, complex_match_objects_keys,
+        ComplexMatchResult, MatchEnvironment, MatchResult, ObjectNameMatcher,
+        complex_match_objects_keys,
     },
     model::{ValSet, WorldStateError},
 };
@@ -32,16 +33,22 @@ pub struct ComplexObjectNameMatcher<M: MatchEnvironment> {
 }
 
 impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
-    fn match_object(&self, object_name: &str) -> Result<Option<Obj>, WorldStateError> {
+    fn match_object(&self, object_name: &str) -> Result<MatchResult, WorldStateError> {
         if object_name.is_empty() {
-            return Ok(None);
+            return Ok(MatchResult {
+                result: None,
+                candidates: Vec::new(),
+            });
         }
 
         // Handle object number references (e.g. "#123" or UUID format)
         if object_name.starts_with('#')
             && let Ok(obj) = Obj::try_from(object_name)
         {
-            return Ok(Some(obj));
+            return Ok(MatchResult {
+                result: Some(obj),
+                candidates: Vec::new(),
+            });
         }
         // Continue with name matching if parsing fails
 
@@ -54,11 +61,17 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
 
         // Handle special keywords
         if object_name.eq_ignore_ascii_case(ME) {
-            return Ok(Some(self.player));
+            return Ok(MatchResult {
+                result: Some(self.player),
+                candidates: Vec::new(),
+            });
         }
 
         if object_name.eq_ignore_ascii_case(HERE) {
-            return Ok(Some(self.env.location_of(&self.player)?));
+            return Ok(MatchResult {
+                result: Some(self.env.location_of(&self.player)?),
+                candidates: Vec::new(),
+            });
         }
 
         // Get objects in the environment (location, contents, player)
@@ -84,31 +97,62 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
         }
 
         if objects.is_empty() {
-            return Ok(Some(FAILED_MATCH));
+            return Ok(MatchResult {
+                result: Some(FAILED_MATCH),
+                candidates: Vec::new(),
+            });
         }
 
         // Use complex_match to find the best match
         match complex_match_objects_keys(object_name, &objects, &names_lists) {
-            ComplexMatchResult::NoMatch => Ok(Some(FAILED_MATCH)),
+            ComplexMatchResult::NoMatch => Ok(MatchResult {
+                result: Some(FAILED_MATCH),
+                candidates: Vec::new(),
+            }),
             ComplexMatchResult::Single(obj_var) => {
                 // Convert Var back to Obj
                 let moor_var::Variant::Obj(obj) = obj_var.variant() else {
-                    return Ok(Some(FAILED_MATCH));
+                    return Ok(MatchResult {
+                        result: Some(FAILED_MATCH),
+                        candidates: Vec::new(),
+                    });
                 };
-                Ok(Some(*obj))
+                Ok(MatchResult {
+                    result: Some(*obj),
+                    candidates: Vec::new(),
+                })
             }
             ComplexMatchResult::Multiple(matches) => {
                 // Multiple matches - this is ambiguous in MOO
                 if matches.len() <= 1 {
                     let Some(first_match) = matches.first() else {
-                        return Ok(Some(FAILED_MATCH));
+                        return Ok(MatchResult {
+                            result: Some(FAILED_MATCH),
+                            candidates: Vec::new(),
+                        });
                     };
                     let moor_var::Variant::Obj(obj) = first_match.variant() else {
-                        return Ok(Some(FAILED_MATCH));
+                        return Ok(MatchResult {
+                            result: Some(FAILED_MATCH),
+                            candidates: Vec::new(),
+                        });
                     };
-                    Ok(Some(*obj))
+                    Ok(MatchResult {
+                        result: Some(*obj),
+                        candidates: Vec::new(),
+                    })
                 } else {
-                    Ok(Some(AMBIGUOUS))
+                    // Extract all the Obj from matches
+                    let mut candidates = Vec::new();
+                    for match_var in matches {
+                        if let moor_var::Variant::Obj(obj) = match_var.variant() {
+                            candidates.push(*obj);
+                        }
+                    }
+                    Ok(MatchResult {
+                        result: Some(AMBIGUOUS),
+                        candidates,
+                    })
                 }
             }
         }
@@ -129,8 +173,9 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("");
-        assert_eq!(result.unwrap(), None);
+        let result = matcher.match_object("").unwrap();
+        assert_eq!(result.result, None);
+        assert!(result.candidates.is_empty());
     }
 
     #[test]
@@ -140,8 +185,9 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("#4");
-        assert_eq!(result.unwrap(), Some(MOCK_THING1));
+        let result = matcher.match_object("#4").unwrap();
+        assert_eq!(result.result, Some(MOCK_THING1));
+        assert!(result.candidates.is_empty());
     }
 
     #[test]
@@ -152,11 +198,11 @@ mod tests {
             player: MOCK_PLAYER,
         };
         // Test with a UUID format object reference
-        let result = matcher.match_object("#048D05-1234567890");
-        assert!(result.is_ok());
-        let obj = result.unwrap().unwrap();
+        let match_result = matcher.match_object("#048D05-1234567890").unwrap();
+        let obj = match_result.result.unwrap();
         assert!(obj.is_uuobjid());
         assert_eq!(obj.to_literal(), "048D05-1234567890");
+        assert!(match_result.candidates.is_empty());
     }
 
     #[test]
@@ -166,8 +212,9 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("me");
-        assert_eq!(result.unwrap(), Some(MOCK_PLAYER));
+        let result = matcher.match_object("me").unwrap();
+        assert_eq!(result.result, Some(MOCK_PLAYER));
+        assert!(result.candidates.is_empty());
     }
 
     #[test]
@@ -177,8 +224,9 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("here");
-        assert_eq!(result.unwrap(), Some(MOCK_ROOM1));
+        let result = matcher.match_object("here").unwrap();
+        assert_eq!(result.result, Some(MOCK_ROOM1));
+        assert!(result.candidates.is_empty());
     }
 
     #[test]
@@ -188,8 +236,9 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("thing1");
-        assert_eq!(result.unwrap(), Some(MOCK_THING1));
+        let result = matcher.match_object("thing1").unwrap();
+        assert_eq!(result.result, Some(MOCK_THING1));
+        assert!(result.candidates.is_empty());
     }
 
     #[test]
@@ -199,8 +248,9 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("t2");
-        assert_eq!(result.unwrap(), Some(MOCK_THING2));
+        let result = matcher.match_object("t2").unwrap();
+        assert_eq!(result.result, Some(MOCK_THING2));
+        assert!(result.candidates.is_empty());
     }
 
     #[test]
@@ -215,7 +265,8 @@ mod tests {
         let result = matcher.match_object("first t");
         // Should return one of the things (the first match)
         assert!(result.is_ok());
-        let obj = result.unwrap();
+        let match_result = result.unwrap();
+        let obj = match_result.result;
         assert!(obj == Some(MOCK_THING1) || obj == Some(MOCK_THING2));
     }
 
@@ -230,8 +281,13 @@ mod tests {
         let result = matcher.match_object("hing");
         assert!(result.is_ok());
         // Should be ambiguous or return one of them
-        let obj = result.unwrap();
+        let match_result = result.unwrap();
+        let obj = match_result.result;
         assert!(obj == Some(MOCK_THING1) || obj == Some(MOCK_THING2) || obj == Some(AMBIGUOUS));
+        // If ambiguous, candidates should be populated
+        if obj == Some(AMBIGUOUS) {
+            assert!(!match_result.candidates.is_empty());
+        }
     }
 
     #[test]
@@ -241,7 +297,8 @@ mod tests {
             env,
             player: MOCK_PLAYER,
         };
-        let result = matcher.match_object("nonexistent");
-        assert_eq!(result.unwrap(), Some(FAILED_MATCH));
+        let result = matcher.match_object("nonexistent").unwrap();
+        assert_eq!(result.result, Some(FAILED_MATCH));
+        assert!(result.candidates.is_empty());
     }
 }

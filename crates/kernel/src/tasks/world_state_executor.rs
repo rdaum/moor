@@ -454,7 +454,10 @@ pub fn match_object_ref(
                 env: match_env,
                 player: *player,
             };
-            let Ok(Some(o)) = matcher.match_object(object_name) else {
+            let Ok(match_result) = matcher.match_object(object_name) else {
+                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
+            };
+            let Some(o) = match_result.result else {
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             };
             if !tx.valid(&o)? {

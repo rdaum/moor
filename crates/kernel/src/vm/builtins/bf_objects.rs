@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use tracing::{debug, error, trace};
 
 use moor_common::matching::{
-    CommandParser, DefaultParseCommand, ObjectNameMatcher, ParsedCommand, Preposition,
+    CommandParser, DefaultParseCommand, MatchResult, ObjectNameMatcher, ParsedCommand, Preposition,
 };
 use moor_common::model::{ObjSet, PrepSpec, verb_perms_string};
 use moor_common::{
@@ -1345,7 +1345,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     struct DelegatingObjectMatcher(Box<dyn ObjectNameMatcher>);
     impl ObjectNameMatcher for DelegatingObjectMatcher {
-        fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError> {
+        fn match_object(&self, name: &str) -> Result<MatchResult, WorldStateError> {
             self.0.match_object(name)
         }
     }
@@ -1501,6 +1501,16 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         },
     ));
 
+    // ambiguous_dobj: list of objects or empty list
+    result_map.push((
+        use_sym_or_str("ambiguous_dobj"),
+        if let Some(ref candidates) = parsed.ambiguous_dobj {
+            v_list(&candidates.iter().map(|obj| v_obj(*obj)).collect::<Vec<_>>())
+        } else {
+            v_list(&[])
+        },
+    ));
+
     // prepstr: string or ""
     result_map.push((
         use_sym_or_str("prepstr"),
@@ -1536,6 +1546,16 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             v_obj(obj)
         } else {
             v_obj(NOTHING)
+        },
+    ));
+
+    // ambiguous_iobj: list of objects or empty list
+    result_map.push((
+        use_sym_or_str("ambiguous_iobj"),
+        if let Some(ref candidates) = parsed.ambiguous_iobj {
+            v_list(&candidates.iter().map(|obj| v_obj(*obj)).collect::<Vec<_>>())
+        } else {
+            v_list(&[])
         },
     ));
 
@@ -1860,10 +1880,12 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
                 args: args.iter().collect(),
                 dobj: if dobj == NOTHING { None } else { Some(dobj) },
                 dobjstr,
+                ambiguous_dobj: None,
                 prep,
                 prepstr,
                 iobj: if iobj == NOTHING { None } else { Some(iobj) },
                 iobjstr,
+                ambiguous_iobj: None,
             };
 
             // Build the CommandVerbExecutionRequest
