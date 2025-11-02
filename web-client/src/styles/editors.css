@@ -757,8 +757,8 @@
 }
 
 .browser-item.selected {
-  background-color: var(--color-bg-accent);
-  color: var(--color-text-primary);
+  background-color: var(--color-text-primary);
+  color: var(--color-bg-base);
 }
 
 .browser-item-name {
