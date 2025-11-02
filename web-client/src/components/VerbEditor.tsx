@@ -127,6 +127,29 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
     });
 
+    // Word wrap state
+    const [wordWrap, setWordWrap] = useState<"on" | "off">(() => {
+        if (typeof window === "undefined") {
+            return isMobile ? "on" : "off";
+        }
+        const stored = window.localStorage.getItem("moor-editor-wordwrap");
+        if (stored === "on" || stored === "off") {
+            return stored;
+        }
+        return isMobile ? "on" : "off";
+    });
+
+    // Minimap state
+    const [minimapEnabled, setMinimapEnabled] = useState<boolean>(() => {
+        if (typeof window === "undefined") {
+            return !isMobile;
+        }
+        const stored = window.localStorage.getItem("moor-editor-minimap");
+        if (stored === "true") return true;
+        if (stored === "false") return false;
+        return !isMobile;
+    });
+
     // Verb metadata editing state
     const [isEditingOwner, setIsEditingOwner] = useState(false);
     const [editOwnerValue, setEditOwnerValue] = useState(owner ? `#${owner}` : "");
@@ -334,6 +357,26 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             editorRef.current.updateOptions({ fontSize });
         }
     }, [fontSize]);
+
+    // Save word wrap preference and update editor
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem("moor-editor-wordwrap", wordWrap);
+        }
+        if (editorRef.current) {
+            editorRef.current.updateOptions({ wordWrap });
+        }
+    }, [wordWrap]);
+
+    // Save minimap preference and update editor
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem("moor-editor-minimap", minimapEnabled.toString());
+        }
+        if (editorRef.current) {
+            editorRef.current.updateOptions({ minimap: { enabled: minimapEnabled } });
+        }
+    }, [minimapEnabled]);
 
     // Configure MOO language for Monaco
     const handleEditorWillMount = useCallback((monaco: Monaco) => {
@@ -1743,6 +1786,32 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                             +
                         </button>
                     </div>
+                    {/* Word wrap toggle button */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setWordWrap(prev => prev === "on" ? "off" : "on");
+                        }}
+                        aria-label={wordWrap === "on" ? "Disable word wrap" : "Enable word wrap"}
+                        title={wordWrap === "on" ? "Disable word wrap" : "Enable word wrap"}
+                        className="btn btn-secondary btn-sm"
+                        style={{ minWidth: "auto", padding: "0.25em 0.5em" }}
+                    >
+                        {wordWrap === "on" ? "↩" : "→"}
+                    </button>
+                    {/* Minimap toggle button */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMinimapEnabled(prev => !prev);
+                        }}
+                        aria-label={minimapEnabled ? "Hide minimap" : "Show minimap"}
+                        title={minimapEnabled ? "Hide minimap" : "Show minimap"}
+                        className="btn btn-secondary btn-sm"
+                        style={{ minWidth: "auto", padding: "0.25em 0.5em" }}
+                    >
+                        {minimapEnabled ? "🗺" : "▯"}
+                    </button>
                     {/* Compile button */}
                     <button
                         onClick={(e) => {
@@ -2046,7 +2115,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                     beforeMount={handleEditorWillMount}
                     onMount={handleEditorDidMount}
                     options={{
-                        minimap: { enabled: !isMobile },
+                        minimap: { enabled: minimapEnabled },
                         fontSize,
                         fontFamily:
                             "\"JetBrains Mono\", \"Fira Code\", \"Source Code Pro\", Consolas, \"Liberation Mono\", Monaco, Menlo, \"Courier New\", monospace",
@@ -2055,7 +2124,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         dragAndDrop: false,
                         emptySelectionClipboard: false,
                         autoClosingDelete: "never",
-                        wordWrap: isMobile ? "on" : "off",
+                        wordWrap,
                         lineNumbers: "on",
                         folding: !isMobile,
                         renderWhitespace: "none", // Hide whitespace rendering completely
