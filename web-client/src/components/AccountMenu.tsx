@@ -15,6 +15,7 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import AvatarEditor from "react-avatar-editor";
+import { usePlayerDescription } from "../hooks/usePlayerDescription";
 import { useProfilePicture } from "../hooks/useProfilePicture";
 import { EncryptionSettings } from "./EncryptionSettings";
 
@@ -36,11 +37,21 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
     playerOid,
 }) => {
     const { profilePicture, loading, uploadProfilePicture } = useProfilePicture(authToken, playerOid);
+    const {
+        playerDescription,
+        loading: descriptionLoading,
+        updatePlayerDescription,
+    } = usePlayerDescription(authToken, playerOid);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const editorRef = useRef<AvatarEditor>(null);
     const [editorOpen, setEditorOpen] = useState(false);
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [editorScale, setEditorScale] = useState(1.0);
+
+    // Description editor state
+    const [descriptionEditorOpen, setDescriptionEditorOpen] = useState(false);
+    const [editingDescription, setEditingDescription] = useState("");
 
     // Convert binary data to blob URL for display
     const profilePictureUrl = useMemo(() => {
@@ -122,6 +133,25 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
         setEditorOpen(false);
         setSelectedImage(null);
         setEditorScale(1.0);
+    };
+
+    const handleEditDescription = () => {
+        setEditingDescription(playerDescription || "");
+        setDescriptionEditorOpen(true);
+    };
+
+    const handleDescriptionSave = async () => {
+        try {
+            await updatePlayerDescription(editingDescription);
+            setDescriptionEditorOpen(false);
+        } catch (err) {
+            console.error("Save description failed:", err);
+            alert("Failed to update description. The verb may not be implemented.");
+        }
+    };
+
+    const handleDescriptionCancel = () => {
+        setDescriptionEditorOpen(false);
     };
 
     if (!isOpen) return null;
@@ -221,6 +251,59 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                         </div>
                     </div>
 
+                    {/* Player Description Section */}
+                    <div className="settings-section">
+                        <h3>Description</h3>
+                        <div
+                            style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "12px",
+                                padding: "12px 0",
+                            }}
+                        >
+                            {descriptionLoading
+                                ? (
+                                    <div style={{ color: "var(--text-secondary)" }}>
+                                        Loading...
+                                    </div>
+                                )
+                                : playerDescription
+                                ? (
+                                    <div
+                                        style={{
+                                            padding: "12px",
+                                            backgroundColor: "var(--bg-secondary)",
+                                            borderRadius: "8px",
+                                            border: "1px solid var(--border-color)",
+                                            whiteSpace: "pre-wrap",
+                                            fontFamily: "var(--font-mono)",
+                                        }}
+                                    >
+                                        {playerDescription}
+                                    </div>
+                                )
+                                : (
+                                    <div
+                                        style={{
+                                            padding: "12px",
+                                            color: "var(--text-secondary)",
+                                            fontStyle: "italic",
+                                        }}
+                                    >
+                                        No description set
+                                    </div>
+                                )}
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleEditDescription}
+                                disabled={descriptionLoading}
+                            >
+                                {playerDescription ? "Edit Description" : "Add Description"}
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="settings-section">
                         <h3>Security</h3>
                         <EncryptionSettings isAvailable={historyAvailable} />
@@ -313,6 +396,68 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                                 disabled={loading}
                             >
                                 {loading ? "Uploading..." : "Upload"}
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Description Editor Modal */}
+            {descriptionEditorOpen && (
+                <>
+                    <div className="dialog-backdrop" onClick={handleDescriptionCancel} />
+                    <div className="dialog-sheet dialog-form">
+                        <div className="dialog-sheet-header">
+                            <h2>Edit Description</h2>
+                        </div>
+
+                        <div className="dialog-sheet-content">
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "8px",
+                                }}
+                            >
+                                <label
+                                    style={{
+                                        fontSize: "14px",
+                                        color: "var(--text-secondary)",
+                                    }}
+                                >
+                                    Description
+                                </label>
+                                <textarea
+                                    value={editingDescription}
+                                    onChange={(e) => setEditingDescription(e.target.value)}
+                                    rows={10}
+                                    style={{
+                                        padding: "8px",
+                                        borderRadius: "4px",
+                                        border: "1px solid var(--border-color)",
+                                        backgroundColor: "var(--bg-primary)",
+                                        color: "var(--text-primary)",
+                                        fontFamily: "var(--font-mono)",
+                                        resize: "vertical",
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="dialog-sheet-footer">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleDescriptionCancel}
+                                disabled={descriptionLoading}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleDescriptionSave}
+                                disabled={descriptionLoading}
+                            >
+                                {descriptionLoading ? "Saving..." : "Save"}
                             </button>
                         </div>
                     </div>
