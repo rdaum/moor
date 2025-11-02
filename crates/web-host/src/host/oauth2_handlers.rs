@@ -20,6 +20,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect},
 };
+use moor_common::model::ObjectRef;
 use moor_schema::rpc as moor_rpc;
 use rpc_common::mk_login_command_msg;
 use serde_derive::{Deserialize, Serialize};
@@ -261,11 +262,10 @@ pub async fn oauth2_callback_handler(
             "Existing OAuth2 user logged in: {} (flags: {})",
             player_obj, player_flags
         );
-        // URL-encode the player OID to handle # character
-        let player_oid_str = player_obj.to_string();
-        let player_oid_encoded = urlencoding::encode(&player_oid_str);
+        // Return CURIE format (oid:N or uuid:xxx)
+        let player_curie = ObjectRef::Id(player_obj).to_curie();
         let redirect_url =
-            format!("/?auth_token={auth_token}&player={player_oid_encoded}&flags={player_flags}");
+            format!("/?auth_token={auth_token}&player={player_curie}&flags={player_flags}");
         Redirect::to(&redirect_url).into_response()
     } else {
         // New user - redirect to account choice page with user info
@@ -506,11 +506,11 @@ pub async fn oauth2_account_choice_handler(
             choice.mode, player_obj, player_flags
         );
 
-        // Return JSON with auth token, player OID, and flags
+        // Return JSON with auth token, player CURIE, and flags
         Json(OAuth2LoginResponse {
             success: true,
             auth_token: Some(auth_token.to_string()),
-            player: Some(player_obj.to_string()),
+            player: Some(ObjectRef::Id(player_obj).to_curie()),
             player_flags: Some(player_flags),
             error: None,
         })

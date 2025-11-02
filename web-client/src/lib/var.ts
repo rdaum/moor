@@ -122,6 +122,42 @@ export function objToString(obj: any): string | null {
     return null;
 }
 
+/**
+ * Convert FlatBuffer Obj union to CURIE format (oid:N or uuid:xxx)
+ * Returns CURIE string for ObjId/UuObjId, null for other types
+ */
+export function objToCurie(obj: any): string | null {
+    if (!obj) return null;
+
+    // ObjUnion enum values
+    const ObjUnion = {
+        NONE: 0,
+        ObjId: 1,
+        UuObjId: 2,
+        AnonymousObjId: 3,
+    };
+
+    const objType = obj.objType();
+
+    // ObjId type - return oid:N
+    if (objType === ObjUnion.ObjId) {
+        const objId = obj.obj(new ObjId());
+        return objId ? `oid:${objId.id()}` : null;
+    }
+
+    // UuObjId type - return uuid:FFFFFF-FFFFFFFFFF
+    if (objType === ObjUnion.UuObjId) {
+        const uuObjId = obj.obj(new UuObjId());
+        if (uuObjId) {
+            const packedValue = uuObjId.packedValue();
+            return `uuid:${uuObjIdToString(packedValue)}`;
+        }
+    }
+
+    // AnonymousObjId can't come over RPC
+    return null;
+}
+
 export class Error {
     code: string;
     message: string | null;

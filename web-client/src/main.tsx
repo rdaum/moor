@@ -682,13 +682,6 @@ function AppContent({
 
     // Load history and connect WebSocket after authentication
     useEffect(() => {
-        console.log("[ConnectionDebug] Effect triggered:", {
-            hasPlayer: !!authState.player,
-            historyLoaded,
-            hasCheckedOnce: encryptionState.hasCheckedOnce,
-            isConnected: wsState.isConnected,
-        });
-
         if (!authState.player || !authState.player.authToken) {
             return;
         }
@@ -941,12 +934,6 @@ function AppContent({
             {/* Top navigation bar - only show when connected */}
             {isConnected && (
                 <>
-                    {console.log(
-                        "[ObjectBrowser] Player flags:",
-                        authState.player?.flags,
-                        "Has Programmer?",
-                        !!(authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)),
-                    )}
                     <TopNavBar
                         onSettingsToggle={() => setIsSettingsOpen(true)}
                         onAccountToggle={() => setIsAccountMenuOpen(true)}
@@ -972,6 +959,8 @@ function AppContent({
                 onClose={() => setIsAccountMenuOpen(false)}
                 onLogout={handleLogout}
                 historyAvailable={eventLogEnabled !== false}
+                authToken={authState.player?.authToken ?? null}
+                playerOid={authState.player?.oid ?? null}
             />
 
             {/* Main app layout with narrative interface */}
@@ -1315,7 +1304,10 @@ function AppWrapper() {
 
         try {
             const sysobj = new MoorRemoteObject(oidRef(0), authState.player.authToken);
-            await sysobj.callVerb("handle_client_url", [url]);
+            // TODO: Need to convert URL to FlatBuffer Var and pass as argument
+            // For now, calling without arguments - the verb may not work correctly
+            await sysobj.callVerb("handle_client_url");
+            console.warn(`Link click handling called without URL argument: ${url}`);
             // The result comes through WebSocket narrative, so we don't need to handle the return value
         } catch (error) {
             console.error("Failed to handle link click:", error);

@@ -18,6 +18,7 @@ import { ErrorCode } from "../generated/moor-common/error-code.js";
 import { ObjId } from "../generated/moor-common/obj-id.js";
 import { ObjUnion } from "../generated/moor-common/obj-union.js";
 import { UuObjId } from "../generated/moor-common/uu-obj-id.js";
+import { VarBinary } from "../generated/moor-var/var-binary.js";
 import { VarBool } from "../generated/moor-var/var-bool.js";
 import { VarErr } from "../generated/moor-var/var-err.js";
 import { VarFloat } from "../generated/moor-var/var-float.js";
@@ -195,6 +196,15 @@ export class MoorVar {
     }
 
     /**
+     * Extract binary value as Uint8Array, or null if not binary
+     */
+    asBinary(): Uint8Array | null {
+        if (this.fb.variantType() !== VarUnion.VarBinary) return null;
+        const varBinary = this.fb.variant(new VarBinary()) as VarBinary | null;
+        return varBinary?.dataArray() ?? null;
+    }
+
+    /**
      * Convert this Var to a plain JavaScript value
      *
      * This recursively converts MOO types to their JavaScript equivalents:
@@ -250,6 +260,9 @@ export class MoorVar {
 
             case VarUnion.VarErr:
                 return { error: this.asError() };
+
+            case VarUnion.VarBinary:
+                return this.asBinary();
 
             default:
                 console.warn(`Unsupported Var type: ${VarUnion[varType]}`);
@@ -345,6 +358,12 @@ export class MoorVar {
             case VarUnion.VarSym: {
                 const val = this.asSymbol();
                 return val ? `'${val}` : "''";
+            }
+
+            case VarUnion.VarBinary: {
+                const binary = this.asBinary();
+                if (!binary) return "<binary:empty>";
+                return `<binary:${binary.length} bytes>`;
             }
 
             default:

@@ -381,6 +381,42 @@ impl WebHost {
         })
     }
 
+    /// Create an event subscription for a specific client_id
+    /// Used for HTTP handlers that need to wait for task completion events
+    pub async fn events_sub(
+        &self,
+        client_id: Uuid,
+    ) -> Result<tmq::subscribe::Subscribe, eyre::Error> {
+        let zmq_ctx = self.zmq_context.clone();
+
+        let mut narrative_socket_builder = subscribe(&zmq_ctx);
+
+        // Configure CURVE encryption if keys provided
+        if let Some((client_secret, client_public, server_public)) = &self.curve_keys {
+            // Decode Z85 keys to bytes
+            let client_secret_bytes = zmq::z85_decode(client_secret)
+                .map_err(|_| eyre::eyre!("Invalid client secret key"))?;
+            let client_public_bytes = zmq::z85_decode(client_public)
+                .map_err(|_| eyre::eyre!("Invalid client public key"))?;
+            let server_public_bytes = zmq::z85_decode(server_public)
+                .map_err(|_| eyre::eyre!("Invalid server public key"))?;
+
+            narrative_socket_builder = narrative_socket_builder
+                .set_curve_secretkey(&client_secret_bytes)
+                .set_curve_publickey(&client_public_bytes)
+                .set_curve_serverkey(&server_public_bytes);
+        }
+
+        let narrative_sub = narrative_socket_builder
+            .connect(self.pubsub_addr.as_str())
+            .map_err(|e| eyre::eyre!("Unable to connect narrative subscriber: {}", e))?;
+        let narrative_sub = narrative_sub
+            .subscribe(&client_id.as_bytes()[..])
+            .map_err(|e| eyre::eyre!("Unable to subscribe to narrative messages: {}", e))?;
+
+        Ok(narrative_sub)
+    }
+
     pub async fn establish_client_connection(
         &self,
         addr: SocketAddr,

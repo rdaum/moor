@@ -23,7 +23,7 @@ import { PresentEvent } from "../generated/moor-common/present-event.js";
 import { TracebackEvent } from "../generated/moor-common/traceback-event.js";
 import { UnpresentEvent } from "../generated/moor-common/unpresent-event.js";
 import { AbortLimitReason } from "../generated/moor-rpc/abort-limit-reason.js";
-import { ClientEventUnion } from "../generated/moor-rpc/client-event-union.js";
+import { ClientEventUnion, unionToClientEventUnion } from "../generated/moor-rpc/client-event-union.js";
 import { ClientEvent } from "../generated/moor-rpc/client-event.js";
 import { ClientSuccess } from "../generated/moor-rpc/client-success.js";
 import { CommandErrorUnion } from "../generated/moor-rpc/command-error-union.js";
@@ -69,6 +69,9 @@ import {
 } from "../generated/moor-rpc/verb-program-response-union.js";
 import { VerbValue } from "../generated/moor-rpc/verb-value.js";
 import { VerbsReply } from "../generated/moor-rpc/verbs-reply.js";
+import { VarList } from "../generated/moor-var/var-list.js";
+import { VarUnion } from "../generated/moor-var/var-union.js";
+import { Var } from "../generated/moor-var/var.js";
 import { decryptEventBlob } from "./age-decrypt.js";
 import { MoorVar } from "./MoorVar.js";
 
@@ -846,7 +849,7 @@ export function handleClientEventFlatBuffer(
                     return;
                 }
 
-                // Task completed successfully - state is handled server-side
+                // Task completed successfully - these now come via HTTP response for verb invocations
                 break;
             }
 
@@ -1011,18 +1014,30 @@ export async function getVerbCodeFlatBuffer(
  * @param authToken - Authentication token
  * @param objectCurie - Object CURIE
  * @param verbName - Verb name
- * @param args - Array of arguments (will be converted to FB Var list)
+ * @param args - Optional FlatBuffer-encoded Var (typically a VarList) as Uint8Array
  * @returns Promise resolving to EvalResult FlatBuffer (or TaskSubmitted)
  */
 export async function invokeVerbFlatBuffer(
     authToken: string,
     objectCurie: string,
     verbName: string,
-    _args: any[] = [],
+    args?: Uint8Array,
 ): Promise<EvalResult | any> {
-    // TODO: Convert args array to FlatBuffer Var list
-    // For now, send empty list
-    const emptyListBytes = new Uint8Array(0);
+    // If no args provided, build an empty list FlatBuffer
+    let argsBytes: Uint8Array;
+    if (!args) {
+        const builder = new flatbuffers.Builder(256);
+        const emptyListOffset = VarList.createVarList(builder, VarList.createElementsVector(builder, []));
+        const listVarOffset = Var.createVar(builder, VarUnion.VarList, emptyListOffset);
+        builder.finish(listVarOffset);
+        argsBytes = builder.asUint8Array();
+    } else {
+        argsBytes = args;
+    }
+
+    // Create a properly sized ArrayBuffer from the Uint8Array
+    // Can't use argsBytes.buffer directly as it might be larger than the actual data
+    const bodyBuffer = argsBytes.slice(0, argsBytes.length).buffer as ArrayBuffer;
 
     const response = await fetch(`/fb/verbs/${objectCurie}/${encodeURIComponent(verbName)}/invoke`, {
         method: "POST",
@@ -1030,7 +1045,7 @@ export async function invokeVerbFlatBuffer(
             "X-Moor-Auth-Token": authToken,
             "Content-Type": "application/x-flatbuffer",
         },
-        body: emptyListBytes,
+        body: bodyBuffer,
     });
 
     if (!response.ok) {
@@ -1040,41 +1055,23 @@ export async function invokeVerbFlatBuffer(
     const arrayBuffer = await response.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 
-    const replyResult = ReplyResult.getRootAsReplyResult(
+    // Server returns ClientEvent (TaskSuccessEvent or TaskErrorEvent)
+    const clientEvent = ClientEvent.getRootAsClientEvent(
         new flatbuffers.ByteBuffer(bytes),
     );
 
-    const resultType = replyResult.resultType();
-    if (resultType !== ReplyResultUnion.ClientSuccess) {
-        throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
-    }
-
-    const clientSuccess = unionToReplyResultUnion(
-        resultType,
-        (obj) => replyResult.result(obj),
-    ) as ClientSuccess | null;
-
-    if (!clientSuccess) {
-        throw new Error("Failed to parse ClientSuccess");
-    }
-
-    const daemonReply = clientSuccess.reply();
-    if (!daemonReply) {
-        throw new Error("Missing daemon reply");
-    }
-
-    const replyType = daemonReply.replyType();
-    const replyUnion = unionToDaemonToClientReplyUnion(
-        replyType,
-        (obj: any) => daemonReply.reply(obj),
+    const eventType = clientEvent.eventType();
+    const event = unionToClientEventUnion(
+        eventType,
+        (obj: any) => clientEvent.event(obj),
     );
 
-    if (!replyUnion) {
-        throw new Error("Failed to parse reply union");
+    if (!event) {
+        throw new Error("Failed to parse client event");
     }
 
-    // Return the reply FlatBuffer wrapper (EvalResult or TaskSubmitted)
-    return replyUnion;
+    // Return the event (TaskSuccessEvent or TaskErrorEvent)
+    return event;
 }
 
 /**

@@ -60,10 +60,10 @@ export class MoorRemoteObject {
      * Invokes a verb/method on the remote MOO object
      *
      * @param verbName - Name of the verb to call
-     * @param args - Arguments to pass to the verb
+     * @param args - Optional FlatBuffer-encoded arguments as Uint8Array
      * @returns Promise resolving to the result of the verb invocation
      */
-    async callVerb(verbName: string, args: any[] = []): Promise<any> {
+    async callVerb(verbName: string, args?: Uint8Array): Promise<any> {
         const evalResult = await invokeVerbFlatBuffer(
             this.authToken,
             orefCurie(this.oref),

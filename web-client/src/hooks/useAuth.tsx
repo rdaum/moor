@@ -18,7 +18,7 @@ import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to
 import { LoginResult } from "../generated/moor-rpc/login-result";
 import { ReplyResult } from "../generated/moor-rpc/reply-result";
 import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union";
-import { objToString } from "../lib/var";
+import { objToCurie } from "../lib/var";
 
 export interface Player {
     oid: string;
@@ -194,7 +194,7 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 return;
             }
 
-            const playerOid = objToString(playerObj);
+            const playerOid = objToCurie(playerObj);
             if (!playerOid) {
                 const error = "Authentication failed: Invalid player object";
                 console.error(error);
