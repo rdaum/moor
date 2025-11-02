@@ -17,7 +17,9 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use tracing::{debug, error, trace};
 
-use moor_common::matching::{CommandParser, DefaultParseCommand, ObjectNameMatcher, Preposition};
+use moor_common::matching::{
+    CommandParser, DefaultParseCommand, ObjectNameMatcher, ParsedCommand, Preposition,
+};
 use moor_common::model::{ObjSet, PrepSpec, verb_perms_string};
 use moor_common::{
     model::{Named, ObjFlag, ObjectKind, ValSet, WorldStateError},
@@ -25,9 +27,9 @@ use moor_common::{
 };
 use moor_compiler::offset_for_builtin;
 use moor_var::{
-    Associative, E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, List, NOTHING, Obj, Sequence, Symbol,
-    Variant, v_arc_string, v_bool, v_int, v_list, v_list_iter, v_map_iter, v_obj, v_str, v_string,
-    v_sym,
+    Associative, E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, E_VERBNF, List, NOTHING, Obj, Sequence,
+    Symbol, Variant, v_arc_string, v_bool, v_int, v_list, v_list_iter, v_map_iter, v_obj, v_str,
+    v_string, v_sym,
 };
 
 use crate::{
@@ -1547,7 +1549,9 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// This function searches for command verbs on the specified targets that match the parsed command
 /// specification. It returns a list of [target_object, verb_info] pairs where:
 /// - `target_object` is the object where the matching verb was found
-/// - `verb_info` is a list [owner, permissions, verb_names] describing the verb
+/// - `verb_info` is a list [owner, permissions, verb_display_names, matched_verb_name] describing the verb
+///   - `verb_display_names` is the full concatenated display form (e.g., "d*rop th*row")
+///   - `matched_verb_name` is the actual verb that was matched from the command (e.g., "drop")
 ///
 /// When used together with `parse_command`, these two functions emulate the behavior of the
 /// built-in MOO command parser:
@@ -1656,15 +1660,22 @@ fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
                 let perms_string = verb_perms_string(perms);
 
-                // Join names into a single string, this is how MOO presents it.
-                let verb_names = names
+                // Display form: all verb names joined with spaces (e.g., "d*rop th*row")
+                let display_names = names
                     .iter()
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
 
-                let verb_info =
-                    v_list(&[v_obj(owner), v_string(perms_string), v_string(verb_names)]);
+                // Matched verb: the actual verb from the parsed command (e.g., "drop")
+                let matched_verb = verb_sym.as_string();
+
+                let verb_info = v_list(&[
+                    v_obj(owner),
+                    v_string(perms_string),
+                    v_string(display_names),
+                    v_string(matched_verb),
+                ]);
                 matches.push(v_list(&[v_obj(target), verb_info]));
             }
             Ok(None) => {
@@ -1683,6 +1694,210 @@ fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     Ok(Ret(v_list(&matches)))
+}
+
+const BF_DISPATCH_COMMAND_VERB_TRAMPOLINE_DONE: usize = 0;
+
+/// Dispatches a command verb with full command environment (dobj, iobj, prep, etc).
+/// This is wizard-only and bypasses the exec bit requirement.
+/// MOO: `any dispatch_command_verb(obj target, str verb_name, map parsed_command_spec)`
+/// The `parse_command_spec` passed is used to fill the various parameters (dobj, dobjstr, iobj, etc)
+/// that the command sees and expects. Its structure should map that returned from `parse_command`
+fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 3 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("dispatch_command_verb() takes 3 arguments"),
+        ));
+    }
+
+    // Must be a wizard to use this function
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    let Some(target) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("dispatch_command_verb() first argument must be an object"),
+        ));
+    };
+
+    let Some(verb_name_str) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("dispatch_command_verb() second argument must be a string"),
+        ));
+    };
+    let verb_name = Symbol::mk(verb_name_str);
+
+    let Some(parsed_command_spec) = bf_args.args[2].as_map() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("dispatch_command_verb() third argument must be a map"),
+        ));
+    };
+
+    let tramp = bf_args.bf_frame_mut().bf_trampoline.take();
+
+    match tramp {
+        None => {
+            // Extract components from the parsed command spec
+            let use_symbols = bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type;
+            let sym_or_str = |sym| {
+                if use_symbols { v_sym(sym) } else { v_str(sym) }
+            };
+
+            // Extract argstr
+            let argstr = parsed_command_spec
+                .get(&sym_or_str("argstr"))
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_string()))
+                .unwrap_or_default();
+
+            // Extract args list
+            let args = parsed_command_spec
+                .get(&sym_or_str("args"))
+                .ok()
+                .and_then(|v| v.as_list().map(|l| l.clone()))
+                .unwrap_or_else(|| List::mk_list(&[]));
+
+            // Extract dobj
+            let dobj = parsed_command_spec
+                .get(&sym_or_str("dobj"))
+                .ok()
+                .and_then(|v| v.as_object())
+                .unwrap_or(NOTHING);
+
+            // Extract dobjstr
+            let dobjstr = parsed_command_spec
+                .get(&sym_or_str("dobjstr"))
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_string()));
+
+            // Extract prep
+            let prep = parsed_command_spec
+                .get(&sym_or_str("prep"))
+                .ok()
+                .and_then(|v| v.as_integer())
+                .map(|prep_int| {
+                    // Convert from the integer representation used in parse_command
+                    match prep_int {
+                        -2 => PrepSpec::Any,
+                        -1 => PrepSpec::None,
+                        p => PrepSpec::Other(
+                            Preposition::from_repr(p as u16).unwrap_or(Preposition::WithUsing),
+                        ),
+                    }
+                })
+                .unwrap_or(PrepSpec::None);
+
+            // Extract prepstr
+            let prepstr = parsed_command_spec
+                .get(&sym_or_str("prepstr"))
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_string()));
+
+            // Extract iobj
+            let iobj = parsed_command_spec
+                .get(&sym_or_str("iobj"))
+                .ok()
+                .and_then(|v| v.as_object())
+                .unwrap_or(NOTHING);
+
+            // Extract iobjstr
+            let iobjstr = parsed_command_spec
+                .get(&sym_or_str("iobjstr"))
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_string()));
+
+            // Check if target is valid
+            if !with_current_transaction(|world_state| world_state.valid(&target))
+                .map_err(world_state_bf_err)?
+            {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("dispatch_command_verb() target must be a valid object"),
+                ));
+            }
+
+            // Look up the command verb
+            let match_result = with_current_transaction(|world_state| {
+                world_state.find_command_verb_on(
+                    &bf_args.task_perms_who(),
+                    &target,
+                    verb_name,
+                    &dobj,
+                    prep,
+                    &iobj,
+                )
+            });
+
+            let (program, verbdef) = match match_result {
+                Ok(Some((program, verbdef))) => (program, verbdef),
+                Ok(None) => {
+                    return Err(BfErr::ErrValue(
+                        E_VERBNF.with_msg(|| format!("Verb {verb_name} not found on {target}")),
+                    ));
+                }
+                Err(WorldStateError::VerbPermissionDenied)
+                | Err(WorldStateError::ObjectPermissionDenied)
+                | Err(WorldStateError::PropertyPermissionDenied) => {
+                    return Err(BfErr::ErrValue(E_PERM.msg("Permission denied")));
+                }
+                Err(e) => {
+                    error!(
+                        "Error finding command verb {} on {}: {:?}",
+                        verb_name, target, e
+                    );
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.with_msg(|| format!("Error finding command verb: {e}")),
+                    ));
+                }
+            };
+
+            // Build the ParsedCommand structure
+            let parsed_command = ParsedCommand {
+                verb: verb_name,
+                argstr: argstr.clone(),
+                args: args.iter().collect(),
+                dobj: if dobj == NOTHING { None } else { Some(dobj) },
+                dobjstr,
+                prep,
+                prepstr,
+                iobj: if iobj == NOTHING { None } else { Some(iobj) },
+                iobjstr,
+            };
+
+            // Build the CommandVerbExecutionRequest
+            let exec_request = Box::new(crate::vm::CommandVerbExecutionRequest {
+                permissions: verbdef.owner(),
+                resolved_verb: verbdef,
+                verb_name,
+                this: v_obj(target),
+                player: bf_args.exec_state.top().player,
+                args: args.clone(),
+                caller: bf_args.exec_state.top().this.clone(),
+                argstr,
+                command: parsed_command,
+                program,
+            });
+
+            // Set trampoline to DONE for when the verb returns
+            let bf_frame = bf_args.bf_frame_mut();
+            bf_frame.bf_trampoline = Some(BF_DISPATCH_COMMAND_VERB_TRAMPOLINE_DONE);
+
+            // Dispatch the command verb
+            Ok(VmInstr(
+                crate::vm::vm_host::ExecutionResult::DispatchCommandVerb(exec_request),
+            ))
+        }
+        Some(BF_DISPATCH_COMMAND_VERB_TRAMPOLINE_DONE) => {
+            // Get the return value from the dispatched verb
+            let return_value = bf_args.exec_state.top().frame.return_value();
+            Ok(Ret(return_value))
+        }
+        Some(unknown) => {
+            panic!("Invalid trampoline for bf_dispatch_command_verb {unknown}")
+        }
+    }
 }
 
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
@@ -1710,4 +1925,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("is_uuobjid")] = Box::new(bf_is_uuobjid);
     builtins[offset_for_builtin("parse_command")] = Box::new(bf_parse_command);
     builtins[offset_for_builtin("find_command_verb")] = Box::new(bf_find_command_verb);
+    builtins[offset_for_builtin("dispatch_command_verb")] = Box::new(bf_dispatch_command_verb);
 }

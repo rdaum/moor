@@ -33,7 +33,7 @@ use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
     vm::{
-        FinallyReason, Fork, TaskSuspend, VMHostResponse,
+        CommandVerbExecutionRequest, FinallyReason, Fork, TaskSuspend, VMHostResponse,
         VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend},
         VerbExecutionRequest,
         activation::Frame,
@@ -75,6 +75,8 @@ pub(crate) enum ExecutionResult {
     },
     /// Perform the verb dispatch, building the stack frame and executing it.
     DispatchVerb(Box<VerbExecutionRequest>),
+    /// Perform command verb dispatch with full command environment (dobj, iobj, prep, etc).
+    DispatchCommandVerb(Box<CommandVerbExecutionRequest>),
     /// Request `eval` execution, which is a kind of special activation creation where we've already
     /// been given the program to execute instead of having to look it up.
     DispatchEval {
@@ -348,6 +350,21 @@ impl VmHost {
                         exec_request.args,
                         exec_request.caller,
                         exec_request.argstr,
+                        exec_request.program,
+                    );
+                    return ContinueOk;
+                }
+                ExecutionResult::DispatchCommandVerb(exec_request) => {
+                    self.vm_exec_state.exec_command_request(
+                        exec_request.permissions,
+                        exec_request.resolved_verb,
+                        exec_request.verb_name,
+                        exec_request.this,
+                        exec_request.player,
+                        exec_request.args,
+                        exec_request.caller,
+                        exec_request.argstr,
+                        &exec_request.command,
                         exec_request.program,
                     );
                     return ContinueOk;

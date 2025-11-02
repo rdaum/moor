@@ -79,6 +79,31 @@ pub struct VerbExecutionRequest {
     pub program: ProgramType,
 }
 
+/// The set of parameters for a command verb dispatch with full command environment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandVerbExecutionRequest {
+    /// The applicable permissions.
+    pub permissions: Obj,
+    /// The resolved verb.
+    pub resolved_verb: VerbDef,
+    /// Verb name
+    pub verb_name: Symbol,
+    /// This object
+    pub this: Var,
+    /// Player
+    pub player: Obj,
+    /// Arguments
+    pub args: List,
+    /// Caller
+    pub caller: Var,
+    /// Argument string
+    pub argstr: String,
+    /// The parsed command with dobj, iobj, prep, etc.
+    pub command: ParsedCommand,
+    /// The decoded MOO Binary that contains the verb to be executed.
+    pub program: ProgramType,
+}
+
 /// The set of parameters & utilities passed to the VM for execution of a given task.
 pub struct VmExecParams<'a> {
     pub builtin_registry: &'a BuiltinRegistry,

@@ -692,6 +692,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             ],
             true,
         ),
+        mk_builtin(
+            "dispatch_command_verb",
+            Q(3),
+            Q(3),
+            vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Typed(TYPE_MAP)],
+            true,
+        ),
     ]
 }
 

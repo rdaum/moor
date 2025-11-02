@@ -22,7 +22,7 @@ use crate::vm::{
     activation::{Activation, Frame},
     moo_frame::{MooStackFrame, ScopeType},
 };
-pub use vm_call::VerbExecutionRequest;
+pub use vm_call::{CommandVerbExecutionRequest, VerbExecutionRequest};
 pub use vm_unwind::FinallyReason;
 
 pub(crate) mod activation;
