@@ -761,7 +761,7 @@ impl Task {
                 let player = *player;
                 let args_val = args.clone();
                 let argstr_val = argstr.clone();
-                let caller = v_obj(NOTHING);
+                let caller = v_obj(player);
 
                 // Find the callable verb ...
                 // Obj or flyweight?

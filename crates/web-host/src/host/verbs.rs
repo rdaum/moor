@@ -307,7 +307,10 @@ pub async fn invoke_verb_handler(
 
     // Extract task_id from the reply
     let task_id = match extract_task_id(&reply_bytes) {
-        Ok(id) => id,
+        Ok(id) => {
+            tracing::debug!("Extracted task_id: {} for verb {}", id, verb_name);
+            id
+        }
         Err(status) => return status.into_response(),
     };
 
@@ -318,10 +321,16 @@ pub async fn invoke_verb_handler(
     )
     .await
     {
-        Ok(Ok((success, bytes))) => (success, bytes),
+        Ok(Ok((success, bytes))) => {
+            tracing::debug!("Task {} completed with success={}", task_id, success);
+            (success, bytes)
+        }
         Ok(Err(status)) => return status.into_response(),
         Err(_) => {
-            error!("Task {} timed out after 60 seconds", task_id);
+            error!(
+                "Task {} for verb {} timed out after 60 seconds - no completion event received",
+                task_id, verb_name
+            );
             return StatusCode::GATEWAY_TIMEOUT.into_response();
         }
     };
