@@ -561,6 +561,16 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             return properties;
         };
 
+        const getCachedBuiltins = async (cacheKey: string, fetchFn: () => Promise<any>) => {
+            const cached = completionCache.get(cacheKey);
+            if (cached && (cached as any).builtins && Date.now() - cached.timestamp < CACHE_TTL) {
+                return (cached as any).builtins;
+            }
+            const builtins = await fetchFn();
+            completionCache.set(cacheKey, { ...cached, builtins, timestamp: Date.now() } as any);
+            return builtins;
+        };
+
         // Generic property completion for any object reference
         const addPropertyCompletions = async (
             objectRef: any,
@@ -663,6 +673,106 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                 }
             } catch (error) {
                 console.warn(`Failed to fetch verbs for ${contextLabel}:`, error);
+            }
+        };
+
+        // Add builtin function completions
+        const addBuiltinCompletions = async (
+            prefix: string,
+            startColumn: number,
+            position: any,
+            suggestions: monaco.languages.CompletionItem[],
+        ) => {
+            try {
+                const builtins = await getCachedBuiltins("builtins", async () => {
+                    // performEvalFlatBuffer returns converted JS objects/arrays
+                    const result = await performEvalFlatBuffer(authToken, "return function_info();");
+                    // Result is an array of [name, min_args, max_args, [arg_types]]
+                    const builtinList = [];
+                    if (Array.isArray(result)) {
+                        for (const item of result) {
+                            if (Array.isArray(item) && item.length >= 4) {
+                                const [name, minArgs, maxArgs, argTypes] = item;
+                                if (
+                                    typeof name === "string" && typeof minArgs === "number"
+                                    && typeof maxArgs === "number"
+                                ) {
+                                    builtinList.push({
+                                        name,
+                                        minArgs,
+                                        maxArgs,
+                                        argTypes: Array.isArray(argTypes) ? argTypes : [],
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    return builtinList;
+                });
+
+                // Type code to string mapping
+                const typeToString = (typeCode: number): string => {
+                    switch (typeCode) {
+                        case -2:
+                            return "num";
+                        case -1:
+                            return "any";
+                        case 0:
+                            return "int";
+                        case 1:
+                            return "obj";
+                        case 2:
+                            return "str";
+                        case 3:
+                            return "err";
+                        case 4:
+                            return "list";
+                        case 5:
+                            return "clear";
+                        case 6:
+                            return "none";
+                        case 7:
+                            return "float";
+                        default:
+                            return "?";
+                    }
+                };
+
+                // Add completions for matching builtins
+                let sortIndex = 0;
+                for (const builtin of builtins) {
+                    if (!builtin.name.startsWith(prefix)) continue;
+
+                    // Build arg signature
+                    const argSig = builtin.argTypes.length > 0
+                        ? builtin.argTypes.map((t: number) => typeToString(t)).join(", ")
+                        : "";
+                    const argsDesc = builtin.minArgs === builtin.maxArgs
+                        ? `${builtin.minArgs} arg${builtin.minArgs === 1 ? "" : "s"}`
+                        : builtin.maxArgs === -1
+                        ? `${builtin.minArgs}+ args`
+                        : `${builtin.minArgs}-${builtin.maxArgs} args`;
+
+                    suggestions.push({
+                        label: {
+                            label: builtin.name,
+                            detail: argSig ? ` (${argSig})` : "",
+                        },
+                        kind: monaco.languages.CompletionItemKind.Function,
+                        insertText: builtin.name,
+                        sortText: sortIndex.toString().padStart(4, "0"),
+                        documentation: `Builtin function: ${builtin.name}(${argSig}) - ${argsDesc}`,
+                        range: {
+                            startLineNumber: position.lineNumber,
+                            endLineNumber: position.lineNumber,
+                            startColumn,
+                            endColumn: position.column,
+                        },
+                    });
+                    sortIndex++;
+                }
+            } catch (error) {
+                console.warn("Failed to fetch builtin functions:", error);
             }
         };
 
@@ -887,6 +997,16 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         }
 
                         return { suggestions };
+                    }
+
+                    // Check for builtin function completions
+                    // Trigger when typing a word that's not after : or .
+                    const word = model.getWordUntilPosition(position);
+                    const beforeWord = lineContent.substring(0, word.startColumn - 1);
+                    const isAfterObjectOp = beforeWord.match(/[:\.]$/);
+
+                    if (!isAfterObjectOp && word.word.length > 0) {
+                        await addBuiltinCompletions(word.word, word.startColumn, position, suggestions);
                     }
                 } // If no smart completions matched, show block templates
                 if (suggestions.length === 0) {
