@@ -6,6 +6,7 @@
 - Changes throughout to better support mooR UUID-style object references
 - New $login.welcome_message, with djot/markdown style content
 - Added `$oauth_challenge` `$ouath_create` `$oauth_connect`
+- Support web client $player:set_profile_picture/$player:profile_picture
 
 ### Exhaustive List of Changes Since LambdaCore-17May04
 

@@ -96,14 +96,10 @@ object ROOT_CLASS
   verb set_description (this none this) owner: #2 flags: "rxd"
     "set_description(newdesc) attempts to change this.description to newdesc";
     "  => E_PERM   if you don't own this or aren't its parent";
-    if (!($perm_utils:controls(caller_perms(), this) || this == caller))
-      return E_PERM;
-    elseif (typeof(desc = args[1]) in {LIST, STR})
-      this.description = desc;
-      return 1;
-    else
-      return E_TYPE;
-    endif
+    ($perm_utils:controls(caller_perms(), this) || this == caller) || return E_PERM;
+    (typeof(desc = args[1]) in {LIST, STR}) || return E_TYPE;
+    this.description = desc;
+    return 1;
   endverb
 
   verb description (this none this) owner: #2 flags: "rxd"

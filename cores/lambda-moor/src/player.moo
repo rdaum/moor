@@ -47,6 +47,7 @@ object PLAYER
   property pr (owner: #2, flags: "rc") = "itself";
   property prc (owner: #2, flags: "rc") = "Itself";
   property previous_connection (owner: #2, flags: "") = 0;
+  property profile_picture (owner: #2, flags: "rc") = false;
   property ps (owner: #2, flags: "rc") = "it";
   property psc (owner: #2, flags: "rc") = "It";
   property size_quota (owner: HACKER, flags: "") = {};
@@ -2549,4 +2550,19 @@ object PLAYER
     endif
     player:tell($string_utils:nn(dobj), " is owned by ", $string_utils:nn(dobj.owner), ".");
   endverb
+
+  verb profile_picture (this none this) owner: #2 flags: "rxd"
+    return this.profile_picture;
+  endverb
+
+  verb set_profile_picture (this none this) owner: #2 flags: "rxd"
+    ($perm_utils:controls(caller_perms(), this) || this == caller) || return E_PERM;
+    set_task_perms(this);
+    {content_type, picbin} = args;
+    (length(picbin) > (5 * (1 << 23))) && raise(E_INVARG("Profile picture too large"));
+    (typeof(content_type) == STR && $string_utils:find_prefix("image/", {content_type})) || raise(E_TYPE);
+    typeof(picbin) == BINARY || raise(E_TYPE);
+    this.profile_picture = {content_type, picbin};
+  endverb
+
 endobject
