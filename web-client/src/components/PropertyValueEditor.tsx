@@ -39,6 +39,7 @@ export interface PropertyValueEditorProps {
     permissions?: { readable: boolean; writable: boolean }; // Property permissions
     onNavigateToObject?: (objId: string) => void; // Callback for clicking object references
     normalizeObjectInput?: (raw: string) => string; // Utility to convert various object formats to MOO expressions
+    getDollarName?: (objId: string) => string | null; // Get $ name for an object ID
 }
 
 /**
@@ -213,6 +214,7 @@ export function PropertyValueEditor({
     permissions,
     onNavigateToObject,
     normalizeObjectInput,
+    getDollarName,
 }: PropertyValueEditorProps) {
     const [mode, setMode] = useState<EditorMode>(() => detectMode(propertyValue));
     const [value, setValue] = useState<string>(() => toEditorText(propertyValue, detectMode(propertyValue)));
@@ -523,12 +525,18 @@ export function PropertyValueEditor({
                                         onClick={() => onNavigateToObject(definer)}
                                         className="metadata-object-button"
                                     >
-                                        #{definer}
+                                        {(() => {
+                                            const dollarName = getDollarName?.(definer);
+                                            return dollarName ? `$${dollarName} / #${definer}` : `#${definer}`;
+                                        })()}
                                     </button>
                                 )
                                 : (
                                     <span className="metadata-object-badge">
-                                        #{definer}
+                                        {(() => {
+                                            const dollarName = getDollarName?.(definer);
+                                            return dollarName ? `$${dollarName} / #${definer}` : `#${definer}`;
+                                        })()}
                                     </span>
                                 )}
                         </div>
@@ -567,7 +575,10 @@ export function PropertyValueEditor({
                                         className="metadata-object-button"
                                         title="Click to edit owner"
                                     >
-                                        #{owner}
+                                        {(() => {
+                                            const dollarName = getDollarName?.(owner);
+                                            return dollarName ? `$${dollarName} / #${owner}` : `#${owner}`;
+                                        })()}
                                     </button>
                                 )}
                         </div>

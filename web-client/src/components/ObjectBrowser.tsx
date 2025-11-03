@@ -197,6 +197,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         return stored !== "false";
     });
     const [serverFeatures, setServerFeatures] = useState<ServerFeatureSet | null>(null);
+    const [dollarNames, setDollarNames] = useState<Map<string, string>>(new Map());
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showRecycleDialog, setShowRecycleDialog] = useState(false);
     const [showAddPropertyDialog, setShowAddPropertyDialog] = useState(false);
@@ -256,6 +257,73 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             cancelled = true;
         };
     }, [visible]);
+
+    // Fetch $ name mappings from #0 properties
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
+        let cancelled = false;
+        const fetchDollarNames = async () => {
+            try {
+                // Evaluate MOO expression to get all property names and their values from #0
+                const expr = "return {{x, #0.(x)} for x in (properties(#0))};";
+                const result = await performEvalFlatBuffer(authToken, expr);
+
+                if (cancelled) return;
+
+                const nameMap = new Map<string, string>();
+
+                // Handle different possible return formats
+                if (Array.isArray(result)) {
+                    // If it's an array of [key, value] pairs
+                    for (const entry of result) {
+                        if (Array.isArray(entry) && entry.length === 2) {
+                            const [propName, objRef] = entry;
+                            if (typeof propName === "string" && objRef && typeof objRef === "object") {
+                                let objId: string | null = null;
+                                if ("oid" in objRef && typeof objRef.oid === "number") {
+                                    objId = String(objRef.oid);
+                                } else if ("uuid" in objRef && typeof objRef.uuid === "string") {
+                                    // UUID comes as packed bigint string, need to convert to formatted string
+                                    objId = uuObjIdToString(BigInt(objRef.uuid));
+                                }
+                                if (objId) {
+                                    nameMap.set(objId, propName);
+                                }
+                            }
+                        }
+                    }
+                } else if (result && typeof result === "object") {
+                    // If it's an object/map with property names as keys
+                    for (const [propName, objRef] of Object.entries(result)) {
+                        let objId: string | null = null;
+                        if (objRef && typeof objRef === "object") {
+                            if ("oid" in objRef && typeof objRef.oid === "number") {
+                                objId = String(objRef.oid);
+                            } else if ("uuid" in objRef && typeof objRef.uuid === "string") {
+                                // UUID comes as packed bigint string, need to convert to formatted string
+                                objId = uuObjIdToString(BigInt(objRef.uuid));
+                            }
+                        }
+                        if (objId) {
+                            nameMap.set(objId, propName);
+                        }
+                    }
+                }
+
+                setDollarNames(nameMap);
+            } catch (error) {
+                console.error("Failed to fetch $ names from #0:", error);
+            }
+        };
+
+        fetchDollarNames();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [visible, authToken]);
 
     useEffect(() => {
         if (!visible) {
@@ -1360,6 +1428,10 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     };
 
+    const getDollarName = (objId: string): string | null => {
+        return dollarNames.get(objId) || null;
+    };
+
     const describeObject = (obj: ObjectData): string => {
         const id = normalizeObjectInput(obj.obj) || "#?";
         return obj.name ? `${id} ("${obj.name}")` : id;
@@ -1608,35 +1680,39 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     : (
                                         <>
                                             {/* Numeric OID objects */}
-                                            {numericObjects.map((obj) => (
-                                                <div
-                                                    key={obj.obj}
-                                                    className={`browser-item ${
-                                                        selectedObject?.obj === obj.obj ? "selected" : ""
-                                                    }`}
-                                                    onClick={() => handleObjectSelect(obj)}
-                                                >
-                                                    <div className="browser-item-name font-bold">
-                                                        #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
-                                                        {formatObjectFlags(obj.flags) && (
-                                                            <span
-                                                                className="text-secondary"
-                                                                style={{
-                                                                    opacity: selectedObject?.obj === obj.obj
-                                                                        ? "0.7"
-                                                                        : "1",
-                                                                    color: selectedObject?.obj === obj.obj
-                                                                        ? "inherit"
-                                                                        : undefined,
-                                                                    fontWeight: "400",
-                                                                }}
-                                                            >
-                                                                ({formatObjectFlags(obj.flags)})
-                                                            </span>
-                                                        )}
+                                            {numericObjects.map((obj) => {
+                                                const dollarName = getDollarName(obj.obj);
+                                                return (
+                                                    <div
+                                                        key={obj.obj}
+                                                        className={`browser-item ${
+                                                            selectedObject?.obj === obj.obj ? "selected" : ""
+                                                        }`}
+                                                        onClick={() => handleObjectSelect(obj)}
+                                                    >
+                                                        <div className="browser-item-name font-bold">
+                                                            {dollarName ? `$${dollarName} / ` : ""}#{obj.obj}{" "}
+                                                            {obj.name && `("${obj.name}")`}{" "}
+                                                            {formatObjectFlags(obj.flags) && (
+                                                                <span
+                                                                    className="text-secondary"
+                                                                    style={{
+                                                                        opacity: selectedObject?.obj === obj.obj
+                                                                            ? "0.7"
+                                                                            : "1",
+                                                                        color: selectedObject?.obj === obj.obj
+                                                                            ? "inherit"
+                                                                            : undefined,
+                                                                        fontWeight: "400",
+                                                                    }}
+                                                                >
+                                                                    ({formatObjectFlags(obj.flags)})
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
 
                                             {/* Separator and UUID objects section */}
                                             {uuidObjects.length > 0 && (
@@ -1650,35 +1726,40 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                                     >
                                                         UUID Objects
                                                     </div>
-                                                    {uuidObjects.map((obj) => (
-                                                        <div
-                                                            key={obj.obj}
-                                                            className={`browser-item ${
-                                                                selectedObject?.obj === obj.obj ? "selected" : ""
-                                                            }`}
-                                                            onClick={() => handleObjectSelect(obj)}
-                                                        >
-                                                            <div className="browser-item-name font-bold">
-                                                                #{obj.obj} {obj.name && `("${obj.name}")`}{" "}
-                                                                {formatObjectFlags(obj.flags) && (
-                                                                    <span
-                                                                        className="text-secondary"
-                                                                        style={{
-                                                                            opacity: selectedObject?.obj === obj.obj
-                                                                                ? "0.7"
-                                                                                : "1",
-                                                                            color: selectedObject?.obj === obj.obj
-                                                                                ? "inherit"
-                                                                                : undefined,
-                                                                            fontWeight: "400",
-                                                                        }}
-                                                                    >
-                                                                        ({formatObjectFlags(obj.flags)})
-                                                                    </span>
-                                                                )}
+                                                    {uuidObjects.map((obj) => {
+                                                        const dollarName = getDollarName(obj.obj);
+                                                        return (
+                                                            <div
+                                                                key={obj.obj}
+                                                                className={`browser-item ${
+                                                                    selectedObject?.obj === obj.obj ? "selected" : ""
+                                                                }`}
+                                                                onClick={() => handleObjectSelect(obj)}
+                                                            >
+                                                                <div className="browser-item-name font-bold">
+                                                                    {dollarName ? `$${dollarName} / ` : ""}#{obj.obj}
+                                                                    {" "}
+                                                                    {obj.name && `("${obj.name}")`}{" "}
+                                                                    {formatObjectFlags(obj.flags) && (
+                                                                        <span
+                                                                            className="text-secondary"
+                                                                            style={{
+                                                                                opacity: selectedObject?.obj === obj.obj
+                                                                                    ? "0.7"
+                                                                                    : "1",
+                                                                                color: selectedObject?.obj === obj.obj
+                                                                                    ? "inherit"
+                                                                                    : undefined,
+                                                                                fontWeight: "400",
+                                                                            }}
+                                                                        >
+                                                                            ({formatObjectFlags(obj.flags)})
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </>
                                             )}
                                         </>
@@ -1939,6 +2020,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     onNavigate={handleNavigateToObject}
                                     normalizeObjectRef={normalizeObjectRef}
                                     normalizeObjectInput={normalizeObjectInput}
+                                    getDollarName={getDollarName}
                                     onCreateChild={() => {
                                         setCreateDialogError(null);
                                         setActionMessage(null);
@@ -2003,6 +2085,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     }}
                                     onNavigateToObject={handleNavigateToObject}
                                     normalizeObjectInput={normalizeObjectInput}
+                                    getDollarName={getDollarName}
                                 />
                             )}
                             {selectedProperty && !selectedProperty.moorVar && (
@@ -2053,6 +2136,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         setShowDeleteVerbDialog(true);
                                     }}
                                     normalizeObjectInput={normalizeObjectInput}
+                                    getDollarName={getDollarName}
                                 />
                             )}
                         </div>
@@ -3286,6 +3370,7 @@ interface ObjectInfoEditorProps {
     onNavigate: (objectId: string) => void;
     normalizeObjectRef: (raw: string) => { display: string; objectId: string | null };
     normalizeObjectInput: (raw: string) => string;
+    getDollarName: (objId: string) => string | null;
     onCreateChild: () => void;
     onRecycle: () => void;
     onEditFlags: () => void;
@@ -3306,6 +3391,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     onNavigate,
     normalizeObjectRef,
     normalizeObjectInput: _normalizeObjectInput,
+    getDollarName,
     onCreateChild,
     onRecycle,
     onEditFlags,
@@ -3420,11 +3506,18 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     const renderObjectLink = (objId: string) => {
         const { display, objectId } = normalizeObjectRef(objId);
 
-        // Look up object name from the objects list
+        // Look up object name and $ name from the objects list
         const objData = objects.find(o => o.obj === objectId);
-        const displayText = objData && objData.name
-            ? `${display} ("${objData.name}")`
-            : display;
+        const dollarName = objectId ? getDollarName(objectId) : null;
+
+        let displayText = "";
+        if (dollarName) {
+            displayText = `$${dollarName} / `;
+        }
+        displayText += display;
+        if (objData && objData.name) {
+            displayText += ` ("${objData.name}")`;
+        }
 
         if (!objectId) {
             return (
@@ -3502,14 +3595,22 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
     const renderObjectRefSimple = (raw: string): React.ReactNode => {
         const { display, objectId } = normalizeObjectRef(raw);
 
-        // Look up the object name for tooltip
+        // Look up the object name and $ name
         const objData = objectId ? objects.find(o => o.obj === objectId) : null;
+        const dollarName = objectId ? getDollarName(objectId) : null;
+
+        let badgeText = "";
+        if (dollarName) {
+            badgeText = `$${dollarName} / `;
+        }
+        badgeText += display;
+
         const tooltip = objData?.name || null;
 
         if (!objectId) {
             return (
                 <span className="object-ref-badge" title={tooltip || undefined}>
-                    {display}
+                    {badgeText}
                 </span>
             );
         }
@@ -3520,7 +3621,7 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                 onClick={() => onNavigate(objectId)}
                 title={tooltip || undefined}
             >
-                {display}
+                {badgeText}
             </button>
         );
     };
@@ -3542,9 +3643,18 @@ const ObjectInfoEditor: React.FC<ObjectInfoEditorProps> = ({
                             marginRight: "var(--space-sm)",
                         }}
                     >
-                        {object.name
-                            ? `${normalizeObjectRef(object.obj).display} ("${object.name}")`
-                            : normalizeObjectRef(object.obj).display}
+                        {(() => {
+                            const dollarName = getDollarName(object.obj);
+                            let text = "";
+                            if (dollarName) {
+                                text = `$${dollarName} / `;
+                            }
+                            text += normalizeObjectRef(object.obj).display;
+                            if (object.name) {
+                                text += ` ("${object.name}")`;
+                            }
+                            return text;
+                        })()}
                     </span>
                 </h3>
                 <div className="flex gap-sm" style={{ flexWrap: "nowrap" }}>

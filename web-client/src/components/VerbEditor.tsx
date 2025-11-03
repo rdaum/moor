@@ -42,6 +42,7 @@ interface VerbEditorProps {
     onSave?: () => void; // Callback to refresh verb data after metadata save
     onDelete?: () => void; // Callback to delete verb
     normalizeObjectInput?: (raw: string) => string; // Utility to convert object references to MOO expressions
+    getDollarName?: (objId: string) => string | null; // Get $ name for an object ID
     // Navigation for multiple editors
     onPreviousEditor?: () => void; // Navigate to previous editor
     onNextEditor?: () => void; // Navigate to next editor
@@ -86,6 +87,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     onSave,
     onDelete,
     normalizeObjectInput,
+    getDollarName,
     onPreviousEditor,
     onNextEditor,
     editorCount = 1,
@@ -1950,7 +1952,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                 Definer:
                             </span>
                             <span className="verb-metadata-value">
-                                #{definer}
+                                {(() => {
+                                    const dollarName = getDollarName?.(definer);
+                                    return dollarName ? `$${dollarName} / #${definer}` : `#${definer}`;
+                                })()}
                             </span>
                         </div>
                     )}
@@ -1987,7 +1992,10 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                                         onClick={() => setIsEditingOwner(true)}
                                         className="verb-metadata-button"
                                     >
-                                        #{owner}
+                                        {(() => {
+                                            const dollarName = getDollarName?.(owner);
+                                            return dollarName ? `$${dollarName} / #${owner}` : `#${owner}`;
+                                        })()}
                                     </button>
                                 )}
                         </div>
