@@ -1896,7 +1896,8 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
                 this: v_obj(target),
                 player: bf_args.exec_state.top().player,
                 args: args.clone(),
-                caller: bf_args.exec_state.top().this.clone(),
+                // Caller needs to be the player in order for downstream caller perms checks to function correctly
+                caller: v_obj(bf_args.exec_state.top().player),
                 argstr,
                 command: parsed_command,
                 program,
