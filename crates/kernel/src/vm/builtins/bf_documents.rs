@@ -17,7 +17,7 @@ use crate::{
     task_context::with_current_transaction,
     vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err},
 };
-use moor_compiler::offset_for_builtin;
+use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, Flyweight, List, Map, SYSTEM_OBJECT,
     Sequence, Symbol, VarType, Variant, v_flyweight, v_int, v_list, v_map, v_obj, v_str, v_string,
@@ -398,9 +398,12 @@ where
     let tag_name = match tag_element.as_symbol() {
         Ok(sym) => sym.to_string(),
         Err(_) => {
-            return Err(BfErr::ErrValue(
-                E_INVARG.msg("Tag name must be string or symbol"),
-            ));
+            return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                format!(
+                    "Tag name must be string or symbol (was: {})",
+                    to_literal(&tag_element)
+                )
+            })));
         }
     };
 
