@@ -40,6 +40,14 @@ pub async fn start_host_session(
     // Establish the initial connection to the daemon, and send the host_id and our initial
     // listener list.
     let rpc_client = loop {
+        // Check if shutdown was requested before attempting connection
+        if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+            info!("Host shutdown requested during connection attempt");
+            return Err(RpcError::CouldNotInitiateSession(
+                "Host shutdown requested during connection".to_string(),
+            ));
+        }
+
         // Create managed RPC client with connection pooling and cancellation safety
         let rpc_client = RpcClient::new_with_defaults(
             std::sync::Arc::new(zmq_ctx.clone()),

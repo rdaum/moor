@@ -251,7 +251,7 @@ impl Scheduler {
                     .config
                     .runtime
                     .scheduler_tick_duration
-                    .unwrap_or(Duration::from_millis(10));
+                    .unwrap_or(Duration::from_millis(50));
                 std::thread::sleep(tick_duration);
                 continue;
             }
@@ -318,7 +318,7 @@ impl Scheduler {
                 .config
                 .runtime
                 .scheduler_tick_duration
-                .unwrap_or(Duration::from_millis(10));
+                .unwrap_or(Duration::from_millis(50));
 
             match selector.wait_timeout(tick_duration) {
                 Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
@@ -1869,7 +1869,7 @@ impl Scheduler {
             .config
             .runtime
             .scheduler_tick_duration
-            .unwrap_or(Duration::from_millis(10));
+            .unwrap_or(Duration::from_millis(50));
 
         while !self.task_q.active.is_empty() {
             std::thread::sleep(tick_duration);
