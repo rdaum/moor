@@ -97,6 +97,7 @@ humantime.workspace = true
 iana-time-zone.workspace = true
 
 # Text Processing & Regex
+natord.workspace = true
 onig.workspace = true
 
 # Collections & Data Structures

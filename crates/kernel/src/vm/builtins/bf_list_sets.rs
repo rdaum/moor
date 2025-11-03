@@ -1046,6 +1046,178 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// MOO: `list sort(list values [, list keys] [, int natural] [, int reverse])`
+/// Sorts a list of values, optionally using a parallel list of keys for sorting.
+/// All elements must be the same type (int, float, obj, err, or str).
+/// Strings are compared case-insensitively, optionally using natural sort order.
+fn bf_sort(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 4 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let values = &bf_args.args[0];
+    let Variant::List(values_list) = values.variant() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            "First argument to sort() must be a list".to_string()
+        })));
+    };
+
+    // Empty list case
+    if values_list.is_empty() {
+        return Ok(Ret(v_empty_list()));
+    }
+
+    // Determine if we're sorting by keys (arg 2) or by values
+    let (sort_by, _keys_list) = if bf_args.args.len() >= 2 {
+        let keys = &bf_args.args[1];
+        let Variant::List(keys_list) = keys.variant() else {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                "Second argument to sort() must be a list".to_string()
+            })));
+        };
+
+        // If keys list is non-empty, use it for sorting
+        if !keys_list.is_empty() {
+            // Validate that keys and values have same length
+            if keys_list.len() != values_list.len() {
+                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                    format!(
+                        "sort() keys list length ({}) must match values list length ({})",
+                        keys_list.len(),
+                        values_list.len()
+                    )
+                })));
+            }
+            (keys_list, Some(keys_list))
+        } else {
+            (values_list, None)
+        }
+    } else {
+        (values_list, None)
+    };
+
+    // Parse natural sort flag (arg 3)
+    let natural = bf_args.args.len() >= 3 && bf_args.args[2].is_true();
+
+    // Parse reverse flag (arg 4)
+    let reverse = bf_args.args.len() >= 4 && bf_args.args[3].is_true();
+
+    // Validate all elements in sort_by are the same type
+    let first_elem = sort_by.index(0).map_err(BfErr::ErrValue)?;
+    let sort_type = first_elem.type_code();
+
+    // Check if type is sortable
+    match sort_type {
+        VarType::TYPE_INT
+        | VarType::TYPE_FLOAT
+        | VarType::TYPE_OBJ
+        | VarType::TYPE_ERR
+        | VarType::TYPE_STR => {}
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "sort() cannot sort lists containing {} values",
+                    sort_type.to_literal()
+                )
+            })));
+        }
+    }
+
+    // Validate all elements are the same type
+    for (idx, elem) in sort_by.iter().enumerate() {
+        if elem.type_code() != sort_type {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "sort() requires all elements to be the same type, but element at index {} is {} while others are {}",
+                    idx + 1,
+                    elem.type_code().to_literal(),
+                    sort_type.to_literal()
+                )
+            })));
+        }
+    }
+
+    // Create index vector and sort it
+    let mut indices: Vec<usize> = (0..values_list.len()).collect();
+
+    // Sort indices based on the sort_by list elements
+    indices.sort_by(|&a, &b| {
+        let elem_a = sort_by.index(a).unwrap();
+        let elem_b = sort_by.index(b).unwrap();
+
+        let ordering = match (elem_a.variant(), elem_b.variant()) {
+            (Variant::Int(a), Variant::Int(b)) => a.cmp(b),
+            (Variant::Float(a), Variant::Float(b)) => {
+                // Handle NaN: NaN is considered equal to itself and less than any other value
+                if a.is_nan() && b.is_nan() {
+                    std::cmp::Ordering::Equal
+                } else if a.is_nan() {
+                    std::cmp::Ordering::Less
+                } else if b.is_nan() {
+                    std::cmp::Ordering::Greater
+                } else {
+                    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                }
+            }
+            (Variant::Obj(a), Variant::Obj(b)) => a.cmp(b),
+            (Variant::Err(a), Variant::Err(b)) => a.name().cmp(&b.name()),
+            (Variant::Str(a), Variant::Str(b)) => {
+                if natural {
+                    natord::compare_ignore_case(a.as_str(), b.as_str())
+                } else {
+                    // Case-insensitive comparison
+                    a.as_str().to_lowercase().cmp(&b.as_str().to_lowercase())
+                }
+            }
+            _ => unreachable!("Type validation should have caught this"),
+        };
+
+        if reverse {
+            ordering.reverse()
+        } else {
+            ordering
+        }
+    });
+
+    // Build result list using sorted indices from values_list
+    let result: Vec<Var> = indices
+        .iter()
+        .map(|&idx| values_list.index(idx).unwrap())
+        .collect();
+
+    Ok(Ret(v_list(&result)))
+}
+
+/// MOO: `list|str reverse(list|str input)`
+/// Reverses the order of elements in a list or characters in a string.
+fn bf_reverse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let input = &bf_args.args[0];
+
+    match input.variant() {
+        Variant::List(list) => {
+            // Reverse the list
+            let mut reversed: Vec<Var> = list.iter().collect();
+            reversed.reverse();
+            Ok(Ret(v_list(&reversed)))
+        }
+        Variant::Str(s) => {
+            // Reverse the string by Unicode scalar values (code points)
+            let reversed: String = s.as_str().chars().rev().collect();
+            Ok(Ret(v_str(&reversed)))
+        }
+        _ => Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+            format!(
+                "reverse() requires a list or string, got {}",
+                input.type_code().to_literal()
+            )
+        }))),
+    }
+}
+
 pub(crate) fn register_bf_list_sets(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("is_member")] = Box::new(bf_is_member);
     builtins[offset_for_builtin("listinsert")] = Box::new(bf_listinsert);
@@ -1061,6 +1233,8 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("pcre_replace")] = Box::new(bf_pcre_replace);
     builtins[offset_for_builtin("slice")] = Box::new(bf_slice);
     builtins[offset_for_builtin("complex_match")] = Box::new(bf_complex_match);
+    builtins[offset_for_builtin("sort")] = Box::new(bf_sort);
+    builtins[offset_for_builtin("reverse")] = Box::new(bf_reverse);
 }
 
 #[cfg(test)]

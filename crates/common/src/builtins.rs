@@ -699,6 +699,19 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_OBJ), Typed(TYPE_STR), Typed(TYPE_MAP)],
             true,
         ),
+        mk_builtin(
+            "sort",
+            Q(1),
+            Q(4),
+            vec![
+                Typed(TYPE_LIST),
+                Typed(TYPE_LIST),
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
+            ],
+            true,
+        ),
+        mk_builtin("reverse", Q(1), Q(1), vec![Any], true),
     ]
 }
 

@@ -7,6 +7,7 @@
 - New $login.welcome_message, with djot/markdown style content
 - Added `$oauth_challenge` `$ouath_create` `$oauth_connect`
 - Support web client $player:set_profile_picture/$player:profile_picture
+- Make $list_utils use builtin `sort` and `reverse` instead of slow hand-rolled
 
 ### Exhaustive List of Changes Since LambdaCore-17May04
 

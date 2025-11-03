@@ -36,3 +36,75 @@
 ; return slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1});
 {{1, "z"}, {2, "y"}}
 
+// test_sort_integers
+; return sort({5, 2, 8, 1, 3});
+{1, 2, 3, 5, 8}
+
+// test_sort_strings_case_insensitive
+; return sort({"zebra", "Apple", "banana", "Cherry"});
+{"Apple", "banana", "Cherry", "zebra"}
+
+// test_sort_empty
+; return sort({});
+{}
+
+// test_sort_with_keys
+; return sort({"Alice", "Bob", "Charlie"}, {30, 25, 35});
+{"Bob", "Alice", "Charlie"}
+
+// test_sort_natural
+; return sort({"file10.txt", "file2.txt", "file1.txt", "file20.txt"}, {}, 1);
+{"file1.txt", "file2.txt", "file10.txt", "file20.txt"}
+
+// test_sort_reverse
+; return sort({5, 2, 8, 1, 3}, {}, 0, 1);
+{8, 5, 3, 2, 1}
+
+// test_sort_floats
+; return sort({5.5, 2.2, 8.8, 1.1});
+{1.1, 2.2, 5.5, 8.8}
+
+// test_sort_objects
+; return sort({#5, #2, #8, #1});
+{#1, #2, #5, #8}
+
+// test_sort_type_error
+; return sort({1, "hello", 3});
+E_TYPE
+
+// test_sort_invalid_type
+; return sort({{1}, {2}});
+E_TYPE
+
+// test_sort_key_length_mismatch
+; return sort({"a", "b"}, {1, 2, 3});
+E_INVARG
+
+// test_reverse_list
+; return reverse({1, 2, 3, 4, 5});
+{5, 4, 3, 2, 1}
+
+// test_reverse_string
+; return reverse("hello");
+"olleh"
+
+// test_reverse_empty_list
+; return reverse({});
+{}
+
+// test_reverse_empty_string
+; return reverse("");
+""
+
+// test_reverse_single_element_list
+; return reverse({42});
+{42}
+
+// test_reverse_single_char_string
+; return reverse("a");
+"a"
+
+// test_reverse_invalid_type
+; return reverse(42);
+E_INVARG
+

@@ -219,19 +219,7 @@ object LIST_UTILS
 
   verb reverse (this none this) owner: HACKER flags: "rxd"
     "reverse(list) => reversed list";
-    return this:_reverse(@args[1]);
-  endverb
-
-  verb _reverse (this none this) owner: HACKER flags: "rxd"
-    ":_reverse(@list) => reversed list";
-    if (length(args) > 50)
-      return {@this:_reverse(@args[$ / 2 + 1..$]), @this:_reverse(@args[1..$ / 2])};
-    endif
-    l = {};
-    for a in (args)
-      l = listinsert(l, a);
-    endfor
-    return l;
+    return reverse(args[1]);
   endverb
 
   verb compress (this none this) owner: HACKER flags: "rxd"
@@ -252,19 +240,9 @@ object LIST_UTILS
   endverb
 
   verb sort (this none this) owner: HACKER flags: "rxd"
-    "sort(list[,keys]) => sorts keys (assumed to be all numbers or strings) and returns list with the corresponding permutation applied to it.  keys defaults to the list itself.";
+    "sort(list[,keys][,natural][,reverse]) => sorts list, optionally using parallel keys for sort order. Strings are compared case-insensitively. If natural is true, uses natural string ordering (e.g., file2.txt < file10.txt). If reverse is true, reverses the sort order.";
     "sort({x1,x3,x2},{1,3,2}) => {x1,x2,x3}";
-    lst = args[1];
-    unsorted_keys = (use_sorted_lst = length(args) >= 2) ? args[2] | lst;
-    sorted_lst = sorted_keys = {};
-    for e in (unsorted_keys)
-      l = this:find_insert(sorted_keys, e);
-      sorted_keys = listinsert(sorted_keys, e, l);
-      if (use_sorted_lst)
-        sorted_lst = listinsert(sorted_lst, lst[length(sorted_keys)], l);
-      endif
-    endfor
-    return sorted_lst || sorted_keys;
+    return sort(@args);
   endverb
 
   verb sort_suspended (this none this) owner: #2 flags: "rxd"
@@ -577,24 +555,8 @@ object LIST_UTILS
   endverb
 
   verb reverse_suspended (this none this) owner: #2 flags: "rxd"
-    "reverse(list) => reversed list.  Does suspend(0) as necessary.";
-    set_task_perms(caller_perms());
-    "^^^For suspend task.";
-    return this:_reverse_suspended(@args[1]);
-  endverb
-
-  verb _reverse_suspended (this none this) owner: #2 flags: "rxd"
-    ":_reverse(@list) => reversed list";
-    set_task_perms(caller_perms());
-    $command_utils:suspend_if_needed(0);
-    if (length(args) > 50)
-      return {@this:_reverse_suspended(@args[$ / 2 + 1..$]), @this:_reverse_suspended(@args[1..$ / 2])};
-    endif
-    l = {};
-    for a in (args)
-      l = listinsert(l, a);
-    endfor
-    return l;
+    "reverse(list) => reversed list.  Uses the fast builtin reverse() so no suspend is needed.";
+    return reverse(args[1]);
   endverb
 
   verb randomly_permute_suspended (this none this) owner: #2 flags: "rxd"
