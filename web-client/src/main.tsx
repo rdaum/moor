@@ -20,6 +20,7 @@ import { RightDock } from "./components/docks/RightDock";
 import { TopDock } from "./components/docks/TopDock";
 import { EncryptionPasswordPrompt } from "./components/EncryptionPasswordPrompt";
 import { EncryptionSetupPrompt } from "./components/EncryptionSetupPrompt";
+import { EvalPanel } from "./components/EvalPanel";
 import { Login, useWelcomeMessage } from "./components/Login";
 import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeMessage, NarrativeRef } from "./components/Narrative";
@@ -90,6 +91,7 @@ function AppContent({
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
     const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
     const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
+    const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [userSkippedEncryption, setUserSkippedEncryption] = useState(false);
@@ -109,6 +111,7 @@ function AppContent({
     const isTouchDevice = useTouchDevice();
     const [forceSplitMode, setForceSplitMode] = useState(false);
     const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isTouchDevice);
+    const [isEvalPanelDocked, setIsEvalPanelDocked] = useState(() => isTouchDevice);
     const [narrativeFontSize, setNarrativeFontSize] = useState(() => {
         const fallback = 14;
         if (typeof window === "undefined") {
@@ -136,6 +139,13 @@ function AppContent({
         setIsObjectBrowserDocked(prev => !prev);
     }, [isTouchDevice]);
 
+    const toggleEvalPanelDock = useCallback(() => {
+        if (isTouchDevice) {
+            return;
+        }
+        setIsEvalPanelDocked(prev => !prev);
+    }, [isTouchDevice]);
+
     const decreaseNarrativeFontSize = useCallback(() => {
         setNarrativeFontSize(prev => Math.max(10, prev - 1));
     }, []);
@@ -149,6 +159,12 @@ function AppContent({
             setIsObjectBrowserDocked(true);
         }
     }, [isTouchDevice, isObjectBrowserDocked]);
+
+    useEffect(() => {
+        if (isTouchDevice && !isEvalPanelDocked) {
+            setIsEvalPanelDocked(true);
+        }
+    }, [isTouchDevice, isEvalPanelDocked]);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -278,6 +294,17 @@ function AppContent({
         setIsObjectBrowserOpen(true);
     }, [isTouchDevice, closeEditor, closePropertyEditor, isObjectBrowserDocked]);
 
+    const handleOpenEvalPanel = useCallback(() => {
+        if (isTouchDevice) {
+            closeEditor();
+            closePropertyEditor();
+            if (!isEvalPanelDocked) {
+                setIsEvalPanelDocked(true);
+            }
+        }
+        setIsEvalPanelOpen(true);
+    }, [isTouchDevice, closeEditor, closePropertyEditor, isEvalPanelDocked]);
+
     useEffect(() => {
         if (!isTouchDevice) {
             return;
@@ -296,6 +323,25 @@ function AppContent({
             setIsObjectBrowserOpen(false);
         }
     }, [isTouchDevice, editorSession, propertyEditorSession, isObjectBrowserOpen]);
+
+    useEffect(() => {
+        if (!isTouchDevice) {
+            return;
+        }
+        if (isEvalPanelOpen) {
+            closeEditor();
+            closePropertyEditor();
+        }
+    }, [isTouchDevice, isEvalPanelOpen, closeEditor, closePropertyEditor]);
+
+    useEffect(() => {
+        if (!isTouchDevice) {
+            return;
+        }
+        if ((editorSession || propertyEditorSession) && isEvalPanelOpen) {
+            setIsEvalPanelOpen(false);
+        }
+    }, [isTouchDevice, editorSession, propertyEditorSession, isEvalPanelOpen]);
 
     // Notify parent about verb editor availability
     useEffect(() => {
@@ -865,7 +911,9 @@ function AppContent({
     const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
     const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
     const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
-    const isSplitMode = isConnected && (verbEditorDocked || propertyEditorDocked || objectBrowserDocked);
+    const evalPanelDocked = isEvalPanelOpen && isEvalPanelDocked;
+    const isSplitMode = isConnected
+        && (verbEditorDocked || propertyEditorDocked || objectBrowserDocked || evalPanelDocked);
     const canUseObjectBrowser = Boolean(
         isConnected
             && authState.player?.authToken
@@ -939,6 +987,9 @@ function AppContent({
                         onAccountToggle={() => setIsAccountMenuOpen(true)}
                         onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
                             ? handleOpenObjectBrowser
+                            : undefined}
+                        onEvalToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
+                            ? handleOpenEvalPanel
                             : undefined}
                     />
                 </>
@@ -1130,6 +1181,16 @@ function AppContent({
                                     isInSplitMode={true}
                                 />
                             )}
+                            {evalPanelDocked && canUseObjectBrowser && (
+                                <EvalPanel
+                                    visible={isEvalPanelOpen}
+                                    onClose={() => setIsEvalPanelOpen(false)}
+                                    authToken={authState.player.authToken}
+                                    splitMode={true}
+                                    onToggleSplitMode={toggleEvalPanelDock}
+                                    isInSplitMode={true}
+                                />
+                            )}
                         </div>
                     )}
                 </main>
@@ -1230,6 +1291,17 @@ function AppContent({
                     onClose={() => setIsObjectBrowserOpen(false)}
                     authToken={authState.player.authToken}
                     onToggleSplitMode={toggleObjectBrowserDock}
+                    isInSplitMode={false}
+                />
+            )}
+
+            {/* Eval Panel - floating mode */}
+            {isEvalPanelOpen && !evalPanelDocked && canUseObjectBrowser && authState.player?.authToken && (
+                <EvalPanel
+                    visible={true}
+                    onClose={() => setIsEvalPanelOpen(false)}
+                    authToken={authState.player.authToken}
+                    onToggleSplitMode={toggleEvalPanelDock}
                     isInSplitMode={false}
                 />
             )}

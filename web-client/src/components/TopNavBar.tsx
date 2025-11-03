@@ -20,12 +20,14 @@ interface TopNavBarProps {
     onSettingsToggle: () => void;
     onAccountToggle: () => void;
     onBrowserToggle?: () => void;
+    onEvalToggle?: () => void;
 }
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({
     onSettingsToggle,
     onAccountToggle,
     onBrowserToggle,
+    onEvalToggle,
 }) => {
     const title = useTitle();
 
@@ -64,6 +66,17 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
                             <rect x="3" y="14" width="7" height="7" />
                             <rect x="14" y="14" width="7" height="7" />
                         </svg>
+                    </button>
+                )}
+
+                {onEvalToggle && (
+                    <button
+                        className="account-icon"
+                        onClick={onEvalToggle}
+                        aria-label="Open eval panel"
+                        title="Eval Panel"
+                    >
+                        <span style={{ fontSize: "20px", fontWeight: "bold" }}>λ</span>
                     </button>
                 )}
 
