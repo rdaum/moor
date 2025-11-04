@@ -712,6 +712,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("reverse", Q(1), Q(1), vec![Any], true),
+        mk_builtin(
+            "uuid",
+            Q(0),
+            Q(2),
+            vec![Typed(TYPE_INT), Typed(TYPE_INT)],
+            true,
+        ),
     ]
 }
 

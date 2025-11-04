@@ -23,6 +23,7 @@ use moor_var::{
     ByteSized, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Sequence, Variant, v_err, v_float, v_int, v_obj,
     v_objid, v_str, v_sym,
 };
+use uuid::Uuid;
 
 /// MOO: `int typeof(any value)`
 /// Returns the type code of the given value.
@@ -352,6 +353,44 @@ fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_str(msg.as_str())))
 }
 
+/// MOO: `str uuid([int high, int low])`
+/// Generates a v7 UUID or reconstructs a UUID from two 64-bit integers (big-endian).
+fn bf_uuid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    match bf_args.args.len() {
+        0 => {
+            // Generate a new v7 UUID
+            let uuid = Uuid::now_v7();
+            Ok(Ret(v_str(uuid.to_string().as_str())))
+        }
+        2 => {
+            // Reconstruct UUID from two i64 values (big-endian)
+            let Some(high) = bf_args.args[0].as_integer() else {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("uuid() requires integer arguments"),
+                ));
+            };
+            let Some(low) = bf_args.args[1].as_integer() else {
+                return Err(BfErr::ErrValue(
+                    E_TYPE.msg("uuid() requires integer arguments"),
+                ));
+            };
+
+            // Convert i64 to u64 for bit manipulation
+            let high_u64 = high as u64;
+            let low_u64 = low as u64;
+
+            // Construct the 128-bit UUID bytes (big-endian)
+            let mut bytes = [0u8; 16];
+            bytes[0..8].copy_from_slice(&high_u64.to_be_bytes());
+            bytes[8..16].copy_from_slice(&low_u64.to_be_bytes());
+
+            let uuid = Uuid::from_bytes(bytes);
+            Ok(Ret(v_str(uuid.to_string().as_str())))
+        }
+        _ => Err(BfErr::ErrValue(E_ARGS.msg("uuid() takes 0 or 2 arguments"))),
+    }
+}
+
 pub(crate) fn register_bf_values(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("typeof")] = Box::new(bf_typeof);
     builtins[offset_for_builtin("tostr")] = Box::new(bf_tostr);
@@ -368,4 +407,5 @@ pub(crate) fn register_bf_values(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("length")] = Box::new(bf_length);
     builtins[offset_for_builtin("error_code")] = Box::new(bf_error_code);
     builtins[offset_for_builtin("error_message")] = Box::new(bf_error_message);
+    builtins[offset_for_builtin("uuid")] = Box::new(bf_uuid);
 }

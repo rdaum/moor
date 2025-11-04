@@ -1777,7 +1777,7 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
             let args = parsed_command_spec
                 .get(&sym_or_str("args"))
                 .ok()
-                .and_then(|v| v.as_list().map(|l| l.clone()))
+                .and_then(|v| v.as_list().cloned())
                 .unwrap_or_else(|| List::mk_list(&[]));
 
             // Extract dobj
