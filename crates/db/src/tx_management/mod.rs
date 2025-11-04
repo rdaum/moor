@@ -34,7 +34,7 @@ pub enum Error {
     Conflict,
     #[error("Retrieval error from backing store")]
     RetrievalFailure(String),
-    #[error("Store failure when writing to backing store: #[0]")]
+    #[error("Store failure when writing to backing store: #{0}")]
     StorageFailure(String),
     #[error("Encoding error")]
     EncodingFailure,

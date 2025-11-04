@@ -257,12 +257,23 @@ fn encode_moor_program(program: &Program) -> Result<fb::StoredMooRProgram, Encod
         })
         .collect();
 
-    // 12. Encode error operands
-    let error_operands: Vec<u8> = program
+    // 12. Encode error operands with complete information including symbols for custom errors
+    let error_operands_full: Vec<fb::StoredErrorOperand> = program
         .0
         .error_operands
         .iter()
-        .map(error_code_to_discriminant)
+        .map(|err| {
+            let discriminant = error_code_to_discriminant(err);
+            let symbol = if let moor_var::ErrorCode::ErrCustom(sym) = err {
+                Some(sym.as_string())
+            } else {
+                None
+            };
+            fb::StoredErrorOperand {
+                discriminant,
+                symbol,
+            }
+        })
         .collect();
 
     // 13. Encode lambda programs (recursive)
@@ -315,7 +326,8 @@ fn encode_moor_program(program: &Program) -> Result<fb::StoredMooRProgram, Encod
         for_range_operands,
         range_comprehensions,
         list_comprehensions,
-        error_operands,
+        error_operands: vec![], // Deprecated field, always empty
+        error_operands_full: Some(error_operands_full),
         lambda_programs,
         line_number_spans,
         fork_line_number_spans,
@@ -628,16 +640,36 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
     let range_comprehensions = decode_range_comprehensions(&fb_prog_ref)?;
     let list_comprehensions = decode_list_comprehensions(&fb_prog_ref)?;
 
-    // Decode error operands
-    let fb_error_operands = fb_prog_ref.error_operands().map_err(|e| {
-        DecodeError::DecodeFailed(format!("Failed to read lambda error_operands: {e}"))
-    })?;
-    let error_operands = fb_error_operands
+    // Decode error operands - require new format with full error information
+    let fb_error_operands_full = fb_prog_ref
+        .error_operands_full()
+        .map_err(|e| DecodeError::DecodeFailed(format!("Failed to read error_operands_full: {e}")))?
+        .expect("error_operands_full field is missing - database migration to v3.0.0 required");
+
+    let error_operands = fb_error_operands_full
         .iter()
-        .map(|&code| {
-            error_code_from_discriminant(code).ok_or(DecodeError::DecodeFailed(format!(
-                "Invalid opcode in program stream: {code}"
-            )))
+        .map(|operand_result| {
+            let operand = operand_result.map_err(|e| {
+                DecodeError::DecodeFailed(format!("Failed to read error operand: {e}"))
+            })?;
+
+            let disc = operand.discriminant().map_err(|e| {
+                DecodeError::DecodeFailed(format!("Failed to read discriminant: {e}"))
+            })?;
+
+            if disc == 255 {
+                // Custom error - must have symbol
+                let symbol_str = operand.symbol().map_err(|e| {
+                    DecodeError::DecodeFailed(format!("Failed to read custom error symbol: {e}"))
+                })?.ok_or_else(|| {
+                    DecodeError::DecodeFailed("Custom error missing symbol field".to_string())
+                })?;
+                Ok(moor_var::ErrorCode::ErrCustom(moor_var::Symbol::mk(symbol_str)))
+            } else {
+                error_code_from_discriminant(disc).ok_or_else(|| {
+                    DecodeError::DecodeFailed(format!("Invalid error code discriminant: {disc}"))
+                })
+            }
         })
         .collect::<Result<Vec<_>, DecodeError>>()?;
 

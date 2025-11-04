@@ -158,6 +158,15 @@ table StoredListComprehend {
 }
 
 // ============================================================================
+// Error operands
+// ============================================================================
+
+table StoredErrorOperand {
+    discriminant: uint8;
+    symbol: string;  // Only present for custom errors (discriminant == 255)
+}
+
+// ============================================================================
 // Fork vectors
 // ============================================================================
 
@@ -208,8 +217,11 @@ table StoredMooRProgram {
     // List comprehensions
     list_comprehensions: [StoredListComprehend] (required);
 
-    // Error operands (as u8 codes)
+    // Error operands (as u8 codes) - DEPRECATED: Use error_operands_full instead
     error_operands: [uint8] (required);
+
+    // Error operands with complete information including symbols for custom errors
+    error_operands_full: [StoredErrorOperand];
 
     // Lambda programs (recursive)
     lambda_programs: [StoredMooRProgram] (required);
