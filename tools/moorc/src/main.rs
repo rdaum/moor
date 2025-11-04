@@ -422,6 +422,7 @@ fn main() -> Result<(), eyre::Report> {
     // Run unit tests
     if args.run_tests == Some(true) && !unit_tests.is_empty() {
         'outer: for (o, verb) in unit_tests {
+            info!("Running {}:{}....", o, verb);
             let session = test_session_factory
                 .clone()
                 .mk_background_session(&wizard)
