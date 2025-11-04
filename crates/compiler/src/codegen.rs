@@ -1149,10 +1149,6 @@ impl CodegenState {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::FinallyContinue);
-                // End the scope created by TryFinally
-                self.emit(Op::EndScope {
-                    num_bindings: *environment_width as u16,
-                });
             }
             StmtNode::Scope { num_bindings, body } => {
                 let end_label = self.make_jump_label(None);

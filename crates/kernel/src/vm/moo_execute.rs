@@ -1017,6 +1017,11 @@ pub fn moo_frame_execute(
             Op::EndFinally => {
                 // Execution of the block completed successfully, so we can just continue with
                 // fall-through into the FinallyContinue block
+                // Pop the scope that was pushed by TryFinally
+                let scope = f.pop_scope().expect("Missing scope for try/finally");
+                if !matches!(scope.scope_type, ScopeType::TryFinally(_)) {
+                    panic!("EndFinally without TryFinally scope");
+                }
                 f.finally_stack.push(FinallyReason::Fallthrough);
             }
             //
