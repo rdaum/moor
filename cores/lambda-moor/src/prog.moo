@@ -1362,7 +1362,7 @@ object PROG
     else
       what = player:my_match_object(whatstr);
     endif
-    if (!valid(what) && match(whatstr, "^[0-9]+$"))
+    if (!valid(what) && $code_utils:match_objid("#" + whatstr))
       what = toobj(whatstr);
     endif
     if ($command_utils:object_match_failed(what, whatstr))
