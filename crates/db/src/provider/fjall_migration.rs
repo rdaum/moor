@@ -265,7 +265,9 @@ impl FjallMigrator {
 
     /// Migration from version 2 to version 3: Fix error_operands to preserve custom error symbols
     fn fjall_migrate_v2_to_v3(&self) -> Result<(), String> {
-        warn!("Running Fjall migration v2 -> v3: Migrating verb programs to new error_operands format");
+        warn!(
+            "Running Fjall migration v2 -> v3: Migrating verb programs to new error_operands format"
+        );
 
         if !self.keyspace.partition_exists("object_verbs") {
             info!("No object_verbs partition found, skipping verb migration");
@@ -285,10 +287,7 @@ impl FjallMigrator {
         partition: &PartitionHandle,
         partition_name: &str,
     ) -> Result<(), String> {
-        warn!(
-            "Migrating verb programs in partition {}",
-            partition_name
-        );
+        warn!("Migrating verb programs in partition {}", partition_name);
 
         let mut entry_count = 0;
         let mut migrated_count = 0;
@@ -325,7 +324,9 @@ impl FjallMigrator {
 
             // Re-encode the program (this will use the new format with error_operands_full)
             // This will migrate the program even if it fails to decode custom errors from old format
-            let new_program_bytes = match moor_schema::convert_program::stored_to_program(&stored_program) {
+            let new_program_bytes = match moor_schema::convert_program::stored_to_program(
+                &stored_program,
+            ) {
                 Ok(program) => {
                     // Successfully decoded, re-encode
                     match moor_schema::convert_program::program_to_stored(&program) {
@@ -339,7 +340,9 @@ impl FjallMigrator {
                 Err(e) => {
                     // If it fails to decode, it might have custom errors in old format
                     warn!("Program failed to decode (may have custom errors): {e}");
-                    warn!("This verb may need manual recompilation to preserve custom error symbols");
+                    warn!(
+                        "This verb may need manual recompilation to preserve custom error symbols"
+                    );
                     continue;
                 }
             };

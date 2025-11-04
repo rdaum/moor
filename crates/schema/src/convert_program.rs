@@ -659,12 +659,19 @@ pub fn decode_fb_program(fb_prog_ref: fb::StoredMooRProgramRef) -> Result<Progra
 
             if disc == 255 {
                 // Custom error - must have symbol
-                let symbol_str = operand.symbol().map_err(|e| {
-                    DecodeError::DecodeFailed(format!("Failed to read custom error symbol: {e}"))
-                })?.ok_or_else(|| {
-                    DecodeError::DecodeFailed("Custom error missing symbol field".to_string())
-                })?;
-                Ok(moor_var::ErrorCode::ErrCustom(moor_var::Symbol::mk(symbol_str)))
+                let symbol_str = operand
+                    .symbol()
+                    .map_err(|e| {
+                        DecodeError::DecodeFailed(format!(
+                            "Failed to read custom error symbol: {e}"
+                        ))
+                    })?
+                    .ok_or_else(|| {
+                        DecodeError::DecodeFailed("Custom error missing symbol field".to_string())
+                    })?;
+                Ok(moor_var::ErrorCode::ErrCustom(moor_var::Symbol::mk(
+                    symbol_str,
+                )))
             } else {
                 error_code_from_discriminant(disc).ok_or_else(|| {
                     DecodeError::DecodeFailed(format!("Invalid error code discriminant: {disc}"))

@@ -637,6 +637,7 @@ mod tests {
          9: 052                 * PUT a
         10: 111                   POP
         11: 112 006               CONTINUE
+        12: 112 104 000           END_SCOPE 0
         */
         assert_eq!(
             binary.main_vector().to_vec(),
@@ -653,6 +654,7 @@ mod tests {
                 Put(a),
                 Pop,
                 FinallyContinue,
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );

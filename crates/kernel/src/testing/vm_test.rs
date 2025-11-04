@@ -2865,4 +2865,30 @@ mod tests {
         ]);
         assert_eq!(result, Ok(expected));
     }
+
+    #[test]
+    fn test_stack_tracking_after_try_finally() {
+        // Regression test for stack underflow bug after try/finally
+        // The compiler was not tracking the stack correctly after try/finally blocks
+        let program = r#"
+            result = #-3;
+            try
+                temp = 42;
+            finally
+                x = 1;
+            endtry
+            result != #-3 && raise(E_ASSERT, "should not raise");
+            return result;
+        "#;
+        let state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state,
+            session.clone(),
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_obj(Obj::mk_id(-3))));
+    }
 }
