@@ -35,6 +35,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 const TASK_TIMEOUT: Duration = Duration::from_secs(10);
+const WEBSOCKET_PING_INTERVAL: Duration = Duration::from_secs(30);
 
 pub struct WebSocketConnection {
     pub(crate) player: Obj,
@@ -60,6 +61,7 @@ pub enum ReadEvent {
     InputReply(Message),
     ConnectionClose,
     PendingEvent,
+    Ping(Vec<u8>),
 }
 
 impl WebSocketConnection {
@@ -86,6 +88,7 @@ impl WebSocketConnection {
         debug!(client_id = ?self.client_id, "Entering command dispatch loop");
 
         let mut expecting_input = VecDeque::new();
+        let mut ping_interval = tokio::time::interval(WEBSOCKET_PING_INTERVAL);
         loop {
             // We should not send the next line until we've received a narrative event for the
             // previous.
@@ -104,14 +107,35 @@ impl WebSocketConnection {
                     return ReadEvent::PendingEvent;
                 }
 
-                let Some(Ok(line)) = ws_receiver.next().await else {
-                    return ReadEvent::ConnectionClose;
-                };
+                loop {
+                    let Some(Ok(msg)) = ws_receiver.next().await else {
+                        return ReadEvent::ConnectionClose;
+                    };
 
-                if !expecting_input.is_empty() {
-                    ReadEvent::InputReply(line)
-                } else {
-                    ReadEvent::Command(line)
+                    // Filter out WebSocket control frames (ping, pong, close)
+                    // Only process actual data messages (text/binary)
+                    match msg {
+                        Message::Text(_) | Message::Binary(_) => {
+                            if !expecting_input.is_empty() {
+                                return ReadEvent::InputReply(msg);
+                            } else {
+                                return ReadEvent::Command(msg);
+                            }
+                        }
+                        Message::Ping(payload) => {
+                            // Client sent us a ping - we must respond with a pong
+                            trace!("Received ping from client");
+                            return ReadEvent::Ping(payload.to_vec());
+                        }
+                        Message::Pong(_) => {
+                            // Client responded to our ping
+                            trace!("Received pong from client");
+                            continue;
+                        }
+                        Message::Close(_) => {
+                            return ReadEvent::ConnectionClose;
+                        }
+                    }
                 }
             };
 
@@ -131,6 +155,20 @@ impl WebSocketConnection {
                         ReadEvent::PendingEvent => {
                             continue
                         }
+                        ReadEvent::Ping(payload) => {
+                            trace!("Responding to client ping with pong");
+                            if let Err(e) = ws_sender.send(Message::Pong(payload.into())).await {
+                                error!("Failed to send pong response: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+                _ = ping_interval.tick() => {
+                    trace!("Sending WebSocket ping");
+                    if let Err(e) = ws_sender.send(Message::Ping(vec![].into())).await {
+                        error!("Failed to send WebSocket ping: {}", e);
+                        break;
                     }
                 }
                 Ok(event_msg) = broadcast_recv(&mut self.broadcast_sub) => {
