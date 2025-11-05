@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Builtin functions for Age encryption (modern file encryption).
+//! Builtin functions used for encryption & cryptographic hashing.
 
 use std::{io::Write, str::FromStr};
 
@@ -20,7 +20,15 @@ use age::{
     secrecy::ExposeSecret,
     x25519::{Identity, Recipient},
 };
+use argon2::password_hash::{SaltString, rand_core::OsRng};
+use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use hmac::{Hmac, Mac};
+use lazy_static::lazy_static;
+use rand::Rng;
+use rand::distr::Alphanumeric;
+use sha1::Sha1;
+use sha2::Sha256;
 use ssh_key::public::PublicKey;
 use std::io::Read;
 use tracing::{error, warn};
@@ -28,8 +36,15 @@ use tracing::{error, warn};
 use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, world_state_bf_err,
 };
-use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Variant, v_binary, v_list, v_string};
+use moor_compiler::{offset_for_builtin, to_literal};
+use moor_var::{
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Variant, v_binary, v_list, v_str, v_string,
+};
+
+lazy_static! {
+    static ref SHA1_SYM: Symbol = Symbol::mk("sha1");
+    static ref SHA256_SYM: Symbol = Symbol::mk("sha256");
+}
 
 /// MOO: `list age_generate_keypair([bool as_bytes])`
 /// Generates a new X25519 keypair for age encryption. Programmer-only function.
@@ -350,8 +365,297 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-pub(crate) fn register_bf_age_crypto(builtins: &mut [Box<BuiltinFunction>]) {
+/// MOO: `str argon2(str password, str salt [, int iterations] [, int memory] [, int parallelism])`
+/// Generates Argon2 hash with specified parameters. Wizard-only function.
+fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() > 5 || bf_args.args.len() < 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Some(password) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let Some(salt) = bf_args.args[1].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let iterations = if bf_args.args.len() > 2 {
+        let Some(iterations) = bf_args.args[2].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        iterations as u32
+    } else {
+        3
+    };
+    let memory = if bf_args.args.len() > 3 {
+        let Some(memory) = bf_args.args[3].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        memory as u32
+    } else {
+        4096
+    };
+
+    let parallelism = if bf_args.args.len() > 4 {
+        let Some(parallelism) = bf_args.args[4].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        parallelism as u32
+    } else {
+        1
+    };
+
+    let params = Params::new(memory, iterations, parallelism, None).map_err(|e| {
+        warn!("Failed to create argon2 params: {}", e);
+        BfErr::Code(E_INVARG)
+    })?;
+
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let salt_string = SaltString::encode_b64(salt.as_bytes()).map_err(|e| {
+        warn!("Failed to encode salt: {}", e);
+        BfErr::Code(E_INVARG)
+    })?;
+
+    let hash = argon2
+        .hash_password(password.as_bytes(), &salt_string)
+        .map_err(|e| {
+            warn!("Failed to hash password: {}", e);
+            BfErr::Code(E_INVARG)
+        })?;
+
+    Ok(Ret(v_string(hash.to_string())))
+}
+
+/// MOO: `bool argon2_verify(str hashed_password, str password)`
+/// Verifies a password against an Argon2 hash. Wizard-only function.
+fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Some(hashed_password) = bf_args.args[0].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let Some(password) = bf_args.args[1].as_string() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default());
+    let Ok(hashed_password) = argon2::PasswordHash::new(hashed_password) else {
+        return Err(BfErr::Code(E_INVARG));
+    };
+
+    let validated = argon2
+        .verify_password(password.as_bytes(), &hashed_password)
+        .is_ok();
+    Ok(Ret(bf_args.v_bool(validated)))
+}
+
+/// MOO: `str crypt(str text [, str salt])`
+/// Encrypts text using standard UNIX encryption method.
+/// If salt is provided, uses first two characters as encryption salt.
+/// If no salt provided, uses random pair. Salt is returned as first two characters of result.
+fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let salt = if bf_args.args.len() == 1 {
+        // Provide a random 2-letter salt.
+        let mut rng = rand::rng();
+        let mut salt = String::new();
+
+        salt.push(char::from(rng.sample(Alphanumeric)));
+        salt.push(char::from(rng.sample(Alphanumeric)));
+        salt
+    } else {
+        let Some(salt) = bf_args.args[1].as_string() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        String::from(salt)
+    };
+    if let Some(text) = bf_args.args[0].as_string() {
+        let crypted = pwhash::unix::crypt(text, salt.as_str()).unwrap();
+        Ok(Ret(v_string(crypted)))
+    } else {
+        Err(BfErr::Code(E_TYPE))
+    }
+}
+
+/// MOO: `str salt()`
+/// Generates a random cryptographically secure salt string for use with crypt & argon2.
+/// Note: Not compatible with ToastStunt's salt function which takes two arguments.
+fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let mut rng_core = OsRng;
+    let salt = SaltString::generate(&mut rng_core);
+    let salt = v_str(salt.as_str());
+    Ok(Ret(salt))
+}
+
+/// MOO: `str string_hmac(str text, str key [, str algorithm] [, bool binary_output])`
+/// Computes HMAC of text using key with specified algorithm (SHA1, SHA256).
+fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let arg_count = bf_args.args.len();
+    if !(2..=4).contains(&arg_count) {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(text) = bf_args.args[0].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for text argument for string_hmac",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
+    };
+
+    let Some(key) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for key argument for string_hmac",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
+    };
+
+    let algo = if arg_count > 2 {
+        let Ok(kind) = bf_args.args[2].as_symbol() else {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid type for algorithm argument in string_hmac: {})",
+                    to_literal(&bf_args.args[2])
+                )
+            })));
+        };
+        kind
+    } else {
+        *SHA256_SYM
+    };
+
+    let binary_output = arg_count > 3 && bf_args.args[3].is_true();
+
+    let result_bytes = if algo == *SHA1_SYM {
+        let mut mac =
+            Hmac::<Sha1>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(text.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else if algo == *SHA256_SYM {
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(text.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.with_msg(|| format!("Invalid algorithm for string_hmac: {algo}")),
+        ));
+    };
+
+    if binary_output {
+        Ok(Ret(v_binary(result_bytes)))
+    } else {
+        let hex_string = result_bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        Ok(Ret(v_str(&hex_string)))
+    }
+}
+
+/// MOO: `str|binary binary_hmac(binary data, str key [, symbol algorithm] [, bool binary_output])`
+/// Computes HMAC of binary data using key with specified algorithm (SHA1, SHA256).
+/// Note: Takes mooR's native Binary type, NOT ToastStunt's bin-string format.
+fn bf_binary_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let arg_count = bf_args.args.len();
+    if !(2..=4).contains(&arg_count) {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Some(data) = bf_args.args[0].as_binary() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for data argument for binary_hmac (requires mooR Binary type, not string)",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
+    };
+
+    let Some(key) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Invalid type {} for key argument for binary_hmac",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
+    };
+
+    let algo = if arg_count > 2 {
+        let Ok(kind) = bf_args.args[2].as_symbol() else {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "Invalid type for algorithm argument in binary_hmac: {})",
+                    to_literal(&bf_args.args[2])
+                )
+            })));
+        };
+        kind
+    } else {
+        *SHA256_SYM
+    };
+
+    let binary_output = arg_count > 3 && bf_args.args[3].is_true();
+
+    let result_bytes = if algo == *SHA1_SYM {
+        let mut mac =
+            Hmac::<Sha1>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(data.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else if algo == *SHA256_SYM {
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(key.as_bytes()).map_err(|_| BfErr::Code(E_INVARG))?;
+        mac.update(data.as_bytes());
+        mac.finalize().into_bytes().to_vec()
+    } else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.with_msg(|| format!("Invalid algorithm for binary_hmac: {algo}")),
+        ));
+    };
+
+    if binary_output {
+        Ok(Ret(v_binary(result_bytes)))
+    } else {
+        let hex_string = result_bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        Ok(Ret(v_str(&hex_string)))
+    }
+}
+
+pub(crate) fn register_bf_cryptography(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("age_generate_keypair")] = Box::new(bf_age_generate_keypair);
     builtins[offset_for_builtin("age_encrypt")] = Box::new(bf_age_encrypt);
     builtins[offset_for_builtin("age_decrypt")] = Box::new(bf_age_decrypt);
+    builtins[offset_for_builtin("argon2")] = Box::new(bf_argon2);
+    builtins[offset_for_builtin("argon2_verify")] = Box::new(bf_argon2_verify);
+    builtins[offset_for_builtin("crypt")] = Box::new(bf_crypt);
+    builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
+    builtins[offset_for_builtin("string_hmac")] = Box::new(bf_string_hmac);
+    builtins[offset_for_builtin("binary_hmac")] = Box::new(bf_binary_hmac);
 }

@@ -15,14 +15,16 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use thiserror::Error;
 
+use crate::vm::builtins::bf_connection::register_bf_connection;
 use crate::vm::builtins::bf_obj_load::register_bf_obj_load;
+use crate::vm::builtins::bf_task::register_bf_task;
 use crate::{
     config::FeaturesConfig,
     task_context::with_current_transaction,
     vm::{
         activation::{BfFrame, Frame},
         builtins::{
-            bf_age_crypto::register_bf_age_crypto,
+            bf_cryptography::register_bf_cryptography,
             bf_documents::register_bf_documents,
             bf_flyweights::register_bf_flyweights,
             bf_list_sets::register_bf_list_sets,
@@ -49,7 +51,7 @@ use moor_var::{
     v_map,
 };
 
-mod bf_age_crypto;
+mod bf_cryptography;
 mod bf_documents;
 mod bf_flyweights;
 mod bf_list_sets;
@@ -64,6 +66,8 @@ mod bf_values;
 mod bf_verbs;
 mod docs;
 
+mod bf_connection;
+mod bf_task;
 #[cfg(test)]
 #[path = "test_function_help.rs"]
 mod test_function_help;
@@ -110,7 +114,7 @@ pub fn bf_perf_counters() -> &'static BfCounters {
 #[derive(Clone)]
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
-    pub(crate) builtins: Arc<Vec<Box<BuiltinFunction>>>,
+    pub(crate) builtins: Arc<Box<[Box<BuiltinFunction>]>>,
 }
 
 impl Default for BuiltinRegistry {
@@ -126,6 +130,8 @@ impl BuiltinRegistry {
             builtins.push(Box::new(bf_noop))
         }
         register_bf_server(&mut builtins);
+        register_bf_connection(&mut builtins);
+        register_bf_task(&mut builtins);
         register_bf_num(&mut builtins);
         register_bf_values(&mut builtins);
         register_bf_strings(&mut builtins);
@@ -137,10 +143,10 @@ impl BuiltinRegistry {
         register_bf_properties(&mut builtins);
         register_bf_flyweights(&mut builtins);
         register_bf_documents(&mut builtins);
-        register_bf_age_crypto(builtins.as_mut());
+        register_bf_cryptography(&mut builtins);
 
         BuiltinRegistry {
-            builtins: Arc::new(builtins),
+            builtins: Arc::new(builtins.into_boxed_slice()),
         }
     }
 
