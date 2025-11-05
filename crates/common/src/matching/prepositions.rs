@@ -37,6 +37,8 @@ pub enum Preposition {
     Is = 12,
     As = 13,
     OffOf = 14,
+    /// mooR extension: not present in LambdaMOO
+    NamedCalled = 15,
 }
 
 impl Preposition {
@@ -59,6 +61,7 @@ impl Preposition {
             "is" => Some(Self::Is),
             "as" => Some(Self::As),
             "off/off of" | "off" | "off of" => Some(Self::OffOf),
+            "named/called/known as" | "named" | "called" | "known as" => Some(Self::NamedCalled),
             _ => None,
         }
     }
@@ -79,6 +82,7 @@ impl Preposition {
             Self::Is => "is",
             Self::As => "as",
             Self::OffOf => "off/off of",
+            Self::NamedCalled => "named/called/known as",
         }
     }
 
@@ -101,6 +105,7 @@ impl Preposition {
             Self::Is => "is",
             Self::As => "as",
             Self::OffOf => "off",
+            Self::NamedCalled => "named",
         }
     }
 }
@@ -149,6 +154,7 @@ fn find_preposition_fuzzy(prep: &str) -> Option<Preposition> {
         Preposition::Is,
         Preposition::As,
         Preposition::OffOf,
+        Preposition::NamedCalled,
     ];
 
     let mut best_match = None;
@@ -195,6 +201,7 @@ fn get_preposition_forms(prep: Preposition) -> Vec<&'static str> {
         Preposition::Is => vec!["is"],
         Preposition::As => vec!["as"],
         Preposition::OffOf => vec!["off", "off of"],
+        Preposition::NamedCalled => vec!["named", "called", "known as"],
     }
 }
 
@@ -317,5 +324,40 @@ mod tests {
         // Fuzzy matching on compound forms
         assert_eq!(find_preposition("in frnt of"), Some(Preposition::InFrontOf)); // "front" typo
         assert_eq!(find_preposition("ou of"), Some(Preposition::OutOf)); // "out" typo
+    }
+
+    #[test]
+    fn test_find_preposition_named_called() {
+        // mooR extension: named/called/known as preposition
+        assert_eq!(find_preposition("named"), Some(Preposition::NamedCalled));
+        assert_eq!(find_preposition("called"), Some(Preposition::NamedCalled));
+        assert_eq!(
+            find_preposition("known as"),
+            Some(Preposition::NamedCalled)
+        );
+        assert_eq!(
+            find_preposition("named/called/known as"),
+            Some(Preposition::NamedCalled)
+        );
+
+        // Numeric ID
+        assert_eq!(find_preposition("15"), Some(Preposition::NamedCalled));
+
+        // Command parsing should work
+        assert_eq!(
+            find_preposition_for_command("named"),
+            Some(Preposition::NamedCalled)
+        );
+        assert_eq!(
+            find_preposition_for_command("called"),
+            Some(Preposition::NamedCalled)
+        );
+        assert_eq!(
+            find_preposition_for_command("known as"),
+            Some(Preposition::NamedCalled)
+        );
+
+        // But should NOT treat number as ID in command parsing
+        assert_eq!(find_preposition_for_command("15"), None);
     }
 }

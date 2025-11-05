@@ -32,9 +32,12 @@ object CODE_UTILS
     "is",
     "as",
     "off",
-    "off of"
+    "off of",
+    "named",
+    "called",
+    "known as"
   };
-  property _multi_preps (owner: HACKER, flags: "rc") = {"off", "from", "out", "on", "on top", "in", "in front"};
+  property _multi_preps (owner: HACKER, flags: "rc") = {"off", "from", "out", "on", "on top", "in", "in front", "known"};
   property _other_preps (owner: HACKER, flags: "rc") = {
     "using",
     "at",
@@ -48,9 +51,11 @@ object CODE_UTILS
     "underneath",
     "beneath",
     "about",
-    "off of"
+    "off of",
+    "called",
+    "known as"
   };
-  property _other_preps_n (owner: HACKER, flags: "rc") = {1, 2, 4, 4, 5, 5, 5, 6, 6, 9, 9, 12, 15};
+  property _other_preps_n (owner: HACKER, flags: "rc") = {1, 2, 4, 4, 5, 5, 5, 6, 6, 9, 9, 12, 15, 16, 16};
   property _short_preps (owner: HACKER, flags: "rc") = {
     "with",
     "to",
@@ -66,7 +71,8 @@ object CODE_UTILS
     "for",
     "is",
     "as",
-    "off"
+    "off",
+    "named"
   };
   property _version (owner: HACKER, flags: "rc") = "1.8.4+toastsoft.51";
   property builtin_props (owner: #2, flags: "r") = {"name", "r", "w", "f", "programmer", "wizard", "owner", "location", "contents"};
@@ -121,7 +127,8 @@ object CODE_UTILS
     "for/about",
     "is",
     "as",
-    "off/off of"
+    "off/off of",
+    "named/called/known as"
   };
 
   override aliases = {"code", "utils"};

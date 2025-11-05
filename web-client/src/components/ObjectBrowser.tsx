@@ -2998,6 +2998,7 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
                                     <option value="is">is</option>
                                     <option value="as">as</option>
                                     <option value="off">off</option>
+                                    <option value="named">named</option>
                                 </select>
                             </label>
                             <label className="verb-argspec-column">
