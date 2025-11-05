@@ -872,16 +872,16 @@ fn bf_format_compile_error(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(v_list(error_vars.as_slice())))
 }
 
-pub(crate) fn register_bf_verbs(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("verb_info")] = Box::new(bf_verb_info);
-    builtins[offset_for_builtin("set_verb_info")] = Box::new(bf_set_verb_info);
-    builtins[offset_for_builtin("verb_args")] = Box::new(bf_verb_args);
-    builtins[offset_for_builtin("set_verb_args")] = Box::new(bf_set_verb_args);
-    builtins[offset_for_builtin("verb_code")] = Box::new(bf_verb_code);
-    builtins[offset_for_builtin("set_verb_code")] = Box::new(bf_set_verb_code);
-    builtins[offset_for_builtin("format_compile_error")] = Box::new(bf_format_compile_error);
-    builtins[offset_for_builtin("add_verb")] = Box::new(bf_add_verb);
-    builtins[offset_for_builtin("delete_verb")] = Box::new(bf_delete_verb);
-    builtins[offset_for_builtin("disassemble")] = Box::new(bf_disassemble);
-    builtins[offset_for_builtin("respond_to")] = Box::new(bf_respond_to);
+pub(crate) fn register_bf_verbs(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("verb_info")] = bf_verb_info;
+    builtins[offset_for_builtin("set_verb_info")] = bf_set_verb_info;
+    builtins[offset_for_builtin("verb_args")] = bf_verb_args;
+    builtins[offset_for_builtin("set_verb_args")] = bf_set_verb_args;
+    builtins[offset_for_builtin("verb_code")] = bf_verb_code;
+    builtins[offset_for_builtin("set_verb_code")] = bf_set_verb_code;
+    builtins[offset_for_builtin("format_compile_error")] = bf_format_compile_error;
+    builtins[offset_for_builtin("add_verb")] = bf_add_verb;
+    builtins[offset_for_builtin("delete_verb")] = bf_delete_verb;
+    builtins[offset_for_builtin("disassemble")] = bf_disassemble;
+    builtins[offset_for_builtin("respond_to")] = bf_respond_to;
 }

@@ -346,18 +346,18 @@ fn bf_explode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&parts)))
 }
 
-pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("strsub")] = Box::new(bf_strsub);
-    builtins[offset_for_builtin("index")] = Box::new(bf_index);
-    builtins[offset_for_builtin("rindex")] = Box::new(bf_rindex);
-    builtins[offset_for_builtin("strcmp")] = Box::new(bf_strcmp);
-    builtins[offset_for_builtin("string_hash")] = Box::new(bf_string_hash);
-    builtins[offset_for_builtin("binary_hash")] = Box::new(bf_binary_hash);
-    builtins[offset_for_builtin("encode_base64")] = Box::new(bf_encode_base64);
-    builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);
-    builtins[offset_for_builtin("binary_to_str")] = Box::new(bf_binary_to_str);
-    builtins[offset_for_builtin("binary_from_str")] = Box::new(bf_binary_from_str);
-    builtins[offset_for_builtin("explode")] = Box::new(bf_explode);
+pub(crate) fn register_bf_strings(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("strsub")] = bf_strsub;
+    builtins[offset_for_builtin("index")] = bf_index;
+    builtins[offset_for_builtin("rindex")] = bf_rindex;
+    builtins[offset_for_builtin("strcmp")] = bf_strcmp;
+    builtins[offset_for_builtin("string_hash")] = bf_string_hash;
+    builtins[offset_for_builtin("binary_hash")] = bf_binary_hash;
+    builtins[offset_for_builtin("encode_base64")] = bf_encode_base64;
+    builtins[offset_for_builtin("decode_base64")] = bf_decode_base64;
+    builtins[offset_for_builtin("binary_to_str")] = bf_binary_to_str;
+    builtins[offset_for_builtin("binary_from_str")] = bf_binary_from_str;
+    builtins[offset_for_builtin("explode")] = bf_explode;
 }
 
 #[cfg(test)]

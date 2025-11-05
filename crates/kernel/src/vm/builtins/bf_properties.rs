@@ -225,11 +225,11 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_empty_list()))
 }
 
-pub(crate) fn register_bf_properties(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("property_info")] = Box::new(bf_property_info);
-    builtins[offset_for_builtin("set_property_info")] = Box::new(bf_set_property_info);
-    builtins[offset_for_builtin("is_clear_property")] = Box::new(bf_is_clear_property);
-    builtins[offset_for_builtin("clear_property")] = Box::new(bf_clear_property);
-    builtins[offset_for_builtin("add_property")] = Box::new(bf_add_property);
-    builtins[offset_for_builtin("delete_property")] = Box::new(bf_delete_property);
+pub(crate) fn register_bf_properties(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("property_info")] = bf_property_info;
+    builtins[offset_for_builtin("set_property_info")] = bf_set_property_info;
+    builtins[offset_for_builtin("is_clear_property")] = bf_is_clear_property;
+    builtins[offset_for_builtin("clear_property")] = bf_clear_property;
+    builtins[offset_for_builtin("add_property")] = bf_add_property;
+    builtins[offset_for_builtin("delete_property")] = bf_delete_property;
 }

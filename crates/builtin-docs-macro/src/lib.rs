@@ -104,7 +104,7 @@ fn extract_docs_from_file(path: &PathBuf, docs_map: &mut HashMap<String, Vec<Str
 }
 
 /// Extracts builtin registrations from a register_bf_* function body.
-/// Looks for patterns like: builtins[offset_for_builtin("abs")] = Box::new(bf_abs);
+/// Looks for patterns like: builtins[offset_for_builtin("abs")] = bf_abs;
 fn extract_registrations(
     stmts: &[Stmt],
     fn_docs: &HashMap<String, Vec<String>>,
@@ -175,29 +175,12 @@ fn extract_builtin_name_from_index(index: &Expr) -> Option<String> {
 }
 
 fn extract_bf_fn_name(expr: &Expr) -> Option<String> {
-    // Parse: Box::new(bf_name)
-    let Expr::Call(call) = expr else {
+    // Parse direct function pointer: bf_name
+    let Expr::Path(path) = expr else {
         return None;
     };
 
-    let Expr::Path(path) = &*call.func else {
-        return None;
-    };
-
-    // Check if it's Box::new
-    if path.path.segments.len() != 2
-        || path.path.segments[0].ident != "Box"
-        || path.path.segments[1].ident != "new"
-    {
-        return None;
-    }
-
-    // Get the argument to Box::new
-    let Some(Expr::Path(fn_path)) = call.args.first() else {
-        return None;
-    };
-
-    fn_path.path.segments.last().map(|s| s.ident.to_string())
+    path.path.segments.last().map(|s| s.ident.to_string())
 }
 
 fn extract_doc_comments(attrs: &[Attribute]) -> Vec<String> {

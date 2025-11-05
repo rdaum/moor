@@ -599,8 +599,8 @@ fn bf_reload_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_obj(result.loaded_objects[0])))
 }
 
-pub(crate) fn register_bf_obj_load(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("dump_object")] = Box::new(bf_dump_object);
-    builtins[offset_for_builtin("load_object")] = Box::new(bf_load_object);
-    builtins[offset_for_builtin("reload_object")] = Box::new(bf_reload_object);
+pub(crate) fn register_bf_obj_load(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("dump_object")] = bf_dump_object;
+    builtins[offset_for_builtin("load_object")] = bf_load_object;
+    builtins[offset_for_builtin("reload_object")] = bf_reload_object;
 }

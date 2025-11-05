@@ -1174,24 +1174,24 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(port as i64)))
 }
 
-pub(crate) fn register_bf_connection(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
-    builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
-    builtins[offset_for_builtin("force_input")] = Box::new(bf_force_input);
-    builtins[offset_for_builtin("present")] = Box::new(bf_present);
-    builtins[offset_for_builtin("worker_request")] = Box::new(bf_worker_request);
-    builtins[offset_for_builtin("connections")] = Box::new(bf_connections);
-    builtins[offset_for_builtin("connection")] = Box::new(bf_connection);
-    builtins[offset_for_builtin("switch_player")] = Box::new(bf_switch_player);
-    builtins[offset_for_builtin("workers")] = Box::new(bf_workers);
-    builtins[offset_for_builtin("output_delimiters")] = Box::new(bf_output_delimiters);
-    builtins[offset_for_builtin("connection_options")] = Box::new(bf_connection_options);
-    builtins[offset_for_builtin("connection_option")] = Box::new(bf_connection_option);
-    builtins[offset_for_builtin("set_connection_option")] = Box::new(bf_set_connection_option);
-    builtins[offset_for_builtin("idle_seconds")] = Box::new(bf_idle_seconds);
-    builtins[offset_for_builtin("connected_seconds")] = Box::new(bf_connected_seconds);
-    builtins[offset_for_builtin("connection_name")] = Box::new(bf_connection_name);
-    builtins[offset_for_builtin("listeners")] = Box::new(bf_listeners);
-    builtins[offset_for_builtin("listen")] = Box::new(bf_listen);
-    builtins[offset_for_builtin("unlisten")] = Box::new(bf_unlisten);
+pub(crate) fn register_bf_connection(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("notify")] = bf_notify;
+    builtins[offset_for_builtin("connected_players")] = bf_connected_players;
+    builtins[offset_for_builtin("force_input")] = bf_force_input;
+    builtins[offset_for_builtin("present")] = bf_present;
+    builtins[offset_for_builtin("worker_request")] = bf_worker_request;
+    builtins[offset_for_builtin("connections")] = bf_connections;
+    builtins[offset_for_builtin("connection")] = bf_connection;
+    builtins[offset_for_builtin("switch_player")] = bf_switch_player;
+    builtins[offset_for_builtin("workers")] = bf_workers;
+    builtins[offset_for_builtin("output_delimiters")] = bf_output_delimiters;
+    builtins[offset_for_builtin("connection_options")] = bf_connection_options;
+    builtins[offset_for_builtin("connection_option")] = bf_connection_option;
+    builtins[offset_for_builtin("set_connection_option")] = bf_set_connection_option;
+    builtins[offset_for_builtin("idle_seconds")] = bf_idle_seconds;
+    builtins[offset_for_builtin("connected_seconds")] = bf_connected_seconds;
+    builtins[offset_for_builtin("connection_name")] = bf_connection_name;
+    builtins[offset_for_builtin("listeners")] = bf_listeners;
+    builtins[offset_for_builtin("listen")] = bf_listen;
+    builtins[offset_for_builtin("unlisten")] = bf_unlisten;
 }

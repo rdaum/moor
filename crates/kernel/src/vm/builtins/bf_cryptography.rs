@@ -648,14 +648,14 @@ fn bf_binary_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-pub(crate) fn register_bf_cryptography(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("age_generate_keypair")] = Box::new(bf_age_generate_keypair);
-    builtins[offset_for_builtin("age_encrypt")] = Box::new(bf_age_encrypt);
-    builtins[offset_for_builtin("age_decrypt")] = Box::new(bf_age_decrypt);
-    builtins[offset_for_builtin("argon2")] = Box::new(bf_argon2);
-    builtins[offset_for_builtin("argon2_verify")] = Box::new(bf_argon2_verify);
-    builtins[offset_for_builtin("crypt")] = Box::new(bf_crypt);
-    builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
-    builtins[offset_for_builtin("string_hmac")] = Box::new(bf_string_hmac);
-    builtins[offset_for_builtin("binary_hmac")] = Box::new(bf_binary_hmac);
+pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("age_generate_keypair")] = bf_age_generate_keypair;
+    builtins[offset_for_builtin("age_encrypt")] = bf_age_encrypt;
+    builtins[offset_for_builtin("age_decrypt")] = bf_age_decrypt;
+    builtins[offset_for_builtin("argon2")] = bf_argon2;
+    builtins[offset_for_builtin("argon2_verify")] = bf_argon2_verify;
+    builtins[offset_for_builtin("crypt")] = bf_crypt;
+    builtins[offset_for_builtin("salt")] = bf_salt;
+    builtins[offset_for_builtin("string_hmac")] = bf_string_hmac;
+    builtins[offset_for_builtin("binary_hmac")] = bf_binary_hmac;
 }

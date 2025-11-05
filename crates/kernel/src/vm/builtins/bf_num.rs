@@ -273,26 +273,26 @@ math_fn!(bf_floor, "floor", |x: f64| x.floor());
 // MOO: `float trunc(num x)` - Returns x with the fractional part removed.
 math_fn!(bf_trunc, "trunc", |x: f64| x.trunc());
 
-pub(crate) fn register_bf_num(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("abs")] = Box::new(bf_abs);
-    builtins[offset_for_builtin("min")] = Box::new(bf_min);
-    builtins[offset_for_builtin("max")] = Box::new(bf_max);
-    builtins[offset_for_builtin("random")] = Box::new(bf_random);
-    builtins[offset_for_builtin("floatstr")] = Box::new(bf_floatstr);
-    builtins[offset_for_builtin("sqrt")] = Box::new(bf_sqrt);
-    builtins[offset_for_builtin("sin")] = Box::new(bf_sin);
-    builtins[offset_for_builtin("cos")] = Box::new(bf_cos);
-    builtins[offset_for_builtin("tan")] = Box::new(bf_tan);
-    builtins[offset_for_builtin("asin")] = Box::new(bf_asin);
-    builtins[offset_for_builtin("acos")] = Box::new(bf_acos);
-    builtins[offset_for_builtin("atan")] = Box::new(bf_atan);
-    builtins[offset_for_builtin("sinh")] = Box::new(bf_sinh);
-    builtins[offset_for_builtin("cosh")] = Box::new(bf_cosh);
-    builtins[offset_for_builtin("tanh")] = Box::new(bf_tanh);
-    builtins[offset_for_builtin("exp")] = Box::new(bf_exp);
-    builtins[offset_for_builtin("log")] = Box::new(bf_log);
-    builtins[offset_for_builtin("log10")] = Box::new(bf_log10);
-    builtins[offset_for_builtin("ceil")] = Box::new(bf_ceil);
-    builtins[offset_for_builtin("floor")] = Box::new(bf_floor);
-    builtins[offset_for_builtin("trunc")] = Box::new(bf_trunc);
+pub(crate) fn register_bf_num(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("abs")] = bf_abs;
+    builtins[offset_for_builtin("min")] = bf_min;
+    builtins[offset_for_builtin("max")] = bf_max;
+    builtins[offset_for_builtin("random")] = bf_random;
+    builtins[offset_for_builtin("floatstr")] = bf_floatstr;
+    builtins[offset_for_builtin("sqrt")] = bf_sqrt;
+    builtins[offset_for_builtin("sin")] = bf_sin;
+    builtins[offset_for_builtin("cos")] = bf_cos;
+    builtins[offset_for_builtin("tan")] = bf_tan;
+    builtins[offset_for_builtin("asin")] = bf_asin;
+    builtins[offset_for_builtin("acos")] = bf_acos;
+    builtins[offset_for_builtin("atan")] = bf_atan;
+    builtins[offset_for_builtin("sinh")] = bf_sinh;
+    builtins[offset_for_builtin("cosh")] = bf_cosh;
+    builtins[offset_for_builtin("tanh")] = bf_tanh;
+    builtins[offset_for_builtin("exp")] = bf_exp;
+    builtins[offset_for_builtin("log")] = bf_log;
+    builtins[offset_for_builtin("log10")] = bf_log10;
+    builtins[offset_for_builtin("ceil")] = bf_ceil;
+    builtins[offset_for_builtin("floor")] = bf_floor;
+    builtins[offset_for_builtin("trunc")] = bf_trunc;
 }

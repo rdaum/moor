@@ -391,21 +391,21 @@ fn bf_uuid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-pub(crate) fn register_bf_values(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("typeof")] = Box::new(bf_typeof);
-    builtins[offset_for_builtin("tostr")] = Box::new(bf_tostr);
-    builtins[offset_for_builtin("tosym")] = Box::new(bf_tosym);
-    builtins[offset_for_builtin("toliteral")] = Box::new(bf_toliteral);
-    builtins[offset_for_builtin("toint")] = Box::new(bf_toint);
-    builtins[offset_for_builtin("tonum")] = Box::new(bf_toint);
-    builtins[offset_for_builtin("toobj")] = Box::new(bf_toobj);
-    builtins[offset_for_builtin("tofloat")] = Box::new(bf_tofloat);
-    builtins[offset_for_builtin("equal")] = Box::new(bf_equal);
-    builtins[offset_for_builtin("value_bytes")] = Box::new(bf_value_bytes);
-    builtins[offset_for_builtin("object_bytes")] = Box::new(bf_object_bytes);
-    builtins[offset_for_builtin("value_hash")] = Box::new(bf_value_hash);
-    builtins[offset_for_builtin("length")] = Box::new(bf_length);
-    builtins[offset_for_builtin("error_code")] = Box::new(bf_error_code);
-    builtins[offset_for_builtin("error_message")] = Box::new(bf_error_message);
-    builtins[offset_for_builtin("uuid")] = Box::new(bf_uuid);
+pub(crate) fn register_bf_values(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("typeof")] = bf_typeof;
+    builtins[offset_for_builtin("tostr")] = bf_tostr;
+    builtins[offset_for_builtin("tosym")] = bf_tosym;
+    builtins[offset_for_builtin("toliteral")] = bf_toliteral;
+    builtins[offset_for_builtin("toint")] = bf_toint;
+    builtins[offset_for_builtin("tonum")] = bf_toint;
+    builtins[offset_for_builtin("toobj")] = bf_toobj;
+    builtins[offset_for_builtin("tofloat")] = bf_tofloat;
+    builtins[offset_for_builtin("equal")] = bf_equal;
+    builtins[offset_for_builtin("value_bytes")] = bf_value_bytes;
+    builtins[offset_for_builtin("object_bytes")] = bf_object_bytes;
+    builtins[offset_for_builtin("value_hash")] = bf_value_hash;
+    builtins[offset_for_builtin("length")] = bf_length;
+    builtins[offset_for_builtin("error_code")] = bf_error_code;
+    builtins[offset_for_builtin("error_message")] = bf_error_message;
+    builtins[offset_for_builtin("uuid")] = bf_uuid;
 }

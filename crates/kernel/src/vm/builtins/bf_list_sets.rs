@@ -1218,23 +1218,23 @@ fn bf_reverse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-pub(crate) fn register_bf_list_sets(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("is_member")] = Box::new(bf_is_member);
-    builtins[offset_for_builtin("listinsert")] = Box::new(bf_listinsert);
-    builtins[offset_for_builtin("listappend")] = Box::new(bf_listappend);
-    builtins[offset_for_builtin("listdelete")] = Box::new(bf_listdelete);
-    builtins[offset_for_builtin("listset")] = Box::new(bf_listset);
-    builtins[offset_for_builtin("setadd")] = Box::new(bf_setadd);
-    builtins[offset_for_builtin("setremove")] = Box::new(bf_setremove);
-    builtins[offset_for_builtin("match")] = Box::new(bf_match);
-    builtins[offset_for_builtin("rmatch")] = Box::new(bf_rmatch);
-    builtins[offset_for_builtin("substitute")] = Box::new(bf_substitute);
-    builtins[offset_for_builtin("pcre_match")] = Box::new(bf_pcre_match);
-    builtins[offset_for_builtin("pcre_replace")] = Box::new(bf_pcre_replace);
-    builtins[offset_for_builtin("slice")] = Box::new(bf_slice);
-    builtins[offset_for_builtin("complex_match")] = Box::new(bf_complex_match);
-    builtins[offset_for_builtin("sort")] = Box::new(bf_sort);
-    builtins[offset_for_builtin("reverse")] = Box::new(bf_reverse);
+pub(crate) fn register_bf_list_sets(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("is_member")] = bf_is_member;
+    builtins[offset_for_builtin("listinsert")] = bf_listinsert;
+    builtins[offset_for_builtin("listappend")] = bf_listappend;
+    builtins[offset_for_builtin("listdelete")] = bf_listdelete;
+    builtins[offset_for_builtin("listset")] = bf_listset;
+    builtins[offset_for_builtin("setadd")] = bf_setadd;
+    builtins[offset_for_builtin("setremove")] = bf_setremove;
+    builtins[offset_for_builtin("match")] = bf_match;
+    builtins[offset_for_builtin("rmatch")] = bf_rmatch;
+    builtins[offset_for_builtin("substitute")] = bf_substitute;
+    builtins[offset_for_builtin("pcre_match")] = bf_pcre_match;
+    builtins[offset_for_builtin("pcre_replace")] = bf_pcre_replace;
+    builtins[offset_for_builtin("slice")] = bf_slice;
+    builtins[offset_for_builtin("complex_match")] = bf_complex_match;
+    builtins[offset_for_builtin("sort")] = bf_sort;
+    builtins[offset_for_builtin("reverse")] = bf_reverse;
 }
 
 #[cfg(test)]

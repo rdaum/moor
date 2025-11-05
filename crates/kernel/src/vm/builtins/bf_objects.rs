@@ -1923,30 +1923,30 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
     }
 }
 
-pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("create")] = Box::new(bf_create);
-    builtins[offset_for_builtin("create_at")] = Box::new(bf_create_at);
-    builtins[offset_for_builtin("valid")] = Box::new(bf_valid);
-    builtins[offset_for_builtin("verbs")] = Box::new(bf_verbs);
-    builtins[offset_for_builtin("properties")] = Box::new(bf_properties);
-    builtins[offset_for_builtin("parent")] = Box::new(bf_parent);
-    builtins[offset_for_builtin("children")] = Box::new(bf_children);
-    builtins[offset_for_builtin("ancestors")] = Box::new(bf_ancestors);
-    builtins[offset_for_builtin("isa")] = Box::new(bf_isa);
-    builtins[offset_for_builtin("descendants")] = Box::new(bf_descendants);
-    builtins[offset_for_builtin("move")] = Box::new(bf_move);
-    builtins[offset_for_builtin("chparent")] = Box::new(bf_chparent);
-    builtins[offset_for_builtin("set_player_flag")] = Box::new(bf_set_player_flag);
-    builtins[offset_for_builtin("recycle")] = Box::new(bf_recycle);
-    builtins[offset_for_builtin("max_object")] = Box::new(bf_max_object);
-    builtins[offset_for_builtin("players")] = Box::new(bf_players);
-    builtins[offset_for_builtin("objects")] = Box::new(bf_objects);
-    builtins[offset_for_builtin("locations")] = Box::new(bf_locations);
-    builtins[offset_for_builtin("owned_objects")] = Box::new(bf_owned_objects);
-    builtins[offset_for_builtin("renumber")] = Box::new(bf_renumber);
-    builtins[offset_for_builtin("is_anonymous")] = Box::new(bf_is_anonymous);
-    builtins[offset_for_builtin("is_uuobjid")] = Box::new(bf_is_uuobjid);
-    builtins[offset_for_builtin("parse_command")] = Box::new(bf_parse_command);
-    builtins[offset_for_builtin("find_command_verb")] = Box::new(bf_find_command_verb);
-    builtins[offset_for_builtin("dispatch_command_verb")] = Box::new(bf_dispatch_command_verb);
+pub(crate) fn register_bf_objects(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("create")] = bf_create;
+    builtins[offset_for_builtin("create_at")] = bf_create_at;
+    builtins[offset_for_builtin("valid")] = bf_valid;
+    builtins[offset_for_builtin("verbs")] = bf_verbs;
+    builtins[offset_for_builtin("properties")] = bf_properties;
+    builtins[offset_for_builtin("parent")] = bf_parent;
+    builtins[offset_for_builtin("children")] = bf_children;
+    builtins[offset_for_builtin("ancestors")] = bf_ancestors;
+    builtins[offset_for_builtin("isa")] = bf_isa;
+    builtins[offset_for_builtin("descendants")] = bf_descendants;
+    builtins[offset_for_builtin("move")] = bf_move;
+    builtins[offset_for_builtin("chparent")] = bf_chparent;
+    builtins[offset_for_builtin("set_player_flag")] = bf_set_player_flag;
+    builtins[offset_for_builtin("recycle")] = bf_recycle;
+    builtins[offset_for_builtin("max_object")] = bf_max_object;
+    builtins[offset_for_builtin("players")] = bf_players;
+    builtins[offset_for_builtin("objects")] = bf_objects;
+    builtins[offset_for_builtin("locations")] = bf_locations;
+    builtins[offset_for_builtin("owned_objects")] = bf_owned_objects;
+    builtins[offset_for_builtin("renumber")] = bf_renumber;
+    builtins[offset_for_builtin("is_anonymous")] = bf_is_anonymous;
+    builtins[offset_for_builtin("is_uuobjid")] = bf_is_uuobjid;
+    builtins[offset_for_builtin("parse_command")] = bf_parse_command;
+    builtins[offset_for_builtin("find_command_verb")] = bf_find_command_verb;
+    builtins[offset_for_builtin("dispatch_command_verb")] = bf_dispatch_command_verb;
 }

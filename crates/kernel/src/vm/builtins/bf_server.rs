@@ -1155,36 +1155,36 @@ fn bf_function_help(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(doc_list)))
 }
 
-pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("is_player")] = Box::new(bf_is_player);
-    builtins[offset_for_builtin("caller_perms")] = Box::new(bf_caller_perms);
-    builtins[offset_for_builtin("set_task_perms")] = Box::new(bf_set_task_perms);
-    builtins[offset_for_builtin("time")] = Box::new(bf_time);
-    builtins[offset_for_builtin("ftime")] = Box::new(bf_ftime);
-    builtins[offset_for_builtin("ctime")] = Box::new(bf_ctime);
-    builtins[offset_for_builtin("raise")] = Box::new(bf_raise);
-    builtins[offset_for_builtin("server_version")] = Box::new(bf_server_version);
-    builtins[offset_for_builtin("shutdown")] = Box::new(bf_shutdown);
-    builtins[offset_for_builtin("boot_player")] = Box::new(bf_boot_player);
-    builtins[offset_for_builtin("call_function")] = Box::new(bf_call_function);
-    builtins[offset_for_builtin("server_log")] = Box::new(bf_server_log);
-    builtins[offset_for_builtin("function_info")] = Box::new(bf_function_info);
-    builtins[offset_for_builtin("function_help")] = Box::new(bf_function_help);
-    builtins[offset_for_builtin("eval")] = Box::new(bf_eval);
-    builtins[offset_for_builtin("dump_database")] = Box::new(bf_dump_database);
-    builtins[offset_for_builtin("gc_collect")] = Box::new(bf_gc_collect);
-    builtins[offset_for_builtin("memory_usage")] = Box::new(bf_memory_usage);
-    builtins[offset_for_builtin("db_disk_size")] = Box::new(db_disk_size);
-    builtins[offset_for_builtin("load_server_options")] = Box::new(load_server_options);
-    builtins[offset_for_builtin("bf_counters")] = Box::new(bf_bf_counters);
-    builtins[offset_for_builtin("db_counters")] = Box::new(bf_db_counters);
-    builtins[offset_for_builtin("sched_counters")] = Box::new(bf_sched_counters);
-    builtins[offset_for_builtin("log_cache_stats")] = Box::new(bf_log_cache_stats);
-    builtins[offset_for_builtin("verb_cache_stats")] = Box::new(bf_verb_cache_stats);
-    builtins[offset_for_builtin("property_cache_stats")] = Box::new(bf_property_cache_stats);
-    builtins[offset_for_builtin("ancestry_cache_stats")] = Box::new(bf_ancestry_cache_stats);
-    builtins[offset_for_builtin("flush_caches")] = Box::new(bf_flush_caches);
-    builtins[offset_for_builtin("rotate_enrollment_token")] = Box::new(bf_rotate_enrollment_token);
-    builtins[offset_for_builtin("player_event_log_stats")] = Box::new(bf_player_event_log_stats);
-    builtins[offset_for_builtin("purge_player_event_log")] = Box::new(bf_purge_player_event_log);
+pub(crate) fn register_bf_server(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("is_player")] = bf_is_player;
+    builtins[offset_for_builtin("caller_perms")] = bf_caller_perms;
+    builtins[offset_for_builtin("set_task_perms")] = bf_set_task_perms;
+    builtins[offset_for_builtin("time")] = bf_time;
+    builtins[offset_for_builtin("ftime")] = bf_ftime;
+    builtins[offset_for_builtin("ctime")] = bf_ctime;
+    builtins[offset_for_builtin("raise")] = bf_raise;
+    builtins[offset_for_builtin("server_version")] = bf_server_version;
+    builtins[offset_for_builtin("shutdown")] = bf_shutdown;
+    builtins[offset_for_builtin("boot_player")] = bf_boot_player;
+    builtins[offset_for_builtin("call_function")] = bf_call_function;
+    builtins[offset_for_builtin("server_log")] = bf_server_log;
+    builtins[offset_for_builtin("function_info")] = bf_function_info;
+    builtins[offset_for_builtin("function_help")] = bf_function_help;
+    builtins[offset_for_builtin("eval")] = bf_eval;
+    builtins[offset_for_builtin("dump_database")] = bf_dump_database;
+    builtins[offset_for_builtin("gc_collect")] = bf_gc_collect;
+    builtins[offset_for_builtin("memory_usage")] = bf_memory_usage;
+    builtins[offset_for_builtin("db_disk_size")] = db_disk_size;
+    builtins[offset_for_builtin("load_server_options")] = load_server_options;
+    builtins[offset_for_builtin("bf_counters")] = bf_bf_counters;
+    builtins[offset_for_builtin("db_counters")] = bf_db_counters;
+    builtins[offset_for_builtin("sched_counters")] = bf_sched_counters;
+    builtins[offset_for_builtin("log_cache_stats")] = bf_log_cache_stats;
+    builtins[offset_for_builtin("verb_cache_stats")] = bf_verb_cache_stats;
+    builtins[offset_for_builtin("property_cache_stats")] = bf_property_cache_stats;
+    builtins[offset_for_builtin("ancestry_cache_stats")] = bf_ancestry_cache_stats;
+    builtins[offset_for_builtin("flush_caches")] = bf_flush_caches;
+    builtins[offset_for_builtin("rotate_enrollment_token")] = bf_rotate_enrollment_token;
+    builtins[offset_for_builtin("player_event_log_stats")] = bf_player_event_log_stats;
+    builtins[offset_for_builtin("purge_player_event_log")] = bf_purge_player_event_log;
 }

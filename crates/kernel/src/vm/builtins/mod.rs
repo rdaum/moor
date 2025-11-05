@@ -114,7 +114,7 @@ pub fn bf_perf_counters() -> &'static BfCounters {
 #[derive(Clone)]
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
-    pub(crate) builtins: Arc<Box<[Box<BuiltinFunction>]>>,
+    pub(crate) builtins: Arc<[BuiltinFunction]>,
 }
 
 impl Default for BuiltinRegistry {
@@ -125,9 +125,9 @@ impl Default for BuiltinRegistry {
 
 impl BuiltinRegistry {
     pub fn new() -> Self {
-        let mut builtins: Vec<Box<BuiltinFunction>> = Vec::with_capacity(BUILTINS.number_of());
+        let mut builtins: Vec<BuiltinFunction> = Vec::with_capacity(BUILTINS.number_of());
         for _ in 0..BUILTINS.number_of() {
-            builtins.push(Box::new(bf_noop))
+            builtins.push(bf_noop)
         }
         register_bf_server(&mut builtins);
         register_bf_connection(&mut builtins);
@@ -146,7 +146,7 @@ impl BuiltinRegistry {
         register_bf_cryptography(&mut builtins);
 
         BuiltinRegistry {
-            builtins: Arc::new(builtins.into_boxed_slice()),
+            builtins: Arc::from(builtins),
         }
     }
 

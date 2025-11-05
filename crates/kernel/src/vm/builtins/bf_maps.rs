@@ -109,9 +109,9 @@ fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(BfRet::Ret(bf_args.v_bool(contains)))
 }
 
-pub(crate) fn register_bf_maps(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("mapdelete")] = Box::new(bf_mapdelete);
-    builtins[offset_for_builtin("mapkeys")] = Box::new(bf_mapkeys);
-    builtins[offset_for_builtin("mapvalues")] = Box::new(bf_mapvalues);
-    builtins[offset_for_builtin("maphaskey")] = Box::new(bf_maphaskey);
+pub(crate) fn register_bf_maps(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("mapdelete")] = bf_mapdelete;
+    builtins[offset_for_builtin("mapkeys")] = bf_mapkeys;
+    builtins[offset_for_builtin("mapvalues")] = bf_mapvalues;
+    builtins[offset_for_builtin("maphaskey")] = bf_maphaskey;
 }

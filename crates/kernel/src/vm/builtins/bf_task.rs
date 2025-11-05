@@ -492,19 +492,19 @@ fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
 }
 
-pub(crate) fn register_bf_task(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("suspend")] = Box::new(bf_suspend);
-    builtins[offset_for_builtin("queued_tasks")] = Box::new(bf_queued_tasks);
-    builtins[offset_for_builtin("active_tasks")] = Box::new(bf_active_tasks);
-    builtins[offset_for_builtin("queue_info")] = Box::new(bf_queue_info);
-    builtins[offset_for_builtin("kill_task")] = Box::new(bf_kill_task);
-    builtins[offset_for_builtin("resume")] = Box::new(bf_resume);
-    builtins[offset_for_builtin("ticks_left")] = Box::new(bf_ticks_left);
-    builtins[offset_for_builtin("seconds_left")] = Box::new(bf_seconds_left);
-    builtins[offset_for_builtin("read")] = Box::new(bf_read);
-    builtins[offset_for_builtin("wait_task")] = Box::new(bf_wait_task);
-    builtins[offset_for_builtin("commit")] = Box::new(bf_commit);
-    builtins[offset_for_builtin("rollback")] = Box::new(bf_rollback);
-    builtins[offset_for_builtin("callers")] = Box::new(bf_callers);
-    builtins[offset_for_builtin("task_id")] = Box::new(bf_task_id);
+pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("suspend")] = bf_suspend;
+    builtins[offset_for_builtin("queued_tasks")] = bf_queued_tasks;
+    builtins[offset_for_builtin("active_tasks")] = bf_active_tasks;
+    builtins[offset_for_builtin("queue_info")] = bf_queue_info;
+    builtins[offset_for_builtin("kill_task")] = bf_kill_task;
+    builtins[offset_for_builtin("resume")] = bf_resume;
+    builtins[offset_for_builtin("ticks_left")] = bf_ticks_left;
+    builtins[offset_for_builtin("seconds_left")] = bf_seconds_left;
+    builtins[offset_for_builtin("read")] = bf_read;
+    builtins[offset_for_builtin("wait_task")] = bf_wait_task;
+    builtins[offset_for_builtin("commit")] = bf_commit;
+    builtins[offset_for_builtin("rollback")] = bf_rollback;
+    builtins[offset_for_builtin("callers")] = bf_callers;
+    builtins[offset_for_builtin("task_id")] = bf_task_id;
 }

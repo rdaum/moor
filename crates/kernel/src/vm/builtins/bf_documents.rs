@@ -796,14 +796,14 @@ fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-pub(crate) fn register_bf_documents(builtins: &mut [Box<BuiltinFunction>]) {
+pub(crate) fn register_bf_documents(builtins: &mut [BuiltinFunction]) {
     // XML functions
-    builtins[offset_for_builtin("xml_parse")] = Box::new(bf_xml_parse);
-    builtins[offset_for_builtin("to_xml")] = Box::new(bf_to_xml);
+    builtins[offset_for_builtin("xml_parse")] = bf_xml_parse;
+    builtins[offset_for_builtin("to_xml")] = bf_to_xml;
 
     // JSON functions
-    builtins[offset_for_builtin("generate_json")] = Box::new(bf_generate_json);
-    builtins[offset_for_builtin("parse_json")] = Box::new(bf_parse_json);
+    builtins[offset_for_builtin("generate_json")] = bf_generate_json;
+    builtins[offset_for_builtin("parse_json")] = bf_parse_json;
 }
 
 #[cfg(test)]

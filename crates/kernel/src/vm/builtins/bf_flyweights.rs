@@ -132,8 +132,8 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-pub(crate) fn register_bf_flyweights(builtins: &mut [Box<BuiltinFunction>]) {
-    builtins[offset_for_builtin("slots")] = Box::new(bf_slots);
-    builtins[offset_for_builtin("remove_slot")] = Box::new(bf_remove_slot);
-    builtins[offset_for_builtin("add_slot")] = Box::new(bf_add_slot);
+pub(crate) fn register_bf_flyweights(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("slots")] = bf_slots;
+    builtins[offset_for_builtin("remove_slot")] = bf_remove_slot;
+    builtins[offset_for_builtin("add_slot")] = bf_add_slot;
 }
