@@ -534,8 +534,8 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 /// Arguments controlling compilation error output:
 ///   - verbosity: Controls error detail level (default: 0)
 ///     - 0=summary: Brief error message only
-///     - 1=notes: Summary plus diagnostic hints
-///     - 2=detailed: Full context with error markers
+///     - 1=context: Message with error location (graphical display when output_mode > 0)
+///     - 2=detailed: Message, location, and diagnostic hints
 ///     - 3=structured map: Returns error data as map for programmatic handling
 ///   - output_mode: Controls error formatting style (default: 0)
 ///     - 0=plain text

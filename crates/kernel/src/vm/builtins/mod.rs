@@ -290,7 +290,7 @@ pub(crate) fn parse_diagnostic_options(
 
     let verbosity = match verbosity_level {
         0 => DiagnosticVerbosity::Summary,
-        1 => DiagnosticVerbosity::Notes,
+        1 => DiagnosticVerbosity::SourceContext,
         2 => DiagnosticVerbosity::Detailed,
         _ => {
             return Err(BfErr::Code(E_INVARG));

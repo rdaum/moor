@@ -33,9 +33,9 @@ use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
 pub enum DiagnosticVerbosity {
     /// Single-line summary only.
     Summary,
-    /// Summary plus textual notes (expected tokens, hints).
-    Notes,
-    /// Full detail with source excerpt and notes.
+    /// Summary with source context showing error location.
+    SourceContext,
+    /// Source context plus textual notes (expected tokens, hints).
     Detailed,
 }
 
@@ -199,13 +199,7 @@ fn format_parse_error(
         return lines;
     }
 
-    if options.verbosity == DiagnosticVerbosity::Notes {
-        append_expected_tokens(&mut lines, details);
-        append_notes(&mut lines, &details.notes);
-        return lines;
-    }
-
-    // DiagnosticVerbosity::Detailed
+    // For SourceContext and Detailed, show the error location
     let use_graphical = options.use_graphics && source.is_some() && details.span.is_some();
 
     if use_graphical {
@@ -221,8 +215,12 @@ fn format_parse_error(
         ));
     }
 
-    append_expected_tokens(&mut lines, details);
-    append_notes(&mut lines, &details.notes);
+    // Only add notes for Detailed level
+    if options.verbosity == DiagnosticVerbosity::Detailed {
+        append_expected_tokens(&mut lines, details);
+        append_notes(&mut lines, &details.notes);
+    }
+
     lines
 }
 

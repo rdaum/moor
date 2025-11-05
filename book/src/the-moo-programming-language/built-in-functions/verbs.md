@@ -94,8 +94,8 @@
 - `code`: A list of strings, each representing a line of the verb's source code
 - `verbosity`: (Optional) Controls error output detail level (default: 2)
   - `0` - Summary: Brief error message only
-  - `1` - Notes: Summary plus additional diagnostic notes
-  - `2` - Detailed: Full context with inline error markers (default)
+  - `1` - Context: Message with error location (graphical display when output_mode > 0)
+  - `2` - Detailed: Message, location, and diagnostic hints (default)
   - `3` - Structured: Returns error data as a map for programmatic handling
 - `output_mode`: (Optional) Controls error formatting style (default: 0)
   - `0` - Plain text without special characters
@@ -160,8 +160,8 @@ formatted = format_compile_error(err, 0);  // Summary only
 - `error`: Map containing compilation error data (from `set_verb_code()` or `eval()` with `verbosity` 3)
 - `verbosity`: (Optional) Controls output detail level (default: 2)
   - `0` - Summary: Brief error message only
-  - `1` - Notes: Summary plus additional diagnostic notes
-  - `2` - Detailed: Full context with inline error markers
+  - `1` - Context: Message with error location (graphical display when output_mode > 0)
+  - `2` - Detailed: Message, location, and diagnostic hints
 - `output_mode`: (Optional) Controls formatting style (default: 0)
   - `0` - Plain text without special characters
   - `1` - Graphics characters for visual clarity

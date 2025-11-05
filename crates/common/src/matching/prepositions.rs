@@ -331,10 +331,7 @@ mod tests {
         // mooR extension: named/called/known as preposition
         assert_eq!(find_preposition("named"), Some(Preposition::NamedCalled));
         assert_eq!(find_preposition("called"), Some(Preposition::NamedCalled));
-        assert_eq!(
-            find_preposition("known as"),
-            Some(Preposition::NamedCalled)
-        );
+        assert_eq!(find_preposition("known as"), Some(Preposition::NamedCalled));
         assert_eq!(
             find_preposition("named/called/known as"),
             Some(Preposition::NamedCalled)

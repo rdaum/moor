@@ -655,9 +655,9 @@ fn bf_binary_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 fn parse_symmetric_key(var: &Var) -> Result<[u8; 32], BfErr> {
     let bytes = match var.variant() {
         Variant::Binary(b) => b.as_bytes().to_vec(),
-        Variant::Str(s) => BASE64.decode(s.as_str()).map_err(|_| {
-            BfErr::ErrValue(E_INVARG.msg("String key must be valid base64"))
-        })?,
+        Variant::Str(s) => BASE64
+            .decode(s.as_str())
+            .map_err(|_| BfErr::ErrValue(E_INVARG.msg("String key must be valid base64")))?,
         _ => {
             return Err(BfErr::ErrValue(E_INVARG.msg(
                 "Symmetric key must be a 32-byte Binary value or base64-encoded string",
@@ -666,9 +666,9 @@ fn parse_symmetric_key(var: &Var) -> Result<[u8; 32], BfErr> {
     };
 
     if bytes.len() != 32 {
-        return Err(BfErr::ErrValue(E_INVARG.msg(
-            "Symmetric key must be exactly 32 bytes",
-        )));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("Symmetric key must be exactly 32 bytes"),
+        ));
     }
 
     let mut key = [0u8; 32];

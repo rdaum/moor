@@ -567,8 +567,8 @@ connections()
 - `program`: String containing MOO code to evaluate
 - `verbosity`: (Optional) Controls error output detail level (default: 0)
   - `0` - Summary: Brief error message only (default for eval)
-  - `1` - Notes: Summary plus additional diagnostic notes
-  - `2` - Detailed: Full context with inline error markers
+  - `1` - Context: Message with error location (graphical display when output_mode > 0)
+  - `2` - Detailed: Message, location, and diagnostic hints
   - `3` - Structured: Returns error data as a map for programmatic handling
 - `output_mode`: (Optional) Controls error formatting style (default: 0)
   - `0` - Plain text without special characters

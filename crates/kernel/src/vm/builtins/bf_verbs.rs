@@ -419,8 +419,8 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Arguments controlling compilation error output:
 ///   - verbosity: Controls error detail level (default: 2)
 ///     - 0=summary: Brief error message only
-///     - 1=notes: Summary plus diagnostic hints
-///     - 2=detailed: Full context with error markers
+///     - 1=context: Message with error location (graphical display when output_mode > 0)
+///     - 2=detailed: Message, location, and diagnostic hints
 ///     - 3=structured map: Returns error data as map for programmatic handling
 ///   - output_mode: Controls error formatting style (default: 0)
 ///     - 0=plain text
@@ -744,7 +744,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 ///
 /// Arguments:
 ///   - error: map with diagnostic data (type, message, line, column, etc.)
-///   - verbosity: 0=summary, 1=notes, 2=detailed (default: 2)
+///   - verbosity: 0=summary, 1=context, 2=detailed (default: 2)
 ///   - output_mode: 0=plain text, 1=graphics, 2=graphics+color (default: 0)
 ///
 /// Returns a list of formatted error strings.
