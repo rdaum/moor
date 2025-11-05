@@ -719,6 +719,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_INT), Typed(TYPE_INT)],
             true,
         ),
+        mk_builtin(
+            "paseto_make_local",
+            Q(1),
+            Q(2),
+            vec![Any, Typed(TYPE_LIST)],
+            true,
+        ),
+        mk_builtin(
+            "paseto_verify_local",
+            Q(1),
+            Q(2),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST)],
+            true,
+        ),
     ]
 }
 

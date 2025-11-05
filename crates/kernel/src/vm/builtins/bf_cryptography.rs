@@ -27,6 +27,8 @@ use hmac::{Hmac, Mac};
 use lazy_static::lazy_static;
 use rand::Rng;
 use rand::distr::Alphanumeric;
+use rusty_paseto::core::{Key, Local, Paseto, PasetoNonce, PasetoSymmetricKey, Payload, V4};
+use serde_json::Value as JsonValue;
 use sha1::Sha1;
 use sha2::Sha256;
 use ssh_key::public::PublicKey;
@@ -38,7 +40,8 @@ use crate::vm::builtins::{
 };
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
-    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Variant, v_binary, v_list, v_str, v_string,
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_binary, v_float, v_int, v_list,
+    v_map, v_str, v_string,
 };
 
 lazy_static! {
@@ -648,6 +651,237 @@ fn bf_binary_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+/// Parse a symmetric key from a Var (32-byte Binary value or base64-encoded string).
+fn parse_symmetric_key(var: &Var) -> Result<[u8; 32], BfErr> {
+    let bytes = match var.variant() {
+        Variant::Binary(b) => b.as_bytes().to_vec(),
+        Variant::Str(s) => BASE64.decode(s.as_str()).map_err(|_| {
+            BfErr::ErrValue(E_INVARG.msg("String key must be valid base64"))
+        })?,
+        _ => {
+            return Err(BfErr::ErrValue(E_INVARG.msg(
+                "Symmetric key must be a 32-byte Binary value or base64-encoded string",
+            )));
+        }
+    };
+
+    if bytes.len() != 32 {
+        return Err(BfErr::ErrValue(E_INVARG.msg(
+            "Symmetric key must be exactly 32 bytes",
+        )));
+    }
+
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&bytes);
+    Ok(key)
+}
+
+/// Convert a Var to a JSON value for PASETO claims.
+fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
+    match var.variant() {
+        Variant::None => Ok(JsonValue::Null),
+        Variant::Int(i) => Ok(JsonValue::Number((*i).into())),
+        Variant::Float(f) => serde_json::Number::from_f64(*f)
+            .map(JsonValue::Number)
+            .ok_or_else(|| BfErr::ErrValue(E_INVARG.msg("Invalid float value"))),
+        Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),
+        Variant::Sym(sym) => Ok(JsonValue::String(sym.to_string())),
+        Variant::List(list) => {
+            let mut json_list = Vec::new();
+            for item in list.iter() {
+                json_list.push(var_to_json(&item)?);
+            }
+            Ok(JsonValue::Array(json_list))
+        }
+        Variant::Map(map) => {
+            let mut json_map = serde_json::Map::new();
+            for (key, value) in map.iter() {
+                let key_str = match key.as_symbol() {
+                    Ok(sym) => sym.to_string(),
+                    Err(_) => match key.variant() {
+                        Variant::Int(i) => i.to_string(),
+                        _ => {
+                            return Err(BfErr::ErrValue(
+                                E_INVARG.msg("Map keys must be strings, symbols, or integers"),
+                            ));
+                        }
+                    },
+                };
+                json_map.insert(key_str, var_to_json(&value)?);
+            }
+            Ok(JsonValue::Object(json_map))
+        }
+        _ => Err(BfErr::ErrValue(
+            E_INVARG.msg("Cannot convert this type to PASETO claim"),
+        )),
+    }
+}
+
+/// Convert a JSON value to a Var.
+/// Symbols/objects/errors come back as literal strings (e.g., "'read", "#123", "E_PERM").
+fn json_to_var(json: &JsonValue) -> Result<Var, BfErr> {
+    match json {
+        JsonValue::Null => Ok(Var::mk_none()),
+        JsonValue::Bool(b) => Ok(v_int(*b as i64)),
+        JsonValue::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Ok(Var::from(i))
+            } else if let Some(f) = n.as_f64() {
+                Ok(v_float(f))
+            } else {
+                Err(BfErr::ErrValue(
+                    E_INVARG.msg("Invalid number in PASETO token"),
+                ))
+            }
+        }
+        JsonValue::String(s) => Ok(v_string(s.clone())),
+        JsonValue::Array(arr) => {
+            let mut list = Vec::new();
+            for item in arr {
+                list.push(json_to_var(item)?);
+            }
+            Ok(Var::mk_list(&list))
+        }
+        JsonValue::Object(obj) => {
+            let mut pairs = Vec::new();
+            for (key, value) in obj {
+                pairs.push((v_string(key.clone()), json_to_var(value)?));
+            }
+            Ok(v_map(&pairs))
+        }
+    }
+}
+
+/// MOO: `str paseto_make_local(map|list claims [, str|binary signing_key])`
+///
+/// Creates a PASETO V4.Local token from the given claims.
+///
+/// If signing_key is not provided, uses the server's symmetric key (wizard-only).
+/// If signing_key is provided, any user can create tokens with their own key.
+///
+/// The signing_key can be either a 32-byte Binary value or a base64-encoded string.
+fn bf_paseto_make_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    // Parse claims from map or alist
+    let claims_map = bf_args.map_or_alist_to_map(&bf_args.args[0])?;
+
+    // Determine which key to use
+    let symmetric_key = if bf_args.args.len() == 2 {
+        // User-provided key mode
+        parse_symmetric_key(&bf_args.args[1])?
+    } else {
+        // Server key mode - requires wizard
+        bf_args
+            .task_perms()
+            .map_err(world_state_bf_err)?
+            .check_wizard()
+            .map_err(world_state_bf_err)?;
+
+        let Some(key) = crate::get_server_symmetric_key() else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("Server symmetric key not configured"),
+            ));
+        };
+        *key
+    };
+
+    // Build JSON claims object
+    let mut claims_obj = serde_json::Map::new();
+    for (key, value) in claims_map.iter() {
+        let key_str = match key.as_symbol() {
+            Ok(sym) => sym.to_string(),
+            Err(_) => match key.variant() {
+                Variant::Int(i) => i.to_string(),
+                _ => {
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.msg("Claim keys must be strings, symbols, or integers"),
+                    ));
+                }
+            },
+        };
+        claims_obj.insert(key_str, var_to_json(&value)?);
+    }
+
+    let claims_json = JsonValue::Object(claims_obj);
+    let claims_str = serde_json::to_string(&claims_json)
+        .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to serialize claims: {}", e))))?;
+
+    // Create the token
+    let key = PasetoSymmetricKey::<V4, Local>::from(Key::<32>::from(&symmetric_key));
+    let nonce_key = Key::<32>::try_new_random()
+        .map_err(|e| BfErr::ErrValue(E_INVARG.msg(format!("Failed to generate nonce: {}", e))))?;
+    let nonce = PasetoNonce::<V4, Local>::from(&nonce_key);
+
+    let token = Paseto::<V4, Local>::builder()
+        .set_payload(Payload::from(claims_str.as_str()))
+        .try_encrypt(&key, &nonce)
+        .map_err(|e| {
+            BfErr::ErrValue(E_INVARG.msg(format!("Failed to create PASETO token: {}", e)))
+        })?;
+
+    Ok(Ret(v_string(token)))
+}
+
+/// MOO: `map paseto_verify_local(str token [, str|binary signing_key])`
+///
+/// Verifies and decrypts a PASETO V4.Local token, returning the claims as a map.
+///
+/// If signing_key is not provided, uses the server's symmetric key (wizard-only).
+/// If signing_key is provided, any user can verify tokens with their own key.
+///
+/// The signing_key can be either a 32-byte Binary value or a base64-encoded string.
+///
+/// Returns E_INVARG if the token is invalid or cannot be verified.
+fn bf_paseto_verify_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Str(token_str) = bf_args.args[0].variant() else {
+        return Err(BfErr::ErrValue(E_INVARG.msg("Token must be a string")));
+    };
+
+    // Determine which key to use
+    let symmetric_key = if bf_args.args.len() == 2 {
+        // User-provided key mode
+        parse_symmetric_key(&bf_args.args[1])?
+    } else {
+        // Server key mode - requires wizard
+        bf_args
+            .task_perms()
+            .map_err(world_state_bf_err)?
+            .check_wizard()
+            .map_err(world_state_bf_err)?;
+
+        let Some(key) = crate::get_server_symmetric_key() else {
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("Server symmetric key not configured"),
+            ));
+        };
+        *key
+    };
+
+    // Verify and decrypt the token
+    let key = PasetoSymmetricKey::<V4, Local>::from(Key::<32>::from(&symmetric_key));
+    let verified_token = Paseto::<V4, Local>::try_decrypt(token_str.as_str(), &key, None, None)
+        .map_err(|e| {
+            BfErr::ErrValue(E_INVARG.msg(format!("Failed to verify PASETO token: {}", e)))
+        })?;
+
+    // Parse the claims JSON
+    let claims_str = &verified_token;
+
+    let claims_json: JsonValue = serde_json::from_str(claims_str).map_err(|e| {
+        BfErr::ErrValue(E_INVARG.msg(format!("Failed to parse token claims: {}", e)))
+    })?;
+
+    // Convert to Var map
+    json_to_var(&claims_json).map(Ret)
+}
+
 pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("age_generate_keypair")] = bf_age_generate_keypair;
     builtins[offset_for_builtin("age_encrypt")] = bf_age_encrypt;
@@ -658,4 +892,6 @@ pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("salt")] = bf_salt;
     builtins[offset_for_builtin("string_hmac")] = bf_string_hmac;
     builtins[offset_for_builtin("binary_hmac")] = bf_binary_hmac;
+    builtins[offset_for_builtin("paseto_make_local")] = bf_paseto_make_local;
+    builtins[offset_for_builtin("paseto_verify_local")] = bf_paseto_verify_local;
 }

@@ -51,6 +51,7 @@ use moor_textdump::textdump_load;
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use rand::Rng;
 use rpc_common::load_keypair;
+use sha2::{Digest, Sha256};
 use tracing::{debug, error, info, warn};
 
 mod allowed_hosts;
@@ -415,6 +416,17 @@ fn main() -> Result<(), Report> {
             private_key_path
         );
     };
+
+    // Derive symmetric key for PASETO V4.Local tokens from the Ed25519 private key
+    let mut hasher = Sha256::new();
+    hasher.update(private_key.as_slice());
+    let server_symmetric_key: [u8; 32] = hasher.finalize().into();
+
+    // Initialize the server's symmetric key in the kernel
+    moor_kernel::initialize_server_symmetric_key(server_symmetric_key)
+        .map_err(|e| eyre!("Failed to initialize server symmetric key: {}", e))?;
+
+    info!("Server symmetric key initialized for PASETO operations");
 
     // Acquire exclusive lock on the data directory to prevent multiple daemon instances
     let _data_dir_lock = acquire_data_directory_lock(&args.data_dir)?;

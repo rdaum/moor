@@ -22,7 +22,25 @@ pub use crate::{
 };
 pub use moor_common::tasks::TaskId;
 
-use std::{cell::Cell, marker::PhantomData};
+use std::{cell::Cell, marker::PhantomData, sync::OnceLock};
+
+/// Server's symmetric key for PASETO V4.Local tokens.
+/// Derived from the server's Ed25519 private key and initialized at daemon startup.
+static SERVER_SYMMETRIC_KEY: OnceLock<[u8; 32]> = OnceLock::new();
+
+/// Initialize the server's symmetric key for PASETO operations.
+/// Should be called once at daemon startup.
+pub fn initialize_server_symmetric_key(key: [u8; 32]) -> Result<(), &'static str> {
+    SERVER_SYMMETRIC_KEY
+        .set(key)
+        .map_err(|_| "Server symmetric key already initialized")
+}
+
+/// Get the server's symmetric key used for PASETO operations.
+/// Returns None if not yet initialized.
+pub(crate) fn get_server_symmetric_key() -> Option<&'static [u8; 32]> {
+    SERVER_SYMMETRIC_KEY.get()
+}
 
 pub mod config;
 pub mod task_context;
