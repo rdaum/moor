@@ -188,9 +188,28 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 // Remove the hook after use to avoid affecting other calls
                 DOMPurify.removeHook("afterSanitizeElements");
 
+                // Convert ANSI codes in <pre> blocks
+                const tempDiv = document.createElement("div");
+                tempDiv.innerHTML = sanitizedHtml;
+                const preElements = tempDiv.querySelectorAll("pre");
+
+                if (preElements.length > 0) {
+                    const ansi_up = new AnsiUp();
+                    preElements.forEach((pre) => {
+                        const text = pre.textContent || "";
+                        if (text.includes("\x1b[")) {
+                            // Convert ANSI to HTML, then newlines to <br> for innerHTML
+                            const ansiHtml = ansi_up.ansi_to_html(text).replace(/\n/g, "<br>");
+                            pre.innerHTML = ansiHtml;
+                        }
+                    });
+                }
+
+                const processedHtml = tempDiv.innerHTML;
+
                 return (
                     <div
-                        dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+                        dangerouslySetInnerHTML={{ __html: processedHtml }}
                         onClick={(e) => {
                             // Handle clicks on moo-link spans
                             const target = e.target as HTMLElement;
