@@ -635,7 +635,7 @@ When you call a verb on a flyweight, it looks for the verb on the delegate objec
 
 ```moo
 // Create a flyweight sword:
-sword = < $weapon, [damage -> 10, name -> "iron sword"] >;
+sword = < $weapon, .damage = 10, .name = "iron sword" >;
 
 // Call a verb - this will look for "wield" on $weapon:
 sword:wield(player);
@@ -646,7 +646,7 @@ sword:wield(player);
 You can read the slots (properties) of a flyweight:
 
 ```moo
-sword = < $weapon, [damage -> 10, name -> "iron sword"] >;
+sword = < $weapon, .damage = 10, .name = "iron sword" >;
 damage_value = sword.damage;    // Gets 10
 weapon_name = sword.name;       // Gets "iron sword"
 ```
