@@ -28,6 +28,9 @@ sessions/
 /.claude/
 
 moor-data/
+moor-web-host-data/
+moor-telnet-host-data/
+moor-curl-worker-data/
 
 # OAuth2 config files with secrets
 *-oauth2.yaml

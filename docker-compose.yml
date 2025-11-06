@@ -68,7 +68,6 @@ services:
         --workers-response-listen=tcp://0.0.0.0:7897
         --workers-request-listen=tcp://0.0.0.0:7896
         --enrollment-listen=tcp://0.0.0.0:7900
-
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export --export-format objdef
@@ -99,7 +98,7 @@ services:
     working_dir: /moor
     volumes:
       - moor-enrollment:/root/.config/moor:ro
-      - moor-telnet-data:/root/.moor-host-data
+      - ./moor-telnet-host-data:/moor/.moor-host-data
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
@@ -107,7 +106,6 @@ services:
       - --rpc-address=tcp://moor-daemon:7899
       - --events-address=tcp://moor-daemon:7898
       - --enrollment-address=tcp://moor-daemon:7900
-
     ports:
       # Telnet listener
       - "8888:8888"
@@ -148,7 +146,7 @@ services:
     working_dir: /moor
     volumes:
       - moor-enrollment:/root/.config/moor:ro
-      - moor-web-data:/root/.moor-host-data
+      - ./moor-web-host-data:/moor/.moor-host-data
     command:
       - ./moor-web-host
       - --listen-address=0.0.0.0:8081
@@ -182,7 +180,7 @@ services:
     working_dir: /moor
     volumes:
       - moor-enrollment:/root/.config/moor:ro
-      - moor-curl-data:/root/.moor-host-data
+      - ./moor-curl-worker-data:/moor/.moor-host-data
     command:
       - ./moor-curl-worker
       - --rpc-address=tcp://moor-daemon:7899
@@ -202,6 +200,3 @@ services:
 volumes:
   moor-enrollment:
   moor-allowed-hosts:
-  moor-telnet-data:
-  moor-web-data:
-  moor-curl-data:
