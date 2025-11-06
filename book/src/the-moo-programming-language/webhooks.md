@@ -37,8 +37,8 @@ The `#0:invoke_http_handler` verb receives the following arguments:
 
 - **`method`**: HTTP method as string ("GET", "POST", "PUT", etc.)
 - **`path`**: Request path as string (e.g., "/webhooks/test/friendly")
-- **`query_params`**: Query parameters as a list of [key, value] pairs
-- **`headers`**: HTTP headers as a list of [key, value] pairs
+- **`query_params`**: Query parameters as a list of `{key, value}` pairs
+- **`headers`**: HTTP headers as a list of `{key, value}` pairs
 - **`body`**: Request body as string (for text) or binary (for binary data)
 - **`client_ip`**: Client IP address and port as string (e.g., "127.0.0.1:35194")
 
@@ -122,7 +122,7 @@ The list format is:
 - **Index 0**: HTTP status code (integer)
 - **Index 1**: Response body (string or binary)
 - **Index 2**: Content-Type header (string, optional)
-- **Index 3**: Additional headers (list of [key, value] pairs, optional)
+- **Index 3**: Additional headers (list of `{key, value}` pairs, optional)
 
 This would return:
 
