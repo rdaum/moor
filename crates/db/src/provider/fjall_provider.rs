@@ -174,11 +174,36 @@ where
             .spawn(move || {
                 gdt_cpus::set_thread_priority(ThreadPriority::Background).ok();
                 loop {
+                    // Check kill_switch at top of loop
                     if ks.load(std::sync::atomic::Ordering::SeqCst) {
+                        // Drain any remaining operations before exiting
+                        while let Ok(op) = ops_rx.try_recv() {
+                            match op {
+                                WriteOp::Insert(key_bytes, value, _domain) => {
+                                    let _ = fj.insert(ByteView::from(key_bytes), value);
+                                }
+                                WriteOp::Delete(key_bytes, _domain) => {
+                                    let _ = fj.remove(ByteView::from(key_bytes));
+                                }
+                                WriteOp::Barrier(timestamp, reply) => {
+                                    completed_barrier_bg
+                                        .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
+                                    reply.send(()).ok();
+                                }
+                            }
+                        }
                         break;
                     }
-                    match ops_rx.recv() {
-                        Ok(WriteOp::Insert(key_bytes, value, domain)) => {
+
+                    // Use timeout so we can periodically check kill_switch
+                    let op = match ops_rx.recv_timeout(Duration::from_millis(100)) {
+                        Ok(op) => op,
+                        Err(flume::RecvTimeoutError::Timeout) => continue,
+                        Err(flume::RecvTimeoutError::Disconnected) => break,
+                    };
+
+                    match op {
+                        WriteOp::Insert(key_bytes, value, domain) => {
                             // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual write
                             let write_result = fj.insert(ByteView::from(key_bytes), value);
@@ -192,7 +217,7 @@ where
                                 error!("failed to insert into database: {}", e);
                             }
                         }
-                        Ok(WriteOp::Delete(key_bytes, domain)) => {
+                        WriteOp::Delete(key_bytes, domain) => {
                             // Bytes are already encoded by the per-type EncodeFor impl!
                             // Perform the actual delete
                             let delete_result = fj.remove(ByteView::from(key_bytes));
@@ -206,16 +231,12 @@ where
                                 error!("failed to delete from database: {}", e);
                             }
                         }
-                        Ok(WriteOp::Barrier(timestamp, reply)) => {
+                        WriteOp::Barrier(timestamp, reply) => {
                             // Mark this barrier as completed and reply
                             completed_barrier_bg
                                 .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
                             // Reply to indicate barrier is processed
                             reply.send(()).ok();
-                        }
-                        Err(_e) => {
-                            // Channel closed, exit thread
-                            break;
                         }
                     }
                 }
@@ -476,6 +497,13 @@ where
     fn stop_internal(&self) -> Result<(), Error> {
         self.kill_switch
             .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        // Join the background thread - it will wake up from recv_timeout and see kill_switch
+        let mut jh = self.jh.lock().unwrap();
+        if let Some(jh) = jh.take() {
+            jh.join().unwrap();
+        }
+
         Ok(())
     }
 }

@@ -51,7 +51,7 @@ use std::{
     time::Duration,
 };
 use tempfile::TempDir;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 define_relations! {
     object_location == Obj, Obj,
@@ -287,6 +287,29 @@ impl MoorDB {
             jh.join().unwrap();
         }
 
+        // Wait for all pending write transactions to flush before stopping
+        let last_write_timestamp = Timestamp(
+            self.last_write_commit
+                .load(std::sync::atomic::Ordering::Acquire),
+        );
+        if last_write_timestamp.0 > 0 {
+            info!(
+                "Waiting for write barrier {} before shutdown",
+                last_write_timestamp.0
+            );
+            if let Err(e) = self
+                .relations
+                .wait_for_write_barrier(last_write_timestamp, std::time::Duration::from_secs(30))
+            {
+                error!(
+                    "Timeout waiting for write barrier {} during shutdown: {}",
+                    last_write_timestamp.0, e
+                );
+            } else {
+                info!("Write barrier {} completed", last_write_timestamp.0);
+            }
+        }
+
         self.relations.stop_all();
         if let Err(e) = self.keyspace.persist(PersistMode::SyncAll) {
             error!("Failed to persist keyspace: {}", e);
@@ -381,7 +404,7 @@ impl MoorDB {
         kill_switch: Arc<AtomicBool>,
         _config: DatabaseConfig,
     ) {
-        let this = self.clone();
+        let this_weak = Arc::downgrade(&self);
 
         let thread_builder = std::thread::Builder::new().name("moor-db-process".to_string());
         let jh = thread_builder
@@ -408,14 +431,25 @@ impl MoorDB {
                             result.ok().map(DbMessage::Usage)
                         });
 
-                    let (ws, reply) = match selector.wait_timeout(Duration::from_millis(1000)) {
-                        Ok(Some(DbMessage::Usage(reply))) => {
+                    // Wait for message without holding Arc reference
+                    let message = match selector.wait_timeout(Duration::from_millis(100)) {
+                        Ok(Some(msg)) => msg,
+                        Ok(None) | Err(_) => continue, // Timeout or disconnected - loop to check kill_switch
+                    };
+
+                    // Now upgrade to process the message - if upgrade fails, MoorDB was dropped
+                    let Some(this) = this_weak.upgrade() else {
+                        break;
+                    };
+
+                    let (ws, reply) = match message {
+                        DbMessage::Usage(reply) => {
                             reply.send(this.usage_bytes())
                                 .map_err(|e| warn!("{}", e))
                                 .ok();
                             continue;
                         }
-                        Ok(Some(DbMessage::Commit(CommitSet::CommitReadOnly(combined_caches)))) => {
+                        DbMessage::Commit(CommitSet::CommitReadOnly(combined_caches)) => {
                             if combined_caches.has_changed() {
                                 this.caches.store(Arc::new(combined_caches));
                             }
@@ -423,13 +457,9 @@ impl MoorDB {
                             // wait for write transactions when creating snapshots
                             continue;
                         }
-                        Ok(Some(DbMessage::Commit(CommitSet::CommitWrites(ws, reply)))) => {
+                        DbMessage::Commit(CommitSet::CommitWrites(ws, reply)) => {
                             // Process commit below
                             (ws, reply)
-                        }
-                        Ok(None) | Err(_) => {
-                            // Timeout or channel disconnected
-                            continue;
                         }
                     };
 
@@ -559,6 +589,8 @@ impl MoorDB {
 
 impl Drop for MoorDB {
     fn drop(&mut self) {
+        info!("MoorDB::drop() called - initiating shutdown");
         self.stop();
+        info!("MoorDB shutdown complete");
     }
 }
