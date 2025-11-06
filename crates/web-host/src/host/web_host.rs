@@ -34,6 +34,7 @@ use rpc_common::{
 };
 use std::{
     net::{IpAddr, SocketAddr},
+    sync::LazyLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tmq::{request, subscribe};
@@ -45,6 +46,10 @@ use uuid::Uuid;
 /// Checks X-Real-IP and X-Forwarded-For headers first (for nginx/proxy setups),
 /// then falls back to the direct connection address
 fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr {
+    debug!("Extracting client address. Direct connect_addr: {}", connect_addr);
+    debug!("  X-Real-IP header: {:?}", headers.get("X-Real-IP").and_then(|h| h.to_str().ok()));
+    debug!("  X-Forwarded-For header: {:?}", headers.get("X-Forwarded-For").and_then(|h| h.to_str().ok()));
+
     // Try X-Real-IP header first (most direct)
     if let Some(real_ip) = headers.get("X-Real-IP") {
         let Ok(ip_str) = real_ip.to_str() else {
@@ -101,10 +106,19 @@ fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr 
     connect_addr
 }
 
+/// Cached DNS resolver to avoid recreating on every connection
+/// Initialized lazily on first use
+static DNS_RESOLVER: LazyLock<TokioResolver> = LazyLock::new(|| {
+    debug!("Initializing DNS resolver (first use)");
+    TokioResolver::builder_tokio()
+        .expect("Failed to create DNS resolver builder")
+        .build()
+});
+
 /// Perform async reverse DNS lookup for an IP address with timeout
 async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
-    // Create a new resolver using system configuration
-    let resolver = TokioResolver::builder_tokio()?.build();
+    // Get the cached resolver (created once, reused for all connections)
+    let resolver = &*DNS_RESOLVER;
 
     // Perform reverse DNS lookup with 2 second timeout
     let lookup_future = resolver.reverse_lookup(ip);
