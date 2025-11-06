@@ -17,7 +17,6 @@ use crate::{
     codegen::compile_tree,
     parse::moo::{MooParser, Rule},
 };
-use itertools::Itertools;
 use moor_common::{
     model::{
         ArgSpec, CompileContext, CompileError, ObjFlag, ParseErrorDetails, PrepSpec, PropFlag,
@@ -346,26 +345,21 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
             // Parse the remaining parts: optional slots, optional contents
             for next in parts {
                 match next.as_rule() {
-                    Rule::literal_flyweight_slots => {
-                        // Parse the slots, they're a sequence of ident, expr pairs.
-                        // Collect them into two iterators,
-                        let slot_pairs = next.clone().into_inner().chunks(2);
-                        for mut pair in &slot_pairs {
-                            let slot_name = Symbol::mk(pair.next().unwrap().as_str());
+                    Rule::literal_flyweight_slot => {
+                        let mut inner = next.into_inner();
+                        let slot_ident = inner.next().unwrap();
+                        let slot_name = Symbol::mk(slot_ident.as_str());
 
-                            // "delegate" and "slots" are forbidden slot names.
-                            if slot_name == Symbol::mk("delegate")
-                                || slot_name == Symbol::mk("slots")
-                            {
-                                return Err(VerbCompileError(CompileError::BadSlotName(
-                                    CompileContext::new(next.line_col()),
-                                    slot_name.to_string(),
-                                )));
-                            }
-
-                            let slot_expr = parse_literal(context, pair.next().unwrap())?;
-                            slots.push((slot_name, slot_expr));
+                        if slot_name == Symbol::mk("delegate") || slot_name == Symbol::mk("slots") {
+                            return Err(VerbCompileError(CompileError::BadSlotName(
+                                CompileContext::new(slot_ident.line_col()),
+                                slot_name.to_string(),
+                            )));
                         }
+
+                        let slot_literal = inner.next().unwrap();
+                        let slot_expr = parse_literal(context, slot_literal)?;
+                        slots.push((slot_name, slot_expr));
                     }
                     Rule::literal_flyweight_contents => {
                         let pairs = next.into_inner();
@@ -1210,7 +1204,7 @@ mod tests {
                     override map = [ 1 -> 2, "test" -> 4 ];
                     override nested_list = { 1,2, { 5, 6, 7 }};
                     override nested_map = [ 1 -> [ 2 -> 3, 4 -> 5 ], 6 -> 7 ];
-                    override flyweight = <#1, [ a -> 1, b-> 2 ], { 1,2, 3}>;
+                    override flyweight = <#1, .a = 1, .b = 2, { 1,2, 3}>;
                 endobject"#;
         let mut context = ObjFileContext::new();
         let odef =

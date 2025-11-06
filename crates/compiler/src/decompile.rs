@@ -1533,7 +1533,7 @@ return 0 && "Automatically Added Return";
 
     #[test]
     fn test_flyweight() {
-        let program = r#"flywt = < #1, [ colour -> "orange", z -> 5 ], {#2, #4, "a"}>;"#;
+        let program = r#"flywt = < #1, .colour = "orange", .z = 5, {#2, #4, "a"}>;"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }

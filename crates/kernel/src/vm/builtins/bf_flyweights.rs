@@ -15,125 +15,166 @@
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_PERM, E_TYPE, Sequence, v_flyweight, v_map, v_sym};
+use moor_var::{
+    E_ARGS, E_PERM, E_TYPE, Flyweight, List, Sequence, Symbol, Var, Variant, v_map, v_sym,
+};
 
-/// MOO: `map slots(flyweight f)`
-/// Returns the set of slots on the flyweight as a map.
-fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+fn ensure_enabled(bf_args: &BfCallState<'_>) -> Result<(), BfErr> {
     if !bf_args.config.flyweight_type {
         return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
     }
+    Ok(())
+}
+
+fn contents_list_from_var(var: &Var) -> Result<List, BfErr> {
+    let Some(list) = var.as_list() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("flyweight contents must be a list"),
+        ));
+    };
+    Ok(list.clone())
+}
+
+fn flyweight_to_var(f: Flyweight) -> Var {
+    Var::from_variant(Variant::Flyweight(f))
+}
+
+/// MOO: `toflyweight(delegate [, slots_map [, contents_list]])`
+fn bf_mk_flyweight(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    ensure_enabled(bf_args)?;
+
+    if !(1..=3).contains(&bf_args.args.len()) {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("toflyweight() takes 1 to 3 arguments"),
+        ));
+    }
+
+    let delegate = match bf_args.args[0].as_object() {
+        Some(obj) => obj,
+        None => {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("toflyweight() expects object as first argument"),
+            ));
+        }
+    };
+
+    let mut slot_pairs: Vec<(Symbol, Var)> = Vec::new();
+    if bf_args.args.len() >= 2 {
+        let map = bf_args.map_or_alist_to_map(&bf_args.args[1])?;
+        for (key, value) in map.iter() {
+            let key_sym = key.as_symbol().map_err(|_| {
+                BfErr::ErrValue(
+                    E_TYPE.msg("toflyweight() slot keys must be symbols or string values"),
+                )
+            })?;
+            slot_pairs.push((key_sym, value.clone()));
+        }
+    }
+
+    let contents = if bf_args.args.len() == 3 {
+        contents_list_from_var(&bf_args.args[2])?
+    } else {
+        List::mk_list(&[])
+    };
+
+    let fly = Flyweight::mk_flyweight(delegate, &slot_pairs, contents);
+    Ok(Ret(flyweight_to_var(fly)))
+}
+
+/// MOO: `flyslots(flyweight f)`
+fn bf_flyslots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    ensure_enabled(bf_args)?;
 
     if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
-            format!("slots() takes 1 argument, got {}", bf_args.args.len())
-        })));
+        return Err(BfErr::ErrValue(E_ARGS.msg("flyslots() takes 1 argument")));
     }
 
     let Some(f) = bf_args.args[0].as_flyweight() else {
-        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-            format!(
-                "slots() expects a flyweight as the first argument, got {}",
-                bf_args.args[0].type_code().to_literal()
-            )
-        })));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("flyslots() expects flyweight as first argument"),
+        ));
     };
 
-    let slots_map = f.slots_as_map();
-    let slots: Vec<_> = slots_map
+    let slots = f
+        .slots_as_map()
         .iter()
         .map(|(k, v)| (v_sym(*k), v.clone()))
-        .collect();
-    let map = v_map(&slots);
-
-    Ok(Ret(map))
+        .collect::<Vec<_>>();
+    Ok(Ret(v_map(&slots)))
 }
 
-/// MOO: `flyweight remove_slot(flyweight f, symbol slot_name)`
-/// Returns copy of flyweight with the specified slot removed.
-fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if !bf_args.config.flyweight_type {
-        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
-    }
+/// MOO: `flycontents(flyweight f)`
+fn bf_flycontents(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    ensure_enabled(bf_args)?;
 
-    if bf_args.args.len() != 2 {
-        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
-            format!(
-                "remove_slot() takes 2 arguments, got {}",
-                bf_args.args.len()
-            )
-        })));
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("flycontents() takes 1 argument"),
+        ));
     }
 
     let Some(f) = bf_args.args[0].as_flyweight() else {
-        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-            format!(
-                "remove_slot() expects a flyweight as the first argument, got {}",
-                bf_args.args[0].type_code().to_literal()
-            )
-        })));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("flycontents() expects flyweight as first argument"),
+        ));
     };
 
-    let Ok(s) = bf_args.args[1].as_symbol() else {
-        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-            format!(
-                "remove_slot() expects a symbol as the second argument, got {}",
-                bf_args.args[1].type_code().to_literal()
-            )
-        })));
-    };
-
-    let new_f = f.remove_slot(s);
-    Ok(Ret(v_flyweight(
-        *new_f.delegate(),
-        &new_f.slots(),
-        new_f.contents().clone(),
-    )))
+    Ok(Ret(Var::from_variant(Variant::List(f.contents().clone()))))
 }
 
-/// MOO: `flyweight add_slot(flyweight f, symbol key, any value)`
-/// Returns copy of flyweight with the slot added or updated.
-fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if !bf_args.config.flyweight_type {
-        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
-    }
+/// MOO: `flyslotset(flyweight f, symbol key, any value)`
+fn bf_flyslotset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    ensure_enabled(bf_args)?;
 
     if bf_args.args.len() != 3 {
-        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
-            format!("add_slot() takes 3 arguments, got {}", bf_args.args.len())
-        })));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("flyslotset() takes 3 arguments"),
+        ));
     }
 
     let Some(f) = bf_args.args[0].as_flyweight() else {
-        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-            format!(
-                "add_slot() expects a flyweight as the first argument, got {}",
-                bf_args.args[0].type_code().to_literal()
-            )
-        })));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("flyslotset() expects flyweight as first argument"),
+        ));
     };
 
-    let Ok(key) = bf_args.args[1].as_symbol() else {
-        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-            format!(
-                "add_slot() expects a symbol as the second argument, got {}",
-                bf_args.args[1].type_code().to_literal()
-            )
-        })));
-    };
+    let key = bf_args.args[1]
+        .as_symbol()
+        .map_err(|_| BfErr::ErrValue(E_TYPE.msg("flyslotset() expects symbol key")))?;
 
     let value = bf_args.args[2].clone();
-
     let new_f = f.add_slot(key, value);
-    Ok(Ret(v_flyweight(
-        *new_f.delegate(),
-        &new_f.slots(),
-        new_f.contents().clone(),
-    )))
+    Ok(Ret(flyweight_to_var(new_f)))
+}
+
+/// MOO: `flyslotremove(flyweight f, symbol key)`
+fn bf_flyslotremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    ensure_enabled(bf_args)?;
+
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("flyslotremove() takes 2 arguments"),
+        ));
+    }
+
+    let Some(f) = bf_args.args[0].as_flyweight() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("flyslotremove() expects flyweight as first argument"),
+        ));
+    };
+
+    let key = bf_args.args[1]
+        .as_symbol()
+        .map_err(|_| BfErr::ErrValue(E_TYPE.msg("flyslotremove() expects symbol key")))?;
+
+    let new_f = f.remove_slot(key);
+    Ok(Ret(flyweight_to_var(new_f)))
 }
 
 pub(crate) fn register_bf_flyweights(builtins: &mut [BuiltinFunction]) {
-    builtins[offset_for_builtin("slots")] = bf_slots;
-    builtins[offset_for_builtin("remove_slot")] = bf_remove_slot;
-    builtins[offset_for_builtin("add_slot")] = bf_add_slot;
+    builtins[offset_for_builtin("toflyweight")] = bf_mk_flyweight;
+    builtins[offset_for_builtin("flyslots")] = bf_flyslots;
+    builtins[offset_for_builtin("flycontents")] = bf_flycontents;
+    builtins[offset_for_builtin("flyslotset")] = bf_flyslotset;
+    builtins[offset_for_builtin("flyslotremove")] = bf_flyslotremove;
 }

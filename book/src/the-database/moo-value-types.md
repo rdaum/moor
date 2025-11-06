@@ -588,10 +588,10 @@ Flyweights combine the best parts of objects, lists, and maps:
 
 ### Flyweight syntax:
 
-The basic pattern is: `< delegate_object, [slots], {contents} >`
+The basic pattern is: `< delegate_object, .slot = value, ..., {contents} >`
 
 - **Delegate object** (required): The object that handles verb calls
-- **Slots** (optional): Named properties, like a map
+- **Slots** (optional): Named properties using dot-equals syntax
 - **Contents** (optional): A list of other values
 
 ### Simple examples:
@@ -601,14 +601,14 @@ The basic pattern is: `< delegate_object, [slots], {contents} >`
 < #123 >
 
 // With some data slots:
-< $generic_item, [name -> "magic sword", power -> 15] >
+< $generic_item, .name = "magic sword", .power = 15 >
 
 // With contents (like inventory):
-< $container, [name -> "treasure chest"], {"gold coins", "ruby", "scroll"} >
+< $container, .name = "treasure chest", {"gold coins", "ruby", "scroll"} >
 
 // Complex example - a room in a maze:
-< $maze_room, 
-  [description -> "A twisty passage", exits -> {"north", "south"}],
+< $maze_room,
+  .description = "A twisty passage", .exits = {"north", "south"},
   {player1, player2} >
 ```
 

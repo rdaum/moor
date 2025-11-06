@@ -24,14 +24,14 @@
 //! The slots can be listed with a `.slots` property access.
 //! It is therefore illegal for a slot to have the name `slots` or `delegate`.
 //!
-//! So appending, etc can be done like:
-//! `<  x.delegate, x.slots, {@x, y} >`
-//!
 //! Literal syntax is:
 //!
-//! `< delegate, [ slot -> value, ... ], contents >`
+//! `< delegate, .slot = value, ..., { contents, ... } >`
+//!
+//! Flyweights are immutable. Use builtins such as `toflyweight`, `flyslots`, `flycontents`,
+//! `flyslotset`, and `flyslotremove` to construct or modify them.
 
-use crate::{Error, List, Obj, Sequence, Symbol, Var, Variant, error::ErrorCode::E_TYPE};
+use crate::{List, Obj, Sequence, Symbol, Var};
 use std::{
     fmt::{Debug, Formatter},
     hash::Hash,
@@ -75,9 +75,13 @@ impl Debug for Flyweight {
 
 impl Flyweight {
     pub fn mk_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Self {
+        Self::from_parts(delegate, slots.iter().cloned().collect(), contents)
+    }
+
+    pub fn from_parts(delegate: Obj, slots: imbl::OrdMap<Symbol, Var>, contents: List) -> Self {
         Self(Box::new(Inner {
             delegate,
-            slots: slots.iter().cloned().collect(),
+            slots,
             contents,
         }))
     }
@@ -93,6 +97,10 @@ impl Flyweight {
         self.0.slots.iter().map(|(k, v)| (*k, v.clone())).collect()
     }
 
+    pub fn slots_map(&self) -> &imbl::OrdMap<Symbol, Var> {
+        &self.0.slots
+    }
+
     pub fn delegate(&self) -> &Obj {
         &self.0.delegate
     }
@@ -101,116 +109,35 @@ impl Flyweight {
         &self.0.contents
     }
 
+    pub fn is_contents_empty(&self) -> bool {
+        self.0.contents.is_empty()
+    }
+
+    pub fn with_slots_map(&self, slots: imbl::OrdMap<Symbol, Var>) -> Self {
+        Self::from_parts(self.0.delegate, slots, self.0.contents.clone())
+    }
+
+    pub fn with_contents(&self, contents: List) -> Self {
+        Self::from_parts(self.0.delegate, self.0.slots.clone(), contents)
+    }
+
     /// Add or update a slot, returning a new Flyweight with the change.
     pub fn add_slot(&self, key: Symbol, value: Var) -> Self {
         let mut new_slots = self.0.slots.clone();
         new_slots.insert(key, value);
-        Self(Box::new(Inner {
-            delegate: self.0.delegate,
-            slots: new_slots,
-            contents: self.0.contents.clone(),
-        }))
+        Self::from_parts(self.0.delegate, new_slots, self.0.contents.clone())
     }
 
     /// Remove a slot, returning a new Flyweight without that slot.
     pub fn remove_slot(&self, key: Symbol) -> Self {
         let mut new_slots = self.0.slots.clone();
         new_slots.remove(&key);
-        Self(Box::new(Inner {
-            delegate: self.0.delegate,
-            slots: new_slots,
-            contents: self.0.contents.clone(),
-        }))
+        Self::from_parts(self.0.delegate, new_slots, self.0.contents.clone())
     }
 
     /// Get slots as a map (for the slots() builtin).
     pub fn slots_as_map(&self) -> imbl::OrdMap<Symbol, Var> {
         self.0.slots.clone()
-    }
-
-    pub fn with_new_contents(&self, new_contents: List) -> Var {
-        let fi = Inner {
-            delegate: self.0.delegate,
-            slots: self.0.slots.clone(),
-            contents: new_contents,
-        };
-        let fl = Flyweight(Box::new(fi));
-        let variant = Variant::Flyweight(fl);
-        Var::from_variant(variant)
-    }
-}
-
-impl Sequence for Flyweight {
-    fn is_empty(&self) -> bool {
-        self.0.contents.is_empty()
-    }
-
-    fn len(&self) -> usize {
-        self.0.contents.len()
-    }
-
-    fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
-        self.0.contents.index_in(value, case_sensitive)
-    }
-
-    fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        self.0.contents.contains(value, case_sensitive)
-    }
-
-    fn index(&self, index: usize) -> Result<Var, Error> {
-        self.0.contents.index(index)
-    }
-
-    fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        let new_contents = self.0.contents.index_set(index, value)?;
-        let Some(new_contents_as_list) = new_contents.as_list() else {
-            return Err(E_TYPE.msg("invalid contents type in flyweight"));
-        };
-        Ok(self.with_new_contents(new_contents_as_list.clone()))
-    }
-
-    fn push(&self, value: &Var) -> Result<Var, Error> {
-        let new_contents = self.0.contents.push(value)?;
-        let Some(new_contents_as_list) = new_contents.as_list() else {
-            return Err(E_TYPE.msg("invalid contents type in flyweight"));
-        };
-        Ok(self.with_new_contents(new_contents_as_list.clone()))
-    }
-
-    fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        let new_contents = self.0.contents.insert(index, value)?;
-        let Some(new_contents_as_list) = new_contents.as_list() else {
-            return Err(E_TYPE.msg("invalid contents type in flyweight"));
-        };
-        Ok(self.with_new_contents(new_contents_as_list.clone()))
-    }
-
-    fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
-        self.0.contents.range(from, to)
-    }
-
-    fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
-        let new_contents = self.0.contents.range_set(from, to, with)?;
-        let Some(new_contents_as_list) = new_contents.as_list() else {
-            return Err(E_TYPE.msg("invalid contents type in flyweight"));
-        };
-        Ok(self.with_new_contents(new_contents_as_list.clone()))
-    }
-
-    fn append(&self, other: &Var) -> Result<Var, Error> {
-        let new_contents = self.0.contents.append(other)?;
-        let Some(new_contents_as_list) = new_contents.as_list() else {
-            return Err(E_TYPE.msg("invalid contents type in flyweight"));
-        };
-        Ok(self.with_new_contents(new_contents_as_list.clone()))
-    }
-
-    fn remove_at(&self, index: usize) -> Result<Var, Error> {
-        let new_contents = self.0.contents.remove_at(index)?;
-        let Some(new_contents_as_list) = new_contents.as_list() else {
-            return Err(E_TYPE.msg("invalid contents type in flyweight"));
-        };
-        Ok(self.with_new_contents(new_contents_as_list.clone()))
     }
 }
 

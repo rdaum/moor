@@ -16,7 +16,6 @@
 use std::cell::RefCell;
 use std::{rc::Rc, str::FromStr};
 
-use itertools::Itertools;
 use moor_var::{ErrorCode, SYSTEM_OBJECT, Symbol, Var, VarType, v_none};
 pub use pest::Parser as PestParser;
 use pest::{
@@ -660,7 +659,7 @@ impl TreeTransformer {
                         if !self.options.flyweight_type {
                             return Err(CompileError::DisabledFeature(
                                 self.compile_context(&primary),
-                                "Maps".to_string(),
+                                "Flyweights".to_string(),
                             ));
                         }
                         let mut parts = primary.into_inner();
@@ -679,28 +678,24 @@ impl TreeTransformer {
                         // Parse the remaining parts: optional slots, optional contents
                         for next in parts {
                             match next.as_rule() {
-                                Rule::flyweight_slots => {
-                                    // Parse the slots. They're a sequence of ident, expr pairs.
-                                    // Collect them into two iterators,
-                                    let slot_pairs = next.clone().into_inner().chunks(2);
-                                    for mut pair in &slot_pairs {
-                                        let slot_name = Symbol::mk(pair.next().unwrap().as_str());
+                                Rule::flyweight_slot => {
+                                    let mut inner = next.into_inner();
+                                    let slot_ident = inner.next().unwrap();
+                                    let slot_name = Symbol::mk(slot_ident.as_str());
 
-                                        // "delegate" and "slots" are forbidden slot names.
-                                        if slot_name == Symbol::mk("delegate")
-                                            || slot_name == Symbol::mk("slots")
-                                        {
-                                            return Err(CompileError::BadSlotName(
-                                                self.compile_context(&next),
-                                                slot_name.to_string(),
-                                            ));
-                                        }
-
-                                        let slot_expr = primary_self
-                                            .clone()
-                                            .parse_expr(pair.next().unwrap().into_inner())?;
-                                        slots.push((slot_name, slot_expr));
+                                    if slot_name == Symbol::mk("delegate")
+                                        || slot_name == Symbol::mk("slots")
+                                    {
+                                        return Err(CompileError::BadSlotName(
+                                            self.compile_context(&slot_ident),
+                                            slot_name.to_string(),
+                                        ));
                                     }
+
+                                    let expr_pair = inner.next().unwrap();
+                                    let slot_expr =
+                                        primary_self.clone().parse_expr(expr_pair.into_inner())?;
+                                    slots.push((slot_name, slot_expr));
                                 }
                                 Rule::expr => {
                                     // This is the contents expression
@@ -3665,14 +3660,14 @@ mod tests {
         );
     }
     #[test]
-    fn test_flyweight_empty_slots_just_contents() {
-        let program = r#"<#1, [], {2}>;"#;
+    fn test_flyweight_slots_and_contents() {
+        let program = r#"<#1, .a = 1, {2}>;"#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Flyweight(
                 Box::new(Value(v_objid(1))),
-                vec![],
+                vec![(Symbol::mk("a"), Value(v_int(1)))],
                 Some(Box::new(Expr::List(vec![Normal(Value(v_int(2)))]))),
             ))]
         );
@@ -3680,7 +3675,7 @@ mod tests {
 
     #[test]
     fn test_flyweight_only_slots() {
-        let program = r#"<#1, [a->1 , b->2]>;"#;
+        let program = r#"<#1, .a = 1, .b = 2>;"#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -3698,7 +3693,7 @@ mod tests {
     #[test]
     fn test_flyweight_arbitrary_expression_contents() {
         // Test that flyweight contents can be any expression, not just lists
-        let program = r#"<#1, [], a_list>;"#;
+        let program = r#"<#1, a_list>;"#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         let a_list_var = parse.variables.find_name("a_list").unwrap();
         assert_eq!(

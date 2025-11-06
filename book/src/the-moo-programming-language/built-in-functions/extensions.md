@@ -8,17 +8,22 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `to_xml` - Convert a tree of flyweight objects into a string containing XML
 
 **Import/Export of Objects:**
-- [`load_object`](../../the-system/object-packaging.md#load_object) - Load an object from objdef format with optional conflict detection and resolution options.
+
+- [`load_object`](../../the-system/object-packaging.md#load_object) - Load an object from objdef format with optional
+  conflict detection and resolution options.
 - `dump_object` - Takes an object and returns a list of strings representing the object definition in objdef format.
 
 **Flyweights & Symbols (New Types):**
 
-- `slots` - Returns the slots on a given flyweight
-- `remove_slot` - Returns a copy of the flyweight with the given slot removed, if present
-- `add_slot` - Returns a copy of the flyweight with a new slot added
+- `toflyweight` - Build a flyweight from a delegate, slots map, and optional contents list
+- `flyslots` - Returns the slots on a given flyweight as a map
+- `flycontents` - Returns the contents list from a flyweight
+- `flyslotset` - Returns a copy of the flyweight with a slot added or updated
+- `flyslotremove` - Returns a copy of the flyweight with the given slot removed, if present
 - `tosym` - Turns the given value into a Symbol
 
 **Cryptography:**
+
 - `age_generate_keypair` - Generates a new X25519 keypair for use with age encryption
 - `age_encrypt` - Encrypts a message using age encryption for one or more recipients, outputs as base64
 - `age_decrypt` - Decrypts a base64-encoded age-encrypted message using one or more private keys
@@ -28,7 +33,8 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `vm_counters` - Performance counters for profiling VM internals
 - `bf_counters` - Performance counters for profiling builtin function performance
 - `db_counters` - Performance counters for profiling DB performance
-- [`function_help`](server.md#function_help) - Returns runtime documentation for builtin functions extracted from compiled code
+- [`function_help`](server.md#function_help) - Returns runtime documentation for builtin functions extracted from
+  compiled code
 
 **Task Management:**
 

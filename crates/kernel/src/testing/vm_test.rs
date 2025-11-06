@@ -1093,7 +1093,7 @@ mod tests {
 
     #[test]
     fn test_make_flyweight() {
-        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>;"#;
+        let program = r#"return <#1, .slot = "123", {1, 2, 3}>;"#;
         let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
@@ -1115,7 +1115,7 @@ mod tests {
 
     #[test]
     fn test_flyweight_slot() {
-        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>.slot;"#;
+        let program = r#"return <#1, .slot = "123", {1, 2, 3}>.slot;"#;
         let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
@@ -1131,10 +1131,10 @@ mod tests {
     /// Test the test of builtins for slots
     #[test]
     fn test_flyweight_builtins() {
-        let program = r#"let a = <#1, [slot -> "123"], {1, 2, 3}>;
-        let b = remove_slot(a, 'slot);
-        let c = add_slot(b, 'bananas, "456");
-        return {c, slots(c)};"#;
+        let program = r#"let a = <#1, .slot = "123", {1, 2, 3}>;
+        let b = flyslotremove(a, 'slot);
+        let c = flyslotset(b, 'bananas, "456");
+        return {c, flyslots(c)};"#;
         let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
@@ -1159,7 +1159,10 @@ mod tests {
 
     #[test]
     fn test_flyweight_sequence() {
-        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>[2];"#;
+        let program = r#"
+            let fw = <#1, .slot = "123", {1, 2, 3}>;
+            return flycontents(fw)[2];
+        "#;
         let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
@@ -1190,8 +1193,10 @@ mod tests {
 
     #[test]
     fn test_range_flyweight_oddities() {
-        let program =
-            r#"return <#1, [another_slot -> 5, slot -> "123"], {"another_seq"[1..$]}>[1];"#;
+        let program = r#"
+            let fw = <#1, .another_slot = 5, .slot = "123", {"another_seq"[1..$]}>;
+            return flycontents(fw)[1];
+        "#;
         let state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(

@@ -112,20 +112,20 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Verbs
 
-| Name                                                  | Complete | Notes                                                                   |
-|-------------------------------------------------------|----------|-------------------------------------------------------------------------|
-| [`verbs`](verbs.md#verbs)                             | &check;  |                                                                         |
-| [`verb_info`](verbs.md#verb_info)                     | &check;  |                                                                         |
-| [`set_verb_info`](verbs.md#set_verb_info)             | &check;  |                                                                         |
-| [`verb_args`](verbs.md#verb_args)                     | &check;  |                                                                         |
-| [`set_verb_args`](verbs.md#set_verb_args)             | &check;  |                                                                         |
-| [`add_verb`](verbs.md#add_verb)                       | &check;  |                                                                         |
-| [`delete_verb`](verbs.md#delete_verb)                 | &check;  |                                                                         |
-| [`set_verb_code`](verbs.md#set_verb_code)             | &check;  | Enhanced with diagnostic verbosity & output mode options                |
-| [`eval`](server.md#eval)                              | &check;  | Enhanced with diagnostic verbosity & output mode options                |
-| [`format_compile_error`](verbs.md#format_compile_error) | &check;  | mooR extension. Formats structured compilation errors                   |
-| [`disassemble`](verbs.md#disassemble)                 | &check;  | Output looks nothing like LambdaMOO's                                   |
-| [`verb_code`](verbs.md#verb_code)                     | &check;  |                                                                         |
+| Name                                                    | Complete | Notes                                                    |
+|---------------------------------------------------------|----------|----------------------------------------------------------|
+| [`verbs`](verbs.md#verbs)                               | &check;  |                                                          |
+| [`verb_info`](verbs.md#verb_info)                       | &check;  |                                                          |
+| [`set_verb_info`](verbs.md#set_verb_info)               | &check;  |                                                          |
+| [`verb_args`](verbs.md#verb_args)                       | &check;  |                                                          |
+| [`set_verb_args`](verbs.md#set_verb_args)               | &check;  |                                                          |
+| [`add_verb`](verbs.md#add_verb)                         | &check;  |                                                          |
+| [`delete_verb`](verbs.md#delete_verb)                   | &check;  |                                                          |
+| [`set_verb_code`](verbs.md#set_verb_code)               | &check;  | Enhanced with diagnostic verbosity & output mode options |
+| [`eval`](server.md#eval)                                | &check;  | Enhanced with diagnostic verbosity & output mode options |
+| [`format_compile_error`](verbs.md#format_compile_error) | &check;  | mooR extension. Formats structured compilation errors    |
+| [`disassemble`](verbs.md#disassemble)                   | &check;  | Output looks nothing like LambdaMOO's                    |
+| [`verb_code`](verbs.md#verb_code)                       | &check;  |                                                          |
 
 ### Values / encoding
 
@@ -141,28 +141,28 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Server
 
-| Name                                                   | Complete | Notes                                                                    |
-|--------------------------------------------------------|----------|--------------------------------------------------------------------------|
-| [`server_version`](server.md#server_version)           | &check;  | Crate version + short commit hash, for now                               |
-| [`renumber`](objects.md#renumber)                      | &check;  | Supports UUID to numbered conversion with auto-selection                 |
-| [`reset_max_object`](server.md#reset_max_object)       |          |                                                                          |
-| [`memory_usage`](server.md#memory_usage)               | &check;  |                                                                          |
-| [`shutdown`](server.md#shutdown)                       | &check;  |                                                                          |
-| [`dump_database`](server.md#dump_database)             | &check;  |                                                                          |
-| [`db_disk_size`](server.md#db_disk_size)               | &check;  |                                                                          |
-| [`connected_players`](server.md#connected_players)     | &check;  |                                                                          |
-| [`connected_seconds`](server.md#connected_seconds)     | &check;  |                                                                          |
-| [`idle_seconds`](server.md#idle_seconds)               | &check;  |                                                                          |
-| [`connection_name`](server.md#connection_name)         | &check;  | To make this 100% compat with core, reverse DNS & listen port is needed. |
-| [`connections`](server.md#connections)                 | &check;  | Returns connections for current player, or other players.                |  mooR extension. |
-| [`notify`](server.md#notify)                           | &check;  | With `rich_notify` feature on, supports sending additional content types |
-| [`boot_player`](server.md#boot_player)                 | &check;  |                                                                          |
+| Name                                                         | Complete | Notes                                                                    |
+|--------------------------------------------------------------|----------|--------------------------------------------------------------------------|
+| [`server_version`](server.md#server_version)                 | &check;  | Crate version + short commit hash, for now                               |
+| [`renumber`](objects.md#renumber)                            | &check;  | Supports UUID to numbered conversion with auto-selection                 |
+| [`reset_max_object`](server.md#reset_max_object)             |          |                                                                          |
+| [`memory_usage`](server.md#memory_usage)                     | &check;  |                                                                          |
+| [`shutdown`](server.md#shutdown)                             | &check;  |                                                                          |
+| [`dump_database`](server.md#dump_database)                   | &check;  |                                                                          |
+| [`db_disk_size`](server.md#db_disk_size)                     | &check;  |                                                                          |
+| [`connected_players`](server.md#connected_players)           | &check;  |                                                                          |
+| [`connected_seconds`](server.md#connected_seconds)           | &check;  |                                                                          |
+| [`idle_seconds`](server.md#idle_seconds)                     | &check;  |                                                                          |
+| [`connection_name`](server.md#connection_name)               | &check;  | To make this 100% compat with core, reverse DNS & listen port is needed. |
+| [`connections`](server.md#connections)                       | &check;  | Returns connections for current player, or other players.                |  mooR extension. |
+| [`notify`](server.md#notify)                                 | &check;  | With `rich_notify` feature on, supports sending additional content types |
+| [`boot_player`](server.md#boot_player)                       | &check;  |                                                                          |
 | [`player_event_log_stats`](server.md#player_event_log_stats) | &check;  | mooR extension. Inspect encrypted event history.                         |
 | [`purge_player_event_log`](server.md#purge_player_event_log) | &check;  | mooR extension. Delete encrypted history / public key.                   |
-| [`server_log`](server.md#server_log)                   | &check;  |                                                                          |
-| [`load_server_options`](server.md#load_server_options) |          |                                                                          |
-| [`function_info`](server.md#function_info)             | &check;  |                                                                          |
-| [`read`](server.md#read)                               | &check;  |                                                                          |
+| [`server_log`](server.md#server_log)                         | &check;  |                                                                          |
+| [`load_server_options`](server.md#load_server_options)       |          |                                                                          |
+| [`function_info`](server.md#function_info)                   | &check;  |                                                                          |
+| [`read`](server.md#read)                                     | &check;  |                                                                          |
 
 ### Tasks
 
@@ -178,18 +178,18 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 
 ### Execution
 
-| Name                                         | Complete | Notes        |
-|----------------------------------------------|----------|--------------|
-| [`call_function`](server.md#call_function)   | &check;  |              |
-| [`raise`](server.md#raise)                   | &check;  |              |
-| [`suspend`](server.md#suspend)               | &check;  |              |
-| [`seconds_left`](server.md#seconds_left)     | &check;  |              |
-| [`ticks_left`](server.md#ticks_left)         | &check;  |              |
-| [`pass`](server.md#pass)                     | &check;  | Is an opcode |
-| [`set_task_perms`](server.md#set_task_perms) | &check;  |              |
-| [`caller_perms`](server.md#caller_perms)     | &check;  |              |
-| [`callers`](server.md#callers)               | &check;  |              |
-| [`task_stack`](server.md#task_stack)         |          |              |
+| Name                                         | Complete | Notes          |
+|----------------------------------------------|----------|----------------|
+| [`call_function`](server.md#call_function)   | &check;  |                |
+| [`raise`](server.md#raise)                   | &check;  |                |
+| [`suspend`](server.md#suspend)               | &check;  |                |
+| [`seconds_left`](server.md#seconds_left)     | &check;  |                |
+| [`ticks_left`](server.md#ticks_left)         | &check;  |                |
+| [`pass`](server.md#pass)                     | &check;  | Is an opcode   |
+| [`set_task_perms`](server.md#set_task_perms) | &check;  |                |
+| [`caller_perms`](server.md#caller_perms)     | &check;  |                |
+| [`callers`](server.md#callers)               | &check;  |                |
+| [`task_stack`](server.md#task_stack)         |          |                |
 | [`function_help`](server.md#function_help)   | &check;  | mooR extension |
 
 ### Network connections
@@ -255,12 +255,14 @@ Functions not part of the original LambdaMOO, but added in moor
 
 ### Flyweights & Symbols (new types)
 
-| Name          | Description                                                             | Notes                                                 |
-|---------------|-------------------------------------------------------------------------|-------------------------------------------------------|
-| `slots`       | Returns the slots on a given flyweight                                  | Available only if the flyweights feature is turned on |
-| `remove_slot` | Returns a copy of the flyweight with the given slot removed, if present | Available only if the flyweights feature is turned on |
-| `add_slot`    | Returns a copy of the flyweight with a new slot added                   | Available only if the flyweights feature is turned on |
-| `tosym`       | Turns the given value into a Symbol                                     | Available only if the symbols feature is turned on    |
+| Name            | Description                                                              | Notes                                                 |
+|-----------------|--------------------------------------------------------------------------|-------------------------------------------------------|
+| `toflyweight`   | Build a flyweight from a delegate, slots map, and optional contents list | Available only if the flyweights feature is turned on |
+| `flyslots`      | Returns the slots on a given flyweight as a map                          | Available only if the flyweights feature is turned on |
+| `flycontents`   | Returns the contents list from a flyweight                               | Available only if the flyweights feature is turned on |
+| `flyslotset`    | Returns a copy of the flyweight with a slot added or updated             | Available only if the flyweights feature is turned on |
+| `flyslotremove` | Returns a copy of the flyweight with the given slot removed, if present  | Available only if the flyweights feature is turned on |
+| `tosym`         | Turns the given value into a Symbol                                      | Available only if the symbols feature is turned on    |
 
 ### Expanded error handling
 

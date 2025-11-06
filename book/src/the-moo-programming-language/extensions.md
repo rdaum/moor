@@ -164,22 +164,22 @@ Flyweights have three components only one of this is mandatory:
 Which is expressed in the following literal syntax:
 
 ```moo
-< delegate, [ slot -> value, ... ], { contents } >
+< delegate, .slot = value, ..., { contents } >
 ```
 
 Examples:
 
 ```moo
-< $key, [ password -> "secret" ], { 1, 2, 3 } >
-< $exit, [ name -> "door", locked -> 1, description -> "..." ] >
-< $password, [ crypted -> "fsadfdsa", salt -> "sdfasfd" ]>
+< $key, .password = "secret", { 1, 2, 3 } >
+< $exit, .name = "door", .locked = 1, .description = "..." >
+< $password, .crypted = "fsadfdsa", .salt = "sdfasfd" >
 ```
 
 When accessing a property (or slot) on a flyweight using property accessing syntax, the system will first check the
 flyweight itself, and then check the delegate object. If the property is not found on either, it will return `E_PROPNF`:
 
 ```moo
-let x = < $key, [ password -> "secret" ] >;
+let x = < $key, .password = "secret" >;
 return x.password;
 
 => "secret"
@@ -188,7 +188,7 @@ return x.password;
 Verbs cannot be defined on a flyweight, but calling a verb on one will attempt to call it on the delegate:
 
 ```moo
-let x = < $key, [ password -> "secret" >;
+let x = < $key, .password = "secret" >;
 x:unlock("magic_key");
 ```
 

@@ -263,7 +263,7 @@ impl Var {
             Variant::Str(s) => !s.is_empty(),
             Variant::Map(m) => !m.is_empty(),
             Variant::Err(_) => false,
-            Variant::Flyweight(f) => !f.is_empty(),
+            Variant::Flyweight(f) => !f.is_contents_empty(),
             Variant::Sym(_) => true,
             Variant::Binary(b) => !b.is_empty(),
             Variant::Lambda(_) => true,
@@ -724,7 +724,7 @@ impl Var {
     pub fn type_class(&self) -> TypeClass<'_> {
         match self.variant() {
             Variant::List(s) => TypeClass::Sequence(s),
-            Variant::Flyweight(f) => TypeClass::Sequence(f),
+            Variant::Flyweight(_) => TypeClass::Scalar,
             Variant::Str(s) => TypeClass::Sequence(s),
             Variant::Binary(b) => TypeClass::Sequence(b.as_ref()),
             Variant::Map(m) => TypeClass::Associative(m),

@@ -345,21 +345,17 @@ impl<'a> Unparse<'a> {
                 }
             }
             Expr::Flyweight(delegate, slots, contents) => {
-                // "< #1, [ slot -> value, ...], {1, 2, 3} >"
+                // "< #1, .slot = value, ..., {1, 2, 3} >"
                 let mut buffer = String::new();
                 buffer.push('<');
                 buffer.push_str(self.unparse_expr(delegate)?.as_str());
                 if !slots.is_empty() {
-                    buffer.push_str(", [");
-                    for (i, (slot, value)) in slots.iter().enumerate() {
+                    for (slot, value) in slots.iter() {
+                        buffer.push_str(", .");
                         buffer.push_str(&slot.as_arc_string());
-                        buffer.push_str(" -> ");
+                        buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(value)?.as_str());
-                        if i + 1 < slots.len() {
-                            buffer.push_str(", ");
-                        }
                     }
-                    buffer.push(']');
                 }
                 if let Some(contents_expr) = contents {
                     buffer.push_str(", ");
@@ -933,21 +929,17 @@ pub fn to_literal(v: &Var) -> String {
         Variant::Err(e) => e.name().to_string().to_uppercase(),
         Variant::Flyweight(fl) => {
             // Syntax:
-            // < delegate, [ s -> v, ... ], v, v, v ... >
+            // < delegate, .slot = value, ..., { ... } >
             let mut result = String::new();
             result.push('<');
             result.push_str(fl.delegate().to_literal().as_str());
             if !fl.slots().is_empty() {
-                result.push_str(", [");
-                for (i, (k, v)) in fl.slots().iter().enumerate() {
-                    if i > 0 {
-                        result.push_str(", ");
-                    }
+                for (k, v) in fl.slots().iter() {
+                    result.push_str(", .");
                     result.push_str(&k.as_arc_string());
-                    result.push_str(" -> ");
+                    result.push_str(" = ");
                     result.push_str(to_literal(v).as_str());
                 }
-                result.push(']');
             }
             let v = fl.contents();
             if !v.is_empty() {
@@ -1190,22 +1182,18 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
         }
         Variant::Flyweight(fl) => {
             // Syntax:
-            // < delegate, [ s -> v, ... ], v, v, v ... >
+            // < delegate, .slot = value, ..., { ... } >
             result.push('<');
             result.push_str(fl.delegate().to_literal().as_str());
             if !fl.slots().is_empty() {
-                result.push_str(", [");
-                for (i, (k, v)) in fl.slots().iter().enumerate() {
-                    if i > 0 {
-                        result.push_str(", ");
-                    }
+                for (k, v) in fl.slots().iter() {
+                    result.push_str(", .");
                     result.push_str(&k.as_arc_string());
-                    result.push_str(" -> ");
+                    result.push_str(" = ");
                     result.push_str(
                         to_literal_objsub(v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
                     );
                 }
-                result.push(']');
             }
             let v = fl.contents();
             if !v.is_empty() {
@@ -1557,7 +1545,7 @@ end"#; "complex scatter declaration with optional and rest")]
 
     #[test]
     fn test_flyweight() {
-        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>;"#;
+        let program = r#"return <#1, .slot = "123", {1, 2, 3}>;"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());

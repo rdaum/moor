@@ -195,9 +195,9 @@ lambda_param = { scatter_optional | scatter_target | scatter_rest }
 
 list     = { ("{" ~ exprlist ~ "}" ~ !"=>") | "{}" }
 
-// flyweight is < parent, [ prop -> value, ... ], contents >
-flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ expr)? ~ ">" }
-flyweight_slots    = { ("[" ~ (ident ~ "->" ~ expr) ~ ("," ~ ident ~ "->" ~ expr)* ~ "]") | ( "[" ~ "]") }
+// flyweight is < parent, .slot = value, ..., contents? >
+flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slot)* ~ ("," ~ expr)? ~ ">" }
+flyweight_slot     = { "." ~ ident ~ "=" ~ expr }
 
 exprlist = { argument ~ ("," ~ argument)* }
 argument = { expr | "@" ~ expr }
@@ -338,8 +338,8 @@ variable = { ident }
 literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | ident  }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}" ~ !"=>") | "{}" }
-literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }
-literal_flyweight_slots = { ("[" ~ (ident ~ "->" ~ literal) ~ ("," ~ ident ~ "->" ~ literal)* ~ "]") | ("[" ~ "]") }
+literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slot)* ~ ("," ~ literal_flyweight_contents)? ~ ">" }
+literal_flyweight_slot = { "." ~ ident ~ "=" ~ literal }
 literal_flyweight_contents = { "{" ~ (literal ~ ("," ~ literal)*)? ~ "}" }
 literal_lambda = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr ~ lambda_metadata? }
 lambda_metadata = { "with" ~ lambda_captured? ~ lambda_self_ref? }

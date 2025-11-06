@@ -1,461 +1,82 @@
-// Flyweight tests - testing anonymous lightweight object values
-// Flyweights combine features of objects (delegate verbs), maps (named slots),
-// and lists (contents)
-
-// Flyweights are only enabled if the server has the flyweight_type feature enabled
+// Flyweight tests - verification of literal syntax and builtins
 @programmer
 
-// test_basic_flyweight_creation
-// Simplest flyweight - just a delegate
+// basic literal
 ; return typeof(<#0>);
 FLYWEIGHT
 
 ; return toliteral(<#0>);
 "<#0>"
 
-; return <#0>;
- <#0>
+// literal with slots and contents
+; return toliteral(<#0, .name = "sword", .power = 10, {"edge"}>);
+"<#0, .name = \"sword\", .power = 10, {\"edge\"}>"
 
-// test_flyweight_with_empty_slots_and_contents
-; return <#0, [], {}>;
- <#0>
+// property access resolves via slots
+; $tmp = <#0, .name = "sword", .power = 10>;
+; return {$tmp.name, $tmp.power};
+{"sword", 10}
 
-// test_flyweight_with_slots
-; return toliteral(<#0, [name -> "sword", power -> 10]>);
-"<#0, [name -> \"sword\", power -> 10]>"
+// flyslots() returns a map of slot values
+; $tmp = <#0, .name = "sword", .power = 10>;
+; return flyslots($tmp);
+['name -> "sword", 'power -> 10]
 
-// test_flyweight_with_contents
-; return <#0, [], {"item1", "item2", "item3"}>;
- <#0, {"item1", "item2", "item3"}>
-
-; return toliteral(<#0, [], {"item1", "item2"}> );
-"<#0, {\"item1\", \"item2\"}>"
-
-// test_flyweight_with_slots_and_contents
-; return toliteral(<#0, [x -> 5, y -> 10], {1, 2, 3}>);
-"<#0, [x -> 5, y -> 10], {1, 2, 3}>"
-
-; return toliteral(<#0, [name -> "chest"], {"gold", "ruby"}> );
-"<#0, [name -> \"chest\"], {\"gold\", \"ruby\"}>"
-
-// test_slots_builtin_returns_map_of_slots
-; $tmp = <#0, [a -> 1, b -> 2, c -> 3]>;
-; return slots($tmp);
-['a -> 1, 'b -> 2, 'c -> 3]
-
-; return typeof(slots($tmp));
+; return typeof(flyslots($tmp));
 MAP
 
-; return length(slots($tmp));
-3
-
-// test_slots_on_empty_flyweight
-; return slots(<#0>);
-[]
-
-; return length(slots(<#0>));
-0
-
-// test_add_slot_adds_new_slot
-; $tmp = <#0, [a -> 1]>;
-; return add_slot($tmp, 'b, 2);
- <#0, [a -> 1, b -> 2]>
-
-; return slots(add_slot($tmp, 'b, 2));
-['a -> 1, 'b -> 2]
-
-// test_add_slot_updates_existing_slot
-; $tmp = <#0, [a -> 1, b -> 2]>;
-; return add_slot($tmp, 'b, 99);
- <#0, [a -> 1, b -> 99]>
-
-; return slots(add_slot($tmp, 'a, "changed"));
-['a -> "changed", 'b -> 2]
-
-// test_add_slot_preserves_original_flyweight
-; $tmp = <#0, [a -> 1]>;
-; $tmp2 = add_slot($tmp, 'b, 2);
-; return slots($tmp);
-['a -> 1]
-
-; return slots($tmp2);
-['a -> 1, 'b -> 2]
-
-// test_add_slot_preserves_contents
-; $tmp = <#0, [a -> 1], {"x", "y"}>;
-; return add_slot($tmp, 'b, 2);
- <#0, [a -> 1, b -> 2], {"x", "y"}>
-
-// test_remove_slot_removes_existing_slot
-; $tmp = <#0, [a -> 1, b -> 2, c -> 3]>;
-; return remove_slot($tmp, 'b);
- <#0, [a -> 1, c -> 3]>
-
-; return slots(remove_slot($tmp, 'a));
-['b -> 2, 'c -> 3]
-
-// test_remove_slot_on_nonexistent_slot_returns_same_flyweight
-; $tmp = <#0, [a -> 1, b -> 2]>;
-; return remove_slot($tmp, 'nonexistent);
- <#0, [a -> 1, b -> 2]>
-
-; return slots(remove_slot($tmp, 'z));
-['a -> 1, 'b -> 2]
-
-// test_remove_slot_preserves_original
-; $tmp = <#0, [a -> 1, b -> 2]>;
-; $tmp2 = remove_slot($tmp, 'a);
-; return slots($tmp);
-['a -> 1, 'b -> 2]
-
-; return slots($tmp2);
-['b -> 2]
-
-// test_remove_slot_preserves_contents
-; $tmp = <#0, [a -> 1, b -> 2], {"item"}>;
-; return remove_slot($tmp, 'a);
- <#0, [b -> 2], {"item"}>
-
-// test_property_access_on_flyweight_slots
-; $tmp = <#0, [name -> "sword", power -> 10]>;
-; return $tmp.name;
-"sword"
-
-; return $tmp.power;
-10
-
-// test_property_access_on_nonexistent_slot_raises_error
-; $tmp = <#0, [name -> "sword"]>;
-; return $tmp.nonexistent;
-E_PROPNF
-
-// test_flyweight_delegate_access
-; $tmp = <#0, [x -> 1]>;
-; return $tmp.delegate;
-#0
-
-; $tmp = <#0>;
-; return $tmp.delegate;
-#0
-
-// test_flyweight_contents_access_via_delegate
-; $tmp = <#0, [], {"a", "b", "c"}>;
-; return length($tmp);
-3
-
-; return $tmp[1];
-"a"
-
-; return $tmp[2];
-"b"
-
-; return $tmp[3];
-"c"
-
-// test_flyweight_contents_range
-; $tmp = <#0, [], {1, 2, 3, 4, 5}>;
-; return $tmp[2..4];
-{2, 3, 4}
-
-; return $tmp[1..2];
-{1, 2}
-
-// test_flyweight_sequence_operations_return_new_flyweight
-; $tmp = <#0, [x -> 1], {1, 2, 3}>;
-; $tmp2 = $tmp;
-; $tmp2[2] = 99;
-; return $tmp2;
- <#0, [x -> 1], {1, 99, 3}>
-
-; return $tmp;
- <#0, [x -> 1], {1, 2, 3}>
-
-// test_flyweight_push_operation
-; $tmp = <#0, [], {1, 2}>;
-; return {@$tmp, 3};
- <#0, {1, 2, 3}>
-
-// test_flyweight_equality
-; return <#0> == <#0>;
-1
-
-; return equal(<#0>, <#0>);
-1
-
-; return <#0, [a -> 1]> == <#0, [a -> 1]>;
-1
-
-; return <#0, [a -> 1]> == <#0, [a -> 2]>;
-0
-
-; return <#0, [], {1}> == <#0, [], {1}>;
-1
-
-; return <#0, [], {1}> == <#0, [], {2}>;
-0
-
-// test_flyweight_equality_with_different_delegates
-// Note: Using $nothing (#-1) as a different delegate since #1 may not exist
-; return <#0> == <$nothing>;
-0
-
-; return <#0, [a -> 1]> == <$nothing, [a -> 1]>;
-0
-
-// test_flyweight_equality_case_sensitivity
-// equal() should be case-sensitive for strings in slots
-; return equal(<#0, [name -> "Alice"]>, <#0, [name -> "alice"]>);
-0
-
-; return <#0, [name -> "Alice"]> == <#0, [name -> "alice"]>;
-1
-
-// test_equal_case_sensitivity_with_nested_strings_in_slots
-; return equal(<#0, [str -> "Hello"]>, <#0, [str -> "hello"]>);
-0
-
-; return equal(<#0, [str -> "Hello"]>, <#0, [str -> "Hello"]>);
-1
-
-// test_equal_case_sensitivity_with_strings_in_contents
-; return equal(<#0, [], {"Apple"}>, <#0, [], {"apple"}>);
-0
-
-; return equal(<#0, [], {"Apple"}>, <#0, [], {"Apple"}>);
-1
-
-// test_equal_case_sensitivity_with_lists_in_slots
-; return equal(<#0, [items -> {"Apple", "Banana"}]>, <#0, [items -> {"apple", "banana"}]>);
-0
-
-; return equal(<#0, [items -> {"Apple", "Banana"}]>, <#0, [items -> {"Apple", "Banana"}]>);
-1
-
-// test_flyweight_type_checking
-; return typeof(<#0>);
-FLYWEIGHT
-
-; $tmp = <#0, [a -> 1], {1, 2}>;
-; return typeof($tmp);
-FLYWEIGHT
-
-// test_flyweight_truthiness
-// NOTE: Flyweights appear to be falsy (like empty lists)
-; return <#0> && "yes" || "no";
-"no"
-
-; return <#0, [], {}> && "yes" || "no";
-"no"
-
-// test_flyweight_with_various_value_types_in_slots
-; $tmp = <#0, [str -> "hello", int -> 42, float -> 3.14, obj -> #123, err -> E_PERM]>;
-; return slots($tmp);
-['str -> "hello", 'int -> 42, 'float -> 3.14, 'obj -> #123, 'err -> E_PERM]
-
-; return $tmp.str;
-"hello"
-
-; return $tmp.int;
-42
-
-; return $tmp.float;
-3.14
-
-; return $tmp.obj;
-#123
-
-; return $tmp.err;
-E_PERM
-
-// test_flyweight_with_nested_collections_in_slots
-; $tmp = <#0, [list -> {1, 2, 3}, map -> ["a" -> "b"]]>;
-; return $tmp.list;
-{1, 2, 3}
-
-; return $tmp.map;
-["a" -> "b"]
-
-; return $tmp.list[2];
-2
-
-; return $tmp.map["a"];
-"b"
-
-// test_flyweight_with_nested_flyweights
-; $tmp = <#0, [inner_val -> 10]>;
-; $tmp = <#0, [nested -> $tmp]>;
-; return $tmp.nested;
- <#0, [inner_val -> 10]>
-
-; return $tmp.nested.inner_val;
-10
-
-// test_flyweight_immutability_original_unchanged
-; $tmp = <#0, [a -> 1], {1, 2, 3}>;
-; return slots(add_slot($tmp, 'b, 2));
-['a -> 1, 'b -> 2]
-
-; return slots($tmp);
-['a -> 1]
-
-// test_flyweight_tostr_representation
-; return tostr(<#0>);
-"<flyweight>"
-
-; return tostr(<#0, [a -> 1]>);
-"<flyweight>"
-
-// test_flyweight_length_with_empty_contents
-; return length(<#0>);
-0
-
-; return length(<#0, [a -> 1]>);
-0
-
-; return length(<#0, [], {}>);
-0
-
-// test_flyweight_contains_operation
-; $tmp = <#0, [], {"apple", "banana", "cherry"}>;
-; return "banana" in $tmp;
-2
-
-; return "grape" in $tmp;
-0
-
-; return "apple" in $tmp;
-1
-
-// test_is_member_with_flyweight
-; $tmp = <#0, [], {"apple", "banana", "cherry"}>;
-; return is_member("banana", $tmp);
-1
-
-; return is_member("grape", $tmp);
-0
-
-; return is_member("apple", $tmp);
-1
-
-// test_flyweight_with_symbol_keys
-; $tmp = <#0, [name -> "test", type -> 'weapon, level -> 5]>;
-; return $tmp.type;
-'weapon
-
-; return typeof($tmp.type);
-SYM
-
-// test_add_slot_with_different_value_types
-; $tmp = <#0>;
-; $tmp = add_slot($tmp, 'a, "string");
-; $tmp = add_slot($tmp, 'b, 123);
-; $tmp = add_slot($tmp, 'c, 3.14);
-; $tmp = add_slot($tmp, 'd, #0);
-; $tmp = add_slot($tmp, 'e, {1, 2, 3});
-; return length(slots($tmp));
-5
-
-; return typeof($tmp.a);
-STR
-
-; return typeof($tmp.b);
-INT
-
-; return typeof($tmp.c);
-FLOAT
-
-; return typeof($tmp.d);
-OBJ
-
-; return typeof($tmp.e);
+// flycontents() exposes list contents
+; $tmp = <#0, .name = "sword", {"edge", "balanced"}>;
+; return flycontents($tmp);
+{"edge", "balanced"}
+
+; return typeof(flycontents($tmp));
 LIST
 
-// test_slot_names_can_be_strings_or_symbols
-; $tmp = <#0>;
-; return add_slot($tmp, "converted_from_string", 1);
- <#0, [converted_from_string -> 1]>
+// flyslotset() updates or adds a slot without mutating the original
+; $tmp = <#0, .name = "sword">;
+; return {$tmp.name, flyslotset($tmp, 'name, "blade").name};
+{"sword", "blade"}
 
-; return add_slot($tmp, 'explicit_symbol, 2);
- <#0, [explicit_symbol -> 2]>
+; return flyslots(flyslotset($tmp, 'weight, 3));
+['name -> "sword", 'weight -> 3]
 
-// test_slot_names_must_be_convertible_to_symbols
-; $tmp = <#0>;
-; return add_slot($tmp, 123, 1);
-E_TYPE
+// flyslotremove() removes a slot if present
+; $tmp = <#0, .name = "sword", .weight = 3>;
+; return flyslots(flyslotremove($tmp, 'weight));
+['name -> "sword"]
 
-// test_remove_slot_accepts_strings_or_symbols
-; $tmp = <#0, [a -> 1, b -> 2]>;
-; return remove_slot($tmp, "a");
- <#0, [b -> 2]>
-
-; return remove_slot($tmp, 'b);
- <#0, [a -> 1]>
-
-// test_remove_slot_requires_convertible_to_symbol
-; $tmp = <#0, [a -> 1]>;
-; return remove_slot($tmp, 123);
-E_TYPE
-
-// test_slots_builtin_requires_flyweight
-; return slots({1, 2, 3});
-E_TYPE
-
-; return slots(#0);
-E_TYPE
-
-; return slots("string");
-E_TYPE
-
-; return slots(123);
-E_TYPE
-
-// test_add_slot_requires_flyweight
-; return add_slot({}, 'a, 1);
-E_TYPE
-
-; return add_slot(#0, 'a, 1);
-E_TYPE
-
-; return add_slot("string", 'a, 1);
-E_TYPE
-
-// test_remove_slot_requires_flyweight
-; return remove_slot({}, 'a);
-E_TYPE
-
-; return remove_slot(#0, 'a);
-E_TYPE
-
-; return remove_slot("string", 'a);
-E_TYPE
-
-// test_flyweight_value_bytes
-; $tmp = <#0, [a -> 1], {1, 2, 3}>;
-; return value_bytes($tmp) > 0;
+; return flyslotremove($tmp, 'missing) == $tmp;
 1
 
-// test_complex_flyweight_manipulation
-; $tmp = <#0, [name -> "sword", damage -> 10]>;
-; $tmp = add_slot($tmp, 'enchanted, 1);
-; $tmp = add_slot($tmp, 'owner, #123);
-; return length(slots($tmp));
-4
+// toflyweight() composes a flyweight from pieces
+; return toliteral(toflyweight(#0));
+"<#0>"
 
-; return $tmp.name;
-"sword"
+; return flyslots(toflyweight(#0, ['name -> "blade"]));
+['name -> "blade"]
 
-; return $tmp.damage;
-10
+; return toliteral(toflyweight(#0, ['name -> "blade"], {"edge"}));
+"<#0, .name = \"blade\", {\"edge\"}>"
 
-; return $tmp.enchanted;
+// length() and indexing no longer work directly on flyweights
+; return length(<#0, .name = "sword">);
+E_INVARG
+
+; return length(<#0, .name = "sword">);
+E_INVARG
+
+; return <#0, .name = "sword">[1];
+E_TYPE
+
+// contents can still be manipulated once extracted
+; $tmp = <#0, .name = "sword", {"edge", "balanced"}>;
+; return {flycontents($tmp)[1], flycontents($tmp)[2]};
+{"edge", "balanced"}
+
+// equality semantics unchanged
+; return <#0, .name = "sword"> == <#0, .name = "sword">;
 1
 
-; return $tmp.owner;
-#123
-
-; $tmp = remove_slot($tmp, 'enchanted);
-; return length(slots($tmp));
-3
-
-; return $tmp.enchanted;
-E_PROPNF
+; return <#0, .name = "sword"> == <#0, .name = "blade">;
+0
