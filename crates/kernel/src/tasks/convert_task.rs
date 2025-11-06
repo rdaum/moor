@@ -915,6 +915,7 @@ pub(crate) fn bf_frame_from_flatbuffer(
         bf_trampoline,
         bf_trampoline_arg,
         return_value,
+        caller_perms_override: None,
     })
 }
 

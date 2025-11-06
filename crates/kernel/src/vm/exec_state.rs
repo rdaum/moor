@@ -130,11 +130,36 @@ impl VMExecState {
 
     /// Return the permissions of the caller of the current activation.
     pub(crate) fn caller_perms(&self) -> Obj {
-        // Filter out builtin frames, and then take the next one.
-        let mut stack_iter = self.stack.iter().rev().filter(|a| !a.is_builtin_frame());
-        // caller is the frame just before us.
-        stack_iter.next();
-        stack_iter.next().map(|a| a.permissions).unwrap_or(NOTHING)
+        // Walk the stack backwards, skipping builtin frames (checking them for overrides)
+        // and skipping the first non-builtin frame (current), returning the second non-builtin
+        // frame's permissions (the caller).
+        let stack_iter = self.stack.iter().rev();
+        let mut non_builtin_count = 0;
+
+        for activation in stack_iter {
+            // Check if this is a builtin frame with an override
+            if let Frame::Bf(bf_frame) = &activation.frame {
+                if let Some(override_perms) = bf_frame.caller_perms_override {
+                    return override_perms;
+                }
+                // Regular builtin frame without override - skip it
+                continue;
+            }
+
+            // This is a non-builtin frame
+            non_builtin_count += 1;
+
+            // Skip the first non-builtin (current frame)
+            if non_builtin_count == 1 {
+                continue;
+            }
+
+            // Return the second non-builtin (caller frame)
+            return activation.permissions;
+        }
+
+        // No caller found
+        NOTHING
     }
 
     /// Return the permissions of the current task, which is the "starting"

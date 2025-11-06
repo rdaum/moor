@@ -46,9 +46,18 @@ use uuid::Uuid;
 /// Checks X-Real-IP and X-Forwarded-For headers first (for nginx/proxy setups),
 /// then falls back to the direct connection address
 fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr {
-    debug!("Extracting client address. Direct connect_addr: {}", connect_addr);
-    debug!("  X-Real-IP header: {:?}", headers.get("X-Real-IP").and_then(|h| h.to_str().ok()));
-    debug!("  X-Forwarded-For header: {:?}", headers.get("X-Forwarded-For").and_then(|h| h.to_str().ok()));
+    debug!(
+        "Extracting client address. Direct connect_addr: {}",
+        connect_addr
+    );
+    debug!(
+        "  X-Real-IP header: {:?}",
+        headers.get("X-Real-IP").and_then(|h| h.to_str().ok())
+    );
+    debug!(
+        "  X-Forwarded-For header: {:?}",
+        headers.get("X-Forwarded-For").and_then(|h| h.to_str().ok())
+    );
 
     // Try X-Real-IP header first (most direct)
     if let Some(real_ip) = headers.get("X-Real-IP") {

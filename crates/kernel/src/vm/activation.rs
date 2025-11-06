@@ -190,6 +190,12 @@ pub struct BfFrame {
 
     /// Return value into this frame.
     pub(crate) return_value: Option<Var>,
+
+    /// Optional override for what caller_perms() should return when called from verbs invoked
+    /// by this builtin. When set, caller_perms() returns this value instead of filtering out
+    /// this frame. Used by dispatch_command_verb to make dispatched verbs see the player as
+    /// the caller rather than the wizard who invoked dispatch_command_verb.
+    pub(crate) caller_perms_override: Option<Obj>,
 }
 
 impl Activation {
@@ -479,6 +485,7 @@ impl Activation {
             bf_trampoline: None,
             bf_trampoline_arg: None,
             return_value: None,
+            caller_perms_override: None,
         };
         let frame = Frame::Bf(bf_frame);
         Self {

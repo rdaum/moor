@@ -1907,6 +1907,11 @@ fn bf_dispatch_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfEr
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_DISPATCH_COMMAND_VERB_TRAMPOLINE_DONE);
 
+            // Override caller_perms() to return #-1 (NOTHING) to mimic top-level command execution
+            // behavior. This makes the dispatched verb behave as if it's at the root of the call
+            // chain, matching how LambdaMOO handles commands.
+            bf_frame.caller_perms_override = Some(NOTHING);
+
             // Dispatch the command verb
             Ok(VmInstr(
                 crate::vm::vm_host::ExecutionResult::DispatchCommandVerb(exec_request),
