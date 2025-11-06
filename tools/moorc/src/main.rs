@@ -105,6 +105,12 @@ pub struct Args {
 
     #[clap(long, help = "Enable debug logging")]
     debug: bool,
+
+    #[clap(
+        long,
+        help = "Path to database directory (if not specified, uses a temporary directory)"
+    )]
+    db_path: Option<PathBuf>,
 }
 
 fn emit_objdef_compile_error(
@@ -196,25 +202,32 @@ fn main() -> Result<(), eyre::Report> {
         std::process::exit(1);
     }
 
-    // Actual binary database is in a tmpdir.
-    let db_dir = match tempfile::tempdir() {
-        Ok(dir) => dir,
-        Err(e) => {
-            error!("Failed to create temporary directory: {}", e);
-            std::process::exit(1);
-        }
+    // Actual binary database is either in a specified path or tmpdir.
+    // Keep the TempDir alive for the entire scope if we're using a temp directory.
+    let _temp_dir_guard;
+    let db_path = if let Some(ref path) = args.db_path {
+        info!("Using specified database path: {}", path.display());
+        path.as_path()
+    } else {
+        _temp_dir_guard = match tempfile::tempdir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                error!("Failed to create temporary directory: {}", e);
+                std::process::exit(1);
+            }
+        };
+        info!(
+            "Using temporary database at {}",
+            _temp_dir_guard.path().display()
+        );
+        _temp_dir_guard.path()
     };
 
-    info!("Opening temporary database at {}", db_dir.path().display());
-    let (database, _) = TxDB::open(Some(db_dir.path()), DatabaseConfig::default());
+    let (database, _) = TxDB::open(Some(db_path), DatabaseConfig::default());
     let mut loader_interface = match database.loader_client() {
         Ok(loader) => loader,
         Err(e) => {
-            error!(
-                "Unable to open temporary database at {}: {}",
-                db_dir.path().display(),
-                e
-            );
+            error!("Unable to open database at {}: {}", db_path.display(), e);
             std::process::exit(1);
         }
     };
@@ -295,10 +308,7 @@ fn main() -> Result<(), eyre::Report> {
     // Dump phase.
     if let Some(textdump_path) = args.out_textdump {
         let Ok(loader_interface) = database.create_snapshot() else {
-            error!(
-                "Unable to open temporary database at {}",
-                db_dir.path().display()
-            );
+            error!("Unable to open database at {}", db_path.display());
             return Ok(());
         };
 
@@ -333,10 +343,7 @@ fn main() -> Result<(), eyre::Report> {
 
     if let Some(dirdump_path) = args.out_objdef_dir {
         let Ok(loader_interface) = database.create_snapshot() else {
-            error!(
-                "Unable to open temporary database at {}",
-                db_dir.path().display()
-            );
+            error!("Unable to open database at {}", db_path.display());
             return Ok(());
         };
 
@@ -350,6 +357,10 @@ fn main() -> Result<(), eyre::Report> {
 
     if args.run_tests != Some(true) && args.test_directory.is_none() {
         info!("No tests to run. Exiting.");
+        info!("Dropping database to trigger shutdown...");
+        // Explicitly drop database to ensure clean shutdown with barrier waiting
+        drop(database);
+        info!("Database dropped, moorc exiting");
         return Ok(());
     }
 
