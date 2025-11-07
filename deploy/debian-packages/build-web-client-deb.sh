@@ -56,7 +56,7 @@ EOF
 
 # Build the package
 echo "Building debian package..."
-dpkg-deb --build ${BUILD_DIR} ${PACKAGE_NAME}_${VERSION}_all.deb
+dpkg-deb --root-owner-group --build ${BUILD_DIR} ${PACKAGE_NAME}_${VERSION}_all.deb
 
 echo "Package built successfully: ${PACKAGE_NAME}_${VERSION}_all.deb"
 

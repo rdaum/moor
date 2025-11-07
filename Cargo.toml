@@ -83,6 +83,13 @@ lto = "fat"
 # the binary.
 debug = "full"
 
+# Faster release profile for testing/packaging where build time matters more than runtime optimization
+[profile.release-fast]
+inherits = "release"
+codegen-units = 16 # Use default parallelism for faster compilation
+lto = "thin" # Lighter LTO - faster to compile, still gets most benefits
+debug = false # No debug symbols to save memory/disk during build
+
 [workspace.dependencies]
 # Core Runtime & System
 gdt-cpus = "25.5"

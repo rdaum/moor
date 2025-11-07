@@ -40,32 +40,40 @@ fi
 echo "Prerequisites OK"
 echo ""
 
-# Build Rust binaries in release mode
+# Build Rust binaries using release-fast profile (faster builds, less memory usage)
 echo "======================================"
-echo "Building Rust workspace (release)"
+echo "Building Rust workspace (release-fast profile)"
 echo "======================================"
-cargo build --release --workspace
+echo "Using CARGO_BUILD_JOBS=2 to limit memory usage..."
+CARGO_BUILD_JOBS=2 cargo build --profile release-fast --workspace
 echo ""
 
 # Build daemon package
 echo "======================================"
 echo "Building moor-daemon package"
 echo "======================================"
-cargo deb -p moor-daemon --no-build
+cargo deb -p moor-daemon --profile release-fast --no-build
 echo ""
 
 # Build telnet-host package
 echo "======================================"
 echo "Building moor-telnet-host package"
 echo "======================================"
-cargo deb -p moor-telnet-host --no-build
+cargo deb -p moor-telnet-host --profile release-fast --no-build
 echo ""
 
 # Build web-host package
 echo "======================================"
 echo "Building moor-web-host package"
 echo "======================================"
-cargo deb -p moor-web-host --no-build
+cargo deb -p moor-web-host --profile release-fast --no-build
+echo ""
+
+# Build curl-worker package
+echo "======================================"
+echo "Building moor-curl-worker package"
+echo "======================================"
+cargo deb -p moor-curl-worker --profile release-fast --no-build
 echo ""
 
 # Build web client package (if Node.js is available)

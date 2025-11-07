@@ -1,4 +1,17 @@
 #!/bin/bash
+# Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, version
+# 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
 # Master test runner for all deployment configurations
 
 set -e
@@ -72,6 +85,14 @@ main() {
         "web-basic"
         "web-ssl"
     )
+
+    # Add debian-packages if prerequisites are available
+    if command -v cargo-deb &> /dev/null && command -v incus &> /dev/null; then
+        DEPLOYMENTS+=("debian-packages")
+    else
+        echo -e "${YELLOW}⚠ Skipping debian-packages test (requires cargo-deb and incus)${NC}"
+        echo
+    fi
 
     # Run each deployment test
     for deployment in "${DEPLOYMENTS[@]}"; do
