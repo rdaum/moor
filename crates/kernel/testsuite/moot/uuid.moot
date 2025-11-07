@@ -1,0 +1,22 @@
+// Test uuid() builtin function
+
+// Test that uuid() generates a valid v7 UUID string
+; u = uuid(); return typeof(u) == 2 && length(u) == 36;
+1
+
+// Test that uuid() generates different UUIDs on each call
+; u1 = uuid(); u2 = uuid(); return u1 != u2;
+1
+
+// Test reconstruction from two integers
+// Using known UUID: 550e8400-e29b-41d4-a716-446655440000
+; high = 6128981282234515924; low = -6406858213580079104; return uuid(high, low);
+"550e8400-e29b-41d4-a716-446655440000"
+
+// Test that uuid() with wrong number of arguments raises E_ARGS
+; return uuid(42);
+E_ARGS
+
+// Test that uuid() with wrong argument types raises E_TYPE
+; return uuid("foo", "bar");
+E_TYPE
