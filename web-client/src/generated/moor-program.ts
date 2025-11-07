@@ -5,6 +5,7 @@ export { ForkVector } from "./moor-program/fork-vector.js";
 export { LineSpan } from "./moor-program/line-span.js";
 export { StoredDeclType } from "./moor-program/stored-decl-type.js";
 export { StoredDecl } from "./moor-program/stored-decl.js";
+export { StoredErrorOperand } from "./moor-program/stored-error-operand.js";
 export { StoredForRangeOperand } from "./moor-program/stored-for-range-operand.js";
 export { StoredForSequenceOperand } from "./moor-program/stored-for-sequence-operand.js";
 export { StoredJumpLabel } from "./moor-program/stored-jump-label.js";

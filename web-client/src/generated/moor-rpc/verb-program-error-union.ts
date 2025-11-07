@@ -3,25 +3,29 @@
 import { NoVerbToProgram } from "../moor-rpc/no-verb-to-program.js";
 import { VerbCompilationError } from "../moor-rpc/verb-compilation-error.js";
 import { VerbDatabaseError } from "../moor-rpc/verb-database-error.js";
+import { VerbPermissionDenied } from "../moor-rpc/verb-permission-denied.js";
 
 export enum VerbProgramErrorUnion {
     NONE = 0,
     NoVerbToProgram = 1,
-    VerbCompilationError = 2,
-    VerbDatabaseError = 3,
+    VerbPermissionDenied = 2,
+    VerbCompilationError = 3,
+    VerbDatabaseError = 4,
 }
 
 export function unionToVerbProgramErrorUnion(
     type: VerbProgramErrorUnion,
     accessor: (
-        obj: NoVerbToProgram | VerbCompilationError | VerbDatabaseError,
-    ) => NoVerbToProgram | VerbCompilationError | VerbDatabaseError | null,
-): NoVerbToProgram | VerbCompilationError | VerbDatabaseError | null {
+        obj: NoVerbToProgram | VerbCompilationError | VerbDatabaseError | VerbPermissionDenied,
+    ) => NoVerbToProgram | VerbCompilationError | VerbDatabaseError | VerbPermissionDenied | null,
+): NoVerbToProgram | VerbCompilationError | VerbDatabaseError | VerbPermissionDenied | null {
     switch (VerbProgramErrorUnion[type]) {
         case "NONE":
             return null;
         case "NoVerbToProgram":
             return accessor(new NoVerbToProgram())! as NoVerbToProgram;
+        case "VerbPermissionDenied":
+            return accessor(new VerbPermissionDenied())! as VerbPermissionDenied;
         case "VerbCompilationError":
             return accessor(new VerbCompilationError())! as VerbCompilationError;
         case "VerbDatabaseError":
@@ -35,15 +39,17 @@ export function unionListToVerbProgramErrorUnion(
     type: VerbProgramErrorUnion,
     accessor: (
         index: number,
-        obj: NoVerbToProgram | VerbCompilationError | VerbDatabaseError,
-    ) => NoVerbToProgram | VerbCompilationError | VerbDatabaseError | null,
+        obj: NoVerbToProgram | VerbCompilationError | VerbDatabaseError | VerbPermissionDenied,
+    ) => NoVerbToProgram | VerbCompilationError | VerbDatabaseError | VerbPermissionDenied | null,
     index: number,
-): NoVerbToProgram | VerbCompilationError | VerbDatabaseError | null {
+): NoVerbToProgram | VerbCompilationError | VerbDatabaseError | VerbPermissionDenied | null {
     switch (VerbProgramErrorUnion[type]) {
         case "NONE":
             return null;
         case "NoVerbToProgram":
             return accessor(index, new NoVerbToProgram())! as NoVerbToProgram;
+        case "VerbPermissionDenied":
+            return accessor(index, new VerbPermissionDenied())! as VerbPermissionDenied;
         case "VerbCompilationError":
             return accessor(index, new VerbCompilationError())! as VerbCompilationError;
         case "VerbDatabaseError":

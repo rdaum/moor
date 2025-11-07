@@ -6,6 +6,7 @@ import { Symbol } from "../moor-common/symbol.js";
 import { ForkLineSpans } from "../moor-program/fork-line-spans.js";
 import { ForkVector } from "../moor-program/fork-vector.js";
 import { LineSpan } from "../moor-program/line-span.js";
+import { StoredErrorOperand } from "../moor-program/stored-error-operand.js";
 import { StoredForRangeOperand } from "../moor-program/stored-for-range-operand.js";
 import { StoredForSequenceOperand } from "../moor-program/stored-for-sequence-operand.js";
 import { StoredJumpLabel } from "../moor-program/stored-jump-label.js";
@@ -223,8 +224,23 @@ export class StoredMooRProgram {
             : null;
     }
 
-    lambdaPrograms(index: number, obj?: StoredMooRProgram): StoredMooRProgram | null {
+    errorOperandsFull(index: number, obj?: StoredErrorOperand): StoredErrorOperand | null {
         const offset = this.bb!.__offset(this.bb_pos, 30);
+        return offset
+            ? (obj || new StoredErrorOperand()).__init(
+                this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
+                this.bb!,
+            )
+            : null;
+    }
+
+    errorOperandsFullLength(): number {
+        const offset = this.bb!.__offset(this.bb_pos, 30);
+        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
+    }
+
+    lambdaPrograms(index: number, obj?: StoredMooRProgram): StoredMooRProgram | null {
+        const offset = this.bb!.__offset(this.bb_pos, 32);
         return offset
             ? (obj || new StoredMooRProgram()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -234,12 +250,12 @@ export class StoredMooRProgram {
     }
 
     lambdaProgramsLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 30);
+        const offset = this.bb!.__offset(this.bb_pos, 32);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     lineNumberSpans(index: number, obj?: LineSpan): LineSpan | null {
-        const offset = this.bb!.__offset(this.bb_pos, 32);
+        const offset = this.bb!.__offset(this.bb_pos, 34);
         return offset
             ? (obj || new LineSpan()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -249,12 +265,12 @@ export class StoredMooRProgram {
     }
 
     lineNumberSpansLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 32);
+        const offset = this.bb!.__offset(this.bb_pos, 34);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     forkLineNumberSpans(index: number, obj?: ForkLineSpans): ForkLineSpans | null {
-        const offset = this.bb!.__offset(this.bb_pos, 34);
+        const offset = this.bb!.__offset(this.bb_pos, 36);
         return offset
             ? (obj || new ForkLineSpans()).__init(
                 this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
@@ -264,12 +280,12 @@ export class StoredMooRProgram {
     }
 
     forkLineNumberSpansLength(): number {
-        const offset = this.bb!.__offset(this.bb_pos, 34);
+        const offset = this.bb!.__offset(this.bb_pos, 36);
         return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
     }
 
     static startStoredMooRProgram(builder: flatbuffers.Builder) {
-        builder.startObject(16);
+        builder.startObject(17);
     }
 
     static addVersion(builder: flatbuffers.Builder, version: number) {
@@ -473,8 +489,24 @@ export class StoredMooRProgram {
         builder.startVector(1, numElems, 1);
     }
 
+    static addErrorOperandsFull(builder: flatbuffers.Builder, errorOperandsFullOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(13, errorOperandsFullOffset, 0);
+    }
+
+    static createErrorOperandsFullVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
+        builder.startVector(4, data.length, 4);
+        for (let i = data.length - 1; i >= 0; i--) {
+            builder.addOffset(data[i]!);
+        }
+        return builder.endVector();
+    }
+
+    static startErrorOperandsFullVector(builder: flatbuffers.Builder, numElems: number) {
+        builder.startVector(4, numElems, 4);
+    }
+
     static addLambdaPrograms(builder: flatbuffers.Builder, lambdaProgramsOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(13, lambdaProgramsOffset, 0);
+        builder.addFieldOffset(14, lambdaProgramsOffset, 0);
     }
 
     static createLambdaProgramsVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -490,7 +522,7 @@ export class StoredMooRProgram {
     }
 
     static addLineNumberSpans(builder: flatbuffers.Builder, lineNumberSpansOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(14, lineNumberSpansOffset, 0);
+        builder.addFieldOffset(15, lineNumberSpansOffset, 0);
     }
 
     static createLineNumberSpansVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
@@ -506,7 +538,7 @@ export class StoredMooRProgram {
     }
 
     static addForkLineNumberSpans(builder: flatbuffers.Builder, forkLineNumberSpansOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(15, forkLineNumberSpansOffset, 0);
+        builder.addFieldOffset(16, forkLineNumberSpansOffset, 0);
     }
 
     static createForkLineNumberSpansVector(
@@ -538,9 +570,9 @@ export class StoredMooRProgram {
         builder.requiredField(offset, 24); // range_comprehensions
         builder.requiredField(offset, 26); // list_comprehensions
         builder.requiredField(offset, 28); // error_operands
-        builder.requiredField(offset, 30); // lambda_programs
-        builder.requiredField(offset, 32); // line_number_spans
-        builder.requiredField(offset, 34); // fork_line_number_spans
+        builder.requiredField(offset, 32); // lambda_programs
+        builder.requiredField(offset, 34); // line_number_spans
+        builder.requiredField(offset, 36); // fork_line_number_spans
         return offset;
     }
 }

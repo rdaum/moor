@@ -109,6 +109,9 @@ pub fn verb_program_error_to_flatbuffer_struct(
         VerbProgramError::NoVerbToProgram => {
             rpc::VerbProgramErrorUnion::NoVerbToProgram(Box::new(rpc::NoVerbToProgram {}))
         }
+        VerbProgramError::PermissionDenied => {
+            rpc::VerbProgramErrorUnion::VerbPermissionDenied(Box::new(rpc::VerbPermissionDenied {}))
+        }
         VerbProgramError::CompilationError(compile_error) => {
             let compile_error_fb = compilation_error_to_flatbuffer_struct(compile_error)?;
             rpc::VerbProgramErrorUnion::VerbCompilationError(Box::new(rpc::VerbCompilationError {
@@ -257,6 +260,9 @@ fn verb_program_error_from_ref(
         .map_err(|_| "Failed to read VerbProgramError union")?
     {
         rpc::VerbProgramErrorUnionRef::NoVerbToProgram(_) => Ok(VerbProgramError::NoVerbToProgram),
+        rpc::VerbProgramErrorUnionRef::VerbPermissionDenied(_) => {
+            Ok(VerbProgramError::PermissionDenied)
+        }
         rpc::VerbProgramErrorUnionRef::VerbCompilationError(_compile_error) => {
             // TODO: Implement CompileError conversion if needed
             Err("VerbCompilationError conversion not yet implemented".to_string())

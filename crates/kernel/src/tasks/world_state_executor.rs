@@ -94,10 +94,15 @@ impl WorldStateActionExecutor {
 
                 // Use get_verb here to avoid requiring the exec flag (bf_verb_code and editing tools
                 // should be able to program verbs that are readable but not executable).
-                let verbdef = self
-                    .tx
-                    .get_verb(&perms, &object, verb_name)
-                    .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
+                let verbdef =
+                    self.tx
+                        .get_verb(&perms, &object, verb_name)
+                        .map_err(|e| match e {
+                            WorldStateError::VerbPermissionDenied => {
+                                VerbProgramFailed(VerbProgramError::PermissionDenied)
+                            }
+                            _ => VerbProgramFailed(VerbProgramError::NoVerbToProgram),
+                        })?;
 
                 let program = compile(
                     code.join("\n").as_str(),
@@ -116,7 +121,12 @@ impl WorldStateActionExecutor {
                 };
                 self.tx
                     .update_verb_with_id(&perms, &object, verbdef.uuid(), update_attrs)
-                    .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
+                    .map_err(|e| match e {
+                        WorldStateError::VerbPermissionDenied => {
+                            VerbProgramFailed(VerbProgramError::PermissionDenied)
+                        }
+                        _ => VerbProgramFailed(VerbProgramError::DatabaseError),
+                    })?;
 
                 Ok(WorldStateResult::VerbProgrammed {
                     object,

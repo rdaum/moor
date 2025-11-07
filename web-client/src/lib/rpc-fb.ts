@@ -16,6 +16,7 @@
 
 import * as flatbuffers from "flatbuffers";
 import { CompileError } from "../generated/moor-common/compile-error.js";
+import { ErrorCode } from "../generated/moor-common/error-code.js";
 import { EventUnion, unionToEventUnion } from "../generated/moor-common/event-union.js";
 import { NarrativeEvent } from "../generated/moor-common/narrative-event.js";
 import { NotifyEvent } from "../generated/moor-common/notify-event.js";
@@ -35,6 +36,7 @@ import {
     unionToDaemonToHostReplyUnion,
 } from "../generated/moor-rpc/daemon-to-host-reply-union.js";
 import { EvalResult } from "../generated/moor-rpc/eval-result.js";
+import { Failure } from "../generated/moor-rpc/failure.js";
 import { HistoryResponseReply } from "../generated/moor-rpc/history-response-reply.js";
 import { HostSuccess } from "../generated/moor-rpc/host-success.js";
 import { ListObjectsReply } from "../generated/moor-rpc/list-objects-reply.js";
@@ -44,7 +46,7 @@ import { PropertyUpdated } from "../generated/moor-rpc/property-updated.js";
 import { PropertyValue } from "../generated/moor-rpc/property-value.js";
 import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union.js";
 import { ReplyResult } from "../generated/moor-rpc/reply-result.js";
-import { SchedulerErrorUnion } from "../generated/moor-rpc/scheduler-error-union.js";
+import { SchedulerErrorUnion, unionToSchedulerErrorUnion } from "../generated/moor-rpc/scheduler-error-union.js";
 import { SchedulerError } from "../generated/moor-rpc/scheduler-error.js";
 import { ServerFeatures } from "../generated/moor-rpc/server-features.js";
 import { SysPropValue } from "../generated/moor-rpc/sys-prop-value.js";
@@ -52,6 +54,7 @@ import { SystemMessageEvent } from "../generated/moor-rpc/system-message-event.j
 import { SystemVerbResponseReply } from "../generated/moor-rpc/system-verb-response-reply.js";
 import { unionToSystemVerbResponseUnion } from "../generated/moor-rpc/system-verb-response-union.js";
 import { SystemVerbSuccess } from "../generated/moor-rpc/system-verb-success.js";
+import { TaskAbortedException } from "../generated/moor-rpc/task-aborted-exception.js";
 import { TaskAbortedLimit } from "../generated/moor-rpc/task-aborted-limit.js";
 import { TaskErrorEvent } from "../generated/moor-rpc/task-error-event.js";
 import { TaskSuccessEvent } from "../generated/moor-rpc/task-success-event.js";
@@ -93,6 +96,110 @@ export interface ServerFeatureSet {
 }
 
 /**
+ * Helper function to extract error details from a Failure response
+ */
+function extractFailureError(replyResult: ReplyResult, context: string): never {
+    const resultType = replyResult.resultType();
+    const failure = unionToReplyResultUnion(
+        resultType,
+        (obj) => replyResult.result(obj),
+    ) as Failure | null;
+
+    if (failure) {
+        const rpcError = failure.error();
+        if (rpcError) {
+            const rawMessage = rpcError.message() || "Unknown error";
+            const schedulerError = rpcError.schedulerError();
+
+            console.log("Error details:", {
+                hasSchedulerError: !!schedulerError,
+                rawMessage: rawMessage,
+                errorCode: rpcError.errorCode(),
+            });
+
+            // If there's a SchedulerError, try to extract detailed error info
+            if (schedulerError) {
+                const errorType = schedulerError.errorType();
+                const errorUnion = unionToSchedulerErrorUnion(
+                    errorType,
+                    (obj: any) => schedulerError.error(obj),
+                );
+
+                console.log("SchedulerError type:", SchedulerErrorUnion[errorType]);
+
+                // Handle TaskAbortedException which contains the MOO error
+                if (errorType === SchedulerErrorUnion.TaskAbortedException && errorUnion) {
+                    const taskException = errorUnion as TaskAbortedException;
+                    const exception = taskException.exception();
+
+                    if (exception) {
+                        const error = exception.error();
+                        if (error) {
+                            const errType = error.errType();
+                            const customMsg = error.msg();
+
+                            // Map error codes to friendly messages
+                            const errorMessages: Record<number, string> = {
+                                [ErrorCode.E_NONE]: "No error",
+                                [ErrorCode.E_TYPE]: "Type mismatch",
+                                [ErrorCode.E_DIV]: "Division by zero",
+                                [ErrorCode.E_PERM]: "Permission denied",
+                                [ErrorCode.E_PROPNF]: "Property not found",
+                                [ErrorCode.E_VERBNF]: "Verb not found",
+                                [ErrorCode.E_VARNF]: "Variable not found",
+                                [ErrorCode.E_INVIND]: "Invalid indirection",
+                                [ErrorCode.E_RECMOVE]: "Recursive move",
+                                [ErrorCode.E_MAXREC]: "Too many verb calls",
+                                [ErrorCode.E_RANGE]: "Range error",
+                                [ErrorCode.E_ARGS]: "Incorrect number of arguments",
+                                [ErrorCode.E_NACC]: "Move refused by destination",
+                                [ErrorCode.E_INVARG]: "Invalid argument",
+                                [ErrorCode.E_QUOTA]: "Resource limit exceeded",
+                                [ErrorCode.E_FLOAT]: "Floating-point arithmetic error",
+                                [ErrorCode.E_FILE]: "File error",
+                                [ErrorCode.E_EXEC]: "Execution error",
+                                [ErrorCode.E_INTRPT]: "Interruption",
+                            };
+
+                            const errorName = ErrorCode[errType] || `Error ${errType}`;
+                            const friendlyMsg = errorMessages[errType] || "Unknown error";
+                            const fullMsg = customMsg || friendlyMsg;
+
+                            throw new Error(`${context} failed: ${errorName} (${fullMsg})`);
+                        }
+                    }
+                }
+            }
+
+            // Fallback: try to parse the raw message string
+            // Look for backtrace with clean error message
+            const backtraceMatch = rawMessage.match(/backtrace:\s*\[String\("([^"]+)"\)/);
+            if (backtraceMatch && backtraceMatch[1]) {
+                const backtraceLine = backtraceMatch[1];
+                // Extract just the error part: "E_PERM (Permission denied)"
+                const errorMatch = backtraceLine.match(/:\s*([EW]_\w+\s*\([^)]+\))/);
+                if (errorMatch && errorMatch[1]) {
+                    throw new Error(`${context} failed: ${errorMatch[1]}`);
+                }
+                // Fallback to full backtrace line
+                throw new Error(`${context} failed: ${backtraceLine}`);
+            }
+
+            // Try to extract just error code
+            const errorTypeMatch = rawMessage.match(/error:\s*([EW]_\w+)/);
+            if (errorTypeMatch && errorTypeMatch[1]) {
+                const errorType = errorTypeMatch[1];
+                throw new Error(`${context} failed: ${errorType}`);
+            }
+
+            // Last resort: show the raw message
+            throw new Error(`${context} failed: ${rawMessage}`);
+        }
+    }
+    throw new Error(`${context} failed with unknown error`);
+}
+
+/**
  * Evaluates a MOO expression on the server using FlatBuffer protocol
  *
  * @param authToken - Authentication token for the request
@@ -125,6 +232,11 @@ export async function performEvalFlatBuffer(authToken: string, expr: string): Pr
 
         // Navigate the union structure
         const resultType = replyResult.resultType();
+
+        // Handle Failure case
+        if (resultType === ReplyResultUnion.Failure) {
+            extractFailureError(replyResult, "Eval");
+        }
 
         if (resultType !== ReplyResultUnion.ClientSuccess) {
             throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
@@ -188,6 +300,12 @@ export async function fetchServerFeatures(): Promise<ServerFeatureSet> {
     const replyResult = ReplyResult.getRootAsReplyResult(new flatbuffers.ByteBuffer(bytes));
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Server features request");
+    }
+
     if (resultType !== ReplyResultUnion.HostSuccess) {
         throw new Error("Unexpected feature reply type");
     }
@@ -281,8 +399,7 @@ export async function getSystemPropertyFlatBuffer(
         }
 
         if (resultType === ReplyResultUnion.Failure) {
-            console.error("[FB] Server returned failure");
-            throw new Error("Server returned failure response");
+            extractFailureError(replyResult, "System property fetch");
         }
 
         if (resultType !== ReplyResultUnion.ClientSuccess) {
@@ -386,6 +503,12 @@ export async function fetchHistoryFlatBuffer(
         );
 
         const resultType = replyResult.resultType();
+
+        // Handle Failure case
+        if (resultType === ReplyResultUnion.Failure) {
+            extractFailureError(replyResult, "History fetch");
+        }
+
         if (resultType !== ReplyResultUnion.ClientSuccess) {
             throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
         }
@@ -545,6 +668,9 @@ function handleTaskError(
                 }
                 case VerbProgramErrorUnion.NoVerbToProgram:
                     message = "Verb not programmed.";
+                    break;
+                case VerbProgramErrorUnion.VerbPermissionDenied:
+                    message = "Permission denied.";
                     break;
             }
             break;
@@ -904,6 +1030,12 @@ export async function getVerbsFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Get verbs");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -972,6 +1104,12 @@ export async function getVerbCodeFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Get verb code");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -1111,6 +1249,12 @@ export async function getPropertiesFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Get properties");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -1179,6 +1323,12 @@ export async function getPropertyFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Get property");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -1243,6 +1393,12 @@ export async function getCurrentPresentationsFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Get presentations");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -1314,6 +1470,12 @@ export async function compileVerbFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Compile verb");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -1380,6 +1542,8 @@ export async function compileVerbFlatBuffer(
                     }
                     case VerbProgramErrorUnionType.NoVerbToProgram:
                         return { success: false, error: "No verb to program" };
+                    case VerbProgramErrorUnionType.VerbPermissionDenied:
+                        return { success: false, error: "Permission denied" };
                     case VerbProgramErrorUnionType.VerbDatabaseError:
                         return { success: false, error: "Database error" };
                     default:
@@ -1512,8 +1676,7 @@ export async function invokeWelcomeMessageFlatBuffer(): Promise<{
         }
 
         if (resultType === ReplyResultUnion.Failure) {
-            console.error("[FB] Server returned failure");
-            throw new Error("Server returned failure response");
+            extractFailureError(replyResult, "System property fetch");
         }
 
         if (resultType !== ReplyResultUnion.ClientSuccess) {
@@ -1642,6 +1805,12 @@ export async function listObjectsFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "List objects");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }
@@ -1716,6 +1885,12 @@ export async function updatePropertyFlatBuffer(
     );
 
     const resultType = replyResult.resultType();
+
+    // Handle Failure case
+    if (resultType === ReplyResultUnion.Failure) {
+        extractFailureError(replyResult, "Update property");
+    }
+
     if (resultType !== ReplyResultUnion.ClientSuccess) {
         throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
     }

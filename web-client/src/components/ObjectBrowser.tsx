@@ -2133,6 +2133,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     }}
                                     onDelete={() => {
                                         setVerbToDelete(selectedVerb);
+                                        setDeleteVerbDialogError(null);
                                         setShowDeleteVerbDialog(true);
                                     }}
                                     normalizeObjectInput={normalizeObjectInput}

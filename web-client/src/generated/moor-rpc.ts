@@ -171,6 +171,7 @@ export { UnknownTypeConstant } from "./moor-rpc/unknown-type-constant.js";
 export { UpdateProperty } from "./moor-rpc/update-property.js";
 export { VerbCompilationError } from "./moor-rpc/verb-compilation-error.js";
 export { VerbDatabaseError } from "./moor-rpc/verb-database-error.js";
+export { VerbPermissionDenied } from "./moor-rpc/verb-permission-denied.js";
 export { VerbProgramErrorUnion } from "./moor-rpc/verb-program-error-union.js";
 export { VerbProgramError } from "./moor-rpc/verb-program-error.js";
 export { VerbProgramFailed } from "./moor-rpc/verb-program-failed.js";

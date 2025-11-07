@@ -179,11 +179,15 @@ table CommandError {
 // Verb program errors
 union VerbProgramErrorUnion {
     NoVerbToProgram,
+    VerbPermissionDenied,
     VerbCompilationError,
     VerbDatabaseError
 }
 
 table NoVerbToProgram {
+}
+
+table VerbPermissionDenied {
 }
 
 table VerbCompilationError {

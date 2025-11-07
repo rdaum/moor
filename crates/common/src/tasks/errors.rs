@@ -23,6 +23,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Error, PartialEq, Eq, Display)]
 pub enum VerbProgramError {
     NoVerbToProgram,
+    PermissionDenied,
     CompilationError(CompileError),
     DatabaseError,
 }
