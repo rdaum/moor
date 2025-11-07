@@ -4,35 +4,63 @@ While Docker Compose is the recommended approach for most users, mooR provides s
 
 ## Debian Packages
 
-For Debian-based systems (including Ubuntu), mooR provides pre-built packages that integrate cleanly with your system's package management.
+For Debian-based systems (including Ubuntu), mooR provides native `.deb` packages that integrate cleanly with your system's package management and systemd service management.
 
 ### About Debian Packages
 
-The Debian packages are built from the `debian` directory in various mooR repositories and are available on the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases). These packages handle:
+mooR packages include:
 
-- Installing binaries in standard system locations
-- Setting up system services and users
-- Managing dependencies automatically
-- Providing standard Debian package management integration
+- **moor-daemon**: Core MOO server with systemd service
+- **moor-telnet-host**: Telnet server with systemd service
+- **moor-web-host**: Web API server with systemd service
+- **moor-curl-worker**: HTTP request worker with systemd service
+- **moor-web-client**: Static web client files (architecture-independent)
 
-### Installation Process
+All packages integrate with systemd, create necessary users and directories, and include the LambdaMOO-based lambda-moor core database by default.
 
-1. **Download the packages** from the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases)
-2. **Install using your package manager**:
-   ```bash
-   sudo dpkg -i moor-*.deb
-   sudo apt-get install -f  # Install any missing dependencies
-   ```
-3. **Configure your core database** (see [Understanding MOO Cores](understanding-moo-cores.md))
-4. **Start the services** using systemd or your preferred service manager
+### Installation Options
+
+**Option 1: Build Locally**
+
+Build packages yourself using the provided scripts in `deploy/debian-packages/`:
+
+```bash
+cd deploy/debian-packages
+./build-all-packages.sh
+sudo dpkg -i ../../target/debian/moor-*.deb
+```
+
+**Option 2: Download from Releases**
+
+Download pre-built packages from the [mooR Codeberg releases page](https://codeberg.org/timbran/moor/releases):
+
+```bash
+sudo dpkg -i moor-*.deb
+sudo apt-get install -f  # Install any missing dependencies
+```
+
+### Comprehensive Documentation
+
+For detailed installation, configuration, service management, testing, and troubleshooting:
+
+**→ See [`deploy/debian-packages/README.md`](https://codeberg.org/timbran/moor/src/branch/main/deploy/debian-packages/README.md)**
+
+This includes:
+- Complete installation and post-installation configuration
+- Service management with systemd
+- nginx setup for the web client
+- Backup and restore procedures
+- Automated testing
+- Troubleshooting guide
 
 ### When to Use Debian Packages
 
 Debian packages are ideal when:
 - You're running a Debian-based Linux distribution
 - You want system-level integration (systemd services, standard file locations)
-- You prefer traditional package management
+- You prefer traditional package management over containers
 - You're setting up a production server on bare metal or VPS
+- You want to deploy on multiple separate machines
 
 ## Building from Source
 
@@ -77,10 +105,11 @@ source ~/.cargo/env
 When building from source, you'll need to manually set up:
 
 - **PASETO authentication keys**: The daemon auto-generates these keys with the `--generate-keypair` flag (creates `moor-signing-key.pem` and `moor-verifying-key.pem`)
-- **Enrollment token**: Generate for CURVE transport encryption if using TCP endpoints: `moor-daemon --rotate-enrollment-token` or rotate later from inside the MOO with the wizard-only `rotate_enrollment_token()` builtin
 - **Configuration files**: Create appropriate configuration for each component
 - **Core database**: Install and configure your chosen MOO core
-- **Service coordination**: Ensure all components can communicate properly
+- **Service coordination**: Ensure all components can communicate properly (see [Server Architecture](server-architecture.md#communication-transport))
+  - Default: IPC (Unix domain sockets) - simplest, no encryption needed
+  - Clustered: TCP with CURVE encryption requires enrollment tokens (see `--rotate-enrollment-token` flag)
 
 The `docker-compose.yml` and `process-compose.yaml` files provide excellent examples of how to configure each component.
 

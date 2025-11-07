@@ -11,36 +11,30 @@ connections (or future facilities like file access) are handled by _workers_ tha
 those activities.
 
 To run the server, you therefore need to run not just the `moor-daemon` binary, but also one or more "hosts" (and,
-optionally "workers")
-that will connect to the daemon.
+optionally "workers") that will connect to the daemon.
 
 These processes communicate over ZeroMQ sockets, with the daemon listening for RPC requests and events, and the hosts
 and workers connecting to those sockets to send requests and receive responses.
 
-Hosts and workers do *not* need to be run on the same machine as the daemon, and can be distributed across multiple
-machines
-or processes. They are stateless and can be clustered for high availability and load balancing. They can also be
-restarted
-independently of the daemon, allowing for flexible deployment and scaling, including live upgrades of the daemon without
-restarting running connections.
+Hosts and workers can be run on the same machine as the daemon (the default) or distributed across multiple machines for
+clustered deployments. They are stateless and can be restarted independently of the daemon, allowing for flexible
+deployment and scaling.
 
-When located on the same machine, the default addresses for the daemon's RPC and events sockets use IPC (Inter-Process
-Communication) endpoints (e.g., `ipc:///tmp/moor_rpc.sock`), which are fast and efficient Unix domain sockets that
-rely on filesystem permissions for security.
+## Transport Modes
 
-When running in a distributed environment across multiple machines, you must use TCP endpoints (e.g.,
-`tcp://0.0.0.0:7899`). TCP endpoints automatically enable CURVE encryption to protect communication over the network.
+For single-machine deployments (the default), components communicate via **IPC (Unix domain sockets)** which use
+filesystem permissions for security and require no additional configuration.
 
-Examples of running the daemon and hosts using TCP connections can be found in the `docker-compose.yml` file in the
-`moor` repository.
+For clustered/multi-machine deployments, components communicate via **TCP with CURVE encryption**. See
+the [Clustered Deployment](clustered-deployment.md) guide for complete details on distributed deployments, security
+considerations, and setup instructions.
 
-## Encryption and Authentication Keys
+## Authentication Keys
 
-The mooR system uses two separate key systems for security:
+### PASETO Keys (Ed25519) - Client/Player Authentication
 
-### 1. PASETO Authentication Keys (Ed25519) - Client/Player Authentication
-
-PASETO tokens authenticate **clients/players** (connecting users) using Ed25519 digital signatures. These are used **only by the daemon** to sign and verify player session tokens.
+PASETO tokens authenticate **clients/players** (connecting users) using Ed25519 digital signatures. These are used *
+*only by the daemon** to sign and verify player session tokens.
 
 The daemon automatically generates these keys on first run when using the `--generate-keypair` flag:
 
@@ -49,7 +43,8 @@ The daemon automatically generates these keys on first run when using the `--gen
 moor-daemon --generate-keypair <other-args>
 ```
 
-This creates `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the moor config directory (`${XDG_CONFIG_HOME:-$HOME/.config}/moor`).
+This creates `moor-signing-key.pem` (private key) and `moor-verifying-key.pem` (public key) in the moor config
+directory (`${XDG_CONFIG_HOME:-$HOME/.config}/moor`).
 
 Alternatively, you can pre-generate them using `openssl`:
 
@@ -58,49 +53,8 @@ openssl genpkey -algorithm ed25519 -out moor-signing-key.pem
 openssl pkey -in moor-signing-key.pem -pubout -out moor-verifying-key.pem
 ```
 
-**Note**: Hosts and workers do **not** need these PEM files - they are only used by the daemon for client authentication.
-
-### 2. CURVE Transport Encryption (Curve25519) - Daemon↔Host/Worker Transport
-
-When using **TCP endpoints**, all ZeroMQ communication between the daemon and hosts/workers is encrypted using CurveZMQ (Curve25519 elliptic curve cryptography). When using **IPC endpoints** (local Unix domain sockets), CURVE encryption is **disabled** since communication never leaves the local machine and is protected by filesystem permissions.
-
-#### TCP Mode (Encrypted)
-
-For distributed deployments using TCP endpoints:
-
-- **Automatic Key Generation**: The daemon generates a CURVE keypair on first run (stored as Z85-encoded text)
-- **Enrollment Process**: Hosts/workers must enroll before connecting:
-  1. Generate their own CURVE keypair on first run
-  2. Connect to the enrollment endpoint (default: `tcp://0.0.0.0:7900`) with an enrollment token
-  3. Register their service type, hostname, and CURVE public key with the daemon
-  4. Daemon stores the public key in `${XDG_DATA_HOME:-$HOME/.local/share}/moor/allowed-hosts/{uuid}` for ZAP authentication
-- **ZAP Authentication**: After enrollment, the daemon validates all incoming ZMQ connections using ZeroMQ Authentication Protocol (ZAP)
-- **Per-Connection Encryption**: Each ZMQ socket (RPC REQ/REP, PUB/SUB) uses CURVE with ephemeral session keys
-
-#### IPC Mode (No Encryption)
-
-For local deployments using IPC endpoints:
-
-- **No CURVE Encryption**: IPC endpoints are exempt from CURVE encryption
-- **Filesystem Security**: Unix domain sockets rely on filesystem permissions for access control
-- **No Enrollment Required**: Hosts/workers connect directly without enrollment
-- **Performance**: IPC mode offers lower latency and higher throughput than encrypted TCP
-
-#### Enrollment Token
-
-TCP mode requires an **enrollment token** for CURVE enrollment:
-
-```bash
-# Generate enrollment token (one-time setup)
-moor-daemon --rotate-enrollment-token
-
-# Token is saved to ${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token
-# Hosts/workers and the daemon will use this path by default (no flag needed)
-```
-
-The enrollment token is a shared secret used during the CURVE enrollment process to authorize hosts/workers to register their public keys with the daemon.
-
-Once the server is running, wizard administrators can rotate the token in-world via the `rotate_enrollment_token()` builtin. The call returns the freshly generated token string and writes it back to the enrollment token file, making it easy to distribute new secrets without shell access.
+**Note**: Hosts and workers do **not** need these PEM files - they are only used by the daemon for client
+authentication.
 
 ## How to set server options
 
@@ -120,24 +74,47 @@ These options control the basic server behavior:
 - `--config-file <PATH>`: Path to configuration (YAML) file to use. If not specified, defaults are used.
 - `--connections-file <PATH>` (default: `connections.db`): Path to connections database
 - `--tasks-db <PATH>` (default: `tasks.db`): Path to persistent tasks database
-- `--rpc-listen <ADDR>` (default: `ipc:///tmp/moor_rpc.sock`): RPC server address (CURVE-encrypted if TCP)
-- `--events-listen <ADDR>` (default: `ipc:///tmp/moor_events.sock`): Events publisher listen address (CURVE-encrypted if TCP)
-- `--workers-response-listen <ADDR>` (default: `ipc:///tmp/moor_workers_response.sock`): Workers server RPC address (CURVE-encrypted if TCP)
-- `--workers-request-listen <ADDR>` (default: `ipc:///tmp/moor_workers_request.sock`): Workers server pub-sub address (CURVE-encrypted if TCP)
-- `--enrollment-listen <ADDR>` (default: `tcp://0.0.0.0:7900`): ZMQ REP socket for host/worker enrollment (not CURVE-encrypted)
-- `--enrollment-token-file <PATH>` (default: `${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token`): Path to enrollment token file
 - `--public-key <PATH>` (default: `${XDG_CONFIG_HOME:-$HOME/.config}/moor/moor-verifying-key.pem`): PEM encoded PASETO public key for token verification
 - `--private-key <PATH>` (default: `${XDG_CONFIG_HOME:-$HOME/.config}/moor/moor-signing-key.pem`): PEM encoded PASETO private key for token signing
 - `--num-io-threads <NUM>` (default: `8`): Number of ZeroMQ IO threads
 - `--debug` (default: `false`): Enable debug logging
 
+### Transport Endpoint Configuration
+
+These options configure how the daemon communicates with hosts and workers. The defaults use IPC (Unix domain sockets) for single-machine deployments. Change these to TCP addresses (e.g., `tcp://0.0.0.0:7899`) only for clustered deployments - see [Clustered Deployment](clustered-deployment.md) for details.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--rpc-listen` | `ipc:///tmp/moor_rpc.sock` | RPC server address |
+| `--events-listen` | `ipc:///tmp/moor_events.sock` | Events publisher address |
+| `--workers-request-listen` | `ipc:///tmp/moor_workers_request.sock` | Workers request pub-sub address |
+| `--workers-response-listen` | `ipc:///tmp/moor_workers_response.sock` | Workers response RPC address |
+
+### Enrollment Configuration (Clustered Deployments Only)
+
+These options are only needed for clustered deployments with TCP transport. See [Clustered Deployment](clustered-deployment.md) for complete setup instructions.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--enrollment-listen` | `tcp://0.0.0.0:7900` | Enrollment endpoint for host/worker registration |
+| `--enrollment-token-file` | `${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token` | Path to enrollment token file |
+
 ## Database Configuration
 
-These options control the database behavior:
+- `<PATH>` (positional argument): Path to the database directory
+- `--db <NAME>` (default: `world.db`): Name of the main database within the directory
+- `--connections-file <PATH>` (default: `connections.db`): Path to connections database (relative to data directory if not absolute)
+- `--tasks-db <PATH>` (default: `tasks.db`): Path to persistent tasks database (relative to data directory if not absolute)
+- `--events-db <PATH>` (default: `events.db`): Path to persistent events database (relative to data directory if not absolute)
 
-- `<PATH>` (positional argument): Path to the database file to use or create
-- `--cache-eviction-interval-seconds <SECONDS>`: Rate to run cache eviction cycles
-- `--default-eviction-threshold <SIZE>`: Default memory threshold for cache eviction
+The first positional argument specifies the database directory (typically `moor-data` or similar). The daemon stores several databases within this directory by default:
+
+- `world.db/` (or name specified by `--db`) - The main MOO database
+- `connections.db` - Connection state database
+- `tasks.db` - Persistent tasks database
+- `events.db` - Event logging database (if event logging is enabled)
+
+All database paths can be customized and are relative to the data directory unless specified as absolute paths.
 
 ## Language Features Configuration
 
@@ -158,7 +135,7 @@ These options enable or disable various MOO language features:
 | Persistent tasks    | `--persistent-tasks`        | `true`  | Enable persistent tasks between server restarts                                  |
 | Event logging       | `--enable-eventlog`         | `true`  | Enable persistent event logging and history features                             |
 | Anonymous objects   | `--anonymous-objects`       | `false` | Enable anonymous objects with automatic garbage collection                       |
-| UUID objects        | `--use-uuobjids`            | `false` | Enable UUID object identifiers like #048D05-1234567890                          |
+| UUID objects        | `--use-uuobjids`            | `false` | Enable UUID object identifiers like #048D05-1234567890                           |
 
 ## Import/Export Configuration
 
@@ -208,7 +185,9 @@ import_export_config:
 
 ## LambdaMOO Compatibility Mode
 
-If you need to maintain compatibility with LambdaMOO 1.8, you'll need to either update your core with the changes provided in the [Lambda-moor core](https://codeberg.org/timbran/moor/src/branch/main/cores/lambda-moor/README.md) or disable several features. Here's a configuration that maintains LambdaMOO compatibility by disabling mooR features:
+If you need to maintain compatibility with LambdaMOO 1.8, you'll need to either update your core with the changes
+provided in the [Lambda-moor core](https://codeberg.org/timbran/moor/src/branch/main/cores/lambda-moor/README.md) or
+disable several features. Here's a configuration that maintains LambdaMOO compatibility by disabling mooR features:
 
 ```yaml
 # LambdaMOO 1.8 compatible features
@@ -235,7 +214,8 @@ import_export_config:
 
 ## Anonymous Objects Configuration
 
-The `anonymous_objects` feature flag enables a new type of object that is automatically garbage collected when no longer referenced.
+The `anonymous_objects` feature flag enables a new type of object that is automatically garbage collected when no longer
+referenced.
 This feature is disabled by default due to performance considerations.
 
 ### Enabling Anonymous Objects

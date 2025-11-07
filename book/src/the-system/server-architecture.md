@@ -38,8 +38,23 @@ All components communicate through authenticated RPC (Remote Procedure Call) con
 - The **daemon** acts as the central coordinator
 - **Hosts** (telnet and web) connect to the daemon to relay player commands and receive responses
 - **Workers** (like curl-worker) connect to the daemon to handle specific tasks
-- Transport security uses CURVE encryption (for TCP) with enrollment-based authentication
 - Client/player authentication uses PASETO tokens signed by the daemon
+
+### Communication Transport
+
+mooR supports two communication modes between its components:
+
+**IPC (Unix Domain Sockets)** - Default for single-machine deployments
+- Simplest configuration
+- No encryption needed (kernel-level security)
+- Used by default in Docker Compose and Debian packages
+- Best for development and single-server production
+
+**TCP with CURVE Encryption** - For clustered/multi-machine deployments
+- Required when services run on separate machines
+- Uses CURVE encryption with enrollment-based authentication
+- Enrollment tokens authenticate hosts connecting to the daemon
+- See `docker-compose.cluster.yml` for example configuration
 
 ## Advantages of This Design
 

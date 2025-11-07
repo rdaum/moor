@@ -49,6 +49,7 @@
     - [Docker Compose Setup](the-system/docker-compose-setup.md)
     - [Alternative Installation Methods](the-system/alternative-installation-methods.md)
     - [Server Configuration](the-system/server-configuration.md)
+    - [Clustered Deployment](the-system/clustered-deployment.md)
     - [Event Logging](the-system/event-logging.md)
     - [Server Assumptions About the Database](the-system/server-assumptions-about-the-database.md)
     - [Object Packaging and Management](the-system/object-packaging.md)
