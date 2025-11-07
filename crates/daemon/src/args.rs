@@ -26,8 +26,19 @@ use moor_textdump::EncodingMode;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 
+use once_cell::sync::Lazy;
+
+static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+    format!(
+        "{} (commit: {})",
+        env!("CARGO_PKG_VERSION"),
+        moor_common::build::short_commit()
+    )
+});
+
 #[allow(dead_code)]
-#[derive(Parser, Debug, Serialize, Deserialize)] // requires `derive` feature
+#[derive(Parser, Debug, Serialize, Deserialize)]
+#[command(version = VERSION_STRING.as_str())]
 pub struct Args {
     #[arg(
         value_name = "data-dir",

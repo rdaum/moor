@@ -70,6 +70,7 @@ termimad.workspace = true
 
 # Utilities & Helpers
 uuid.workspace = true
+once_cell.workspace = true
 
 # Testing
 [dev-dependencies]

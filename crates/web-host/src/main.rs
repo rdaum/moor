@@ -43,7 +43,18 @@ use tokio::{
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use once_cell::sync::Lazy;
+
+static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+    format!(
+        "{} (commit: {})",
+        env!("CARGO_PKG_VERSION"),
+        moor_common::build::short_commit()
+    )
+});
+
 #[derive(Parser, Debug, Serialize, Deserialize)]
+#[command(version = VERSION_STRING.as_str())]
 struct Args {
     #[command(flatten)]
     client_args: RpcClientArgs,

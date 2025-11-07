@@ -19,6 +19,7 @@ mod testrun;
 use crate::{feature_args::FeatureArgs, testrun::run_test};
 use clap::Parser;
 use clap_derive::Parser;
+use once_cell::sync::Lazy;
 use moor_common::{
     build,
     model::{CompileError, Named, ObjectRef, PropFlag, ValSet, WorldStateSource},
@@ -44,7 +45,15 @@ use std::{
 };
 use tracing::{debug, error, info, trace, warn};
 
-#[derive(Parser, Debug)] // requires `derive` feature
+static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+    format!(
+        "{} (commit: {})",
+        env!("CARGO_PKG_VERSION"),
+        moor_common::build::short_commit()
+    )
+});
+#[derive(Parser, Debug)]
+#[command(version = VERSION_STRING.as_str())]
 pub struct Args {
     #[clap(
         long,

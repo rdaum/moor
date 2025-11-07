@@ -16,6 +16,7 @@
 
 use clap::Parser;
 use clap_derive::Parser as DeriveParser;
+use once_cell::sync::Lazy;
 use eyre::{Report, bail, eyre};
 use fs2::FileExt;
 use moor_common::model::ObjectKind;
@@ -103,9 +104,18 @@ impl<'a> MakeWriter<'a> for ExternalPrinterMakeWriter {
     }
 }
 
+static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+    format!(
+        "{} (commit: {})",
+        env!("CARGO_PKG_VERSION"),
+        moor_common::build::short_commit()
+  )
+});
+
 #[derive(DeriveParser, Debug)]
 #[command(name = "moor-emh")]
 #[command(
+    version = VERSION_STRING.as_str(),
     about = "Emergency Medical Hologram for mooR databases",
     long_about = None
 )]

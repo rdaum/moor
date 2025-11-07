@@ -14,6 +14,16 @@ description = "A tool for importing, compiling, and exporting mooR cores without
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
+[package.metadata.deb]
+depends = "$auto"
+extended-description = "Command-line compiler and core management tool for mooR. Allows importing, compiling, and exporting MOO cores without running the full daemon."
+section = "devel"
+license-file = ["../../LICENSE", "0"]
+priority = "optional"
+assets = [
+    ["target/release-fast/moorc", "/usr/bin/moorc", "755"],
+]
+
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../../crates/common" }
@@ -37,6 +47,8 @@ tracing-subscriber.workspace = true
 
 # Utilities & Helpers
 semver.workspace = true
+once_cell.workspace = true
 
 # Testing & Development
 tempfile.workspace = true
+

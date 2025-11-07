@@ -17,7 +17,7 @@ set -e
 # Build script for moor-web-client debian package
 # This script creates a debian package containing the built web client static files
 
-VERSION="0.9.0-alpha"
+VERSION="0.9.0-alpha-1"
 PACKAGE_NAME="moor-web-client"
 BUILD_DIR="debian-pkg-web-client"
 
@@ -56,9 +56,9 @@ EOF
 
 # Build the package
 echo "Building debian package..."
-dpkg-deb --root-owner-group --build ${BUILD_DIR} ${PACKAGE_NAME}_${VERSION}_all.deb
+dpkg-deb --root-owner-group --build ${BUILD_DIR} target/debian/${PACKAGE_NAME}_${VERSION}_all.deb
 
-echo "Package built successfully: ${PACKAGE_NAME}_${VERSION}_all.deb"
+echo "Package built successfully: target/debian/${PACKAGE_NAME}_${VERSION}_all.deb"
 
 # Clean up
 rm -rf ${BUILD_DIR}

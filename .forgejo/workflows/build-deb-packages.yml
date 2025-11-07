@@ -18,8 +18,8 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
-      - name: Build workspace with release-fast profile
-        run: cargo build --profile release-fast --workspace
+      - name: Build only required packages with release-fast profile
+        run: cargo build --profile release-fast -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh
 
       - name: Build moor-daemon deb package
         run: cargo deb -p moor-daemon --profile release-fast --no-build
@@ -29,6 +29,15 @@ jobs:
 
       - name: Build moor-telnet-host deb package
         run: cargo deb -p moor-telnet-host --profile release-fast --no-build
+
+      - name: Build moor-curl-worker deb package
+        run: cargo deb -p moor-curl-worker --profile release-fast --no-build
+
+      - name: Build moorc deb package
+        run: cargo deb -p moorc --profile release-fast --no-build
+
+      - name: Build moor-emh deb package
+        run: cargo deb -p moor-emh --profile release-fast --no-build
 
       - name: Build web client
         run: |
@@ -42,12 +51,9 @@ jobs:
         run: |
           echo "Built .deb packages:"
           ls -lh target/debian/*.deb
-          ls -lh moor-web-client_*.deb
 
       - name: Upload debian packages as artifacts
         uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: debian-packages
-          path: |
-            target/debian/*.deb
-            moor-web-client_*.deb
+          path: target/debian/*.deb

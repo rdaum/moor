@@ -40,12 +40,12 @@ fi
 echo "Prerequisites OK"
 echo ""
 
-# Build Rust binaries using release-fast profile (faster builds, less memory usage)
+# Build only required packages using release-fast profile (faster builds, less memory usage)
 echo "======================================"
-echo "Building Rust workspace (release-fast profile)"
+echo "Building required packages (release-fast profile)"
 echo "======================================"
 echo "Using CARGO_BUILD_JOBS=2 to limit memory usage..."
-CARGO_BUILD_JOBS=2 cargo build --profile release-fast --workspace
+CARGO_BUILD_JOBS=2 cargo build --profile release-fast -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh
 echo ""
 
 # Build daemon package
@@ -74,6 +74,20 @@ echo "======================================"
 echo "Building moor-curl-worker package"
 echo "======================================"
 cargo deb -p moor-curl-worker --profile release-fast --no-build
+echo ""
+
+# Build moorc package
+echo "======================================"
+echo "Building moorc package"
+echo "======================================"
+cargo deb -p moorc --profile release-fast --no-build
+echo ""
+
+# Build moor-emh package
+echo "======================================"
+echo "Building moor-emh package"
+echo "======================================"
+cargo deb -p moor-emh --profile release-fast --no-build
 echo ""
 
 # Build web client package (if Node.js is available)
@@ -117,6 +131,9 @@ echo "Install packages with:"
 echo "  sudo dpkg -i moor-daemon_*.deb"
 echo "  sudo dpkg -i moor-telnet-host_*.deb"
 echo "  sudo dpkg -i moor-web-host_*.deb"
+echo "  sudo dpkg -i moor-curl-worker_*.deb"
+echo "  sudo dpkg -i moorc_*.deb"
+echo "  sudo dpkg -i moor-emh_*.deb"
 echo "  sudo dpkg -i moor-web-client_*.deb  # if built"
 echo ""
 echo "Fix missing dependencies with:"

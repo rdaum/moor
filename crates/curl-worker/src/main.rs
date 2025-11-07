@@ -30,7 +30,18 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 // TODO: timeouts, and generally more error handling
+use once_cell::sync::Lazy;
+
+static VERSION_STRING: Lazy<String> = Lazy::new(|| {
+    format!(
+        "{} (commit: {})",
+        env!("CARGO_PKG_VERSION"),
+        moor_common::build::short_commit()
+    )
+});
+
 #[derive(Parser, Debug)]
+#[command(version = VERSION_STRING.as_str())]
 struct Args {
     #[command(flatten)]
     client_args: RpcClientArgs,

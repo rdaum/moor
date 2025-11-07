@@ -74,6 +74,8 @@ DAEMON_DEB=$(find "$DEB_DIR" -name "moor-daemon_*.deb" | head -1)
 TELNET_DEB=$(find "$DEB_DIR" -name "moor-telnet-host_*.deb" | head -1)
 WEB_DEB=$(find "$DEB_DIR" -name "moor-web-host_*.deb" | head -1)
 CURL_DEB=$(find "$DEB_DIR" -name "moor-curl-worker_*.deb" | head -1)
+MOORC_DEB=$(find "$DEB_DIR" -name "moorc_*.deb" | head -1)
+EMH_DEB=$(find "$DEB_DIR" -name "moor-emh_*.deb" | head -1)
 WEB_CLIENT_DEB=$(find "$DEB_DIR" -name "moor-web-client_*.deb" | head -1)
 
 if [ -z "$DAEMON_DEB" ] || [ -z "$TELNET_DEB" ]; then
@@ -86,6 +88,8 @@ log_info "  Daemon: $(basename "$DAEMON_DEB")"
 log_info "  Telnet: $(basename "$TELNET_DEB")"
 [ -n "$WEB_DEB" ] && log_info "  Web: $(basename "$WEB_DEB")"
 [ -n "$CURL_DEB" ] && log_info "  Curl Worker: $(basename "$CURL_DEB")"
+[ -n "$MOORC_DEB" ] && log_info "  Moorc: $(basename "$MOORC_DEB")"
+[ -n "$EMH_DEB" ] && log_info "  Moor-EMH: $(basename "$EMH_DEB")"
 [ -n "$WEB_CLIENT_DEB" ] && log_info "  Web Client: $(basename "$WEB_CLIENT_DEB")"
 
 # Clean up any existing test container
@@ -105,6 +109,8 @@ incus file push "$DAEMON_DEB" "$CONTAINER_NAME/tmp/"
 incus file push "$TELNET_DEB" "$CONTAINER_NAME/tmp/"
 [ -n "$WEB_DEB" ] && incus file push "$WEB_DEB" "$CONTAINER_NAME/tmp/"
 [ -n "$CURL_DEB" ] && incus file push "$CURL_DEB" "$CONTAINER_NAME/tmp/"
+[ -n "$MOORC_DEB" ] && incus file push "$MOORC_DEB" "$CONTAINER_NAME/tmp/"
+[ -n "$EMH_DEB" ] && incus file push "$EMH_DEB" "$CONTAINER_NAME/tmp/"
 [ -n "$WEB_CLIENT_DEB" ] && incus file push "$WEB_CLIENT_DEB" "$CONTAINER_NAME/tmp/"
 
 # Copy cores directory for database import
@@ -131,6 +137,16 @@ fi
 if [ -n "$CURL_DEB" ]; then
     log_info "Installing moor-curl-worker..."
     incus exec "$CONTAINER_NAME" -- apt-get install -y /tmp/$(basename "$CURL_DEB")
+fi
+
+if [ -n "$MOORC_DEB" ]; then
+    log_info "Installing moorc..."
+    incus exec "$CONTAINER_NAME" -- apt-get install -y /tmp/$(basename "$MOORC_DEB")
+fi
+
+if [ -n "$EMH_DEB" ]; then
+    log_info "Installing moor-emh..."
+    incus exec "$CONTAINER_NAME" -- apt-get install -y /tmp/$(basename "$EMH_DEB")
 fi
 
 # Install tools for testing
@@ -272,6 +288,27 @@ if [ -n "$WEB_DEB" ]; then
     fi
 fi
 
+# Test CLI tools
+if [ -n "$MOORC_DEB" ]; then
+    log_info "Testing moorc CLI tool..."
+    if incus exec "$CONTAINER_NAME" -- moorc --version >/dev/null 2>&1; then
+        log_info "✓ moorc is installed and executable"
+    else
+        log_error "moorc command failed"
+        exit 1
+    fi
+fi
+
+if [ -n "$EMH_DEB" ]; then
+    log_info "Testing moor-emh CLI tool..."
+    if incus exec "$CONTAINER_NAME" -- moor-emh --version >/dev/null 2>&1; then
+        log_info "✓ moor-emh is installed and executable"
+    else
+        log_error "moor-emh command failed"
+        exit 1
+    fi
+fi
+
 log_info "✓ Debian packages deployment test completed successfully"
 log_info ""
 log_info "Summary:"
@@ -282,4 +319,10 @@ log_info "  - MOO core database loaded"
 log_info "  - Telnet connectivity verified"
 if [ -n "$WEB_DEB" ]; then
     log_info "  - Web host endpoint verified"
+fi
+if [ -n "$MOORC_DEB" ]; then
+    log_info "  - moorc CLI tool verified"
+fi
+if [ -n "$EMH_DEB" ]; then
+    log_info "  - moor-emh CLI tool verified"
 fi
