@@ -18,14 +18,17 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
+      - name: Build workspace with release-fast profile
+        run: cargo build --profile release-fast --workspace
+
       - name: Build moor-daemon deb package
-        run: cargo deb -p moor-daemon
+        run: cargo deb -p moor-daemon --profile release-fast --no-build
 
       - name: Build moor-web-host deb package
-        run: cargo deb -p moor-web-host
+        run: cargo deb -p moor-web-host --profile release-fast --no-build
 
       - name: Build moor-telnet-host deb package
-        run: cargo deb -p moor-telnet-host
+        run: cargo deb -p moor-telnet-host --profile release-fast --no-build
 
       - name: Build web client
         run: |
@@ -33,13 +36,18 @@ jobs:
           npm run build
 
       - name: Build moor-web-client deb package
-        run: ./deploy/build-web-client-deb.sh
+        run: ./deploy/debian-packages/build-web-client-deb.sh
 
-      - name: Upload debian packages
-        uses: actions/upload-artifact@v4
+      - name: List built packages
+        run: |
+          echo "Built .deb packages:"
+          ls -lh target/debian/*.deb
+          ls -lh moor-web-client_*.deb
+
+      - name: Upload debian packages as artifacts
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: debian-packages
           path: |
             target/debian/*.deb
             moor-web-client_*.deb
-          retention-days: 30
