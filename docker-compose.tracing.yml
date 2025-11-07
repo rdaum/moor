@@ -1,7 +1,8 @@
 # Docker Compose override for tracing-enabled builds
 # This file enables Chrome Trace Event Format tracing for performance diagnostics
 #
-# Usage: docker compose -f docker-compose.yml -f docker-compose.tracing.yml up
+# Usage (IPC development): docker compose -f docker-compose.yml -f docker-compose.tracing.yml up
+# Usage (TCP cluster): docker compose -f docker-compose.cluster.yml -f docker-compose.tracing.yml up
 
 services:
   moor-daemon:
@@ -17,13 +18,7 @@ services:
       ./moor-daemon
         /db/moor-data
         --db=development.db
-        --rpc-listen=tcp://0.0.0.0:7899
-        --events-listen=tcp://0.0.0.0:7898
-        --workers-response-listen=tcp://0.0.0.0:7897
-        --workers-request-listen=tcp://0.0.0.0:7896
-        --enrollment-listen=tcp://0.0.0.0:7900
         --trace-output=/moor/traces/moor-trace.json
-
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export --export-format objdef

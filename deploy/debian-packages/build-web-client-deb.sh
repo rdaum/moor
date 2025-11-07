@@ -37,8 +37,7 @@ echo "Copying web client files from dist/..."
 cp -r dist/* ${BUILD_DIR}/usr/share/moor/web-client/
 
 # Copy documentation
-cp deploy/nginx-example.conf ${BUILD_DIR}/usr/share/doc/${PACKAGE_NAME}/
-cp deploy/README.web-client.md ${BUILD_DIR}/usr/share/doc/${PACKAGE_NAME}/README.md
+cp deploy/debian-packages/nginx-for-debian.conf ${BUILD_DIR}/usr/share/doc/${PACKAGE_NAME}/
 
 # Create control file
 cat > ${BUILD_DIR}/DEBIAN/control <<EOF

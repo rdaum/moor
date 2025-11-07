@@ -1,9 +1,9 @@
-# Development and Quick-Start Docker Compose Configuration for mooR
+# TCP/CURVE Enrollment Docker Compose Configuration for mooR
 #
 # This configuration is designed for:
-#   - Development and testing
-#   - Quick demos and evaluation
-#   - Learning and experimentation
+#   - Testing TCP/CURVE enrollment flows
+#   - Multi-machine deployment testing
+#   - Development of distributed mooR setups
 #
 # ⚠️  NOT RECOMMENDED FOR PRODUCTION USE ⚠️
 #
@@ -13,7 +13,7 @@
 #   - deploy/web-ssl/         - Web-enabled with HTTPS (recommended for production)
 #   - deploy/debian-packages/ - Native Debian/Ubuntu packages with systemd
 #
-# For testing TCP/CURVE enrollment (multi-machine scenarios), see docker-compose.cluster.yml
+# For simple single-host development, use docker-compose.yml (IPC-based)
 #
 # This configuration uses debug builds by default for faster compilation during development.
 # Production deployments should use release builds for better performance.
@@ -29,9 +29,33 @@
 
 networks:
   # An internal network for the mooR system, to allow the different components to communicate with each other.
+  # This configuration uses TCP sockets to demonstrate how mooR components would communicate in a distributed
+  # multi-machine deployment, with CURVE encryption and enrollment tokens for security.
   moor_net:
 
 services:
+  # Initialization container to generate enrollment token if needed
+  init-enrollment:
+    image: alpine:latest
+    container_name: "moor-init-enrollment"
+    volumes:
+      - moor-enrollment:/root/.config/moor
+    command: >
+      sh -c "
+        if [ ! -f /root/.config/moor/enrollment-token ]; then
+          echo 'Generating enrollment token...' &&
+          mkdir -p /root/.config/moor &&
+          cat /proc/sys/kernel/random/uuid > /root/.config/moor/enrollment-token &&
+          echo 'Enrollment token generated at /root/.config/moor/enrollment-token' &&
+          :
+        else
+          echo 'Enrollment token already exists at /root/.config/moor/enrollment-token' &&
+          :
+        fi
+      "
+    networks:
+      - moor_net
+
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     build:
@@ -46,20 +70,32 @@ services:
     working_dir: /moor
     volumes:
       - ./:/db
-      - moor-ipc:/var/run/moor
+      - moor-enrollment:/root/.config/moor
+      - moor-allowed-hosts:/root/.local/share/moor/allowed-hosts
     command: >
       ./moor-daemon
         /db/moor-data
         --db=development.db
-        --rpc-listen=ipc:///var/run/moor/rpc.sock
-        --events-listen=ipc:///var/run/moor/events.sock
-        --workers-response-listen=ipc:///var/run/moor/workers-response.sock
-        --workers-request-listen=ipc:///var/run/moor/workers-request.sock
+        --rpc-listen=tcp://0.0.0.0:7899
+        --events-listen=tcp://0.0.0.0:7898
+        --workers-response-listen=tcp://0.0.0.0:7897
+        --workers-request-listen=tcp://0.0.0.0:7896
+        --enrollment-listen=tcp://0.0.0.0:7900
         --generate-keypair
         --import=/db/cores/lambda-moor/src --import-format=objdef
         --export=/db/export --export-format objdef
+    ports:
+      # ZMQ ports
+      - "7899:7899" # RPC listener
+      - "7898:7898" # Events listener
+      - "7897:7897" # Workers response listener
+      - "7896:7896" # Workers request listener
+      - "7900:7900" # Enrollment listener
     networks:
       - moor_net
+    depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
@@ -74,20 +110,23 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
+      - moor-enrollment:/root/.config/moor:ro
       - ./moor-telnet-host-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
       - --telnet-port=8888
-      - --rpc-address=ipc:///var/run/moor/rpc.sock
-      - --events-address=ipc:///var/run/moor/events.sock
+      - --rpc-address=tcp://moor-daemon:7899
+      - --events-address=tcp://moor-daemon:7898
+      - --enrollment-address=tcp://moor-daemon:7900
     ports:
       # Telnet listener
       - "8888:8888"
     networks:
       - moor_net
     depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
       moor-daemon:
         condition: service_started
 
@@ -119,13 +158,14 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
+      - moor-enrollment:/root/.config/moor:ro
       - ./moor-web-host-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
     command:
       - ./moor-web-host
       - --listen-address=0.0.0.0:8081
-      - --rpc-address=ipc:///var/run/moor/rpc.sock
-      - --events-address=ipc:///var/run/moor/events.sock
+      - --rpc-address=tcp://moor-daemon:7899
+      - --events-address=tcp://moor-daemon:7898
+      - --enrollment-address=tcp://moor-daemon:7900
 
     ports:
       # API listener (internal)
@@ -133,6 +173,8 @@ services:
     networks:
       - moor_net
     depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
       moor-daemon:
         condition: service_started
 
@@ -150,20 +192,24 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
+      - moor-enrollment:/root/.config/moor:ro
       - ./moor-curl-worker-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
     command:
       - ./moor-curl-worker
-      - --rpc-address=ipc:///var/run/moor/rpc.sock
-      - --events-address=ipc:///var/run/moor/events.sock
-      - --workers-request-address=ipc:///var/run/moor/workers-request.sock
-      - --workers-response-address=ipc:///var/run/moor/workers-response.sock
+      - --rpc-address=tcp://moor-daemon:7899
+      - --events-address=tcp://moor-daemon:7898
+      - --workers-request-address=tcp://moor-daemon:7896
+      - --workers-response-address=tcp://moor-daemon:7897
+      - --enrollment-address=tcp://moor-daemon:7900
 
     networks:
       - moor_net
     depends_on:
+      init-enrollment:
+        condition: service_completed_successfully
       moor-daemon:
         condition: service_started
 
 volumes:
-  moor-ipc:
+  moor-enrollment:
+  moor-allowed-hosts:

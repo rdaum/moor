@@ -1,0 +1,68 @@
+# Telnet-only production deployment for mooR
+# This configuration runs only the core daemon and telnet host, without web components.
+# Uses IPC (Unix domain sockets) for inter-process communication since both services run on the same host.
+# Suitable for traditional MUD/MOO usage via telnet clients.
+
+networks:
+  moor_net:
+
+services:
+  # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
+  moor-daemon:
+    build:
+      context: ../..
+      target: backend
+      network: host
+      args:
+        BUILD_PROFILE: release
+    container_name: "moor-daemon"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - ./moor-data:/moor/moor-data
+      - moor-ipc:/var/run/moor
+    command: >
+      ./moor-daemon
+        /moor/moor-data
+        --db=production.db
+        --rpc-listen=ipc:///var/run/moor/rpc.sock
+        --events-listen=ipc:///var/run/moor/events.sock
+        --generate-keypair
+    networks:
+      - moor_net
+    restart: unless-stopped
+
+  # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
+  moor-telnet-host:
+    build:
+      context: ../..
+      target: backend
+      network: host
+      args:
+        BUILD_PROFILE: release
+    container_name: "moor-telnet-host"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - ./moor-telnet-host-data:/moor/.moor-host-data
+      - moor-ipc:/var/run/moor
+    command:
+      - ./moor-telnet-host
+      - --telnet-address=0.0.0.0
+      - --telnet-port=8888
+      - --rpc-address=ipc:///var/run/moor/rpc.sock
+      - --events-address=ipc:///var/run/moor/events.sock
+    ports:
+      # Telnet listener
+      - "8888:8888"
+    networks:
+      - moor_net
+    depends_on:
+      moor-daemon:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  moor-ipc:

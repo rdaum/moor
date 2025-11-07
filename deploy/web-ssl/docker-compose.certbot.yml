@@ -1,0 +1,27 @@
+# Certbot service for obtaining and renewing Let's Encrypt SSL certificates
+# Use this with docker-compose.yml for certificate management:
+#
+# Initial certificate generation:
+#   docker compose -f docker-compose.yml -f docker-compose.certbot.yml run --rm certbot
+#
+# Certificate renewal:
+#   docker compose -f docker-compose.yml -f docker-compose.certbot.yml run --rm certbot renew
+
+services:
+  # Certbot service for Let's Encrypt certificate management
+  certbot:
+    image: certbot/certbot:latest
+    container_name: "moor-certbot"
+    volumes:
+      - ./letsencrypt:/etc/letsencrypt
+      - ./certbot-webroot:/var/www/certbot
+    # Default command for initial certificate generation
+    # Override with 'renew' for renewal
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot certonly --webroot --webroot-path=/var/www/certbot --email ${CERTBOT_EMAIL} --agree-tos --no-eff-email -d ${DOMAIN_NAME}; sleep 12h & wait $${!}; done;'"
+    networks:
+      - moor_net
+
+networks:
+  moor_net:
+    external: true
+    name: web-ssl_moor_net

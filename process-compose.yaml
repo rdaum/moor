@@ -25,20 +25,9 @@ environment:
   - "RUST_BACKTRACE=1"
 
 processes:
-  # Initialization step: Generate enrollment token for CURVE authentication
-  init-enrollment:
-    command: >
-      sh -c "
-        TOKEN_PATH=${XDG_CONFIG_HOME:-$HOME/.config}/moor/enrollment-token &&
-        if [ ! -f "$TOKEN_PATH" ]; then cargo run --release -p moor-daemon -- --rotate-enrollment-token; fi
-        :
-      "
-    restart: no
-    availability:
-      restart: exit_on_failure
-
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   # Uses --generate-keypair to auto-generate PASETO keys on first run if they don't exist
+  # Uses IPC by default for all ZMQ communication (no CURVE enrollment needed)
   moor-daemon:
     command: >
       cargo run --release -p moor-daemon --
@@ -48,9 +37,6 @@ processes:
       --export=export --export-format=objdef
       --generate-keypair
     restart: on_failure
-    depends_on:
-      init-enrollment:
-        condition: process_completed_successfully
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
@@ -61,8 +47,6 @@ processes:
 
     restart: on_failure
     depends_on:
-      init-enrollment:
-        condition: process_completed_successfully
       moor-daemon:
         condition: process_started
 
@@ -91,8 +75,6 @@ processes:
 
     restart: on_failure
     depends_on:
-      init-enrollment:
-        condition: process_completed_successfully
       moor-daemon:
         condition: process_started
 
@@ -104,7 +86,5 @@ processes:
 
     restart: on_failure
     depends_on:
-      init-enrollment:
-        condition: process_completed_successfully
       moor-daemon:
         condition: process_started
