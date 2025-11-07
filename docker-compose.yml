@@ -4,6 +4,7 @@
 #   - Development and testing
 #   - Quick demos and evaluation
 #   - Learning and experimentation
+#   - Single-machine deployments
 #
 # ⚠️  NOT RECOMMENDED FOR PRODUCTION USE ⚠️
 #
@@ -13,9 +14,15 @@
 #   - deploy/web-ssl/         - Web-enabled with HTTPS (recommended for production)
 #   - deploy/debian-packages/ - Native Debian/Ubuntu packages with systemd
 #
-# For testing TCP/CURVE enrollment (multi-machine scenarios), see docker-compose.cluster.yml
+# Communication: Uses IPC (Unix domain sockets) for inter-service communication since all
+# services run on the same host. For multi-machine deployments, see docker-compose.cluster.yml
 #
-# This configuration uses debug builds by default for faster compilation during development.
+# User Permissions: Services run as the calling user (USER_ID/GROUP_ID environment variables)
+# to avoid permission issues with data directories. Export these before running:
+#   export USER_ID=$(id -u) GROUP_ID=$(id -g)
+#   docker compose up
+#
+# Build Configuration: Uses debug builds by default for faster compilation during development.
 # Production deployments should use release builds for better performance.
 
 # The first time the system starts, it will import cores/lambda-moor from the cores directory.
@@ -41,12 +48,14 @@ services:
       args:
         BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-daemon"
+    user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./:/db
-      - moor-ipc:/var/run/moor
+      - ./moor-ipc:/var/run/moor
     command: >
       ./moor-daemon
         /db/moor-data
@@ -70,12 +79,14 @@ services:
       args:
         BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-telnet-host"
+    user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-telnet-host-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
+      - ./moor-ipc:/var/run/moor
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
@@ -115,12 +126,14 @@ services:
       args:
         BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-web-host"
+    user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-web-host-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
+      - ./moor-ipc:/var/run/moor
     command:
       - ./moor-web-host
       - --listen-address=0.0.0.0:8081
@@ -146,12 +159,14 @@ services:
       args:
         BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-curl-worker"
+    user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-curl-worker-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
+      - ./moor-ipc:/var/run/moor
     command:
       - ./moor-curl-worker
       - --rpc-address=ipc:///var/run/moor/rpc.sock
@@ -164,6 +179,3 @@ services:
     depends_on:
       moor-daemon:
         condition: service_started
-
-volumes:
-  moor-ipc:

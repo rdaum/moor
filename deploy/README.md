@@ -456,6 +456,80 @@ monitor logs for suspicious activity.
 - [Dockerfile-forgejo-builder](Dockerfile-forgejo-builder) - CI/CD builder image (for Forgejo
   Actions)
 
+## Testing Deployments
+
+Automated test scripts are provided to validate that deployment configurations work correctly.
+
+### Running All Tests
+
+To test all Docker-based deployments:
+
+```bash
+cd deploy/
+./test-all.sh
+```
+
+This runs automated tests for:
+
+- `telnet-only/` - Telnet-only deployment
+- `web-basic/` - HTTP web deployment
+- `web-ssl/` - HTTPS web deployment
+
+### Testing Individual Deployments
+
+Each deployment directory has its own `test.sh` script:
+
+```bash
+# Test telnet-only deployment
+cd deploy/telnet-only/
+./test.sh
+
+# Test web-basic deployment
+cd deploy/web-basic/
+./test.sh
+
+# Test web-ssl deployment
+cd deploy/web-ssl/
+./test.sh
+```
+
+### What the Tests Check
+
+The automated tests verify:
+
+- Services start successfully
+- Containers become healthy
+- Network ports are accessible
+- HTTP/telnet endpoints respond
+- Basic connectivity works
+- No critical errors in logs
+
+### Test Requirements
+
+The test scripts require:
+
+- `docker` and `docker compose`
+- `curl` for HTTP testing
+- `nc` (netcat) for port checking
+- `telnet` for telnet protocol testing
+- `jq` for JSON parsing (optional but recommended)
+
+### Testing Debian Packages
+
+Debian package deployment requires manual testing on a Debian/Ubuntu system. See
+[debian-packages/README.md](debian-packages/README.md) for testing procedures.
+
+### SSL Certificate Testing
+
+The `web-ssl/` test cannot validate SSL certificates in automated testing because Let's Encrypt
+requires a real domain with valid DNS. To fully test SSL:
+
+1. Deploy on a server with a real domain name
+2. Configure DNS to point to your server
+3. Set proper `VIRTUAL_HOST` and `LETSENCRYPT_HOST` in `.env`
+4. Run `docker compose up` and verify certificates are obtained
+5. Test HTTPS access with a browser
+
 ## Getting Help
 
 ### Documentation

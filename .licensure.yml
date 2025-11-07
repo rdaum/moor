@@ -94,6 +94,8 @@ excludes:
   - lambdamoo/*
   - __pycache__/*
   - .envrc
+  - .*\.env$
+  - .*\.env\..*
   - node_modules/*
   - development-export/*
   - crates/daemon/debian/*

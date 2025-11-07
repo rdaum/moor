@@ -406,6 +406,136 @@ sudo apt-get remove --purge moor-web-client moor-web-host moor-telnet-host moor-
 sudo rm -rf /var/spool/moor-daemon/
 ```
 
+## Testing and Validation
+
+After installation and configuration, validate your deployment to ensure everything is working
+correctly.
+
+### 1. Verify Services Are Running
+
+Check that all services are active:
+
+```bash
+sudo systemctl status moor-daemon moor-telnet-host moor-web-host
+```
+
+All services should show `active (running)` status.
+
+### 2. Test Telnet Access
+
+If running the telnet host, test connectivity:
+
+```bash
+telnet localhost 8888
+```
+
+You should see a connection prompt. Try basic commands:
+
+```
+connect wizard
+look
+quit
+```
+
+### 3. Test Web Access
+
+If running the web host with nginx, test HTTP access:
+
+```bash
+# Test that nginx is serving the web client
+curl -I http://localhost/
+
+# If using a domain, test from another machine
+curl -I http://your-domain.com/
+```
+
+You should see a `200 OK` response with HTML content.
+
+### 4. Test WebSocket Connection
+
+For web deployments, verify WebSocket connectivity:
+
+```bash
+# Check that the web host is accessible
+curl http://localhost:8080/health || echo "Web host may not have health endpoint"
+```
+
+Test from a browser by opening the web client and checking the browser console for WebSocket
+connection messages.
+
+### 5. Check Logs for Errors
+
+Examine logs for any unexpected errors:
+
+```bash
+# Check daemon logs
+sudo journalctl -u moor-daemon -n 50 --no-pager
+
+# Check telnet host logs
+sudo journalctl -u moor-telnet-host -n 50 --no-pager
+
+# Check web host logs
+sudo journalctl -u moor-web-host -n 50 --no-pager
+
+# Check nginx logs (if using)
+sudo tail -50 /var/log/nginx/error.log
+```
+
+### 6. Verify Database Initialization
+
+Check that the database was created and initialized:
+
+```bash
+# Check database file exists
+sudo ls -lh /var/spool/moor-daemon/*.db
+
+# Check database size (should be > 0 bytes)
+sudo du -h /var/spool/moor-daemon/
+```
+
+### 7. Test Basic MOO Operations
+
+Connect via telnet or web client and verify:
+
+- Can connect as a wizard/user
+- Can execute basic commands (`look`, `@who`, etc.)
+- Objects and rooms are accessible
+- Database changes persist across connections
+
+### Manual Testing Checklist
+
+For production deployments, verify:
+
+- [ ] All systemd services start without errors
+- [ ] Services restart automatically after reboot
+- [ ] Telnet connections work (if enabled)
+- [ ] Web client loads in browser (if enabled)
+- [ ] WebSocket connections establish (check browser console)
+- [ ] SSL certificates are valid (if using HTTPS)
+- [ ] Firewall rules allow necessary ports
+- [ ] Log rotation is working
+- [ ] Backups can be created and restored
+- [ ] Database changes persist across service restarts
+
+### Automated Testing (Development)
+
+For development and testing, you can use a test VM or container:
+
+```bash
+# Using Multipass (Ubuntu VMs)
+multipass launch --name moor-test
+multipass shell moor-test
+
+# Build and install packages
+# (copy .deb files to VM and install)
+
+# Run validation tests
+sudo systemctl status moor-daemon
+telnet localhost 8888
+```
+
+See the main [deploy/README.md](../README.md) for Docker-based testing alternatives.
+
 ## Troubleshooting
 
 ### Services won't start

@@ -1,0 +1,76 @@
+# Development process composition for mooR
+# Same as process-compose.yaml but with debug builds for faster iteration
+
+# USAGE:
+# 1. Install process-compose from: https://github.com/F1bonacc1/process-compose
+# 2. Run with: process-compose -f process-compose-dev.yaml up
+# 3. Stop with: Ctrl+C or process-compose -f process-compose-dev.yaml down
+
+version: "0.5"
+
+environment:
+  - "RUST_BACKTRACE=1"
+  - "RUST_LOG=debug"
+
+processes:
+  # The core Moor daemon (DEBUG BUILD)
+  # Uses IPC by default for all ZMQ communication (no CURVE enrollment needed)
+  moor-daemon:
+    command: >
+      cargo run -p moor-daemon --
+      ./moor-data
+      --db=development.db
+      --import=cores/lambda-moor/src --import-format=objdef
+      --export=export --export-format=objdef
+      --generate-keypair
+    restart: on_failure
+
+  # Telnet server (DEBUG BUILD)
+  moor-telnet-host:
+    command: >
+      cargo run -p moor-telnet-host --
+      --telnet-address=0.0.0.0
+      --telnet-port=8888
+
+    restart: on_failure
+    depends_on:
+      moor-daemon:
+        condition: process_started
+
+  # Frontend web server (DEV MODE)
+  moor-frontend:
+    command: >
+      sh -c "
+        if [ ! -d node_modules ]; then
+          npm install
+        fi &&
+        npm run dev
+      "
+    environment:
+      - MOOR_API_URL=http://localhost:8081
+      - MOOR_WS_URL=ws://localhost:8081
+    restart: on_failure
+    depends_on:
+      moor-web-host:
+        condition: process_started
+
+  # API server (DEBUG BUILD)
+  moor-web-host:
+    command: >
+      cargo run -p moor-web-host --
+      --listen-address=0.0.0.0:8081
+
+    restart: on_failure
+    depends_on:
+      moor-daemon:
+        condition: process_started
+
+  # HTTP worker (DEBUG BUILD)
+  moor-curl-worker:
+    command: >
+      cargo run -p moor-curl-worker --
+
+    restart: on_failure
+    depends_on:
+      moor-daemon:
+        condition: process_started

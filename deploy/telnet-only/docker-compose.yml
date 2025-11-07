@@ -16,12 +16,15 @@ services:
       args:
         BUILD_PROFILE: release
     container_name: "moor-daemon"
+    user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-data:/moor/moor-data
-      - moor-ipc:/var/run/moor
+      - ../../cores:/moor/cores:ro
+      - ./moor-ipc:/var/run/moor
     command: >
       ./moor-daemon
         /moor/moor-data
@@ -29,6 +32,7 @@ services:
         --rpc-listen=ipc:///var/run/moor/rpc.sock
         --events-listen=ipc:///var/run/moor/events.sock
         --generate-keypair
+        --import=/moor/cores/lambda-moor/src --import-format=objdef
     networks:
       - moor_net
     restart: unless-stopped
@@ -42,12 +46,14 @@ services:
       args:
         BUILD_PROFILE: release
     container_name: "moor-telnet-host"
+    user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
+      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-telnet-host-data:/moor/.moor-host-data
-      - moor-ipc:/var/run/moor
+      - ./moor-ipc:/var/run/moor
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
@@ -63,6 +69,3 @@ services:
       moor-daemon:
         condition: service_started
     restart: unless-stopped
-
-volumes:
-  moor-ipc:

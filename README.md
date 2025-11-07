@@ -85,6 +85,7 @@ keep adding features right up until the last minute.
 The easiest way to get started is with Docker Compose:
 
 ```bash
+export USER_ID=$(id -u) GROUP_ID=$(id -g)
 docker compose up
 ```
 
@@ -92,6 +93,7 @@ For faster builds during development, the default configuration uses debug build
 deployment with optimized performance, use:
 
 ```bash
+export USER_ID=$(id -u) GROUP_ID=$(id -g)
 BUILD_PROFILE=release docker compose up
 ```
 
@@ -130,6 +132,60 @@ This starts the moor-daemon and web development server, accessible at
 hot-reloading for frontend development, but it requires installing some dependencies. See
 [the web client's readme](https://codeberg.org/timbran/moor/src/branch/main/web-client#readme) for
 details.
+
+## Deployment Options
+
+mooR provides multiple deployment configurations to suit different use cases:
+
+### Development & Single-Machine Deployments
+
+The root `docker-compose.yml` is designed for development and single-machine deployments. All
+services run on the same host and communicate via **IPC (Unix domain sockets)**.
+
+Services run as your user (via `USER_ID` and `GROUP_ID` environment variables), avoiding permission
+issues with data directories.
+
+To start:
+
+```bash
+export USER_ID=$(id -u) GROUP_ID=$(id -g)
+docker compose up -d
+```
+
+### Testing Clustered Configuration
+
+The `docker-compose.cluster.yml` file is an example configuration that demonstrates TCP-based
+communication with CURVE encryption. It runs on a single machine but shows what a multi-machine
+clustered setup would look like:
+
+```bash
+docker compose -f docker-compose.cluster.yml up -d
+```
+
+This uses TCP with CURVE encryption and enrollment tokens for host authentication. It's useful for
+testing the clustered setup locally before deploying across actual separate machines.
+
+For actual multi-machine production deployments, use Kubernetes (see future documentation) or deploy
+Debian packages on separate servers.
+
+### Production Deployment Configurations
+
+The `deploy/` directory contains production-ready configurations:
+
+- **`telnet-only/`**: Minimal telnet-only setup for traditional MUD usage
+- **`web-basic/`**: Web-enabled deployment with HTTP (for use behind reverse proxies)
+- **`web-ssl/`**: Web-enabled deployment with HTTPS/TLS support
+- **`debian-packages/`**: Native Debian/Ubuntu packages with systemd (no Docker)
+
+All production configurations use IPC for single-machine deployments and include automated testing
+scripts. See each deployment's README for specific setup instructions.
+
+For deployment testing:
+
+```bash
+cd deploy
+./test-all.sh  # Test all deployment configurations
+```
 
 ## For Developers & Contributors
 
