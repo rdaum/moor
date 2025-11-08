@@ -20,7 +20,8 @@ use crate::{
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
     Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, Flyweight, List, Map, SYSTEM_OBJECT,
-    Sequence, Symbol, VarType, Variant, v_flyweight, v_int, v_list, v_map, v_obj, v_str, v_string,
+    Sequence, Symbol, VarType, Variant, v_bool_int, v_flyweight, v_int, v_list, v_map, v_obj,
+    v_str, v_string,
 };
 use serde_json::{self, Value as JsonValue};
 use std::io::{BufReader, BufWriter};
@@ -734,13 +735,26 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
                     Variant::Int(i) => i.to_string(),
                     Variant::Float(f) => f.to_string(),
                     Variant::Obj(o) => format!("{o}"),
-                    _ => return Err(BfErr::Code(E_TYPE)), // Complex keys not supported
+                    _ => {
+                        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                            format!(
+                                "Cannot use {} as a json map key",
+                                k.type_code().to_literal()
+                            )
+                        })));
+                    } // Complex keys not supported
                 };
                 json_obj.insert(key, moo_value_to_json(&v)?);
             }
             Ok(JsonValue::Object(json_obj))
         }
-        _ => Err(BfErr::Code(E_TYPE)), // Other types not supported
+        Variant::Bool(b) => Ok(JsonValue::Bool(*b)),
+        _ => Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "Cannot translate values of type {} to JSON",
+                value.type_code().to_literal()
+            )
+        }))), // Other types not supported
     }
 }
 
@@ -748,7 +762,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
 fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
     match json_value {
         JsonValue::Null => Ok(moor_var::v_none()),
-        JsonValue::Bool(b) => Ok(v_int(if *b { 1 } else { 0 })),
+        JsonValue::Bool(b) => Ok(v_bool_int(*b)),
         JsonValue::Number(n) => {
             if n.is_i64() {
                 Ok(v_int(n.as_i64().unwrap()))
