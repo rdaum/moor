@@ -1,0 +1,101 @@
+/*
+ * Prism syntax highlighting theme for MOO
+ * Matches the moor color scheme
+ */
+
+/* Base token styles */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--color-text-muted, #6a737d);
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: var(--color-text-primary, #d4d4d4);
+}
+
+.token.namespace {
+  opacity: 0.7;
+}
+
+.token.keyword,
+.token.control {
+  color: var(--color-keyword, #569cd6);
+  font-weight: 500;
+}
+
+.token.boolean,
+.token.constant {
+  color: var(--color-constant, #4fc1ff);
+}
+
+.token.builtin {
+  color: var(--color-type, #4ec9b0);
+}
+
+.token.number,
+.token.object-ref {
+  color: var(--color-number, #b5cea8);
+}
+
+.token.string,
+.token.binary,
+.token.symbol,
+.token.char,
+.token.attr-value {
+  color: var(--color-string, #ce9178);
+}
+
+.token.operator,
+.token.entity,
+.token.url {
+  color: var(--color-operator, #d4d4d4);
+}
+
+.token.system-var,
+.token.variable {
+  color: var(--color-variable, #9cdcfe);
+}
+
+.token.function,
+.token.class-name {
+  color: var(--color-function, #dcdcaa);
+}
+
+.token.property,
+.token.tag,
+.token.selector {
+  color: var(--color-property, #9cdcfe);
+}
+
+.token.attr-name {
+  color: var(--color-attribute, #9cdcfe);
+}
+
+.token.regex,
+.token.important {
+  color: var(--color-regex, #d16969);
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+.token.entity {
+  cursor: help;
+}
+
+/* Ensure syntax highlighted code preserves whitespace */
+.content-html pre code[class*="language-"] {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}

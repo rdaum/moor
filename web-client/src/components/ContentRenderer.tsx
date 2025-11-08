@@ -14,7 +14,9 @@
 import { parse, renderHTML } from "@djot/djot";
 import { AnsiUp } from "ansi_up";
 import DOMPurify from "dompurify";
+import Prism from "prismjs";
 import React, { useMemo } from "react";
+import "../lib/prism-moo";
 
 /**
  * Validates a URL to prevent XSS attacks.
@@ -188,7 +190,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 // Remove the hook after use to avoid affecting other calls
                 DOMPurify.removeHook("afterSanitizeElements");
 
-                // Convert ANSI codes in <pre> blocks
+                // Process <pre> blocks: ANSI codes and syntax highlighting
                 const tempDiv = document.createElement("div");
                 tempDiv.innerHTML = sanitizedHtml;
                 const preElements = tempDiv.querySelectorAll("pre");
@@ -196,6 +198,32 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 if (preElements.length > 0) {
                     const ansi_up = new AnsiUp();
                     preElements.forEach((pre) => {
+                        const codeElement = pre.querySelector("code");
+
+                        // Check if this is a code block with language-* class
+                        if (codeElement) {
+                            const classes = codeElement.className.split(/\s+/);
+                            const languageClass = classes.find(cls => cls.startsWith("language-"));
+
+                            if (languageClass) {
+                                const language = languageClass.replace("language-", "");
+
+                                // Apply Prism syntax highlighting for supported languages
+                                if (Prism.languages[language]) {
+                                    const code = codeElement.textContent || "";
+                                    const highlightedHtml = Prism.highlight(
+                                        code,
+                                        Prism.languages[language],
+                                        language,
+                                    );
+                                    codeElement.innerHTML = highlightedHtml;
+                                    codeElement.classList.add(`language-${language}`);
+                                }
+                                return; // Skip ANSI processing for syntax-highlighted code
+                            }
+                        }
+
+                        // ANSI code processing for non-syntax-highlighted blocks
                         const text = pre.textContent || "";
                         if (text.includes("\x1b[")) {
                             // Convert ANSI to HTML, then newlines to <br> for innerHTML

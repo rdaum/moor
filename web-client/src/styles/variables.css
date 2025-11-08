@@ -45,6 +45,19 @@
   --color-bg-accent: var(--color-text-primary);
   --color-surface-raised: #444;
 
+  /* Syntax Highlighting - Dark Theme (VS Code inspired) */
+  --color-keyword: #569cd6;
+  --color-constant: #4fc1ff;
+  --color-type: #4ec9b0;
+  --color-number: #b5cea8;
+  --color-string: #ce9178;
+  --color-operator: #d4d4d4;
+  --color-variable: #9cdcfe;
+  --color-function: #dcdcaa;
+  --color-property: #9cdcfe;
+  --color-attribute: #9cdcfe;
+  --color-regex: #d16969;
+
   /* Light Theme Colors - Will be applied with .light-theme class */
   --light-color-bg-base: #f5f5f5;
   --light-color-bg-primary: #ffffff;
@@ -71,6 +84,19 @@
   --light-color-bg-hover: rgba(0, 0, 0, 0.05);
   --light-color-bg-accent: var(--light-color-text-primary);
   --light-color-surface-raised: #ddd;
+
+  /* Syntax Highlighting - Light Theme */
+  --light-color-keyword: #0000ff;
+  --light-color-constant: #0070c1;
+  --light-color-type: #267f99;
+  --light-color-number: #098658;
+  --light-color-string: #a31515;
+  --light-color-operator: #000000;
+  --light-color-variable: #001080;
+  --light-color-function: #795e26;
+  --light-color-property: #001080;
+  --light-color-attribute: #001080;
+  --light-color-regex: #811f3f;
 
   /* CRT Theme Colors - Classic phosphor green terminal */
   --crt-color-bg-base: #000000;
@@ -99,6 +125,19 @@
   --crt-color-bg-accent: var(--crt-color-text-primary);
   --crt-color-surface-raised: #004400;
 
+  /* Syntax Highlighting - CRT Green Theme (monochrome variations) */
+  --crt-color-keyword: #55ff88;
+  --crt-color-constant: #44dd66;
+  --crt-color-type: #66ff99;
+  --crt-color-number: #00cc33;
+  --crt-color-string: #00ff41;
+  --crt-color-operator: #00ff55;
+  --crt-color-variable: #33ff66;
+  --crt-color-function: #77ffaa;
+  --crt-color-property: #33ff66;
+  --crt-color-attribute: #33ff66;
+  --crt-color-regex: #00ff41;
+
   /* CRT Amber Theme Colors - Classic amber phosphor terminal */
   --crt-amber-color-bg-base: #000000;
   --crt-amber-color-bg-primary: #1a0f00;
@@ -125,6 +164,19 @@
   --crt-amber-color-bg-hover: rgba(255, 161, 40, 0.1);
   --crt-amber-color-bg-accent: var(--crt-amber-color-text-primary);
   --crt-amber-color-surface-raised: #442200;
+
+  /* Syntax Highlighting - CRT Amber Theme (monochrome amber variations) */
+  --crt-amber-color-keyword: #ffcc66;
+  --crt-amber-color-constant: #ffaa44;
+  --crt-amber-color-type: #ffdd88;
+  --crt-amber-color-number: #cc7700;
+  --crt-amber-color-string: #FFA128;
+  --crt-amber-color-operator: #ffaa44;
+  --crt-amber-color-variable: #ffbb55;
+  --crt-amber-color-function: #ffeeaa;
+  --crt-amber-color-property: #ffbb55;
+  --crt-amber-color-attribute: #ffbb55;
+  --crt-amber-color-regex: #FFA128;
 
   /* Spacing & Sizing - Shared between themes */
   --space-xs: 0.15em;
@@ -188,6 +240,19 @@
   --color-bg-hover: var(--light-color-bg-hover);
   --color-bg-accent: var(--light-color-bg-accent);
   --color-surface-raised: var(--light-color-surface-raised);
+
+  /* Syntax Highlighting - Light Theme */
+  --color-keyword: var(--light-color-keyword);
+  --color-constant: var(--light-color-constant);
+  --color-type: var(--light-color-type);
+  --color-number: var(--light-color-number);
+  --color-string: var(--light-color-string);
+  --color-operator: var(--light-color-operator);
+  --color-variable: var(--light-color-variable);
+  --color-function: var(--light-color-function);
+  --color-property: var(--light-color-property);
+  --color-attribute: var(--light-color-attribute);
+  --color-regex: var(--light-color-regex);
 }
 
 /* CRT Theme Class - Applied to body for retro phosphor terminal look */
@@ -223,6 +288,19 @@
   --color-bg-hover: var(--crt-color-bg-hover);
   --color-bg-accent: var(--crt-color-bg-accent);
   --color-surface-raised: var(--crt-color-surface-raised);
+
+  /* Syntax Highlighting - CRT Theme */
+  --color-keyword: var(--crt-color-keyword);
+  --color-constant: var(--crt-color-constant);
+  --color-type: var(--crt-color-type);
+  --color-number: var(--crt-color-number);
+  --color-string: var(--crt-color-string);
+  --color-operator: var(--crt-color-operator);
+  --color-variable: var(--crt-color-variable);
+  --color-function: var(--crt-color-function);
+  --color-property: var(--crt-color-property);
+  --color-attribute: var(--crt-color-attribute);
+  --color-regex: var(--crt-color-regex);
 
   /* CRT-specific typography */
   font-family: var(--font-crt);
@@ -458,6 +536,19 @@
   --color-bg-hover: var(--crt-amber-color-bg-hover);
   --color-bg-accent: var(--crt-amber-color-bg-accent);
   --color-surface-raised: var(--crt-amber-color-surface-raised);
+
+  /* Syntax Highlighting - CRT Amber Theme */
+  --color-keyword: var(--crt-amber-color-keyword);
+  --color-constant: var(--crt-amber-color-constant);
+  --color-type: var(--crt-amber-color-type);
+  --color-number: var(--crt-amber-color-number);
+  --color-string: var(--crt-amber-color-string);
+  --color-operator: var(--crt-amber-color-operator);
+  --color-variable: var(--crt-amber-color-variable);
+  --color-function: var(--crt-amber-color-function);
+  --color-property: var(--crt-amber-color-property);
+  --color-attribute: var(--crt-amber-color-attribute);
+  --color-regex: var(--crt-amber-color-regex);
 
   /* CRT-specific typography */
   font-family: var(--font-crt);
