@@ -693,14 +693,20 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list(&disassembly)))
 }
 
-/// MOO: `bool|list respond_to(obj object, symbol verb_name)`
+/// MOO: `bool|list respond_to(obj|flyweight object, symbol verb_name)`
 /// Returns true if object responds to verb, or `{location, names}` if readable.
+/// For flyweights, checks the delegate object.
 fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Some(obj) = bf_args.args[0].as_object() else {
+    // Get the object to check - either directly or from flyweight's delegate
+    let obj = if let Some(o) = bf_args.args[0].as_object() {
+        o
+    } else if let Some(fw) = bf_args.args[0].as_flyweight() {
+        *fw.delegate()
+    } else {
         return Err(BfErr::Code(E_TYPE));
     };
 
