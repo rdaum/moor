@@ -96,6 +96,13 @@
   border: 1px solid var(--color-border-medium);
   border-radius: 6px;
   background-color: var(--color-background-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.content-html pre code {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 /* For plain text content with whitespace preservation */
@@ -987,9 +994,8 @@
   content: ": ";
 }
 
-/* Normalize whitespace in HTML content */
-.text_narrative .content-html,
-.text_narrative .content-html * {
+/* Normalize whitespace in HTML elements (but preserve whitespace in pre/code blocks and the container) */
+.text_narrative .content-html *:not(pre):not(code) {
   white-space: normal;
   word-wrap: break-word;
   overflow-wrap: break-word;
