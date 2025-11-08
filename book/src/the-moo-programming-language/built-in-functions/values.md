@@ -1,18 +1,18 @@
 ## Type Information Functions
 
 ### `typeof`
+
 **Description**:   Returns the type code of a value.
 **Arguments**:
-
 
 - `value`: The value to get the type of
 
 **Returns:** An integer representing the type code of the value
 
 ### `length`
+
 **Description**:   Returns the length of a sequence (string, list, map).
 **Arguments**:
-
 
 - `sequence`: The sequence to measure
 
@@ -26,7 +26,6 @@
 **Description**: Converts value(s) to a string representation.  
 **Arguments**:
 
-
 - `value1, value2, ...`: One or more values to convert to string
 
 **Returns:** A string representation of the concatenated values  
@@ -36,7 +35,6 @@
 
 **Description**: Converts a scalar value to a symbol.  
 **Arguments**:
-
 
 - `value`: The value to convert (must be a string, boolean, error, or symbol)
 
@@ -48,7 +46,6 @@
 **Description**: Converts a value to its literal string representation.  
 **Arguments**:
 
-
 - `value`: The value to convert
 
 **Returns:** A string containing the literal representation of the value  
@@ -58,7 +55,6 @@
 
 **Description**: Converts a value to an integer.  
 **Arguments**:
-
 
 - `value`: The value to convert (must be a number, object, string, or error)
 
@@ -74,7 +70,6 @@ Alias for `toint`. **Description:**
 **Description**: Converts a value to an object reference.  
 **Arguments**:
 
-
 - `value`: The value to convert (must be a number, string, or object)
 
 **Returns:** An object reference  
@@ -84,7 +79,6 @@ Alias for `toint`. **Description:**
 
 **Description**: Converts a value to a floating-point number.  
 **Arguments**:
-
 
 - `value`: The value to convert (must be a number, string, or error)
 
@@ -97,7 +91,6 @@ Alias for `toint`. **Description:**
 
 **Description**: Performs a case-sensitive equality comparison between two values.  
 **Arguments**:
-
 
 - `value1`: First value to compare
 - `value2`: Second value to compare
@@ -196,15 +189,12 @@ parse_json("{\"#1|obj\":2}", "embedded-types")              =>   [#1 -> 2]
 
 > Note: JSON converts `null` to the string "null".
 
-> Warning: WAIF and ANON types are not supported.
-
 ## Memory Functions
 
 ### `value_bytes`
 
 **Description**: Returns the size of a value in bytes.  
 **Arguments**:
-
 
 - `value`: The value to measure
 
@@ -214,7 +204,6 @@ parse_json("{\"#1|obj\":2}", "embedded-types")              =>   [#1 -> 2]
 
 **Description**: Returns the size of an object in bytes.  
 **Arguments**:
-
 
 - `object`: The object to measure
 
@@ -231,7 +220,6 @@ defaults or errors when conversion isn't possible.
 **Description**: Returns the error message associated with an error value.  
 **Arguments**:
 
-
 - `error`: The error value to get the message from
 
 **Returns:** The error message string
@@ -240,7 +228,6 @@ defaults or errors when conversion isn't possible.
 
 **Description**: Strips off the message from an error value and returns just the error without it.  
 **Arguments**:
-
 
 - `error`: The error value to get the code from
 
