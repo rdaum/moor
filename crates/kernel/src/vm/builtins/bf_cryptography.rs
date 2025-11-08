@@ -40,8 +40,8 @@ use crate::vm::builtins::{
 };
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{
-    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_binary, v_float, v_int, v_list,
-    v_map, v_str, v_string,
+    E_ARGS, E_INVARG, E_TYPE, Sequence, Symbol, Var, Variant, v_binary, v_error, v_float, v_int,
+    v_list, v_map, v_obj, v_str, v_string, v_sym,
 };
 
 lazy_static! {
@@ -677,6 +677,11 @@ fn parse_symmetric_key(var: &Var) -> Result<[u8; 32], BfErr> {
 }
 
 /// Convert a Var to a JSON value for PASETO claims.
+/// Uses tagged object format with __type_* keys to preserve MOO type information.
+/// - Symbol: {"__type_symbol": "read"}
+/// - Obj: {"__type_obj": "#123"}
+/// - Error: {"__type_error": {"code": "E_PERM", "message": "...", "value": ...}}
+/// - Map: {"__type_map": [[key1, val1], [key2, val2], ...]}
 fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
     match var.variant() {
         Variant::None => Ok(JsonValue::Null),
@@ -685,7 +690,39 @@ fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
             .map(JsonValue::Number)
             .ok_or_else(|| BfErr::ErrValue(E_INVARG.msg("Invalid float value"))),
         Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),
-        Variant::Sym(sym) => Ok(JsonValue::String(sym.to_string())),
+        Variant::Sym(sym) => {
+            // Tagged format: {"__type_symbol": "read"}
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "__type_symbol".to_string(),
+                JsonValue::String(sym.to_string()),
+            );
+            Ok(JsonValue::Object(obj))
+        }
+        Variant::Obj(o) => {
+            // Tagged format: {"__type_obj": "#123"}
+            let mut obj = serde_json::Map::new();
+            obj.insert("__type_obj".to_string(), JsonValue::String(o.to_literal()));
+            Ok(JsonValue::Object(obj))
+        }
+        Variant::Err(e) => {
+            // Tagged format: {"__type_error": {"code": "E_PERM", "message": "...", "value": ...}}
+            let mut error_obj = serde_json::Map::new();
+            error_obj.insert("code".to_string(), JsonValue::String(e.name().to_string()));
+
+            let msg = e.message();
+            if !msg.is_empty() {
+                error_obj.insert("message".to_string(), JsonValue::String(msg));
+            }
+
+            if let Some(value) = &e.value {
+                error_obj.insert("value".to_string(), var_to_json(value)?);
+            }
+
+            let mut obj = serde_json::Map::new();
+            obj.insert("__type_error".to_string(), JsonValue::Object(error_obj));
+            Ok(JsonValue::Object(obj))
+        }
         Variant::List(list) => {
             let mut json_list = Vec::new();
             for item in list.iter() {
@@ -694,22 +731,18 @@ fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
             Ok(JsonValue::Array(json_list))
         }
         Variant::Map(map) => {
-            let mut json_map = serde_json::Map::new();
+            // Tagged format: {"__type_map": [[key1, val1], [key2, val2], ...]}
+            let mut pairs = Vec::new();
             for (key, value) in map.iter() {
-                let key_str = match key.as_symbol() {
-                    Ok(sym) => sym.to_string(),
-                    Err(_) => match key.variant() {
-                        Variant::Int(i) => i.to_string(),
-                        _ => {
-                            return Err(BfErr::ErrValue(
-                                E_INVARG.msg("Map keys must be strings, symbols, or integers"),
-                            ));
-                        }
-                    },
-                };
-                json_map.insert(key_str, var_to_json(&value)?);
+                pairs.push(JsonValue::Array(vec![
+                    var_to_json(&key)?,
+                    var_to_json(&value)?,
+                ]));
             }
-            Ok(JsonValue::Object(json_map))
+
+            let mut obj = serde_json::Map::new();
+            obj.insert("__type_map".to_string(), JsonValue::Array(pairs));
+            Ok(JsonValue::Object(obj))
         }
         _ => Err(BfErr::ErrValue(
             E_INVARG.msg("Cannot convert this type to PASETO claim"),
@@ -718,7 +751,8 @@ fn var_to_json(var: &Var) -> Result<JsonValue, BfErr> {
 }
 
 /// Convert a JSON value to a Var.
-/// Symbols/objects/errors come back as literal strings (e.g., "'read", "#123", "E_PERM").
+/// Recognizes tagged object formats with __type_* keys for MOO types.
+/// JSON objects without __type_* keys are NOT converted to MOO maps.
 fn json_to_var(json: &JsonValue) -> Result<Var, BfErr> {
     match json {
         JsonValue::Null => Ok(Var::mk_none()),
@@ -743,11 +777,74 @@ fn json_to_var(json: &JsonValue) -> Result<Var, BfErr> {
             Ok(Var::mk_list(&list))
         }
         JsonValue::Object(obj) => {
-            let mut pairs = Vec::new();
-            for (key, value) in obj {
-                pairs.push((v_string(key.clone()), json_to_var(value)?));
+            // Check for __type_symbol
+            if let Some(JsonValue::String(sym_str)) = obj.get("__type_symbol") {
+                return Ok(v_sym(Symbol::mk(sym_str)));
             }
-            Ok(v_map(&pairs))
+
+            // Check for __type_obj
+            if let Some(JsonValue::String(obj_str)) = obj.get("__type_obj") {
+                let obj = moor_var::Obj::try_from(obj_str.as_str()).map_err(|_| {
+                    BfErr::ErrValue(E_INVARG.msg("Invalid object ID in PASETO token"))
+                })?;
+                return Ok(v_obj(obj));
+            }
+
+            // Check for __type_error
+            if let Some(JsonValue::Object(error_obj)) = obj.get("__type_error") {
+                let Some(JsonValue::String(code_str)) = error_obj.get("code") else {
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.msg("Error object missing 'code' field"),
+                    ));
+                };
+
+                let Some(error_code) = moor_var::ErrorCode::parse_str(code_str) else {
+                    return Err(BfErr::ErrValue(
+                        E_INVARG.msg("Invalid error code in PASETO token"),
+                    ));
+                };
+
+                // Extract optional message
+                let message = error_obj
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                // Extract optional value
+                let value = if let Some(val_json) = error_obj.get("value") {
+                    Some(json_to_var(val_json)?)
+                } else {
+                    None
+                };
+
+                return Ok(v_error(moor_var::Error::new(error_code, message, value)));
+            }
+
+            // Check for __type_map
+            if let Some(JsonValue::Array(pairs_arr)) = obj.get("__type_map") {
+                let mut pairs = Vec::new();
+                for pair_json in pairs_arr {
+                    let JsonValue::Array(pair) = pair_json else {
+                        return Err(BfErr::ErrValue(
+                            E_INVARG.msg("Map pairs must be arrays of [key, value]"),
+                        ));
+                    };
+                    if pair.len() != 2 {
+                        return Err(BfErr::ErrValue(
+                            E_INVARG.msg("Map pairs must have exactly 2 elements"),
+                        ));
+                    }
+                    let key = json_to_var(&pair[0])?;
+                    let value = json_to_var(&pair[1])?;
+                    pairs.push((key, value));
+                }
+                return Ok(v_map(&pairs));
+            }
+
+            // Not a tagged MOO type - error since we can't convert arbitrary JSON objects to MOO
+            Err(BfErr::ErrValue(E_INVARG.msg(
+                "Cannot convert JSON object to MOO value (use __type_map for maps)",
+            )))
         }
     }
 }
@@ -879,7 +976,20 @@ fn bf_paseto_verify_local(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr>
     })?;
 
     // Convert to Var map
-    json_to_var(&claims_json).map(Ret)
+    // The top-level JSON object has string keys (the claim names), so we manually
+    // convert it to a MOO map rather than using json_to_var which expects __type_map
+    let JsonValue::Object(claims_obj) = claims_json else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("PASETO claims must be a JSON object"),
+        ));
+    };
+
+    let mut pairs = Vec::new();
+    for (key, value) in claims_obj {
+        pairs.push((v_string(key), json_to_var(&value)?));
+    }
+
+    Ok(Ret(v_map(&pairs)))
 }
 
 pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
