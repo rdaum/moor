@@ -106,17 +106,17 @@ pub enum CommandError {
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum WorkerError {
-    #[error("Permission denied")]
+    #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    #[error("Invalid request")]
+    #[error("Invalid request: {0}")]
     InvalidRequest(String),
-    #[error("Invalid response")]
+    #[error("Internal error: {0}")]
     InternalError(String),
-    #[error("Request timed out")]
+    #[error("Request timed out: {0}")]
     RequestTimedOut(String),
-    #[error("Request cancelled")]
+    #[error("Request error: {0}")]
     RequestError(String),
-    #[error("Worker detached")]
+    #[error("Worker detached: {0}")]
     WorkerDetached(String),
     #[error("No worker available for {0}")]
     NoWorkerAvailable(Symbol),
