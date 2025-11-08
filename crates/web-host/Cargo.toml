@@ -68,8 +68,8 @@ thiserror.workspace = true
 tracing.workspace = true
 
 # Utilities & Helpers
+once_cell.workspace = true
 planus.workspace = true
 url = "2.5"
 urlencoding = "2.1"
 uuid.workspace = true
-once_cell.workspace = true

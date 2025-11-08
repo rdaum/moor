@@ -34,7 +34,10 @@ use rpc_common::{
 };
 use std::{
     net::{IpAddr, SocketAddr},
-    sync::LazyLock,
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tmq::{request, subscribe};
@@ -158,6 +161,7 @@ pub struct WebHost {
     local_port: u16,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
     pub(crate) host_id: Uuid,
+    last_daemon_ping: Arc<AtomicU64>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -176,6 +180,7 @@ impl WebHost {
         local_port: u16,
         curve_keys: Option<(String, String, String)>,
         host_id: Uuid,
+        last_daemon_ping: Arc<AtomicU64>,
     ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
@@ -186,6 +191,7 @@ impl WebHost {
             local_port,
             curve_keys,
             host_id,
+            last_daemon_ping,
         }
     }
 }
@@ -1021,4 +1027,23 @@ pub async fn invoke_welcome_message_handler(
         .expect("Unable to send detach to RPC server");
 
     response
+}
+
+/// Health check endpoint - verifies host is healthy and can communicate with daemon
+/// Checks that we've received a ping from the daemon recently (within last 30 seconds)
+/// Does NOT invoke any MOO code - just checks infrastructure connectivity
+pub async fn health_handler(State(host): State<WebHost>) -> Response {
+    let last_ping = host.last_daemon_ping.load(Ordering::Relaxed);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Report healthy if: no ping yet (last_ping == 0, still starting up) OR ping within last 30s
+    // This proves: daemon is alive, CURVE auth working, host is registered
+    if last_ping == 0 || now - last_ping < 30 {
+        StatusCode::OK.into_response()
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE.into_response()
+    }
 }

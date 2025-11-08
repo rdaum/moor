@@ -34,7 +34,10 @@ use rpc_async_client::{
 };
 use rpc_common::{HostType, client_args::RpcClientArgs};
 use serde_derive::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::atomic::AtomicBool};
+use std::{
+    net::SocketAddr,
+    sync::atomic::{AtomicBool, AtomicU64},
+};
 use tokio::{
     net::TcpListener,
     select,
@@ -91,6 +94,7 @@ struct Listeners {
     oauth2_manager: Option<Arc<OAuth2Manager>>,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
     enable_webhooks: bool,
+    last_daemon_ping: Arc<AtomicU64>,
 }
 
 impl Listeners {
@@ -104,6 +108,7 @@ impl Listeners {
         oauth2_manager: Option<Arc<OAuth2Manager>>,
         curve_keys: Option<(String, String, String)>,
         enable_webhooks: bool,
+        last_daemon_ping: Arc<AtomicU64>,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -120,6 +125,7 @@ impl Listeners {
             oauth2_manager,
             curve_keys,
             enable_webhooks,
+            last_daemon_ping,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
@@ -166,6 +172,7 @@ impl Listeners {
                         local_addr.port(),
                         self.curve_keys.clone(),
                         self.host_id,
+                        self.last_daemon_ping.clone(),
                     );
 
                     // Create OAuth2State if OAuth2 is enabled
@@ -278,6 +285,7 @@ fn mk_routes(
         )
         .route("/fb/eval", post(host::eval_handler))
         .route("/fb/features", get(host::features_handler))
+        .route("/health", get(host::health_handler))
         .route(
             "/fb/invoke_welcome_message",
             get(host::invoke_welcome_message_handler),
@@ -427,6 +435,7 @@ async fn main() -> Result<(), eyre::Error> {
     };
 
     let host_id = Uuid::new_v4();
+    let last_daemon_ping = Arc::new(AtomicU64::new(0));
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         host_id,
         zmq_ctx.clone(),
@@ -436,6 +445,7 @@ async fn main() -> Result<(), eyre::Error> {
         oauth2_manager,
         curve_keys.clone(),
         args.enable_webhooks,
+        last_daemon_ping.clone(),
     );
     info!("Starting up listener thread...");
     let listeners_thread = tokio::spawn(async move {
@@ -489,6 +499,7 @@ async fn main() -> Result<(), eyre::Error> {
         listeners.clone(),
         HostType::TCP,
         curve_keys,
+        Some(last_daemon_ping),
     );
 
     select! {

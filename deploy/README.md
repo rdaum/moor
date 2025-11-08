@@ -282,10 +282,31 @@ sudo systemctl start moor-daemon
 
 **Location**: [kubernetes/](kubernetes/)
 
-**Status**: Planned for future release
+**Purpose**: Cloud-native deployment with horizontal scaling and distributed architecture
 
-**Contributions welcome!** If you'd like to contribute Kubernetes manifests, please see the
-[kubernetes README](kubernetes/README.md).
+Production Kubernetes deployment with TCP/CURVE communication, enrollment-based authentication, and
+horizontal pod autoscaling. Includes StatefulSet for daemon, Deployments for hosts/workers,
+Services, Ingress, NetworkPolicies, and support for cert-manager TLS certificates. Best suited for
+cloud environments, multi-datacenter deployments, organizations using Kubernetes, and deployments
+requiring horizontal scaling and high availability.
+
+**Quick start**:
+
+```bash
+cd kubernetes
+# Configure image registry in kustomization.yaml
+# Build and push images, or load into kind/minikube
+kubectl apply -k .
+```
+
+**Test locally with kind**:
+
+```bash
+cd kubernetes
+./test.sh
+```
+
+[Read full guide →](kubernetes/README.md)
 
 ---
 
@@ -516,8 +537,30 @@ The test scripts require:
 
 ### Testing Debian Packages
 
-Debian package deployment requires manual testing on a Debian/Ubuntu system. See
-[debian-packages/README.md](debian-packages/README.md) for testing procedures.
+Debian package deployment requires `cargo-deb` and `incus`:
+
+```bash
+cargo install cargo-deb
+# Install incus from your distribution
+```
+
+See [debian-packages/README.md](debian-packages/README.md) for testing procedures.
+
+### Testing Kubernetes
+
+Kubernetes deployment testing requires `kind` and `kubectl`:
+
+```bash
+# Install kind
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+chmod +x ./kind && sudo mv ./kind /usr/local/bin/
+
+# Install kubectl
+# See https://kubernetes.io/docs/tasks/tools/
+```
+
+The test creates a local kind cluster, builds and loads images, deploys manifests, and validates all
+components.
 
 ### SSL Certificate Testing
 

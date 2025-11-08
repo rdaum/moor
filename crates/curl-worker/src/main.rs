@@ -19,14 +19,20 @@ use reqwest::Url;
 use rpc_async_client::worker_loop;
 use rpc_common::client_args::RpcClientArgs;
 use std::{
+    net::SocketAddr,
     str::FromStr,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64},
+    },
 };
 use tokio::{
+    io::AsyncWriteExt,
+    net::TcpListener,
     select,
     signal::unix::{SignalKind, signal},
 };
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 // TODO: timeouts, and generally more error handling
@@ -48,6 +54,14 @@ struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
+
+    #[arg(
+        long,
+        value_name = "health-check-port",
+        help = "Port for health check endpoint (responds with OK)",
+        default_value = "9999"
+    )]
+    health_check_port: u16,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -92,6 +106,66 @@ async fn main() -> Result<(), eyre::Error> {
     // Generate a worker ID (or use enrolled UUID if we have one)
     let my_id = uuid::Uuid::new_v4();
 
+    // Create atomic for tracking daemon pings (for health checks)
+    let last_daemon_ping = Arc::new(AtomicU64::new(0));
+
+    // Start health check server
+    let health_check_addr = format!("0.0.0.0:{}", args.health_check_port);
+    info!("Starting health check endpoint on {}", health_check_addr);
+    let health_kill_switch = kill_switch.clone();
+    let health_ping_tracker = last_daemon_ping.clone();
+    tokio::spawn(async move {
+        let health_sockaddr = match health_check_addr.parse::<SocketAddr>() {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!(
+                    "Failed to parse health check address {}: {}",
+                    health_check_addr, e
+                );
+                return;
+            }
+        };
+
+        let listener = match TcpListener::bind(health_sockaddr).await {
+            Ok(l) => l,
+            Err(e) => {
+                error!("Unable to bind health check listener: {}", e);
+                return;
+            }
+        };
+
+        loop {
+            if health_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+
+            match listener.accept().await {
+                Ok((mut socket, addr)) => {
+                    debug!("Health check probe from {}", addr);
+
+                    // Check if we've received a daemon ping recently
+                    let last_ping = health_ping_tracker.load(std::sync::atomic::Ordering::Relaxed);
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+
+                    // Report healthy if: no ping yet (last_ping == 0, still starting up) OR ping within last 30s
+                    let response: &[u8] = if last_ping == 0 || now - last_ping < 30 {
+                        b"OK\n"
+                    } else {
+                        b"UNHEALTHY\n"
+                    };
+
+                    let _ = socket.write_all(response).await;
+                }
+                Err(e) => {
+                    debug!("Health check accept error: {}", e);
+                }
+            }
+        }
+    });
+
     let worker_response_rpc_addr = args.client_args.workers_response_address.clone();
     let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
     let worker_type = Symbol::mk("curl");
@@ -106,6 +180,7 @@ async fn main() -> Result<(), eyre::Error> {
             worker_type,
             perform_func,
             curve_keys,
+            Some(last_daemon_ping),
         )
         .await
         {

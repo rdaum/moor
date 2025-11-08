@@ -69,8 +69,8 @@ tracing.workspace = true
 termimad.workspace = true
 
 # Utilities & Helpers
-uuid.workspace = true
 once_cell.workspace = true
+uuid.workspace = true
 
 # Testing
 [dev-dependencies]

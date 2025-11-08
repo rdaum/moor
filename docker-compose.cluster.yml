@@ -12,8 +12,13 @@
 #   - deploy/web-basic/       - Web-enabled (HTTP only)
 #   - deploy/web-ssl/         - Web-enabled with HTTPS (recommended for production)
 #   - deploy/debian-packages/ - Native Debian/Ubuntu packages with systemd
+#   - deploy/kubernetes/      - Kubernetes manifests with health checks and horizontal scaling
 #
 # For simple single-host development, use docker-compose.yml (IPC-based)
+#
+# NOTE: This Docker Compose configuration runs all containers on a single host for testing.
+# For a more realistic multi-machine clustered deployment example with health checks,
+# readiness/liveness probes, and horizontal scaling, see deploy/kubernetes/
 #
 # This configuration uses debug builds by default for faster compilation during development.
 # Production deployments should use release builds for better performance.

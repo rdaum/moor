@@ -25,7 +25,11 @@ use moor_var::{Obj, Symbol, Var};
 use rpc_common::WORKER_BROADCAST_TOPIC;
 use std::{
     future::Future,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::SystemTime,
 };
 use thiserror::Error;
 use tmq::{TmqError, request};
@@ -48,6 +52,7 @@ pub async fn worker_loop<ProcessFunc, Fut>(
     worker_type: Symbol,
     perform: Arc<ProcessFunc>,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
+    last_daemon_ping: Option<Arc<AtomicU64>>,
 ) -> Result<(), WorkerRpcError>
 where
     ProcessFunc:
@@ -118,6 +123,7 @@ where
         let ctx = zmq_ctx.clone();
         let perform_p = perform.clone();
         let curve_keys_clone = curve_keys.clone();
+        let ping_tracker = last_daemon_ping.clone();
         tokio::spawn(process_fb(
             event,
             ctx,
@@ -127,6 +133,7 @@ where
             kill_switch.clone(),
             perform_p,
             curve_keys_clone,
+            ping_tracker,
         ));
     }
     Ok(())
@@ -141,6 +148,7 @@ async fn process_fb<ProcessFunc, Fut>(
     kill_switch: Arc<AtomicBool>,
     perform: Arc<ProcessFunc>,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
+    last_daemon_ping: Option<Arc<AtomicU64>>,
 ) where
     ProcessFunc:
         Fn(Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut + Send + Sync + 'static,
@@ -195,6 +203,15 @@ async fn process_fb<ProcessFunc, Fut>(
 
     match message_union {
         moor_rpc::DaemonToWorkerMessageUnionRef::PingWorkers(_) => {
+            // Update last ping timestamp for health checks
+            if let Some(ref ping_atomic) = last_daemon_ping {
+                let timestamp = SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                ping_atomic.store(timestamp, Ordering::Relaxed);
+            }
+
             rpc_client
                 .make_worker_rpc_call_fb_pong(my_id, worker_type)
                 .await

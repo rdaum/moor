@@ -94,6 +94,14 @@ main() {
         echo
     fi
 
+    # Add kubernetes if prerequisites are available
+    if command -v kind &> /dev/null && command -v kubectl &> /dev/null; then
+        DEPLOYMENTS+=("kubernetes")
+    else
+        echo -e "${YELLOW}⚠ Skipping kubernetes test (requires kind and kubectl)${NC}"
+        echo
+    fi
+
     # Run each deployment test
     for deployment in "${DEPLOYMENTS[@]}"; do
         run_deployment_test "$deployment" "$SCRIPT_DIR/$deployment" || true

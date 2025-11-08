@@ -19,7 +19,6 @@ mod testrun;
 use crate::{feature_args::FeatureArgs, testrun::run_test};
 use clap::Parser;
 use clap_derive::Parser;
-use once_cell::sync::Lazy;
 use moor_common::{
     build,
     model::{CompileError, Named, ObjectRef, PropFlag, ValSet, WorldStateSource},
@@ -36,6 +35,7 @@ use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
 use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
+use once_cell::sync::Lazy;
 use std::{
     fs::{self, File},
     io::{self, IsTerminal},

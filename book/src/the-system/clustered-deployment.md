@@ -176,7 +176,9 @@ After enrollment, the daemon validates all incoming ZMQ connections using the Ze
 3. Connection is accepted only if the public key is registered
 4. Invalid or unknown keys are rejected
 
-## Example Configuration: docker-compose.cluster.yml
+## Example Configurations
+
+### docker-compose.cluster.yml
 
 The mooR repository includes `docker-compose.cluster.yml` as a reference implementation. **This configuration runs on a single host** (all containers on one machine) but demonstrates the TCP/CURVE setup you'd use for an actual multi-machine clustered deployment:
 
@@ -194,68 +196,18 @@ This example configuration shows:
 
 **Purpose**: Use this as a reference for understanding and testing the clustered configuration locally before deploying across actual separate machines. For production multi-machine deployments, adapt the endpoint addresses to point to different hosts and configure appropriate network routing.
 
-## Kubernetes Deployment
+### Kubernetes Deployment (deploy/kubernetes/)
 
-For production Kubernetes deployments:
+For a more complete example of multi-machine clustered deployment, see the Kubernetes manifests in `deploy/kubernetes/`. This configuration demonstrates:
 
-### Daemon Pod
+- Health checks with daemon ping/pong verification
+- Horizontal scaling of hosts and workers
+- Readiness and liveness probes
+- Resource limits and requests
+- Service discovery and networking
+- Enrollment token management via Secrets
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: moor-daemon
-spec:
-  replicas: 1  # Daemon should be singleton
-  template:
-    spec:
-      containers:
-        - name: daemon
-          image: moor-daemon:latest
-          args:
-            - --rpc-listen=tcp://0.0.0.0:7899
-            - --events-listen=tcp://0.0.0.0:7898
-            - --enrollment-listen=tcp://0.0.0.0:7900
-            - /data/moor.db
-          ports:
-            - containerPort: 7899
-            - containerPort: 7898
-            - containerPort: 7900
-```
-
-### Web Host Deployment
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: moor-web-host
-spec:
-  replicas: 3  # Scale as needed
-  template:
-    spec:
-      containers:
-        - name: web-host
-          image: moor-web-host:latest
-          args:
-            - --rpc-address=tcp://moor-daemon:7899
-            - --events-address=tcp://moor-daemon:7898
-            - --enrollment-address=tcp://moor-daemon:7900
-          env:
-            - name: ENROLLMENT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: moor-enrollment-token
-                  key: token
-```
-
-### Enrollment Token Secret
-
-```bash
-# Create enrollment token secret
-kubectl create secret generic moor-enrollment-token \
-  --from-file=token=/path/to/enrollment-token
-```
+While designed for local testing with kind/minikube, these manifests serve as a solid reference for production Kubernetes deployments. See the `deploy/kubernetes/README.md` for detailed deployment instructions.
 
 ## Managing Enrollment Tokens
 
@@ -322,12 +274,38 @@ For multi-machine deployments:
 
 Clustered deployments benefit from comprehensive monitoring:
 
+### Health Checks
+
+All components implement health endpoints that verify daemon connectivity:
+
+- **Web-host**: HTTP GET on `/health` (port 8081 by default)
+- **Telnet-host**: TCP socket on port 9888
+- **Curl-worker**: TCP socket on port 9999
+
+Each host and worker tracks daemon ping/pong messages and reports healthy only if a ping was received within the last 30 seconds. This ensures the component is enrolled, CURVE-authenticated, and actively communicating with the daemon.
+
+**Testing health endpoints:**
+
+```bash
+# Web-host HTTP health check
+curl http://web-host.internal:8081/health
+
+# Telnet-host TCP health check
+nc -zv telnet-host.internal 9888
+
+# Curl-worker TCP health check
+nc -zv curl-worker.internal 9999
+```
+
+In Kubernetes, these endpoints are used for liveness and readiness probes to ensure only healthy pods receive traffic.
+
 ### Metrics to Monitor
 
 - **Connection Health**: Are all hosts/workers enrolled and connected?
 - **Network Latency**: Latency between daemon and hosts/workers
 - **Message Throughput**: RPC and event message rates
 - **Error Rates**: Failed enrollments, disconnections, authentication failures
+- **Health Check Status**: Monitor health endpoint responses for early warning of connectivity issues
 
 ### Logging
 

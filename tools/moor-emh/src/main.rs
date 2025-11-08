@@ -16,7 +16,6 @@
 
 use clap::Parser;
 use clap_derive::Parser as DeriveParser;
-use once_cell::sync::Lazy;
 use eyre::{Report, bail, eyre};
 use fs2::FileExt;
 use moor_common::model::ObjectKind;
@@ -36,6 +35,7 @@ use moor_kernel::{
     tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
 };
 use moor_var::{Obj, SYSTEM_OBJECT, Sequence, Symbol, Var};
+use once_cell::sync::Lazy;
 use rustyline::ExternalPrinter;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -109,7 +109,7 @@ static VERSION_STRING: Lazy<String> = Lazy::new(|| {
         "{} (commit: {})",
         env!("CARGO_PKG_VERSION"),
         moor_common::build::short_commit()
-  )
+    )
 });
 
 #[derive(DeriveParser, Debug)]

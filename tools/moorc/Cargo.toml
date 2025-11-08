@@ -46,9 +46,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 # Utilities & Helpers
-semver.workspace = true
 once_cell.workspace = true
+semver.workspace = true
 
 # Testing & Development
 tempfile.workspace = true
-

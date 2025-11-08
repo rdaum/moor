@@ -21,7 +21,10 @@ use rpc_common::{
 };
 use std::{
     net::SocketAddr,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
     time::SystemTime,
 };
 use tracing::{error, info, warn};
@@ -165,6 +168,7 @@ pub async fn process_hosts_events(
     listeners: ListenersClient,
     our_host_type: HostType,
     curve_keys: Option<(String, String, String)>, // (client_secret, client_public, server_public) - Z85 encoded
+    last_daemon_ping: Option<Arc<AtomicU64>>,
 ) -> Result<(), RpcError> {
     // Handle inbound events from the daemon specifically to the host
     let mut socket_builder = tmq::subscribe(&zmq_ctx);
@@ -209,6 +213,15 @@ pub async fn process_hosts_events(
             .map_err(|e| RpcError::CouldNotDecode(format!("Missing event: {e}")))?
         {
             moor_rpc::HostBroadcastEventUnionRef::HostBroadcastPingPong(_) => {
+                // Update last ping timestamp for health checks
+                let timestamp = SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| RpcError::CouldNotSend(format!("Invalid timestamp: {e}")))?
+                    .as_secs();
+                if let Some(ref ping_atomic) = last_daemon_ping {
+                    ping_atomic.store(timestamp, Ordering::Relaxed);
+                }
+
                 // Respond with a HostPong
                 let timestamp = SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)

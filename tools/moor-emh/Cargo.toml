@@ -48,11 +48,10 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 # Utilities & Helpers
+once_cell.workspace = true
 semver.workspace = true
 uuid.workspace = true
-once_cell.workspace = true
 
 # REPL support
 rustyline.workspace = true
 termimad.workspace = true
-
