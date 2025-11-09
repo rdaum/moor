@@ -69,7 +69,8 @@ pub enum VMHostResponse {
     /// Tell the task to suspend us.
     Suspend(Box<TaskSuspend>),
     /// Tell the task Johnny 5 needs input from the client (`read` invocation).
-    SuspendNeedInput,
+    /// Optional metadata provides UI hints for rich input prompts.
+    SuspendNeedInput(Option<Vec<(Symbol, Var)>>),
     /// Task timed out or exceeded ticks.
     AbortLimit(AbortLimitReason),
     /// Tell the task that execution has completed, and the task is successful.

@@ -46,6 +46,7 @@ import { PropertyUpdated } from "../generated/moor-rpc/property-updated.js";
 import { PropertyValue } from "../generated/moor-rpc/property-value.js";
 import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union.js";
 import { ReplyResult } from "../generated/moor-rpc/reply-result.js";
+import { RequestInputEvent } from "../generated/moor-rpc/request-input-event.js";
 import { SchedulerErrorUnion, unionToSchedulerErrorUnion } from "../generated/moor-rpc/scheduler-error-union.js";
 import { SchedulerError } from "../generated/moor-rpc/scheduler-error.js";
 import { ServerFeatures } from "../generated/moor-rpc/server-features.js";
@@ -76,6 +77,7 @@ import { VarList } from "../generated/moor-var/var-list.js";
 import { VarUnion } from "../generated/moor-var/var-union.js";
 import { Var } from "../generated/moor-var/var.js";
 import { decryptEventBlob } from "./age-decrypt.js";
+import { parseInputMetadata } from "./input-metadata.js";
 import { MoorVar } from "./MoorVar.js";
 
 export interface ServerFeatureSet {
@@ -742,6 +744,7 @@ export function handleClientEventFlatBuffer(
     onUnpresentMessage?: (id: string) => void,
     onPlayerFlagsChange?: (flags: number) => void,
     lastEventTimestampRef?: React.MutableRefObject<bigint | null>,
+    onInputMetadata?: (metadata: import("../types/input").InputMetadata | null) => void,
 ): void {
     try {
         // Parse the ClientEvent
@@ -1013,7 +1016,29 @@ export function handleClientEventFlatBuffer(
             }
 
             case ClientEventUnion.RequestInputEvent: {
-                // Input requests are handled by the websocket connection logic
+                const requestInput = clientEvent.event(new RequestInputEvent()) as RequestInputEvent | null;
+                if (!requestInput) {
+                    console.error("[WS] Failed to parse RequestInputEvent");
+                    return;
+                }
+
+                // Extract metadata if present
+                const metadataPairs = [];
+                const metadataLength = requestInput.metadataLength();
+                for (let i = 0; i < metadataLength; i++) {
+                    const pair = requestInput.metadata(i);
+                    if (pair) {
+                        metadataPairs.push(pair);
+                    }
+                }
+
+                // Parse metadata into InputMetadata structure
+                const metadata = parseInputMetadata(metadataPairs.length > 0 ? metadataPairs : null);
+
+                // Notify the input metadata handler
+                if (onInputMetadata) {
+                    onInputMetadata(metadata);
+                }
                 break;
             }
 

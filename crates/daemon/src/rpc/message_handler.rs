@@ -61,7 +61,8 @@ use moor_kernel::{
 
 use moor_schema::convert::{
     narrative_event_to_flatbuffer_struct, obj_from_ref, obj_to_flatbuffer_struct,
-    presentation_to_flatbuffer_struct, uuid_to_flatbuffer_struct, var_from_ref, var_to_flatbuffer,
+    presentation_to_flatbuffer_struct, symbol_to_flatbuffer_struct, uuid_to_flatbuffer_struct,
+    var_from_ref, var_to_flatbuffer,
 };
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_common::{
@@ -533,8 +534,9 @@ impl MessageHandler for RpcMessageHandler {
                 client_id,
                 connection,
                 request_id: input_request_id,
+                metadata,
             } => {
-                if let Err(e) = self.request_client_input(client_id, connection, input_request_id) {
+                if let Err(e) = self.request_client_input(client_id, connection, input_request_id, metadata) {
                     error!(error = ?e, "Unable to request client input");
                 }
             }
@@ -1440,6 +1442,7 @@ impl RpcMessageHandler {
         client_id: Uuid,
         player: Obj,
         input_request_id: Uuid,
+        metadata: Option<Vec<(Symbol, Var)>>,
     ) -> Result<(), Error> {
         // Validate first - check that the player matches the logged-in player for this client
         let Some(logged_in_player) = self.connections.player_object_for_client(client_id) else {
@@ -1449,9 +1452,28 @@ impl RpcMessageHandler {
             return Err(eyre::eyre!("Player mismatch"));
         }
 
+        // Serialize metadata to FlatBuffer format
+        let metadata_fb = metadata.map(|meta| {
+            meta.iter()
+                .filter_map(|(key, value)| {
+                    match var_to_flatbuffer(value) {
+                        Ok(value_fb) => Some(moor_rpc::MetadataPair {
+                            key: Box::new(symbol_to_flatbuffer_struct(key)),
+                            value: Box::new(value_fb),
+                        }),
+                        Err(e) => {
+                            warn!(error = ?e, key = ?key, "Failed to serialize metadata value");
+                            None
+                        }
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
+
         let event = ClientEvent {
             event: ClientEventUnion::RequestInputEvent(Box::new(moor_rpc::RequestInputEvent {
                 request_id: Box::new(uuid_to_flatbuffer_struct(&input_request_id)),
+                metadata: metadata_fb,
             })),
         };
         self.transport.publish_client_event(client_id, event)

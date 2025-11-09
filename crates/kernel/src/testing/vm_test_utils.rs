@@ -88,7 +88,7 @@ fn execute_fork(
             VMHostResponse::Suspend(_) => {
                 panic!("Fork task suspended");
             }
-            VMHostResponse::SuspendNeedInput => {
+            VMHostResponse::SuspendNeedInput(_) => {
                 panic!("Fork task needs input");
             }
             VMHostResponse::RollbackRetry => {
@@ -148,7 +148,7 @@ where
             VMHostResponse::Suspend(_) => {
                 panic!("Unexpected suspend");
             }
-            VMHostResponse::SuspendNeedInput => {
+            VMHostResponse::SuspendNeedInput(_) => {
                 panic!("Unexpected suspend need input");
             }
             VMHostResponse::RollbackRetry => {

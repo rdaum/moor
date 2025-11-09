@@ -60,7 +60,12 @@ impl Session for OutputCaptureSession {
         Ok(Arc::new(Self::new(self.client_id, self.player)))
     }
 
-    fn request_input(&self, _player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(
+        &self,
+        _player: Obj,
+        _input_request_id: Uuid,
+        _metadata: Option<Vec<(Symbol, Var)>>,
+    ) -> Result<(), SessionError> {
         // Input requests are not supported for output capture sessions
         Err(SessionError::CommitError(
             "Input requests not supported for output capture sessions".to_string(),

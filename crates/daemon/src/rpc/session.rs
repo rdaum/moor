@@ -40,6 +40,7 @@ pub enum SessionActions {
         client_id: Uuid,
         connection: Obj,
         request_id: Uuid,
+        metadata: Option<Vec<(Symbol, Var)>>,
     },
     SendSystemMessage {
         client_id: Uuid,
@@ -125,12 +126,18 @@ impl Session for RpcSession {
         )))
     }
 
-    fn request_input(&self, player: Obj, input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(
+        &self,
+        player: Obj,
+        input_request_id: Uuid,
+        metadata: Option<Vec<(Symbol, Var)>>,
+    ) -> Result<(), SessionError> {
         self.send
             .send(SessionActions::RequestClientInput {
                 client_id: self.client_id,
                 connection: player,
                 request_id: input_request_id,
+                metadata,
             })
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
         Ok(())

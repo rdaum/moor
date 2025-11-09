@@ -53,6 +53,7 @@ impl Session for DirectSession {
         &self,
         _player: Obj,
         _input_request_id: uuid::Uuid,
+        _metadata: Option<Vec<(Symbol, Var)>>,
     ) -> Result<(), SessionError> {
         Ok(())
     }

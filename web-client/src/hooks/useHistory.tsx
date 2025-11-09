@@ -166,6 +166,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
             let messageContent: string | string[] = "";
             let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
             let presentationHint: string | undefined;
+            let thumbnail: { contentType: string; data: string } | undefined;
 
             switch (eventType) {
                 case EventUnion.NotifyEvent: {
@@ -193,7 +194,6 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                     }
 
                     // Extract presentation_hint and thumbnail from metadata
-                    let thumbnail: { contentType: string; data: string } | undefined;
                     const metadataLength = notify.metadataLength();
                     for (let mi = 0; mi < metadataLength; mi++) {
                         const metadata = notify.metadata(mi);
@@ -285,7 +285,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                 isHistorical: true,
                 contentType,
                 presentationHint,
-                thumbnail,
+                thumbnail: thumbnail,
             };
         } catch (error) {
             console.error("Failed to convert FlatBuffer event:", error);

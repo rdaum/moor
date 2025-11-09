@@ -494,7 +494,8 @@ function AppContent({
     }, [dismissPresentation, authState.player?.authToken]);
 
     // WebSocket integration
-    const { wsState, connect: connectWS, disconnect: disconnectWS, sendMessage } = useWebSocketContext();
+    const { wsState, connect: connectWS, disconnect: disconnectWS, sendMessage, inputMetadata, clearInputMetadata } =
+        useWebSocketContext();
 
     // Track previous player OID to detect logout
     const previousPlayerOidRef = useRef<string | null>(null);
@@ -1068,6 +1069,8 @@ function AppContent({
                                     playerOid={authState.player?.oid}
                                     onMessageAppended={handleMessageAppended}
                                     fontSize={narrativeFontSize}
+                                    inputMetadata={inputMetadata}
+                                    onClearInputMetadata={clearInputMetadata}
                                 />
                             </section>
 

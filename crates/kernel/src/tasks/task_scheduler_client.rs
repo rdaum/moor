@@ -140,9 +140,9 @@ impl TaskSchedulerClient {
 
     /// Send a message to the scheduler that the task is requesting input from the client.
     /// Moves this task into the suspension queue until the client provides input.
-    pub fn request_input(&self, task: Box<Task>) {
+    pub fn request_input(&self, task: Box<Task>, metadata: Option<Vec<(Symbol, Var)>>) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::TaskRequestInput(task)))
+            .send((self.task_id, TaskControlMsg::TaskRequestInput(task, metadata)))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
@@ -467,7 +467,8 @@ pub enum TaskControlMsg {
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
     TaskSuspend(TaskSuspend, Box<Task>),
     /// Tell the scheduler we're suspending until we get input from the client.
-    TaskRequestInput(Box<Task>),
+    /// Optional metadata provides UI hints for rich input prompts.
+    TaskRequestInput(Box<Task>, Option<Vec<(Symbol, Var)>>),
     /// Task is requesting a list of all other tasks known to the scheduler.
     RequestTasks(oneshot::Sender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.

@@ -100,8 +100,13 @@ pub trait Session: Send + Sync {
     /// Request that the client send input to the server.
     /// The task is committed and suspended until the client sends input to `submit_requested_input`
     /// with the given `input_request_id` argument, at which time the task is resumed in a new
-    /// transaction.
-    fn request_input(&self, player: Obj, input_request_id: Uuid) -> Result<(), SessionError>;
+    /// transaction. Optional metadata provides UI hints for rich input prompts.
+    fn request_input(
+        &self,
+        player: Obj,
+        input_request_id: Uuid,
+        metadata: Option<Vec<(Symbol, Var)>>,
+    ) -> Result<(), SessionError>;
 
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
@@ -257,7 +262,12 @@ impl Session for NoopClientSession {
         Ok(self.clone())
     }
 
-    fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(
+        &self,
+        player: Obj,
+        _input_request_id: Uuid,
+        _metadata: Option<Vec<(Symbol, Var)>>,
+    ) -> Result<(), SessionError> {
         panic!("NoopClientSession::request_input called for player {player}")
     }
 
@@ -432,7 +442,12 @@ impl Session for MockClientSession {
         }))
     }
 
-    fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(
+        &self,
+        player: Obj,
+        _input_request_id: Uuid,
+        _metadata: Option<Vec<(Symbol, Var)>>,
+    ) -> Result<(), SessionError> {
         panic!("MockClientSession::request_input called for player {player}")
     }
 

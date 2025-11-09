@@ -114,16 +114,22 @@ fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Suspends the current task to wait for input from a player.
-/// MOO: `str read([obj player])`
+/// MOO: `str read([obj player [, map/alist metadata]])`
+///
+/// The optional metadata parameter allows specifying UI hints for rich input prompts:
+/// - `input_type`: Type of input ("yes_no", "choice", "number", etc.)
+/// - `prompt`: Prompt text to display
+/// - `choices`: List of choices for "choice" input type
+/// - `min`/`max`: Range constraints for "number" input type
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() > 1 {
-        return Err(ErrValue(E_ARGS.msg("read() requires 0 or 1 arguments")));
+    if bf_args.args.len() > 2 {
+        return Err(ErrValue(E_ARGS.msg("read() requires 0 to 2 arguments")));
     }
 
     // We don't actually support reading from arbitrary connections that aren't the current player,
     // so we'll raise E_INVARG for anything else, because we don't support LambdaMOO's
     // network listener model.
-    if bf_args.args.len() == 1 {
+    if !bf_args.args.is_empty() {
         let Some(requested_player) = bf_args.args[0].as_object() else {
             return Err(ErrValue(
                 E_ARGS.msg("read() requires an object as the first argument"),
@@ -143,7 +149,51 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    Ok(VmInstr(ExecutionResult::TaskNeedInput))
+    // Parse optional metadata (similar to bf_notify)
+    let metadata = if bf_args.args.len() == 2 {
+        let metadata_arg = &bf_args.args[1];
+        let mut metadata_vec = Vec::new();
+
+        match metadata_arg.variant() {
+            Variant::Map(m) => {
+                for (key, value) in m.iter() {
+                    let key_sym = key.as_symbol().map_err(ErrValue)?;
+                    metadata_vec.push((key_sym, value));
+                }
+            }
+            Variant::List(l) => {
+                for item in l.iter() {
+                    match item.variant() {
+                        Variant::List(pair) => {
+                            if pair.len() != 2 {
+                                return Err(ErrValue(E_ARGS.msg(
+                                    "read() metadata alist must contain {key, value} pairs",
+                                )));
+                            }
+                            let key_sym = pair[0].as_symbol().map_err(ErrValue)?;
+                            metadata_vec.push((key_sym, pair[1].clone()));
+                        }
+                        _ => {
+                            return Err(ErrValue(
+                                E_TYPE.msg("read() metadata alist must contain {key, value} pairs"),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(ErrValue(
+                    E_TYPE.msg("read() metadata must be a map or alist"),
+                ));
+            }
+        }
+
+        Some(metadata_vec)
+    } else {
+        None
+    };
+
+    Ok(VmInstr(ExecutionResult::TaskNeedInput(metadata)))
 }
 
 /// Returns a list of all queued (suspended) tasks.

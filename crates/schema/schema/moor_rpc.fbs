@@ -910,8 +910,14 @@ table NarrativeEventMessage {
     event: MoorCommon.NarrativeEvent (required);
 }
 
+table MetadataPair {
+    key: MoorCommon.Symbol (required);
+    value: MoorVar.Var (required);
+}
+
 table RequestInputEvent {
     request_id: MoorCommon.Uuid (required);
+    metadata: [MetadataPair];
 }
 
 table SystemMessageEvent {

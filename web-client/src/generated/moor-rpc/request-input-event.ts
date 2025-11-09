@@ -3,6 +3,7 @@
 import * as flatbuffers from "flatbuffers";
 
 import { Uuid } from "../moor-common/uuid.js";
+import { MetadataPair } from "../moor-rpc/metadata-pair.js";
 
 export class RequestInputEvent {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -30,12 +31,43 @@ export class RequestInputEvent {
         return offset ? (obj || new Uuid()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
+    metadata(index: number, obj?: MetadataPair): MetadataPair | null {
+        const offset = this.bb!.__offset(this.bb_pos, 6);
+        return offset
+            ? (obj || new MetadataPair()).__init(
+                this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4),
+                this.bb!,
+            )
+            : null;
+    }
+
+    metadataLength(): number {
+        const offset = this.bb!.__offset(this.bb_pos, 6);
+        return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
+    }
+
     static startRequestInputEvent(builder: flatbuffers.Builder) {
-        builder.startObject(1);
+        builder.startObject(2);
     }
 
     static addRequestId(builder: flatbuffers.Builder, requestIdOffset: flatbuffers.Offset) {
         builder.addFieldOffset(0, requestIdOffset, 0);
+    }
+
+    static addMetadata(builder: flatbuffers.Builder, metadataOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(1, metadataOffset, 0);
+    }
+
+    static createMetadataVector(builder: flatbuffers.Builder, data: flatbuffers.Offset[]): flatbuffers.Offset {
+        builder.startVector(4, data.length, 4);
+        for (let i = data.length - 1; i >= 0; i--) {
+            builder.addOffset(data[i]!);
+        }
+        return builder.endVector();
+    }
+
+    static startMetadataVector(builder: flatbuffers.Builder, numElems: number) {
+        builder.startVector(4, numElems, 4);
     }
 
     static endRequestInputEvent(builder: flatbuffers.Builder): flatbuffers.Offset {
@@ -47,9 +79,11 @@ export class RequestInputEvent {
     static createRequestInputEvent(
         builder: flatbuffers.Builder,
         requestIdOffset: flatbuffers.Offset,
+        metadataOffset: flatbuffers.Offset,
     ): flatbuffers.Offset {
         RequestInputEvent.startRequestInputEvent(builder);
         RequestInputEvent.addRequestId(builder, requestIdOffset);
+        RequestInputEvent.addMetadata(builder, metadataOffset);
         return RequestInputEvent.endRequestInputEvent(builder);
     }
 }

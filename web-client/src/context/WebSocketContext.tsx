@@ -14,6 +14,7 @@
 import React, { createContext, useContext } from "react";
 import { Player } from "../hooks/useAuth";
 import { useWebSocket, WebSocketState } from "../hooks/useWebSocket";
+import { InputMetadata } from "../types/input";
 import { PresentationData } from "../types/presentation";
 
 interface WebSocketContextType {
@@ -21,6 +22,8 @@ interface WebSocketContextType {
     connect: (mode: "connect" | "create") => Promise<void>;
     disconnect: () => void;
     sendMessage: (message: string) => boolean;
+    inputMetadata: InputMetadata | null;
+    clearInputMetadata: () => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);

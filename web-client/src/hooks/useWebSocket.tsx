@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { handleClientEventFlatBuffer } from "../lib/rpc-fb";
+import { InputMetadata } from "../types/input";
 import { Player } from "./useAuth";
 
 export interface WebSocketState {
@@ -44,6 +45,8 @@ export const useWebSocket = (
         connectionStatus: "disconnected",
     });
 
+    const [inputMetadata, setInputMetadata] = useState<InputMetadata | null>(null);
+
     const socketRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | null>(null);
     const lastEventTimestampRef = useRef<bigint | null>(null);
@@ -71,6 +74,7 @@ export const useWebSocket = (
                         onUnpresentMessage,
                         onPlayerFlagsChange,
                         lastEventTimestampRef,
+                        setInputMetadata,
                     );
                 } else {
                     console.error("Unexpected non-binary WebSocket message:", event.data);
@@ -252,6 +256,11 @@ export const useWebSocket = (
         }
     }, [onSystemMessage]);
 
+    // Clear input metadata
+    const clearInputMetadata = useCallback(() => {
+        setInputMetadata(null);
+    }, []);
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
@@ -282,5 +291,7 @@ export const useWebSocket = (
         connect,
         disconnect,
         sendMessage,
+        inputMetadata,
+        clearInputMetadata,
     };
 };

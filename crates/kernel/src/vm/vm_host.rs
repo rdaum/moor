@@ -106,8 +106,8 @@ pub(crate) enum ExecutionResult {
     /// If the duration is None, then the task is suspended indefinitely, until it is killed or
     /// resumed using `resume()` or `kill_task()`.
     TaskSuspend(TaskSuspend),
-    /// Request input from the client.
-    TaskNeedInput,
+    /// Request input from the client, with optional metadata for UI hints.
+    TaskNeedInput(Option<Vec<(Symbol, Var)>>),
     /// Rollback the current transaction and restart the task in a new transaction.
     /// This can happen when a conflict occurs during execution, independent of a commit.
     TaskRollbackRestart,
@@ -427,8 +427,8 @@ impl VmHost {
                 ExecutionResult::TaskSuspend(delay) => {
                     return Suspend(Box::new(delay));
                 }
-                ExecutionResult::TaskNeedInput => {
-                    return VMHostResponse::SuspendNeedInput;
+                ExecutionResult::TaskNeedInput(metadata) => {
+                    return VMHostResponse::SuspendNeedInput(metadata);
                 }
                 ExecutionResult::Complete(a) => {
                     return VMHostResponse::CompleteSuccess(a);

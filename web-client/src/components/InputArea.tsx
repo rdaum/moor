@@ -12,6 +12,8 @@
 //
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { InputMetadata } from "../types/input";
+import { RichInputPrompt } from "./RichInputPrompt";
 
 interface InputAreaProps {
     visible: boolean;
@@ -19,6 +21,8 @@ interface InputAreaProps {
     onSendMessage: (message: string) => void;
     commandHistory: string[];
     onAddToHistory: (command: string) => void;
+    inputMetadata?: InputMetadata | null;
+    onClearInputMetadata?: () => void;
 }
 
 const ENCOURAGING_PLACEHOLDERS = [
@@ -38,6 +42,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
     onSendMessage,
     commandHistory,
     onAddToHistory,
+    inputMetadata,
+    onClearInputMetadata,
 }) => {
     const [input, setInput] = useState("");
     const [historyOffset, setHistoryOffset] = useState(0);
@@ -227,10 +233,32 @@ export const InputArea: React.FC<InputAreaProps> = ({
         }
     }, [navigateHistory, sendInput, input, historyOffset, commandHistory]);
 
+    // Handler for rich input submission
+    const handleRichInputSubmit = useCallback((value: string) => {
+        onSendMessage(value);
+        if (onClearInputMetadata) {
+            onClearInputMetadata();
+        }
+    }, [onSendMessage, onClearInputMetadata]);
+
     if (!visible) {
         return null;
     }
 
+    // If we have input metadata, render the rich input prompt instead
+    if (inputMetadata && inputMetadata.input_type) {
+        return (
+            <div className="w-full">
+                <RichInputPrompt
+                    metadata={inputMetadata}
+                    onSubmit={handleRichInputSubmit}
+                    disabled={disabled}
+                />
+            </div>
+        );
+    }
+
+    // Default text input
     return (
         <div className="w-full">
             <textarea

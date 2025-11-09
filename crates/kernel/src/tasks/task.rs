@@ -341,7 +341,7 @@ impl Task {
                 task_scheduler_client.suspend(delay.as_ref().clone(), self);
                 None
             }
-            VMHostResponse::SuspendNeedInput => {
+            VMHostResponse::SuspendNeedInput(metadata) => {
                 // VMHost is now suspended for input, and we'll be waiting for a ResumeReceiveInput
 
                 // Attempt commit... See comments/notes on Suspend above.
@@ -361,7 +361,7 @@ impl Task {
                 trace_task_suspend!(self.task_id, "Waiting for input");
 
                 // Consume us, passing back to the scheduler that we're waiting for input.
-                task_scheduler_client.request_input(self);
+                task_scheduler_client.request_input(self, metadata);
                 None
             }
             VMHostResponse::ContinueOk => Some(self),
@@ -1361,7 +1361,7 @@ mod tests {
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskRequestInput(mut resume_task) = msg else {
+        let TaskControlMsg::TaskRequestInput(mut resume_task, _metadata) = msg else {
             panic!("Expected TaskRequestInput, got different message type");
         };
         assert_eq!(resume_task.task_id, 1);

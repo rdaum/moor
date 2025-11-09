@@ -12,6 +12,7 @@
 //
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { InputMetadata } from "../types/input";
 import { getCommandEchoEnabled } from "./CommandEchoToggle";
 import { InputArea } from "./InputArea";
 import { OutputWindow } from "./OutputWindow";
@@ -38,6 +39,8 @@ interface NarrativeProps {
     playerOid?: string | null;
     onMessageAppended?: (message: NarrativeMessage) => void;
     fontSize?: number;
+    inputMetadata?: InputMetadata | null;
+    onClearInputMetadata?: () => void;
 }
 
 export interface NarrativeRef {
@@ -76,6 +79,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     playerOid,
     onMessageAppended,
     fontSize,
+    inputMetadata,
+    onClearInputMetadata,
 }, ref) => {
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -320,6 +325,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     onSendMessage={handleSendMessage}
                     commandHistory={commandHistory}
                     onAddToHistory={addToHistory}
+                    inputMetadata={inputMetadata}
+                    onClearInputMetadata={onClearInputMetadata}
                 />
             </div>
         </div>

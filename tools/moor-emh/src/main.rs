@@ -257,7 +257,12 @@ impl Session for ConsoleSession {
         Ok(Arc::new(ConsoleSession::new()))
     }
 
-    fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(
+        &self,
+        player: Obj,
+        _input_request_id: Uuid,
+        _metadata: Option<Vec<(Symbol, Var)>>,
+    ) -> Result<(), SessionError> {
         panic!("ConsoleSession::request_input called for player {player}")
     }
 

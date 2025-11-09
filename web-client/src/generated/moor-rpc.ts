@@ -99,6 +99,7 @@ export { LoginCommand } from "./moor-rpc/login-command.js";
 export { LoginResult } from "./moor-rpc/login-result.js";
 export { MessageTypeUnion } from "./moor-rpc/message-type-union.js";
 export { MessageType } from "./moor-rpc/message-type.js";
+export { MetadataPair } from "./moor-rpc/metadata-pair.js";
 export { NarrativeEventMessage } from "./moor-rpc/narrative-event-message.js";
 export { NewConnection } from "./moor-rpc/new-connection.js";
 export { NoCommandMatch } from "./moor-rpc/no-command-match.js";
