@@ -190,48 +190,67 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
                 // Remove the hook after use to avoid affecting other calls
                 DOMPurify.removeHook("afterSanitizeElements");
 
-                // Process <pre> blocks: ANSI codes and syntax highlighting
+                // Process ANSI codes and syntax highlighting
                 const tempDiv = document.createElement("div");
                 tempDiv.innerHTML = sanitizedHtml;
+                const ansi_up = new AnsiUp();
+
+                // Process <pre> blocks for syntax highlighting
                 const preElements = tempDiv.querySelectorAll("pre");
+                preElements.forEach((pre) => {
+                    const codeElement = pre.querySelector("code");
 
-                if (preElements.length > 0) {
-                    const ansi_up = new AnsiUp();
-                    preElements.forEach((pre) => {
-                        const codeElement = pre.querySelector("code");
+                    // Check if this is a code block with language-* class
+                    if (codeElement) {
+                        const classes = codeElement.className.split(/\s+/);
+                        const languageClass = classes.find(cls => cls.startsWith("language-"));
 
-                        // Check if this is a code block with language-* class
-                        if (codeElement) {
-                            const classes = codeElement.className.split(/\s+/);
-                            const languageClass = classes.find(cls => cls.startsWith("language-"));
+                        if (languageClass) {
+                            const language = languageClass.replace("language-", "");
 
-                            if (languageClass) {
-                                const language = languageClass.replace("language-", "");
-
-                                // Apply Prism syntax highlighting for supported languages
-                                if (Prism.languages[language]) {
-                                    const code = codeElement.textContent || "";
-                                    const highlightedHtml = Prism.highlight(
-                                        code,
-                                        Prism.languages[language],
-                                        language,
-                                    );
-                                    codeElement.innerHTML = highlightedHtml;
-                                    codeElement.classList.add(`language-${language}`);
-                                }
-                                return; // Skip ANSI processing for syntax-highlighted code
+                            // Apply Prism syntax highlighting for supported languages
+                            if (Prism.languages[language]) {
+                                const code = codeElement.textContent || "";
+                                const highlightedHtml = Prism.highlight(
+                                    code,
+                                    Prism.languages[language],
+                                    language,
+                                );
+                                codeElement.innerHTML = highlightedHtml;
+                                codeElement.classList.add(`language-${language}`);
                             }
+                            return; // Skip ANSI processing for syntax-highlighted code
                         }
+                    }
 
-                        // ANSI code processing for non-syntax-highlighted blocks
-                        const text = pre.textContent || "";
+                    // ANSI code processing for non-syntax-highlighted pre blocks
+                    const text = pre.textContent || "";
+                    if (text.includes("\x1b[")) {
+                        const ansiHtml = ansi_up.ansi_to_html(text).replace(/\n/g, "<br>");
+                        pre.innerHTML = ansiHtml;
+                    }
+                });
+
+                // Process ANSI codes in all other text nodes (recursively)
+                function processTextNodesForAnsi(node: Node): void {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const text = node.textContent || "";
                         if (text.includes("\x1b[")) {
-                            // Convert ANSI to HTML, then newlines to <br> for innerHTML
-                            const ansiHtml = ansi_up.ansi_to_html(text).replace(/\n/g, "<br>");
-                            pre.innerHTML = ansiHtml;
+                            const ansiHtml = ansi_up.ansi_to_html(text);
+                            const span = document.createElement("span");
+                            span.innerHTML = ansiHtml;
+                            node.parentNode?.replaceChild(span, node);
                         }
-                    });
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        const element = node as Element;
+                        // Skip pre elements (already processed) and code elements
+                        if (element.tagName !== "PRE" && element.tagName !== "CODE") {
+                            Array.from(node.childNodes).forEach(processTextNodesForAnsi);
+                        }
+                    }
                 }
+
+                processTextNodesForAnsi(tempDiv);
 
                 const processedHtml = tempDiv.innerHTML;
 

@@ -32,6 +32,7 @@ export const useWebSocket = (
         contentType?: string,
         isHistorical?: boolean,
         noNewline?: boolean,
+        presentationHint?: string,
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,

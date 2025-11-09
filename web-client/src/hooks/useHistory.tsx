@@ -165,6 +165,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
 
             let messageContent: string | string[] = "";
             let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
+            let presentationHint: string | undefined;
 
             switch (eventType) {
                 case EventUnion.NotifyEvent: {
@@ -188,6 +189,35 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                             contentType = "text/html";
                         } else {
                             contentType = "text/plain";
+                        }
+                    }
+
+                    // Extract presentation_hint from metadata
+                    const metadataLength = notify.metadataLength();
+                    for (let mi = 0; mi < metadataLength; mi++) {
+                        const metadata = notify.metadata(mi);
+                        if (metadata) {
+                            const key = metadata.key();
+                            const keyValue = key ? key.value() : null;
+                            if (keyValue === "metadata") {
+                                // The metadata value contains a map (as array of pairs) with our actual metadata
+                                const metadataMapVar = metadata.value();
+                                if (metadataMapVar) {
+                                    const metadataMap = new MoorVar(metadataMapVar).toJS();
+                                    // MOO maps come through as arrays of [key, value] pairs
+                                    if (Array.isArray(metadataMap)) {
+                                        for (const pair of metadataMap) {
+                                            if (Array.isArray(pair) && pair.length === 2) {
+                                                const [k, v] = pair;
+                                                if (k === "presentation_hint" && typeof v === "string") {
+                                                    presentationHint = v;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                break;
+                            }
                         }
                     }
                     break;
@@ -239,6 +269,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                 timestamp,
                 isHistorical: true,
                 contentType,
+                presentationHint,
             };
         } catch (error) {
             console.error("Failed to convert FlatBuffer event:", error);

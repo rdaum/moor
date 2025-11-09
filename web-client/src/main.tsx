@@ -1391,6 +1391,7 @@ function AppWrapper() {
             content: string | string[];
             contentType?: string;
             noNewline?: boolean;
+            presentationHint?: string;
         }>
     >([]);
 
@@ -1400,6 +1401,7 @@ function AppWrapper() {
         contentType?: string,
         isHistorical?: boolean,
         noNewline?: boolean,
+        presentationHint?: string,
     ) => {
         // Handle array content by processing each line
         if (Array.isArray(content)) {
@@ -1419,9 +1421,12 @@ function AppWrapper() {
                         filteredContent,
                         contentType as "text/plain" | "text/djot" | "text/html",
                         noNewline,
+                        presentationHint,
                     );
                 } else {
-                    setPendingMessages(prev => [...prev, { content: filteredContent, contentType, noNewline }]);
+                    setPendingMessages(
+                        prev => [...prev, { content: filteredContent, contentType, noNewline, presentationHint }],
+                    );
                 }
             }
         } else {
@@ -1433,9 +1438,10 @@ function AppWrapper() {
                         content,
                         contentType as "text/plain" | "text/djot" | "text/html",
                         noNewline,
+                        presentationHint,
                     );
                 } else {
-                    setPendingMessages(prev => [...prev, { content, contentType, noNewline }]);
+                    setPendingMessages(prev => [...prev, { content, contentType, noNewline, presentationHint }]);
                 }
             }
         }
@@ -1453,8 +1459,13 @@ function AppWrapper() {
     const narrativeCallbackRef = useCallback((node: NarrativeRef | null) => {
         if (node) {
             // Process any pending messages
-            pendingMessages.forEach(({ content, contentType, noNewline }) => {
-                node.addNarrativeContent(content, contentType as "text/plain" | "text/djot" | "text/html", noNewline);
+            pendingMessages.forEach(({ content, contentType, noNewline, presentationHint }) => {
+                node.addNarrativeContent(
+                    content,
+                    contentType as "text/plain" | "text/djot" | "text/html",
+                    noNewline,
+                    presentationHint,
+                );
             });
             if (pendingMessages.length > 0) {
                 setPendingMessages([]);

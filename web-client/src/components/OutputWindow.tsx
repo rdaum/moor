@@ -23,6 +23,7 @@ interface OutputWindowProps {
         isHistorical?: boolean;
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
         noNewline?: boolean;
+        presentationHint?: string;
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
@@ -189,7 +190,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                 </div>
             )}
 
-            {/* Render all messages, grouping no_newline messages */}
+            {/* Render all messages, grouping no_newline messages and consecutive messages with same presentationHint */}
             {(() => {
                 const groupedMessages = [];
                 let currentGroup = [];
@@ -198,9 +199,16 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                     const message = messages[i];
                     currentGroup.push(message);
 
-                    // If this message doesn't suppress newlines or it's the last message,
-                    // complete the current group
-                    if (!message.noNewline || i === messages.length - 1) {
+                    const nextMessage = i < messages.length - 1 ? messages[i + 1] : null;
+
+                    // Continue grouping if:
+                    // 1. This message has noNewline, OR
+                    // 2. This message has a presentationHint and the next message has the same one
+                    const shouldContinueGroup = message.noNewline
+                        || (message.presentationHint && nextMessage?.presentationHint === message.presentationHint);
+
+                    // If we shouldn't continue grouping or it's the last message, complete the current group
+                    if (!shouldContinueGroup || i === messages.length - 1) {
                         groupedMessages.push(currentGroup);
                         currentGroup = [];
                     }
@@ -208,12 +216,36 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
                 return groupedMessages.map((group, groupIndex) => {
                     if (group.length === 1) {
-                        // Single message - render normally without any grouping changes
+                        // Single message
                         const message = group[0];
+
+                        // If it has a presentationHint, wrap it like we do for groups
+                        if (message.presentationHint) {
+                            const baseClassName = getMessageClassName(message.type, message.isHistorical, undefined);
+                            const wrapperClassName = message.presentationHint === "inset" ? "presentation_inset" : "";
+
+                            return (
+                                <div key={message.id} className={wrapperClassName}>
+                                    <div className={baseClassName}>
+                                        <ContentRenderer
+                                            content={message.content}
+                                            contentType={message.contentType}
+                                            onLinkClick={onLinkClick}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        // Regular message without presentationHint
                         return (
                             <div
                                 key={message.id}
-                                className={getMessageClassName(message.type, message.isHistorical)}
+                                className={getMessageClassName(
+                                    message.type,
+                                    message.isHistorical,
+                                    undefined,
+                                )}
                             >
                                 <ContentRenderer
                                     content={message.content}
@@ -223,38 +255,71 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             </div>
                         );
                     } else {
-                        // Multiple messages grouped together - combine content preserving each message's format
+                        // Multiple messages grouped together
                         const lastMessage = group[group.length - 1];
 
-                        // Convert all messages to their rendered form and combine as HTML
-                        const combinedHtml = group.map(msg => {
-                            const content = typeof msg.content === "string"
-                                ? msg.content
-                                : Array.isArray(msg.content)
-                                ? msg.content.join("")
+                        // Check if this group is for presentationHint or noNewline
+                        const isHintGroup = lastMessage.presentationHint
+                            && group.every(msg => msg.presentationHint === lastMessage.presentationHint);
+
+                        if (isHintGroup) {
+                            // Group messages with same presentationHint in a wrapper, but render each on its own line
+                            const baseClassName = getMessageClassName(
+                                lastMessage.type,
+                                lastMessage.isHistorical,
+                                undefined,
+                            );
+                            const wrapperClassName = lastMessage.presentationHint === "inset"
+                                ? "presentation_inset"
                                 : "";
 
-                            // If it's HTML, use as-is; if it's plain text, escape it
-                            if (msg.contentType === "text/html") {
-                                return content;
-                            } else {
-                                // Escape HTML characters for non-HTML content
-                                return content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                            }
-                        }).join("");
+                            return (
+                                <div key={`group_${groupIndex}_${lastMessage.id}`} className={wrapperClassName}>
+                                    {group.map(msg => (
+                                        <div key={msg.id} className={baseClassName}>
+                                            <ContentRenderer
+                                                content={msg.content}
+                                                contentType={msg.contentType}
+                                                onLinkClick={onLinkClick}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        } else {
+                            // noNewline group - combine content on same line
+                            const combinedHtml = group.map(msg => {
+                                const content = typeof msg.content === "string"
+                                    ? msg.content
+                                    : Array.isArray(msg.content)
+                                    ? msg.content.join("")
+                                    : "";
 
-                        return (
-                            <div
-                                key={`group_${groupIndex}_${lastMessage.id}`}
-                                className={getMessageClassName(lastMessage.type, lastMessage.isHistorical)}
-                            >
-                                <ContentRenderer
-                                    content={combinedHtml}
-                                    contentType="text/html"
-                                    onLinkClick={onLinkClick}
-                                />
-                            </div>
-                        );
+                                // If it's HTML, use as-is; if it's plain text, escape it
+                                if (msg.contentType === "text/html") {
+                                    return content;
+                                } else {
+                                    // Escape HTML characters for non-HTML content
+                                    return content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                                }
+                            }).join("");
+
+                            return (
+                                <div
+                                    key={`group_${groupIndex}_${lastMessage.id}`}
+                                    className={getMessageClassName(
+                                        lastMessage.type,
+                                        lastMessage.isHistorical,
+                                    )}
+                                >
+                                    <ContentRenderer
+                                        content={combinedHtml}
+                                        contentType="text/html"
+                                        onLinkClick={onLinkClick}
+                                    />
+                                </div>
+                            );
+                        }
                     }
                 });
             })()}

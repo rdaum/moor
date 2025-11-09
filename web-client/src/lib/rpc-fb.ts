@@ -613,6 +613,7 @@ function handleTaskError(
         contentType?: string,
         isHistorical?: boolean,
         noNewline?: boolean,
+        presentationHint?: string,
     ) => void,
 ): void {
     const errorType = schedulerError.errorType();
@@ -715,7 +716,7 @@ function handleTaskError(
     if (message && onNarrativeMessage) {
         const fullMessage = description ? `${message}\n${description.join("\n")}` : message;
         // Send to narrative output styled like exception tracebacks (red)
-        onNarrativeMessage(fullMessage, new Date().toISOString(), "text/traceback", false, false);
+        onNarrativeMessage(fullMessage, new Date().toISOString(), "text/traceback", false, false, undefined);
     }
 }
 
@@ -733,6 +734,7 @@ export function handleClientEventFlatBuffer(
         contentType?: string,
         isHistorical?: boolean,
         noNewline?: boolean,
+        presentationHint?: string,
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
@@ -819,8 +821,45 @@ export function handleClientEventFlatBuffer(
 
                         const noNewline = notify.noNewline();
 
+                        // Extract presentation_hint from metadata
+                        let presentationHint: string | undefined;
+                        const metadataLength = notify.metadataLength();
+                        for (let i = 0; i < metadataLength; i++) {
+                            const metadata = notify.metadata(i);
+                            if (metadata) {
+                                const key = metadata.key();
+                                const keyValue = key ? key.value() : null;
+                                if (keyValue === "metadata") {
+                                    // The metadata value contains a map (as array of pairs) with our actual metadata
+                                    const metadataMapVar = metadata.value();
+                                    if (metadataMapVar) {
+                                        const metadataMap = new MoorVar(metadataMapVar).toJS();
+                                        // MOO maps come through as arrays of [key, value] pairs
+                                        if (Array.isArray(metadataMap)) {
+                                            for (const pair of metadataMap) {
+                                                if (Array.isArray(pair) && pair.length === 2) {
+                                                    const [k, v] = pair;
+                                                    if (k === "presentation_hint" && typeof v === "string") {
+                                                        presentationHint = v;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+
                         if (onNarrativeMessage) {
-                            onNarrativeMessage(content, timestamp, contentType || undefined, false, noNewline);
+                            onNarrativeMessage(
+                                content,
+                                timestamp,
+                                contentType || undefined,
+                                false,
+                                noNewline,
+                                presentationHint,
+                            );
                         }
                         break;
                     }
@@ -920,7 +959,7 @@ export function handleClientEventFlatBuffer(
                         const tracebackText = tracebackLines.join("\n");
 
                         if (onNarrativeMessage) {
-                            onNarrativeMessage(tracebackText, timestamp, "text/traceback", false, false);
+                            onNarrativeMessage(tracebackText, timestamp, "text/traceback", false, false, undefined);
                         }
                         break;
                     }
