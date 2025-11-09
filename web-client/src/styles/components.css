@@ -954,7 +954,7 @@
 
 /* Djot content styles */
 .text_djot {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 1em;
   white-space: normal;
   word-wrap: break-word;
