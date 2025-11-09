@@ -614,6 +614,7 @@ function handleTaskError(
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        thumbnail?: { contentType: string; data: string },
     ) => void,
 ): void {
     const errorType = schedulerError.errorType();
@@ -716,7 +717,7 @@ function handleTaskError(
     if (message && onNarrativeMessage) {
         const fullMessage = description ? `${message}\n${description.join("\n")}` : message;
         // Send to narrative output styled like exception tracebacks (red)
-        onNarrativeMessage(fullMessage, new Date().toISOString(), "text/traceback", false, false, undefined);
+        onNarrativeMessage(fullMessage, new Date().toISOString(), "text/traceback", false, false, undefined, undefined);
     }
 }
 
@@ -735,6 +736,7 @@ export function handleClientEventFlatBuffer(
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        thumbnail?: { contentType: string; data: string },
     ) => void,
     onPresentMessage?: (presentData: any) => void,
     onUnpresentMessage?: (id: string) => void,
@@ -821,8 +823,9 @@ export function handleClientEventFlatBuffer(
 
                         const noNewline = notify.noNewline();
 
-                        // Extract presentation_hint from metadata
+                        // Extract presentation_hint and thumbnail from metadata
                         let presentationHint: string | undefined;
+                        let thumbnail: { contentType: string; data: string } | undefined;
                         const metadataLength = notify.metadataLength();
                         for (let i = 0; i < metadataLength; i++) {
                             const metadata = notify.metadata(i);
@@ -841,6 +844,22 @@ export function handleClientEventFlatBuffer(
                                                     const [k, v] = pair;
                                                     if (k === "presentation_hint" && typeof v === "string") {
                                                         presentationHint = v;
+                                                    } else if (
+                                                        k === "thumbnail" && Array.isArray(v) && v.length === 2
+                                                    ) {
+                                                        // thumbnail is [content_type, binary_data]
+                                                        const [contentType, binaryData] = v;
+                                                        if (
+                                                            typeof contentType === "string"
+                                                            && binaryData instanceof Uint8Array
+                                                        ) {
+                                                            // Convert binary data to base64 data URL
+                                                            const base64 = btoa(String.fromCharCode(...binaryData));
+                                                            thumbnail = {
+                                                                contentType,
+                                                                data: `data:${contentType};base64,${base64}`,
+                                                            };
+                                                        }
                                                     }
                                                 }
                                             }
@@ -859,6 +878,7 @@ export function handleClientEventFlatBuffer(
                                 false,
                                 noNewline,
                                 presentationHint,
+                                thumbnail,
                             );
                         }
                         break;
@@ -959,7 +979,15 @@ export function handleClientEventFlatBuffer(
                         const tracebackText = tracebackLines.join("\n");
 
                         if (onNarrativeMessage) {
-                            onNarrativeMessage(tracebackText, timestamp, "text/traceback", false, false, undefined);
+                            onNarrativeMessage(
+                                tracebackText,
+                                timestamp,
+                                "text/traceback",
+                                false,
+                                false,
+                                undefined,
+                                undefined,
+                            );
                         }
                         break;
                     }

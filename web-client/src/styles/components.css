@@ -50,6 +50,18 @@
   background-color: var(--color-bg-secondary);
 }
 
+/* Thumbnail image styling */
+.narrative_thumbnail {
+  float: right;
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-primary);
+  margin: 0 0 0.5rem 0.75rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 .system_message_narrative {
   font-family: var(--font-mono);
   font-size: 1em;

@@ -38,6 +38,7 @@ interface WebSocketProviderProps {
         isHistorical?: boolean,
         noNewline?: boolean,
         presentationHint?: string,
+        thumbnail?: { contentType: string; data: string },
     ) => void;
     handlePresentMessage: (presentData: PresentationData) => void;
     handleUnpresentMessage: (id: string) => void;

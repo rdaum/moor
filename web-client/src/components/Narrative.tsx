@@ -25,6 +25,7 @@ export interface NarrativeMessage {
     contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
     noNewline?: boolean;
     presentationHint?: string;
+    thumbnail?: { contentType: string; data: string };
 }
 
 interface NarrativeProps {
@@ -45,6 +46,7 @@ export interface NarrativeRef {
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
         noNewline?: boolean,
         presentationHint?: string,
+        thumbnail?: { contentType: string; data: string },
     ) => void;
     addSystemMessage: (content: string | string[]) => void;
     addErrorMessage: (content: string | string[]) => void;
@@ -114,6 +116,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
         noNewline?: boolean,
         presentationHint?: string,
+        thumbnail?: { contentType: string; data: string },
     ) => {
         const newMessage: NarrativeMessage = {
             id: `msg_${Date.now()}_${Math.random()}`,
@@ -123,6 +126,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             contentType,
             noNewline,
             presentationHint,
+            thumbnail,
         };
 
         setMessages(prev => [...prev, newMessage]);
@@ -172,8 +176,9 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback",
             noNewline?: boolean,
             presentationHint?: string,
+            thumbnail?: { contentType: string; data: string },
         ) => {
-            addMessage(content, "narrative", contentType, noNewline, presentationHint);
+            addMessage(content, "narrative", contentType, noNewline, presentationHint, thumbnail);
         },
         [addMessage],
     );

@@ -24,6 +24,7 @@ interface OutputWindowProps {
         contentType?: "text/plain" | "text/djot" | "text/html" | "text/traceback";
         noNewline?: boolean;
         presentationHint?: string;
+        thumbnail?: { contentType: string; data: string };
     }>;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
@@ -226,6 +227,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
                             return (
                                 <div key={message.id} className={wrapperClassName}>
+                                    {message.thumbnail && (
+                                        <img
+                                            src={message.thumbnail.data}
+                                            alt="thumbnail"
+                                            className="narrative_thumbnail"
+                                        />
+                                    )}
                                     <div className={baseClassName}>
                                         <ContentRenderer
                                             content={message.content}
@@ -247,6 +255,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                     undefined,
                                 )}
                             >
+                                {message.thumbnail && (
+                                    <img
+                                        src={message.thumbnail.data}
+                                        alt="thumbnail"
+                                        className="narrative_thumbnail"
+                                    />
+                                )}
                                 <ContentRenderer
                                     content={message.content}
                                     contentType={message.contentType}
@@ -277,6 +292,13 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 <div key={`group_${groupIndex}_${lastMessage.id}`} className={wrapperClassName}>
                                     {group.map(msg => (
                                         <div key={msg.id} className={baseClassName}>
+                                            {msg.thumbnail && (
+                                                <img
+                                                    src={msg.thumbnail.data}
+                                                    alt="thumbnail"
+                                                    className="narrative_thumbnail"
+                                                />
+                                            )}
                                             <ContentRenderer
                                                 content={msg.content}
                                                 contentType={msg.contentType}

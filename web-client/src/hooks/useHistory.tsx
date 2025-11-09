@@ -192,7 +192,8 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                         }
                     }
 
-                    // Extract presentation_hint from metadata
+                    // Extract presentation_hint and thumbnail from metadata
+                    let thumbnail: { contentType: string; data: string } | undefined;
                     const metadataLength = notify.metadataLength();
                     for (let mi = 0; mi < metadataLength; mi++) {
                         const metadata = notify.metadata(mi);
@@ -211,6 +212,20 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                                                 const [k, v] = pair;
                                                 if (k === "presentation_hint" && typeof v === "string") {
                                                     presentationHint = v;
+                                                } else if (k === "thumbnail" && Array.isArray(v) && v.length === 2) {
+                                                    // thumbnail is [content_type, binary_data]
+                                                    const [contentType, binaryData] = v;
+                                                    if (
+                                                        typeof contentType === "string"
+                                                        && binaryData instanceof Uint8Array
+                                                    ) {
+                                                        // Convert binary data to base64 data URL
+                                                        const base64 = btoa(String.fromCharCode(...binaryData));
+                                                        thumbnail = {
+                                                            contentType,
+                                                            data: `data:${contentType};base64,${base64}`,
+                                                        };
+                                                    }
                                                 }
                                             }
                                         }
@@ -270,6 +285,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
                 isHistorical: true,
                 contentType,
                 presentationHint,
+                thumbnail,
             };
         } catch (error) {
             console.error("Failed to convert FlatBuffer event:", error);
