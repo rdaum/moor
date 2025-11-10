@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moor-web-host
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: web-host
+    app: moor-web-host
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: moor-web-host
+  template:
+    metadata:
+      labels:
+        app: moor-web-host
+        app.kubernetes.io/name: moor
+        app.kubernetes.io/component: web-host
+    spec:
+      containers:
+        - name: web-host
+          image: moor:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /moor/moor-web-host
+          args:
+            - --listen-address=0.0.0.0:$(WEB_API_PORT)
+            - --rpc-address=tcp://moor-daemon.moor.svc.cluster.local:$(RPC_PORT)
+            - --events-address=tcp://moor-daemon.moor.svc.cluster.local:$(EVENTS_PORT)
+            - --enrollment-address=tcp://moor-daemon.moor.svc.cluster.local:$(ENROLLMENT_PORT)
+            - --enrollment-token-file=/moor/enrollment/enrollment-token
+          env:
+            - name: RUST_BACKTRACE
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rust-backtrace
+            - name: WEB_API_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: web-api-port
+            - name: RPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rpc-port
+            - name: EVENTS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: events-port
+            - name: ENROLLMENT_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: enrollment-port
+            - name: MOOR_ENROLLMENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: moor-enrollment-token
+                  key: token
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          volumeMounts:
+            - name: host-data
+              mountPath: /moor/.moor-host-data
+            - name: enrollment
+              mountPath: /moor/enrollment
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: host-data
+          emptyDir: {}
+        - name: enrollment
+          secret:
+            secretName: moor-enrollment-token
+            items:
+              - key: token
+                path: enrollment-token
+      restartPolicy: Always

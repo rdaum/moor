@@ -1,0 +1,95 @@
+# HTTPS Ingress with TLS for mooR web interface
+# Requires either cert-manager or manual TLS secret creation
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moor-web-tls
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: ingress
+  annotations:
+    # For nginx ingress controller
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Force HTTPS redirect
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Increase timeout for WebSocket connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Enable WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: moor-web-host
+
+    # For cert-manager automatic certificate provisioning
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # Or use a namespace-scoped issuer
+    # cert-manager.io/issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx  # Adjust based on your ingress controller
+  tls:
+    - hosts:
+        - moor.example.com  # Change to your domain
+      secretName: moor-tls  # TLS certificate secret
+  rules:
+    - host: moor.example.com  # Change to your domain
+      http:
+        paths:
+          # API and WebSocket endpoints
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: moor-web-host
+                port:
+                  number: 8081
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: moor-web-host
+                port:
+                  number: 8081
+          # Static frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: moor-frontend
+                port:
+                  number: 80
+---
+# cert-manager ClusterIssuer for Let's Encrypt
+# Only needed if using cert-manager
+# Requires cert-manager to be installed in the cluster
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Production Let's Encrypt server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: your-email@example.com  # Change to your email
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# Staging ClusterIssuer for testing
+# Use this first to avoid rate limits
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Staging Let's Encrypt server (for testing)
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: your-email@example.com  # Change to your email
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx

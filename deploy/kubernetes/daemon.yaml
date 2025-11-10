@@ -1,0 +1,156 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: moor-daemon
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: daemon
+    app: moor-daemon
+spec:
+  serviceName: moor-daemon
+  replicas: 1  # Daemon should be singleton
+  selector:
+    matchLabels:
+      app: moor-daemon
+  template:
+    metadata:
+      labels:
+        app: moor-daemon
+        app.kubernetes.io/name: moor
+        app.kubernetes.io/component: daemon
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: daemon
+          image: moor:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /moor/moor-daemon
+          args:
+            - /data/moor-data
+            - --db=$(DATABASE_NAME)
+            - --rpc-listen=tcp://0.0.0.0:$(RPC_PORT)
+            - --events-listen=tcp://0.0.0.0:$(EVENTS_PORT)
+            - --workers-request-listen=tcp://0.0.0.0:$(WORKERS_REQUEST_PORT)
+            - --workers-response-listen=tcp://0.0.0.0:$(WORKERS_RESPONSE_PORT)
+            - --enrollment-listen=tcp://0.0.0.0:$(ENROLLMENT_PORT)
+            - --enrollment-token-file=/moor/enrollment/enrollment-token
+            - --generate-keypair
+            - --import=$(IMPORT_PATH)
+            - --import-format=$(IMPORT_FORMAT)
+          env:
+            - name: RUST_BACKTRACE
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rust-backtrace
+            - name: DATABASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: database-name
+            - name: RPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rpc-port
+            - name: EVENTS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: events-port
+            - name: WORKERS_REQUEST_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: workers-request-port
+            - name: WORKERS_RESPONSE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: workers-response-port
+            - name: ENROLLMENT_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: enrollment-port
+            - name: IMPORT_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: import-path
+            - name: IMPORT_FORMAT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: import-format
+            - name: MOOR_ENROLLMENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: moor-enrollment-token
+                  key: token
+            - name: HOME
+              value: /data
+          ports:
+            - name: rpc
+              containerPort: 7899
+              protocol: TCP
+            - name: events
+              containerPort: 7898
+              protocol: TCP
+            - name: workers-req
+              containerPort: 7896
+              protocol: TCP
+            - name: workers-resp
+              containerPort: 7897
+              protocol: TCP
+            - name: enrollment
+              containerPort: 7900
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config-dir
+              mountPath: /moor/enrollment
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: rpc
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: rpc
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: moor-data
+        - name: config-dir
+          secret:
+            secretName: moor-enrollment-token
+            items:
+              - key: token
+                path: enrollment-token
+      restartPolicy: Always

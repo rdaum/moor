@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moor-curl-worker
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: curl-worker
+    app: moor-curl-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: moor-curl-worker
+  template:
+    metadata:
+      labels:
+        app: moor-curl-worker
+        app.kubernetes.io/name: moor
+        app.kubernetes.io/component: curl-worker
+    spec:
+      containers:
+        - name: curl-worker
+          image: moor:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /moor/moor-curl-worker
+          args:
+            - --rpc-address=tcp://moor-daemon.moor.svc.cluster.local:$(RPC_PORT)
+            - --events-address=tcp://moor-daemon.moor.svc.cluster.local:$(EVENTS_PORT)
+            - --workers-request-address=tcp://moor-daemon.moor.svc.cluster.local:$(WORKERS_REQUEST_PORT)
+            - --workers-response-address=tcp://moor-daemon.moor.svc.cluster.local:$(WORKERS_RESPONSE_PORT)
+            - --enrollment-address=tcp://moor-daemon.moor.svc.cluster.local:$(ENROLLMENT_PORT)
+            - --enrollment-token-file=/moor/enrollment/enrollment-token
+            - --health-check-port=9999
+          env:
+            - name: RUST_BACKTRACE
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rust-backtrace
+            - name: RPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rpc-port
+            - name: EVENTS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: events-port
+            - name: WORKERS_REQUEST_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: workers-request-port
+            - name: WORKERS_RESPONSE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: workers-response-port
+            - name: ENROLLMENT_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: enrollment-port
+            - name: MOOR_ENROLLMENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: moor-enrollment-token
+                  key: token
+          ports:
+            - name: health
+              containerPort: 9999
+              protocol: TCP
+          volumeMounts:
+            - name: worker-data
+              mountPath: /moor/.moor-host-data
+            - name: enrollment
+              mountPath: /moor/enrollment
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: worker-data
+          emptyDir: {}
+        - name: enrollment
+          secret:
+            secretName: moor-enrollment-token
+            items:
+              - key: token
+                path: enrollment-token
+      restartPolicy: Always

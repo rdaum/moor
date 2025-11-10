@@ -1,0 +1,102 @@
+# Internal service for daemon (ClusterIP)
+# Only accessible within the cluster by hosts and workers
+apiVersion: v1
+kind: Service
+metadata:
+  name: moor-daemon
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: daemon
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for StatefulSet
+  selector:
+    app: moor-daemon
+  ports:
+    - name: rpc
+      port: 7899
+      targetPort: rpc
+      protocol: TCP
+    - name: events
+      port: 7898
+      targetPort: events
+      protocol: TCP
+    - name: workers-req
+      port: 7896
+      targetPort: workers-req
+      protocol: TCP
+    - name: workers-resp
+      port: 7897
+      targetPort: workers-resp
+      protocol: TCP
+    - name: enrollment
+      port: 7900
+      targetPort: enrollment
+      protocol: TCP
+---
+# External service for telnet (NodePort for kind)
+# Accessible from outside the cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: moor-telnet
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: telnet-host
+spec:
+  type: NodePort
+  selector:
+    app: moor-telnet-host
+  ports:
+    - name: telnet
+      port: 8888
+      targetPort: telnet
+      nodePort: 30888
+      protocol: TCP
+    - name: health
+      port: 9888
+      targetPort: health
+      protocol: TCP
+---
+# Internal service for web-host (ClusterIP)
+# Only accessible from frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: moor-web-host
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: web-host
+spec:
+  type: ClusterIP
+  selector:
+    app: moor-web-host
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+      protocol: TCP
+---
+# External service for frontend (NodePort for kind)
+# Accessible from outside the cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: moor-frontend
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: frontend
+spec:
+  type: NodePort
+  selector:
+    app: moor-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080
+      protocol: TCP

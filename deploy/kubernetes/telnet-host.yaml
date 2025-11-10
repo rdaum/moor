@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moor-telnet-host
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: telnet-host
+    app: moor-telnet-host
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: moor-telnet-host
+  template:
+    metadata:
+      labels:
+        app: moor-telnet-host
+        app.kubernetes.io/name: moor
+        app.kubernetes.io/component: telnet-host
+    spec:
+      containers:
+        - name: telnet-host
+          image: moor:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /moor/moor-telnet-host
+          args:
+            - --telnet-address=0.0.0.0
+            - --telnet-port=$(TELNET_PORT)
+            - --health-check-port=$(HEALTH_CHECK_PORT)
+            - --rpc-address=tcp://moor-daemon.moor.svc.cluster.local:$(RPC_PORT)
+            - --events-address=tcp://moor-daemon.moor.svc.cluster.local:$(EVENTS_PORT)
+            - --enrollment-address=tcp://moor-daemon.moor.svc.cluster.local:$(ENROLLMENT_PORT)
+            - --enrollment-token-file=/moor/enrollment/enrollment-token
+          env:
+            - name: RUST_BACKTRACE
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rust-backtrace
+            - name: TELNET_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: telnet-port
+            - name: HEALTH_CHECK_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: telnet-health-port
+            - name: RPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: rpc-port
+            - name: EVENTS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: events-port
+            - name: ENROLLMENT_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: moor-config
+                  key: enrollment-port
+            - name: MOOR_ENROLLMENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: moor-enrollment-token
+                  key: token
+          ports:
+            - name: telnet
+              containerPort: 8888
+              protocol: TCP
+            - name: health
+              containerPort: 9888
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          volumeMounts:
+            - name: host-data
+              mountPath: /moor/.moor-host-data
+            - name: enrollment
+              mountPath: /moor/enrollment
+              readOnly: true
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: host-data
+          emptyDir: {}
+        - name: enrollment
+          secret:
+            secretName: moor-enrollment-token
+            items:
+              - key: token
+                path: enrollment-token
+      restartPolicy: Always

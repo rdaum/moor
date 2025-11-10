@@ -1,0 +1,47 @@
+# HTTP-only Ingress for mooR web interface
+# For production, use ingress-tls.yaml instead
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moor-web
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: ingress
+  annotations:
+    # For nginx ingress controller
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Increase timeout for WebSocket connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Enable WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: moor-web-host
+spec:
+  ingressClassName: nginx  # Adjust based on your ingress controller
+  rules:
+    - host: moor.example.com  # Change to your domain
+      http:
+        paths:
+          # API and WebSocket endpoints
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: moor-web-host
+                port:
+                  number: 8081
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: moor-web-host
+                port:
+                  number: 8081
+          # Static frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: moor-frontend
+                port:
+                  number: 80

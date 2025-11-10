@@ -1,0 +1,232 @@
+# NetworkPolicy for enhanced security
+# Restricts network access between mooR components
+
+# Allow daemon to be accessed only by hosts and workers
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: moor-daemon-policy
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: moor-daemon
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow from telnet-host
+    - from:
+        - podSelector:
+            matchLabels:
+              app: moor-telnet-host
+      ports:
+        - protocol: TCP
+          port: 7899  # RPC
+        - protocol: TCP
+          port: 7898  # Events
+        - protocol: TCP
+          port: 7900  # Enrollment
+    # Allow from web-host
+    - from:
+        - podSelector:
+            matchLabels:
+              app: moor-web-host
+      ports:
+        - protocol: TCP
+          port: 7899  # RPC
+        - protocol: TCP
+          port: 7898  # Events
+        - protocol: TCP
+          port: 7900  # Enrollment
+    # Allow from curl-worker
+    - from:
+        - podSelector:
+            matchLabels:
+              app: moor-curl-worker
+      ports:
+        - protocol: TCP
+          port: 7899  # RPC
+        - protocol: TCP
+          port: 7898  # Events
+        - protocol: TCP
+          port: 7896  # Workers request
+        - protocol: TCP
+          port: 7897  # Workers response
+        - protocol: TCP
+          port: 7900  # Enrollment
+---
+# Allow telnet-host to access daemon only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: moor-telnet-host-policy
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: moor-telnet-host
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from anywhere (public telnet access)
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 8888
+  egress:
+    # Allow to daemon
+    - to:
+        - podSelector:
+            matchLabels:
+              app: moor-daemon
+      ports:
+        - protocol: TCP
+          port: 7899  # RPC
+        - protocol: TCP
+          port: 7898  # Events
+        - protocol: TCP
+          port: 7900  # Enrollment
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+---
+# Allow web-host to access daemon only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: moor-web-host-policy
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: moor-web-host
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from frontend only
+    - from:
+        - podSelector:
+            matchLabels:
+              app: moor-frontend
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    # Allow to daemon
+    - to:
+        - podSelector:
+            matchLabels:
+              app: moor-daemon
+      ports:
+        - protocol: TCP
+          port: 7899  # RPC
+        - protocol: TCP
+          port: 7898  # Events
+        - protocol: TCP
+          port: 7900  # Enrollment
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+---
+# Allow curl-worker to access daemon and external HTTP/HTTPS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: moor-curl-worker-policy
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: moor-curl-worker
+  policyTypes:
+    - Egress
+  egress:
+    # Allow to daemon
+    - to:
+        - podSelector:
+            matchLabels:
+              app: moor-daemon
+      ports:
+        - protocol: TCP
+          port: 7899  # RPC
+        - protocol: TCP
+          port: 7898  # Events
+        - protocol: TCP
+          port: 7896  # Workers request
+        - protocol: TCP
+          port: 7897  # Workers response
+        - protocol: TCP
+          port: 7900  # Enrollment
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow outbound HTTP/HTTPS (for curl operations)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+---
+# Allow frontend to be accessed from anywhere and access web-host
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: moor-frontend-policy
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: moor-frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from anywhere (public web access)
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    # Allow to web-host
+    - to:
+        - podSelector:
+            matchLabels:
+              app: moor-web-host
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53

@@ -1,0 +1,71 @@
+# Kustomize configuration for mooR deployment
+# Allows for easy customization and environment-specific overlays
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: moor
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - pvc.yaml
+  - daemon.yaml
+  - telnet-host.yaml
+  - web-host.yaml
+  - curl-worker.yaml
+  - frontend.yaml
+  - services.yaml
+  - ingress.yaml
+  # Optional resources - uncomment as needed:
+  # - ingress-tls.yaml  # For HTTPS with TLS
+  # - hpa.yaml          # For autoscaling
+  # - network-policy.yaml  # For network security
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: moor
+  app.kubernetes.io/instance: production
+  app.kubernetes.io/version: "0.9.0"
+  app.kubernetes.io/managed-by: kustomize
+
+# Image configuration
+# Update these to point to your container registry
+images:
+  - name: moor
+    newName: moor  # Change to your-registry/moor
+    newTag: latest
+  - name: moor-frontend
+    newName: moor-frontend  # Change to your-registry/moor-frontend
+    newTag: latest
+
+# ConfigMap generator for additional configuration
+# Uncomment to add environment-specific configs
+# configMapGenerator:
+#   - name: moor-env-config
+#     literals:
+#       - ENV=production
+#       - LOG_LEVEL=info
+
+# Secret generator for sensitive data
+# Note: In production, use external secret management (Sealed Secrets, External Secrets, etc.)
+# secretGenerator:
+#   - name: moor-credentials
+#     literals:
+#       - admin-password=changeme
+
+# Resource name prefix/suffix
+# namePrefix: prod-
+# nameSuffix: -v1
+
+# Patches for environment-specific customizations
+# Example: Increase resources for production
+# patches:
+#   - target:
+#       kind: StatefulSet
+#       name: moor-daemon
+#     patch: |-
+#       - op: replace
+#         path: /spec/template/spec/containers/0/resources/limits/memory
+#         value: 4Gi

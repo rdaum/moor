@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: moor-config
+  namespace: moor
+  labels:
+    app.kubernetes.io/name: moor
+    app.kubernetes.io/component: config
+data:
+  # Database configuration
+  database-name: "production.db"
+
+  # Core import configuration
+  import-path: "/cores/lambda-moor/src"
+  import-format: "objdef"
+
+  # ZeroMQ ports for TCP communication
+  rpc-port: "7899"
+  events-port: "7898"
+  workers-request-port: "7896"
+  workers-response-port: "7897"
+  enrollment-port: "7900"
+
+  # Service ports
+  telnet-port: "8888"
+  web-api-port: "8081"
+
+  # Health check ports
+  telnet-health-port: "9888"
+
+  # Rust configuration
+  rust-backtrace: "1"
