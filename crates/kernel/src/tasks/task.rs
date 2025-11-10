@@ -604,7 +604,23 @@ impl Task {
                     return None;
                 };
 
-                warn!(task_id = self.task_id, ?exception, "Task exception");
+                // Format the backtrace for logging
+                let backtrace_str: String = exception
+                    .backtrace
+                    .iter()
+                    .filter_map(|v| v.as_string())
+                    .map(|s| format!("        {}", s))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                error!(
+                    task_id = self.task_id,
+                    player_id = self.player.to_literal(),
+                    perms = self.perms.to_literal(),
+                    error = %exception.error,
+                    "Task exception:\n{}",
+                    backtrace_str
+                );
                 self.vm_host.stop();
 
                 trace_task_abort!(
