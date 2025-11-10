@@ -526,6 +526,7 @@ mod tests {
             &self,
             _player: Obj,
             _request_id: Uuid,
+            _metadata: Option<Vec<(Symbol, Var)>>,
         ) -> Result<(), moor_common::tasks::SessionError> {
             Ok(())
         }

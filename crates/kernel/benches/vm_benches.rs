@@ -130,7 +130,7 @@ fn execute(session: Arc<dyn Session>, vm_host: &mut VmHost) -> usize {
             VMHostResponse::Suspend(_) => {
                 panic!("Unexpected suspend");
             }
-            VMHostResponse::SuspendNeedInput => {
+            VMHostResponse::SuspendNeedInput(_) => {
                 panic!("Unexpected suspend need input");
             }
             VMHostResponse::CompleteAbort => {

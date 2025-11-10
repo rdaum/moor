@@ -827,8 +827,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let player = Obj::mk_id(42);
         let test_event = Box::new(moor_common::tasks::NarrativeEvent {
-            event_id: uuid::Uuid::now_v7(),
-            timestamp: std::time::SystemTime::now(),
+            event_id: Uuid::now_v7(),
+            timestamp: SystemTime::now(),
             author: moor_var::v_str("test_author"),
             event: moor_common::tasks::Event::Notify {
                 value: moor_var::v_str("Test message"),
@@ -877,8 +877,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Test presentation creation
         let present_event = Box::new(moor_common::tasks::NarrativeEvent {
-            event_id: uuid::Uuid::now_v7(),
-            timestamp: std::time::SystemTime::now(),
+            event_id: Uuid::now_v7(),
+            timestamp: SystemTime::now(),
             author: moor_var::v_str("test_author"),
             event: moor_common::tasks::Event::Present(presentation.clone()),
         });
@@ -911,7 +911,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
 
         // Step 1: Set up a client connection to receive narrative events
-        let client_id = uuid::Uuid::new_v4();
+        let client_id = Uuid::new_v4();
         let establish_message =
             mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
@@ -1055,7 +1055,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let ping_pong_event = moor_rpc::ClientsBroadcastEvent {
             event: moor_rpc::ClientsBroadcastEventUnion::ClientsBroadcastPingPong(Box::new(
                 moor_rpc::ClientsBroadcastPingPong {
-                    timestamp: systemtime_to_nanos(std::time::SystemTime::now()),
+                    timestamp: systemtime_to_nanos(SystemTime::now()),
                 },
             )),
         };
@@ -1444,7 +1444,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Step 3: Test client ping-pong cycle
-        let client_id = uuid::Uuid::new_v4();
+        let client_id = Uuid::new_v4();
 
         // Establish client connection first
         let establish_message =
@@ -1472,7 +1472,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         };
 
         // Send ClientPong message
-        let client_pong_time = std::time::SystemTime::now();
+        let client_pong_time = SystemTime::now();
         let client_pong_message = mk_client_pong_msg(
             &client_token,
             systemtime_to_nanos(client_pong_time),
@@ -1813,7 +1813,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (message_handler, transport, _event_log, scheduler) = setup_test_environment();
 
         // Step 1: Establish a client connection
-        let client_id = uuid::Uuid::new_v4();
+        let client_id = Uuid::new_v4();
         let establish_message =
             mk_connection_establish_msg("127.0.0.1:12345".to_string(), 7777, 12345, None, None);
 
@@ -1874,7 +1874,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Step 2: Create a scenario where the daemon would request input
         // We'll simulate this by triggering a client event that requests input
-        let request_id = uuid::Uuid::new_v4();
+        let request_id = Uuid::new_v4();
 
         // Simulate the daemon sending a RequestInput event to the client
         let request_input_event = moor_rpc::ClientEvent {
@@ -1883,6 +1883,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     request_id: Box::new(moor_rpc::Uuid {
                         data: request_id.as_bytes().to_vec(),
                     }),
+                    metadata: None,
                 },
             )),
         };
@@ -1938,7 +1939,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         match &captured_event.event {
             moor_rpc::ClientEventUnion::RequestInputEvent(req) => {
-                let captured_request_id = uuid::Uuid::from_slice(&req.request_id.data).unwrap();
+                let captured_request_id = Uuid::from_slice(&req.request_id.data).unwrap();
                 assert_eq!(captured_request_id, request_id, "Request ID should match");
             }
             other => panic!("Expected RequestInputEvent, got {other:?}"),
@@ -1957,7 +1958,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 && let Ok(moor_rpc::HostClientToDaemonMessageUnionRef::RequestedInput(req)) = msg_ref.message()
                     && let Ok(request_id_data) = req.request_id()
                         && let Ok(data_vec) = request_id_data.data()
-                            && let Ok(captured_id) = uuid::Uuid::from_slice(data_vec) {
+                            && let Ok(captured_id) = Uuid::from_slice(data_vec) {
                                 return captured_id == request_id && (matches!(reply, Ok(r) if matches!(r.reply, moor_rpc::DaemonToClientReplyUnion::InputThanks(_))) || reply.is_err());
                             }
             false
@@ -1971,7 +1972,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Check client event
         for (_, event) in &client_events {
             if let moor_rpc::ClientEventUnion::RequestInputEvent(req) = &event.event {
-                let id = uuid::Uuid::from_slice(&req.request_id.data).unwrap();
+                let id = Uuid::from_slice(&req.request_id.data).unwrap();
                 request_ids_seen.insert(id);
             }
         }
@@ -1983,7 +1984,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     msg_ref.message()
                 && let Ok(request_id_data) = req.request_id()
                 && let Ok(data_vec) = request_id_data.data()
-                && let Ok(id) = uuid::Uuid::from_slice(data_vec)
+                && let Ok(id) = Uuid::from_slice(data_vec)
             {
                 request_ids_seen.insert(id);
             }
