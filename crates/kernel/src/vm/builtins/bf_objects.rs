@@ -1563,11 +1563,16 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 /// Finds command verbs matching the parsed command specification (as returned from parse_command)
-/// on the given environmental targets.
-/// MOO: `list find_command_verb(map parsed_command_spec, list targets_to_search)`
+/// on the given command environment targets.
+/// MOO: `list find_command_verb(map parsed_command_spec, list command_environment)`
 ///
-/// This function searches for command verbs on the specified targets that match the parsed command
-/// specification. It returns a list of [target_object, verb_info] pairs where:
+/// This function searches for command verbs that match the parsed command specification.
+/// The search order is:
+/// 1. Primary targets from command_environment (typically player and player.location)
+/// 2. dobj from the parsed command (if present and valid)
+/// 3. iobj from the parsed command (if present and valid)
+///
+/// Returns a list of [target_object, verb_info] pairs where:
 /// - `target_object` is the object where the matching verb was found
 /// - `verb_info` is a list [owner, permissions, verb_display_names, matched_verb_name] describing the verb
 ///   - `verb_display_names` is the full concatenated display form (e.g., "d*rop th*row")
@@ -1576,7 +1581,7 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// When used together with `parse_command`, these two functions emulate the behavior of the
 /// built-in MOO command parser:
 /// 1. First call `parse_command` to parse the command string into a specification
-/// 2. Then call `find_command_verb` with the specification and target objects
+/// 2. Then call `find_command_verb` with the specification and command environment
 /// 3. Dispatch to the found verb (if any) to execute the command
 ///
 /// This allows custom command parsing and dispatching while maintaining compatibility with
@@ -1594,7 +1599,7 @@ fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ));
     };
 
-    let Some(targets_to_search) = bf_args.args[1].as_list() else {
+    let Some(command_environment) = bf_args.args[1].as_list() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("find_command_verb() second argument must be a list"),
         ));
@@ -1645,10 +1650,24 @@ fn bf_find_command_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .and_then(|iobj_var| iobj_var.as_object())
         .unwrap_or(NOTHING);
 
+    // Build the complete target list: command_environment + dobj + iobj
+    // This matches the search order in task.rs:find_verb_for_command
+    let mut all_targets = command_environment.iter().collect::<Vec<_>>();
+
+    // Add dobj if valid and not NOTHING
+    if dobj != NOTHING {
+        all_targets.push(v_obj(dobj));
+    }
+
+    // Add iobj if valid and not NOTHING
+    if iobj != NOTHING {
+        all_targets.push(v_obj(iobj));
+    }
+
     let mut matches = Vec::new();
 
     // Search for command verbs on each target
-    for target_var in targets_to_search.iter() {
+    for target_var in all_targets.iter() {
         let Some(target) = target_var.as_object() else {
             continue; // Skip non-object entries
         };

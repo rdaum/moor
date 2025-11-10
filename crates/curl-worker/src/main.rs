@@ -314,7 +314,11 @@ async fn perform_http_request(
         None
     };
 
-    info!(?method, ?url, "HTTP request");
+    info!(
+        method = method.as_arc_string().as_str(),
+        url = url.as_str(),
+        "HTTP request"
+    );
     let response = match method.as_arc_string().to_lowercase().as_str() {
         "get" => {
             let client = client.get(url);
