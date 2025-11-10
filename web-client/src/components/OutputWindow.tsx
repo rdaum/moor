@@ -222,7 +222,7 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
 
                         // If it has a presentationHint, wrap it like we do for groups
                         if (message.presentationHint) {
-                            const baseClassName = getMessageClassName(message.type, message.isHistorical, undefined);
+                            const baseClassName = getMessageClassName(message.type, message.isHistorical);
                             const wrapperClassName = message.presentationHint === "inset" ? "presentation_inset" : "";
 
                             return (
@@ -252,7 +252,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                                 className={getMessageClassName(
                                     message.type,
                                     message.isHistorical,
-                                    undefined,
                                 )}
                             >
                                 {message.thumbnail && (
@@ -282,7 +281,6 @@ export const OutputWindow: React.FC<OutputWindowProps> = ({
                             const baseClassName = getMessageClassName(
                                 lastMessage.type,
                                 lastMessage.isHistorical,
-                                undefined,
                             );
                             const wrapperClassName = lastMessage.presentationHint === "inset"
                                 ? "presentation_inset"
