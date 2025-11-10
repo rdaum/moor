@@ -264,7 +264,7 @@ impl Listener {
 
             // Initialize basic connection attributes for telnet
             let mut connection_attributes = std::collections::HashMap::new();
-            connection_attributes.insert(Symbol::mk("host-type"), moor_var::Var::from("telnet"));
+            connection_attributes.insert(Symbol::mk("host_type"), moor_var::Var::from("telnet"));
             connection_attributes.insert(
                 Symbol::mk("supports-telnet-protocol"),
                 moor_var::Var::mk_bool(true),
