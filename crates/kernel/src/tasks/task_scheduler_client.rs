@@ -142,7 +142,10 @@ impl TaskSchedulerClient {
     /// Moves this task into the suspension queue until the client provides input.
     pub fn request_input(&self, task: Box<Task>, metadata: Option<Vec<(Symbol, Var)>>) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::TaskRequestInput(task, metadata)))
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskRequestInput(task, metadata),
+            ))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 

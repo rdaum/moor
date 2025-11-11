@@ -1136,7 +1136,10 @@ impl Scheduler {
                     return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
 
-                let Ok(()) = tc.session.request_input(tc.player, input_request_id, metadata) else {
+                let Ok(()) = tc
+                    .session
+                    .request_input(tc.player, input_request_id, metadata)
+                else {
                     warn!("Could not request input from session; aborting task");
                     return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };

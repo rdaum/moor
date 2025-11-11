@@ -536,7 +536,9 @@ impl MessageHandler for RpcMessageHandler {
                 request_id: input_request_id,
                 metadata,
             } => {
-                if let Err(e) = self.request_client_input(client_id, connection, input_request_id, metadata) {
+                if let Err(e) =
+                    self.request_client_input(client_id, connection, input_request_id, metadata)
+                {
                     error!(error = ?e, "Unable to request client input");
                 }
             }
@@ -1455,16 +1457,14 @@ impl RpcMessageHandler {
         // Serialize metadata to FlatBuffer format
         let metadata_fb = metadata.map(|meta| {
             meta.iter()
-                .filter_map(|(key, value)| {
-                    match var_to_flatbuffer(value) {
-                        Ok(value_fb) => Some(moor_rpc::MetadataPair {
-                            key: Box::new(symbol_to_flatbuffer_struct(key)),
-                            value: Box::new(value_fb),
-                        }),
-                        Err(e) => {
-                            warn!(error = ?e, key = ?key, "Failed to serialize metadata value");
-                            None
-                        }
+                .filter_map(|(key, value)| match var_to_flatbuffer(value) {
+                    Ok(value_fb) => Some(moor_rpc::MetadataPair {
+                        key: Box::new(symbol_to_flatbuffer_struct(key)),
+                        value: Box::new(value_fb),
+                    }),
+                    Err(e) => {
+                        warn!(error = ?e, key = ?key, "Failed to serialize metadata value");
+                        None
                     }
                 })
                 .collect::<Vec<_>>()

@@ -17,6 +17,7 @@ use crate::{
     codegen::compile_tree,
     parse::moo::{MooParser, Rule},
 };
+use base64::{Engine, engine::general_purpose};
 use moor_common::{
     model::{
         ArgSpec, CompileContext, CompileError, ObjFlag, ParseErrorDetails, PrepSpec, PropFlag,
@@ -26,8 +27,8 @@ use moor_common::{
 };
 use moor_var::{
     AnonymousObjid, ErrorCode, List, NOTHING, Obj, Symbol, UuObjid, Var, VarType,
-    program::ProgramType, v_bool, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str,
-    v_sym,
+    program::ProgramType, v_binary, v_bool, v_err, v_float, v_flyweight, v_int, v_list, v_map,
+    v_obj, v_str, v_sym,
 };
 use pest::{
     Parser,
@@ -487,6 +488,33 @@ fn parse_literal_atom(
             // Remove the leading quote from symbol literal
             let symbol_name = &symbol_str[1..];
             Ok(v_sym(symbol_name))
+        }
+        Rule::literal_binary => {
+            let binary_literal = pair.as_str();
+            // Remove b" and " from the literal to get just the base64 content
+            let base64_content = binary_literal
+                .strip_prefix("b\"")
+                .and_then(|s| s.strip_suffix("\""))
+                .ok_or_else(|| {
+                    VerbCompileError(CompileError::StringLexError(
+                        CompileContext::new(pair.line_col()),
+                        format!(
+                            "invalid binary literal '{binary_literal}': missing b\" prefix or \" suffix"
+                        ),
+                    ))
+                })?;
+
+            // Decode the base64 content
+            let decoded = general_purpose::URL_SAFE
+                .decode(base64_content)
+                .map_err(|e| {
+                    VerbCompileError(CompileError::StringLexError(
+                        CompileContext::new(pair.line_col()),
+                        format!("invalid binary literal '{binary_literal}': invalid base64: {e}"),
+                    ))
+                })?;
+
+            Ok(v_binary(decoded))
         }
         _ => {
             panic!("Unimplemented atom: {pair:?}");
@@ -1391,5 +1419,37 @@ mod tests {
             obj.property_definitions[2].name,
             Symbol::mk("quoted normal")
         );
+    }
+
+    /// Test that binary literals in objdef format are parsed correctly
+    #[test]
+    fn test_binary_literal_in_objdef() {
+        let spec = r#"object #1
+                    parent: #1
+                    name: "Test Object"
+                    location: #3
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    property binary_data (owner: #1, flags: "") = b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk-M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        assert_eq!(obj.property_definitions.len(), 1);
+        assert_eq!(obj.property_definitions[0].name, Symbol::mk("binary_data"));
+
+        // Verify the value is a binary type
+        let value = obj.property_definitions[0].value.as_ref().unwrap();
+        let binary_data = value.as_binary().expect("Expected binary value");
+
+        // Verify the decoded content is correct (this is a tiny 1x1 PNG)
+        assert!(!binary_data.is_empty(), "Binary data should not be empty");
     }
 }
