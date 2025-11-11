@@ -110,6 +110,9 @@ impl Ord for Variant {
                 l_ptr.cmp(&r_ptr)
             }
 
+            (Variant::Int(l), Variant::Float(r)) => (*l as f64).total_cmp(r),
+            (Variant::Float(l), Variant::Int(r)) => l.total_cmp(&(*r as f64)),
+
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
             (Variant::Bool(_), _) => Ordering::Less,

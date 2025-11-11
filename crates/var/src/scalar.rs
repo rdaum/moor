@@ -436,4 +436,11 @@ mod tests {
         assert!(v_str("test").bitnot().is_ok()); // Should return error
         assert!(v_float(5.0).bitnot().is_ok()); // Should return error
     }
+
+    #[test]
+    fn test_intertype_snorgling() {
+        let f = v_float(10.74107142857142);
+        let i = v_int(100);
+        assert!(f <= i);
+    }
 }
