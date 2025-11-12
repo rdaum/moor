@@ -312,6 +312,28 @@
   -moz-tab-size: 8;
 }
 
+.narrative-output-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.narrative_output_scrim {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, rgba(0, 0, 0, 0.35) 50%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.narrative-output-wrapper--dimmed .narrative_output_scrim {
+  opacity: 1;
+}
+
 /* History indicator overlay */
 .history_indicator {
   position: sticky;

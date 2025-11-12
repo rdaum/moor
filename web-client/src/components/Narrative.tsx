@@ -298,6 +298,8 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         return null;
     }
 
+    const promptActive = Boolean(inputMetadata?.input_type);
+
     return (
         <div
             ref={narrativeContainerRef}
@@ -309,13 +311,23 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
             {/* <HistoryIndicator /> */}
 
             {/* Output display area - should grow to fill space and handle its own scrolling */}
-            <OutputWindow
-                messages={messages}
-                onLoadMoreHistory={onLoadMoreHistory}
-                isLoadingHistory={isLoadingHistory}
-                onLinkClick={onLinkClick}
-                fontSize={fontSize}
-            />
+            <div className={`narrative-output-wrapper${promptActive ? " narrative-output-wrapper--dimmed" : ""}`}>
+                <OutputWindow
+                    messages={messages}
+                    onLoadMoreHistory={onLoadMoreHistory}
+                    isLoadingHistory={isLoadingHistory}
+                    onLinkClick={onLinkClick}
+                    fontSize={fontSize}
+                />
+                {promptActive && (
+                    <>
+                        <div className="narrative_output_scrim" aria-hidden="true" />
+                        <span className="sr-only" role="status">
+                            A prompt response is required before continuing normal interaction.
+                        </span>
+                    </>
+                )}
+            </div>
 
             {/* Command input area - fixed at bottom */}
             <div className="narrative-input-container">

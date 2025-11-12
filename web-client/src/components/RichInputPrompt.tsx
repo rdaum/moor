@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useId, useMemo, useState } from "react";
 import { renderDjot, renderPlainText } from "../lib/djot-renderer";
 import { InputMetadata } from "../types/input";
 
@@ -34,6 +34,12 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     });
 
     const [showAlternative, setShowAlternative] = useState(false);
+    const baseId = useId();
+    const textInputId = `${baseId}-text`;
+    const numberInputId = `${baseId}-number`;
+    const choiceSelectId = `${baseId}-choice`;
+    const alternativeInputId = `${baseId}-alternative`;
+    const trimmedValue = value.trim();
 
     // Render prompt text as djot with ANSI escape codes
     const renderPrompt = useCallback((text: string) => {
@@ -56,25 +62,57 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         setValue("");
     }, [onSubmit]);
 
+    const submitCurrentValue = useCallback(() => {
+        if (!trimmedValue) {
+            return;
+        }
+        handleSubmit(trimmedValue);
+    }, [handleSubmit, trimmedValue]);
+
+    const submitAlternativeValue = useCallback(() => {
+        if (!trimmedValue) {
+            return;
+        }
+        handleSubmit(`alternative: ${trimmedValue}`);
+    }, [handleSubmit, trimmedValue]);
+
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            if (value.trim()) {
-                handleSubmit(value.trim());
-            }
+            submitCurrentValue();
         }
-    }, [value, handleSubmit]);
+    }, [submitCurrentValue]);
+
+    const promptStatus = useMemo(() => {
+        if (!metadata.prompt) {
+            return null;
+        }
+
+        return (
+            <div className="rich_input_prompt_text" role="status">
+                {renderPrompt(metadata.prompt)}
+            </div>
+        );
+    }, [metadata.prompt, renderPrompt]);
+
+    const renderPromptLabel = useCallback((targetId: string) => {
+        if (!metadata.prompt) {
+            return null;
+        }
+
+        return (
+            <label htmlFor={targetId} className="rich_input_prompt_text">
+                {renderPrompt(metadata.prompt)}
+            </label>
+        );
+    }, [metadata.prompt, renderPrompt]);
 
     // Yes/No/Alternative input type (for coding agents, etc.)
     if (metadata.input_type === "yes_no_alternative") {
         if (showAlternative) {
             return (
                 <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Respond"}>
-                    {metadata.prompt && (
-                        <div className="rich_input_prompt_text" role="status">
-                            {renderPrompt(metadata.prompt)}
-                        </div>
-                    )}
+                    {promptStatus}
                     <div className="rich_input_buttons">
                         <button
                             type="button"
@@ -105,21 +143,19 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         </button>
                     </div>
                     <div className="rich_input_alternative_container">
-                        <label htmlFor="alternative-input" className="rich_input_prompt_text">
+                        <label htmlFor={alternativeInputId} className="rich_input_prompt_text">
                             {renderPrompt(metadata.alternative_label || "Describe your alternative:")}
                         </label>
                         <div className="rich_input_text_container">
                             <textarea
-                                id="alternative-input"
+                                id={alternativeInputId}
                                 className="rich_input_textarea"
                                 value={value}
                                 onChange={(e) => setValue(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter" && e.ctrlKey) {
                                         e.preventDefault();
-                                        if (value.trim()) {
-                                            handleSubmit(`alternative: ${value.trim()}`);
-                                        }
+                                        submitAlternativeValue();
                                     }
                                 }}
                                 placeholder={metadata.alternative_placeholder || "Enter your alternative..."}
@@ -132,8 +168,8 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         <button
                             type="button"
                             className="rich_input_button rich_input_button_primary"
-                            onClick={() => value.trim() && handleSubmit(`alternative: ${value.trim()}`)}
-                            disabled={disabled || !value.trim()}
+                            onClick={submitAlternativeValue}
+                            disabled={disabled || !trimmedValue}
                             aria-label="Submit alternative"
                         >
                             Submit Alternative
@@ -145,11 +181,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
 
         return (
             <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Respond"}>
-                {metadata.prompt && (
-                    <div className="rich_input_prompt_text" role="status">
-                        {renderPrompt(metadata.prompt)}
-                    </div>
-                )}
+                {promptStatus}
                 <div className="rich_input_buttons">
                     <button
                         type="button"
@@ -187,11 +219,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     if (metadata.input_type === "yes_no") {
         return (
             <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Respond"}>
-                {metadata.prompt && (
-                    <div className="rich_input_prompt_text" role="status">
-                        {renderPrompt(metadata.prompt)}
-                    </div>
-                )}
+                {promptStatus}
                 <div className="rich_input_buttons">
                     <button
                         type="button"
@@ -222,15 +250,11 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         if (metadata.choices.length <= 4) {
             return (
                 <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Choose an option"}>
-                    {metadata.prompt && (
-                        <div className="rich_input_prompt_text" role="status">
-                            {renderPrompt(metadata.prompt)}
-                        </div>
-                    )}
+                    {promptStatus}
                     <div className="rich_input_buttons">
                         {metadata.choices.map((choice, index) => (
                             <button
-                                key={index}
+                                key={`${choice}-${index}`}
                                 type="button"
                                 className={`rich_input_button ${index === 0 ? "rich_input_button_primary" : ""}`}
                                 onClick={() => handleSubmit(choice)}
@@ -248,14 +272,10 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         // More than 4 choices: use a dropdown
         return (
             <div className="rich_input_prompt">
-                {metadata.prompt && (
-                    <label htmlFor="choice-select" className="rich_input_prompt_text">
-                        {renderPrompt(metadata.prompt)}
-                    </label>
-                )}
+                {renderPromptLabel(choiceSelectId)}
                 <div className="rich_input_select_container">
                     <select
-                        id="choice-select"
+                        id={choiceSelectId}
                         className="rich_input_select"
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
@@ -273,8 +293,8 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                     <button
                         type="button"
                         className="rich_input_button rich_input_button_primary"
-                        onClick={() => value.trim() && handleSubmit(value.trim())}
-                        disabled={disabled || !value.trim()}
+                        onClick={submitCurrentValue}
+                        disabled={disabled || !trimmedValue}
                         aria-label="Submit choice"
                     >
                         Submit
@@ -288,14 +308,10 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     if (metadata.input_type === "number") {
         return (
             <div className="rich_input_prompt">
-                {metadata.prompt && (
-                    <label htmlFor="number-input" className="rich_input_prompt_text">
-                        {renderPrompt(metadata.prompt)}
-                    </label>
-                )}
+                {renderPromptLabel(numberInputId)}
                 <div className="rich_input_number_container">
                     <input
-                        id="number-input"
+                        id={numberInputId}
                         type="number"
                         className="rich_input_number"
                         value={value}
@@ -311,8 +327,8 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                     <button
                         type="button"
                         className="rich_input_button rich_input_button_primary"
-                        onClick={() => value.trim() && handleSubmit(value.trim())}
-                        disabled={disabled || !value.trim()}
+                        onClick={submitCurrentValue}
+                        disabled={disabled || !trimmedValue}
                         aria-label="Submit number"
                     >
                         Submit
@@ -326,11 +342,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     if (metadata.input_type === "confirmation") {
         return (
             <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Confirm"}>
-                {metadata.prompt && (
-                    <div className="rich_input_prompt_text" role="status">
-                        {renderPrompt(metadata.prompt)}
-                    </div>
-                )}
+                {promptStatus}
                 <div className="rich_input_buttons">
                     <button
                         type="button"
@@ -349,14 +361,10 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     // Default text input type
     return (
         <div className="rich_input_prompt">
-            {metadata.prompt && (
-                <label htmlFor="text-input" className="rich_input_prompt_text">
-                    {renderPrompt(metadata.prompt)}
-                </label>
-            )}
+            {renderPromptLabel(textInputId)}
             <div className="rich_input_text_container">
                 <input
-                    id="text-input"
+                    id={textInputId}
                     type="text"
                     className="rich_input_text"
                     value={value}
@@ -370,8 +378,8 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                 <button
                     type="button"
                     className="rich_input_button rich_input_button_primary"
-                    onClick={() => value.trim() && handleSubmit(value.trim())}
-                    disabled={disabled || !value.trim()}
+                    onClick={submitCurrentValue}
+                    disabled={disabled || !trimmedValue}
                     aria-label="Submit text"
                 >
                     Submit
