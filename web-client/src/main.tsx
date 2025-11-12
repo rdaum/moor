@@ -26,6 +26,7 @@ import { MessageBoard, useSystemMessage } from "./components/MessageBoard";
 import { Narrative, NarrativeMessage, NarrativeRef } from "./components/Narrative";
 import { ObjectBrowser } from "./components/ObjectBrowser";
 import { PropertyEditor } from "./components/PropertyEditor";
+import { PropertyValueEditorWindow } from "./components/PropertyValueEditorWindow";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { TopNavBar } from "./components/TopNavBar";
@@ -38,6 +39,7 @@ import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
 import { usePersistentState } from "./hooks/usePersistentState";
 import { usePropertyEditor } from "./hooks/usePropertyEditor";
+import { usePropertyValueEditor } from "./hooks/usePropertyValueEditor";
 import { useTitle } from "./hooks/useTitle";
 import { useTouchDevice } from "./hooks/useTouchDevice";
 import { useVerbEditor } from "./hooks/useVerbEditor";
@@ -113,6 +115,8 @@ function AppContent({
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
     const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
     const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
+    const [objectBrowserPresentationIds, setObjectBrowserPresentationIds] = useState<string[]>([]);
+    const [objectBrowserLinkedToPresentation, setObjectBrowserLinkedToPresentation] = useState(false);
     const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
     const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -291,31 +295,76 @@ function AppContent({
     // Property editor state
     const {
         propertyEditorSession,
+        launchPropertyEditor,
         closePropertyEditor,
         showPropertyEditor,
     } = usePropertyEditor();
+    const {
+        propertyValueEditorSession,
+        launchPropertyValueEditor,
+        refreshPropertyValueEditor,
+        closePropertyValueEditor,
+    } = usePropertyValueEditor();
+
+    // Presentation management (needs to be declared before handlers that reference it)
+    const {
+        getLeftDockPresentations,
+        getRightDockPresentations,
+        getTopDockPresentations,
+        getBottomDockPresentations,
+        getVerbEditorPresentations,
+        getPropertyEditorPresentations,
+        getPropertyValueEditorPresentations,
+        getObjectBrowserPresentations,
+        dismissPresentation,
+        fetchCurrentPresentations,
+        clearAll: clearAllPresentations,
+    } = usePresentationContext();
+
+    // Computed values (must be declared before any effects/callbacks that use them)
+    const isConnected = isPlayerConnected;
+    const canUseObjectBrowser = Boolean(isConnected && hasProgrammerAccess);
+    const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
+    const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
+    const propertyValueEditorDocked = !!propertyValueEditorSession && (isTouchDevice || forceSplitMode);
+    const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
+    const evalPanelDocked = isEvalPanelOpen && isEvalPanelDocked;
+    const isSplitMode = isConnected
+        && (verbEditorDocked || propertyEditorDocked || propertyValueEditorDocked || objectBrowserDocked
+            || evalPanelDocked);
 
     const handleOpenObjectBrowser = useCallback(() => {
         if (isTouchDevice) {
             closeEditor();
             closePropertyEditor();
+            closePropertyValueEditor();
             if (!isObjectBrowserDocked) {
                 setIsObjectBrowserDocked(true);
             }
         }
         setIsObjectBrowserOpen(true);
-    }, [isTouchDevice, closeEditor, closePropertyEditor, isObjectBrowserDocked]);
+        setObjectBrowserLinkedToPresentation(false);
+    }, [isTouchDevice, closeEditor, closePropertyEditor, closePropertyValueEditor, isObjectBrowserDocked]);
+
+    const handleCloseObjectBrowser = useCallback(() => {
+        if (authToken) {
+            objectBrowserPresentationIds.forEach(id => dismissPresentation(id, authToken));
+        }
+        setIsObjectBrowserOpen(false);
+        setObjectBrowserLinkedToPresentation(false);
+    }, [authToken, dismissPresentation, objectBrowserPresentationIds]);
 
     const handleOpenEvalPanel = useCallback(() => {
         if (isTouchDevice) {
             closeEditor();
             closePropertyEditor();
+            closePropertyValueEditor();
             if (!isEvalPanelDocked) {
                 setIsEvalPanelDocked(true);
             }
         }
         setIsEvalPanelOpen(true);
-    }, [isTouchDevice, closeEditor, closePropertyEditor, isEvalPanelDocked]);
+    }, [isTouchDevice, closeEditor, closePropertyEditor, closePropertyValueEditor, isEvalPanelDocked]);
 
     useEffect(() => {
         if (!isTouchDevice) {
@@ -324,17 +373,18 @@ function AppContent({
         if (isObjectBrowserOpen) {
             closeEditor();
             closePropertyEditor();
+            closePropertyValueEditor();
         }
-    }, [isTouchDevice, isObjectBrowserOpen, closeEditor, closePropertyEditor]);
+    }, [isTouchDevice, isObjectBrowserOpen, closeEditor, closePropertyEditor, closePropertyValueEditor]);
 
     useEffect(() => {
         if (!isTouchDevice) {
             return;
         }
-        if ((editorSession || propertyEditorSession) && isObjectBrowserOpen) {
+        if ((editorSession || propertyEditorSession || propertyValueEditorSession) && isObjectBrowserOpen) {
             setIsObjectBrowserOpen(false);
         }
-    }, [isTouchDevice, editorSession, propertyEditorSession, isObjectBrowserOpen]);
+    }, [isTouchDevice, editorSession, propertyEditorSession, propertyValueEditorSession, isObjectBrowserOpen]);
 
     useEffect(() => {
         if (!isTouchDevice) {
@@ -343,17 +393,18 @@ function AppContent({
         if (isEvalPanelOpen) {
             closeEditor();
             closePropertyEditor();
+            closePropertyValueEditor();
         }
-    }, [isTouchDevice, isEvalPanelOpen, closeEditor, closePropertyEditor]);
+    }, [isTouchDevice, isEvalPanelOpen, closeEditor, closePropertyEditor, closePropertyValueEditor]);
 
     useEffect(() => {
         if (!isTouchDevice) {
             return;
         }
-        if ((editorSession || propertyEditorSession) && isEvalPanelOpen) {
+        if ((editorSession || propertyEditorSession || propertyValueEditorSession) && isEvalPanelOpen) {
             setIsEvalPanelOpen(false);
         }
-    }, [isTouchDevice, editorSession, propertyEditorSession, isEvalPanelOpen]);
+    }, [isTouchDevice, editorSession, propertyEditorSession, propertyValueEditorSession, isEvalPanelOpen]);
 
     // Notify parent about verb editor availability
     useEffect(() => {
@@ -396,18 +447,6 @@ function AppContent({
         isLoadingHistory,
     } = useHistory(authToken, encryptionKeyForHistory);
 
-    // Presentation management
-    const {
-        getLeftDockPresentations,
-        getRightDockPresentations,
-        getTopDockPresentations,
-        getBottomDockPresentations,
-        getVerbEditorPresentations,
-        dismissPresentation,
-        fetchCurrentPresentations,
-        clearAll: clearAllPresentations,
-    } = usePresentationContext();
-
     // Custom close handler for verb editor that also dismisses presentation
     const handleVerbEditorClose = useCallback(() => {
         // If there are multiple sessions, close only the current one
@@ -429,6 +468,24 @@ function AppContent({
             closeEditor();
         }
     }, [authToken, closeEditor, dismissPresentation, editorSession, editorSessions.length, getVerbEditorPresentations]);
+
+    const propertyEditorPresentationId = propertyEditorSession?.presentationId;
+
+    const handlePropertyEditorClose = useCallback(() => {
+        if (propertyEditorPresentationId && authToken) {
+            dismissPresentation(propertyEditorPresentationId, authToken);
+        }
+        closePropertyEditor();
+    }, [authToken, closePropertyEditor, dismissPresentation, propertyEditorPresentationId]);
+
+    const propertyValueEditorPresentationId = propertyValueEditorSession?.presentationId;
+
+    const handlePropertyValueEditorClose = useCallback(() => {
+        if (propertyValueEditorPresentationId && authToken) {
+            dismissPresentation(propertyValueEditorPresentationId, authToken);
+        }
+        closePropertyValueEditor();
+    }, [authToken, closePropertyValueEditor, dismissPresentation, propertyValueEditorPresentationId]);
 
     // Handle verb editor presentations from server
     useEffect(() => {
@@ -482,6 +539,172 @@ function AppContent({
         showMessage,
     ]);
 
+    // Handle property editor presentations from server
+    useEffect(() => {
+        if (!authToken) {
+            return;
+        }
+
+        const propertyPresentations = getPropertyEditorPresentations();
+
+        for (const presentation of propertyPresentations) {
+            if (propertyEditorSession?.presentationId === presentation.id) {
+                continue;
+            }
+
+            const rawObjectId = presentation.attrs.object || presentation.attrs.objectCurie;
+            const propertyName = presentation.attrs.property || presentation.attrs.propertyName;
+
+            if (!rawObjectId || !propertyName) {
+                showMessage("Property editor presentation missing object/property metadata", 5);
+                dismissPresentation(presentation.id, authToken);
+                continue;
+            }
+
+            const objectCurie = stringToCurie(rawObjectId);
+            if (!objectCurie) {
+                showMessage(`Cannot parse object reference ${rawObjectId} for property editor`, 5);
+                dismissPresentation(presentation.id, authToken);
+                continue;
+            }
+
+            launchPropertyEditor(
+                presentation.title || `${objectCurie}.${propertyName}`,
+                objectCurie,
+                propertyName,
+                authToken,
+                presentation.id,
+            ).catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : String(error);
+                const errorMsg = `Failed to open property editor: ${message}`;
+                console.log("[PropertyEditor] Showing error:", errorMsg);
+                showMessage(errorMsg, 5);
+                dismissPresentation(presentation.id, authToken);
+            });
+
+            break;
+        }
+
+        if (propertyEditorSession?.presentationId) {
+            const hasPresentation = propertyPresentations.some(
+                presentation => presentation.id === propertyEditorSession.presentationId,
+            );
+            if (!hasPresentation) {
+                closePropertyEditor();
+            }
+        }
+    }, [
+        authToken,
+        closePropertyEditor,
+        dismissPresentation,
+        getPropertyEditorPresentations,
+        launchPropertyEditor,
+        propertyEditorSession,
+        showMessage,
+    ]);
+
+    // Handle property value editor presentations from server
+    useEffect(() => {
+        if (!authToken) {
+            return;
+        }
+
+        const valuePresentations = getPropertyValueEditorPresentations();
+
+        for (const presentation of valuePresentations) {
+            if (propertyValueEditorSession?.presentationId === presentation.id) {
+                continue;
+            }
+
+            const rawObjectId = presentation.attrs.object || presentation.attrs.objectCurie;
+            const propertyName = presentation.attrs.property || presentation.attrs.propertyName;
+
+            if (!rawObjectId || !propertyName) {
+                showMessage("Property value editor presentation missing object/property metadata", 5);
+                dismissPresentation(presentation.id, authToken);
+                continue;
+            }
+
+            const objectCurie = stringToCurie(rawObjectId);
+            if (!objectCurie) {
+                showMessage(`Cannot parse object reference ${rawObjectId} for property value editor`, 5);
+                dismissPresentation(presentation.id, authToken);
+                continue;
+            }
+
+            launchPropertyValueEditor(
+                presentation.title || `${objectCurie}.${propertyName}`,
+                objectCurie,
+                propertyName,
+                authToken,
+                presentation.id,
+            ).catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : String(error);
+                const errorMsg = `Failed to open property value editor: ${message}`;
+                console.log("[PropertyValueEditor] Showing error:", errorMsg);
+                showMessage(errorMsg, 5);
+                dismissPresentation(presentation.id, authToken);
+            });
+
+            break;
+        }
+
+        if (propertyValueEditorSession?.presentationId) {
+            const hasPresentation = valuePresentations.some(
+                presentation => presentation.id === propertyValueEditorSession.presentationId,
+            );
+            if (!hasPresentation) {
+                closePropertyValueEditor();
+            }
+        }
+    }, [
+        authToken,
+        closePropertyValueEditor,
+        dismissPresentation,
+        getPropertyValueEditorPresentations,
+        launchPropertyValueEditor,
+        propertyValueEditorSession,
+        showMessage,
+    ]);
+
+    // Handle object browser presentations from server
+    useEffect(() => {
+        const objectPresentations = getObjectBrowserPresentations();
+        setObjectBrowserPresentationIds(objectPresentations.map(presentation => presentation.id));
+
+        if (objectPresentations.length === 0) {
+            if (objectBrowserLinkedToPresentation) {
+                setIsObjectBrowserOpen(false);
+                setObjectBrowserLinkedToPresentation(false);
+            }
+            return;
+        }
+
+        if (!canUseObjectBrowser) {
+            objectPresentations.forEach(presentation => {
+                showMessage("Object browser is unavailable for this account", 5);
+                if (authToken) {
+                    dismissPresentation(presentation.id, authToken);
+                }
+            });
+            return;
+        }
+
+        if (!isObjectBrowserOpen) {
+            handleOpenObjectBrowser();
+            setObjectBrowserLinkedToPresentation(true);
+        }
+    }, [
+        authToken,
+        canUseObjectBrowser,
+        dismissPresentation,
+        getObjectBrowserPresentations,
+        handleOpenObjectBrowser,
+        isObjectBrowserOpen,
+        objectBrowserLinkedToPresentation,
+        showMessage,
+    ]);
+
     // MCP handler for parsing edit commands - passed from parent
     // (We receive the handler instead of creating it here)
 
@@ -516,6 +739,7 @@ function AppContent({
             // Close any open editors
             closeEditor();
             closePropertyEditor();
+            closePropertyValueEditor();
 
             // Clear all presentations
             clearAllPresentations();
@@ -537,6 +761,7 @@ function AppContent({
         clearAllPresentations,
         closeEditor,
         closePropertyEditor,
+        closePropertyValueEditor,
         disconnectWS,
         narrativeRef,
         playerOid,
@@ -889,15 +1114,6 @@ function AppContent({
         };
     }, [isDraggingSplit, setSplitRatio]);
 
-    const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
-    const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
-    const isConnected = isPlayerConnected;
-    const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
-    const evalPanelDocked = isEvalPanelOpen && isEvalPanelDocked;
-    const isSplitMode = isConnected
-        && (verbEditorDocked || propertyEditorDocked || objectBrowserDocked || evalPanelDocked);
-    const canUseObjectBrowser = Boolean(isConnected && hasProgrammerAccess);
-
     useEffect(() => {
         if (!isConnected) {
             setUnseenCount(0);
@@ -1131,7 +1347,7 @@ function AppContent({
                             {propertyEditorDocked && propertyEditorSession && (
                                 <PropertyEditor
                                     visible={true}
-                                    onClose={closePropertyEditor}
+                                    onClose={handlePropertyEditorClose}
                                     title={propertyEditorSession.title}
                                     objectCurie={propertyEditorSession.objectCurie}
                                     propertyName={propertyEditorSession.propertyName}
@@ -1145,11 +1361,23 @@ function AppContent({
                                     contentType={propertyEditorSession.contentType}
                                 />
                             )}
+                            {propertyValueEditorDocked && propertyValueEditorSession && (
+                                <PropertyValueEditorWindow
+                                    visible={true}
+                                    authToken={authToken}
+                                    session={propertyValueEditorSession}
+                                    onClose={handlePropertyValueEditorClose}
+                                    onRefresh={() => refreshPropertyValueEditor(authToken)}
+                                    splitMode={true}
+                                    onToggleSplitMode={toggleSplitMode}
+                                    isInSplitMode={true}
+                                />
+                            )}
                             {isObjectBrowserOpen && objectBrowserDocked && canUseObjectBrowser && (
                                 <ObjectBrowser
                                     key="object-browser-instance"
                                     visible={true}
-                                    onClose={() => setIsObjectBrowserOpen(false)}
+                                    onClose={handleCloseObjectBrowser}
                                     authToken={authToken}
                                     splitMode={true}
                                     onToggleSplitMode={toggleObjectBrowserDock}
@@ -1200,7 +1428,7 @@ function AppContent({
             {propertyEditorSession && authToken && !propertyEditorDocked && (
                 <PropertyEditor
                     visible={true}
-                    onClose={closePropertyEditor}
+                    onClose={handlePropertyEditorClose}
                     title={propertyEditorSession.title}
                     objectCurie={propertyEditorSession.objectCurie}
                     propertyName={propertyEditorSession.propertyName}
@@ -1211,6 +1439,17 @@ function AppContent({
                     onToggleSplitMode={toggleSplitMode}
                     isInSplitMode={false}
                     contentType={propertyEditorSession.contentType}
+                />
+            )}
+            {propertyValueEditorSession && authToken && !propertyValueEditorDocked && (
+                <PropertyValueEditorWindow
+                    visible={true}
+                    authToken={authToken}
+                    session={propertyValueEditorSession}
+                    onClose={handlePropertyValueEditorClose}
+                    onRefresh={() => refreshPropertyValueEditor(authToken)}
+                    onToggleSplitMode={toggleSplitMode}
+                    isInSplitMode={false}
                 />
             )}
 
@@ -1259,7 +1498,7 @@ function AppContent({
                 <ObjectBrowser
                     key="object-browser-instance"
                     visible={true}
-                    onClose={() => setIsObjectBrowserOpen(false)}
+                    onClose={handleCloseObjectBrowser}
                     authToken={authToken}
                     splitMode={false}
                     onToggleSplitMode={toggleObjectBrowserDock}

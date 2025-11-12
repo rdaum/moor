@@ -20,6 +20,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
+import { EditorWindow, useTitleBarDrag } from "./EditorWindow";
 import { useTheme } from "./ThemeProvider";
 import { monacoThemeFor } from "./themeSupport";
 
@@ -74,14 +75,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<SaveError[]>([]);
     const [isSaving, setIsSaving] = useState(false);
-    const [position, setPosition] = useState({ x: 50, y: 50 });
-    const [size, setSize] = useState({ width: 800, height: 600 });
-    const [isDragging, setIsDragging] = useState(false);
-    const [isResizing, setIsResizing] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-    const containerRef = useRef<HTMLDivElement | null>(null);
     const clampFontSize = (size: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
     const [fontSize, setFontSize] = usePersistentState<number>(
         FONT_SIZE_STORAGE_KEY,
@@ -127,74 +121,6 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             }
         };
     }, []);
-
-    // Mouse event handlers for dragging
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
-        if (e.button !== 0) return; // Only left mouse button
-        setIsDragging(true);
-        setDragStart({
-            x: e.clientX - position.x,
-            y: e.clientY - position.y,
-        });
-        e.preventDefault();
-    }, [position]);
-
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (isDragging) {
-            const newX = e.clientX - dragStart.x;
-            const newY = e.clientY - dragStart.y;
-
-            // Keep window within viewport bounds
-            const maxX = window.innerWidth - size.width;
-            const maxY = window.innerHeight - size.height;
-
-            setPosition({
-                x: Math.max(0, Math.min(maxX, newX)),
-                y: Math.max(0, Math.min(maxY, newY)),
-            });
-        } else if (isResizing) {
-            const deltaX = e.clientX - resizeStart.x;
-            const deltaY = e.clientY - resizeStart.y;
-
-            const newWidth = Math.max(400, resizeStart.width + deltaX);
-            const newHeight = Math.max(300, resizeStart.height + deltaY);
-
-            setSize({ width: newWidth, height: newHeight });
-        }
-    }, [isDragging, isResizing, dragStart, resizeStart, size]);
-
-    const handleMouseUp = useCallback(() => {
-        setIsDragging(false);
-        setIsResizing(false);
-    }, []);
-
-    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-        if (e.button !== 0) return;
-        setIsResizing(true);
-        setResizeStart({
-            x: e.clientX,
-            y: e.clientY,
-            width: size.width,
-            height: size.height,
-        });
-        e.preventDefault();
-        e.stopPropagation();
-    }, [size]);
-
-    // Add global mouse event listeners
-    useEffect(() => {
-        if (isDragging || isResizing) {
-            document.addEventListener("mousemove", handleMouseMove);
-            document.addEventListener("mouseup", handleMouseUp);
-            document.body.style.userSelect = "none";
-
-            return () => {
-                document.removeEventListener("mousemove", handleMouseMove);
-                document.removeEventListener("mouseup", handleMouseUp);
-                document.body.style.userSelect = "";
-            };
-        }
-    }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
     useEffect(() => {
         if (editorRef.current) {
@@ -315,120 +241,25 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
         return error.message;
     };
 
-    // Focus management for modal
-    useEffect(() => {
-        if (!visible) return;
-
-        // Store the previously focused element
-        const previouslyFocused = document.activeElement as HTMLElement;
-
-        // Focus the modal container when it opens
-        if (containerRef.current) {
-            containerRef.current.focus();
-        }
-
-        // Handle keyboard events for focus trapping
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                onClose();
-                return;
-            }
-
-            if (e.key === "Tab") {
-                const focusableElements = containerRef.current?.querySelectorAll(
-                    "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])",
-                );
-
-                if (!focusableElements || focusableElements.length === 0) return;
-
-                const firstElement = focusableElements[0] as HTMLElement;
-                const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-
-                if (e.shiftKey) {
-                    // Shift+Tab: if focus is on first element, move to last
-                    if (document.activeElement === firstElement) {
-                        e.preventDefault();
-                        lastElement.focus();
-                    }
-                } else {
-                    // Tab: if focus is on last element, move to first
-                    if (document.activeElement === lastElement) {
-                        e.preventDefault();
-                        firstElement.focus();
-                    }
-                }
-            }
-        };
-
-        document.addEventListener("keydown", handleKeyDown);
-
-        // Cleanup: restore focus when modal closes
-        return () => {
-            document.removeEventListener("keydown", handleKeyDown);
-            if (previouslyFocused) {
-                previouslyFocused.focus();
-            }
-        };
-    }, [visible, onClose]);
-
-    if (!visible) {
-        return null;
-    }
-
-    // Split mode styling - fills container
-    const splitStyle = {
-        width: "100%",
-        height: "100%",
-        backgroundColor: "var(--color-bg-input)",
-        border: "1px solid var(--color-border-medium)",
-        display: "flex",
-        flexDirection: "column" as const,
-        overflow: "hidden",
-    };
-
-    // Modal mode styling - floating window
-    const modalStyle = {
-        position: "fixed" as const,
-        top: `${position.y}px`,
-        left: `${position.x}px`,
-        width: `${size.width}px`,
-        height: `${size.height}px`,
-        backgroundColor: "var(--color-bg-input)",
-        border: "1px solid var(--color-border-medium)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "0 8px 32px var(--color-shadow)",
-        zIndex: 1000,
-        display: "flex",
-        flexDirection: "column" as const,
-        cursor: isDragging ? "grabbing" : "default",
-    };
-
     const isSplitDraggable = splitMode && typeof onSplitDrag === "function";
-    const titleMouseDownHandler = isSplitDraggable ? onSplitDrag : (splitMode ? undefined : handleMouseDown);
-    const titleTouchStartHandler = isSplitDraggable ? onSplitTouchStart : undefined;
 
-    return (
-        <div
-            ref={containerRef}
-            className="property_editor_container"
-            role={splitMode ? "region" : "dialog"}
-            aria-modal={splitMode ? undefined : "true"}
-            aria-labelledby="property-editor-title"
-            tabIndex={-1}
-            style={splitMode ? splitStyle : modalStyle}
-        >
-            {/* Title bar */}
+    // Title bar component that uses the drag hook (must be inside EditorWindow)
+    const TitleBar: React.FC = () => {
+        const titleBarDragProps = useTitleBarDrag();
+
+        return (
             <div
-                onMouseDown={titleMouseDownHandler}
-                onTouchStart={titleTouchStartHandler}
+                {...(isSplitDraggable
+                    ? {
+                        onMouseDown: onSplitDrag,
+                        onTouchStart: onSplitTouchStart,
+                        style: {
+                            cursor: "row-resize",
+                            touchAction: "none",
+                        },
+                    }
+                    : titleBarDragProps)}
                 className="editor-title-bar"
-                style={{
-                    borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
-                    cursor: isSplitDraggable
-                        ? "row-resize"
-                        : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
-                    touchAction: isSplitDraggable ? "none" : "auto",
-                }}
             >
                 <h3
                     id="property-editor-title"
@@ -506,6 +337,21 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     </button>
                 </div>
             </div>
+        );
+    };
+
+    return (
+        <EditorWindow
+            visible={visible}
+            onClose={onClose}
+            splitMode={splitMode}
+            defaultPosition={{ x: 50, y: 50 }}
+            defaultSize={{ width: 800, height: 600 }}
+            minSize={{ width: 400, height: 300 }}
+            ariaLabel={`Property editor for ${enhancedTitle}`}
+            className="property_editor_container"
+        >
+            <TitleBar />
 
             {/* Error panel */}
             {errors.length > 0 && (
@@ -558,48 +404,6 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     }}
                 />
             </div>
-
-            {/* Resize handle - only in modal mode */}
-            {!splitMode && (
-                <div
-                    onMouseDown={handleResizeMouseDown}
-                    onTouchStart={(e) => {
-                        if (e.touches.length === 1) {
-                            const touch = e.touches[0];
-                            handleResizeMouseDown({
-                                ...e,
-                                button: 0,
-                                clientX: touch.clientX,
-                                clientY: touch.clientY,
-                                preventDefault: () => e.preventDefault(),
-                                stopPropagation: () => e.stopPropagation(),
-                            } as unknown as React.MouseEvent<HTMLDivElement>);
-                        }
-                    }}
-                    tabIndex={0}
-                    role="button"
-                    aria-label="Resize editor window"
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            // Start resize mode - could be enhanced with arrow key support
-                            handleResizeMouseDown({
-                                ...e,
-                                button: 0,
-                                clientX: size.width + position.x,
-                                clientY: size.height + position.y,
-                            } as unknown as React.MouseEvent<HTMLDivElement>);
-                        }
-                    }}
-                    className="editor-resize-handle"
-                >
-                    <div className="editor-resize-handle-inner" />
-                    <div className="editor-resize-handle-triangle" />
-                    <span aria-hidden="true" className="editor-resize-handle-symbol">
-                        ↘
-                    </span>
-                </div>
-            )}
-        </div>
+        </EditorWindow>
     );
 };

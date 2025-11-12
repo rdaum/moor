@@ -104,9 +104,16 @@ export const usePresentations = () => {
     }, [presentations]);
 
     // Get presentations for visual placement (mapped from semantic targets)
+    const isSpecialTarget = (target: string) =>
+        target === TARGET_TYPES.WINDOW
+        || target === TARGET_TYPES.VERB_EDITOR
+        || target === TARGET_TYPES.PROPERTY_EDITOR
+        || target === TARGET_TYPES.PROPERTY_VALUE_EDITOR
+        || target === TARGET_TYPES.OBJECT_BROWSER;
+
     const getLeftDockPresentations = useCallback((): Presentation[] => {
         return Array.from(presentations.values()).filter(p => {
-            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            if (isSpecialTarget(p.target)) return false;
             const semanticTarget = p.target as SemanticTarget;
             return getPlacementForTarget(semanticTarget) === "left";
         });
@@ -114,7 +121,7 @@ export const usePresentations = () => {
 
     const getRightDockPresentations = useCallback((): Presentation[] => {
         return Array.from(presentations.values()).filter(p => {
-            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            if (isSpecialTarget(p.target)) return false;
             const semanticTarget = p.target as SemanticTarget;
             return getPlacementForTarget(semanticTarget) === "right";
         });
@@ -122,7 +129,7 @@ export const usePresentations = () => {
 
     const getTopDockPresentations = useCallback((): Presentation[] => {
         return Array.from(presentations.values()).filter(p => {
-            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            if (isSpecialTarget(p.target)) return false;
             const semanticTarget = p.target as SemanticTarget;
             return getPlacementForTarget(semanticTarget) === "top";
         });
@@ -130,7 +137,7 @@ export const usePresentations = () => {
 
     const getBottomDockPresentations = useCallback((): Presentation[] => {
         return Array.from(presentations.values()).filter(p => {
-            if (p.target === TARGET_TYPES.WINDOW || p.target === TARGET_TYPES.VERB_EDITOR) return false;
+            if (isSpecialTarget(p.target)) return false;
             const semanticTarget = p.target as SemanticTarget;
             return getPlacementForTarget(semanticTarget) === "bottom";
         });
@@ -147,6 +154,21 @@ export const usePresentations = () => {
     const getVerbEditorPresentations = useCallback(() => getPresentationsByTarget(TARGET_TYPES.VERB_EDITOR), [
         getPresentationsByTarget,
     ]);
+
+    const getPropertyEditorPresentations = useCallback(
+        () => getPresentationsByTarget(TARGET_TYPES.PROPERTY_EDITOR),
+        [getPresentationsByTarget],
+    );
+
+    const getPropertyValueEditorPresentations = useCallback(
+        () => getPresentationsByTarget(TARGET_TYPES.PROPERTY_VALUE_EDITOR),
+        [getPresentationsByTarget],
+    );
+
+    const getObjectBrowserPresentations = useCallback(
+        () => getPresentationsByTarget(TARGET_TYPES.OBJECT_BROWSER),
+        [getPresentationsByTarget],
+    );
 
     // Clear all presentations (used on logout)
     const clearAll = useCallback(() => {
@@ -254,6 +276,9 @@ export const usePresentations = () => {
         getWindowPresentations,
         getHelpPresentations,
         getVerbEditorPresentations,
+        getPropertyEditorPresentations,
+        getPropertyValueEditorPresentations,
+        getObjectBrowserPresentations,
         dismissPresentation,
         fetchCurrentPresentations,
         clearAll,

@@ -19,6 +19,7 @@ import { VarUnion } from "../generated/moor-var/var-union.js";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { MoorVar } from "../lib/MoorVar.js";
 import { performEvalFlatBuffer, updatePropertyFlatBuffer } from "../lib/rpc-fb.js";
+import { useTitleBarDrag } from "./EditorWindow";
 
 // Editor modes
 export type EditorMode =
@@ -41,6 +42,11 @@ export interface PropertyValueEditorProps {
     onNavigateToObject?: (objId: string) => void; // Callback for clicking object references
     normalizeObjectInput?: (raw: string) => string; // Utility to convert various object formats to MOO expressions
     getDollarName?: (objId: string) => string | null; // Get $ name for an object ID
+    // Window mode controls
+    splitMode?: boolean; // When true, renders as embedded split component instead of modal
+    onToggleSplitMode?: () => void; // Handler to toggle between split and floating modes
+    isInSplitMode?: boolean; // Whether currently in split mode (for icon display)
+    isTouchDevice?: boolean; // Whether this is a touch device (hides split toggle)
 }
 
 /**
@@ -216,7 +222,12 @@ export function PropertyValueEditor({
     onNavigateToObject,
     normalizeObjectInput,
     getDollarName,
+    splitMode: _splitMode = false,
+    onToggleSplitMode,
+    isInSplitMode = false,
+    isTouchDevice = false,
 }: PropertyValueEditorProps) {
+    const titleBarDragProps = useTitleBarDrag();
     const [mode, setMode] = useState<EditorMode>(() => detectMode(propertyValue));
     const [value, setValue] = useState<string>(() => toEditorText(propertyValue, detectMode(propertyValue)));
     const [isSaving, setIsSaving] = useState(false);
@@ -361,7 +372,7 @@ export function PropertyValueEditor({
             }}
         >
             {/* Title bar */}
-            <div className="editor-title-bar">
+            <div className="editor-title-bar" {...titleBarDragProps}>
                 <h3 className="editor-title">
                     <span className="editor-title-label">
                         Property editor{hasUnsavedChanges && (
@@ -482,6 +493,20 @@ export function PropertyValueEditor({
                     >
                         {isSaving ? "💾" : "💾"}
                     </button>
+                    {/* Split/Float toggle button - only on non-touch devices */}
+                    {!isTouchDevice && onToggleSplitMode && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleSplitMode();
+                            }}
+                            aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                            title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                            className="editor-btn-toggle-split"
+                        >
+                            {isInSplitMode ? "🪟" : "⬌"}
+                        </button>
+                    )}
                     {/* Close button */}
                     <button
                         onClick={onCancel}

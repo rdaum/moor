@@ -24,6 +24,7 @@ export interface PropertyEditorSession {
     content: string;
     uploadAction?: string; // For MCP-triggered editors
     contentType?: "text/plain" | "text/html" | "text/markdown"; // Future support for different content types
+    presentationId?: string; // Presentation that spawned this editor
 }
 
 export const usePropertyEditor = () => {
@@ -35,6 +36,7 @@ export const usePropertyEditor = () => {
         objectCurie: string,
         propertyName: string,
         authToken: string,
+        presentationId?: string,
     ) => {
         try {
             // Fetch property content from server
@@ -62,9 +64,11 @@ export const usePropertyEditor = () => {
                 propertyName,
                 content,
                 contentType: "text/plain", // Default to plain text, could be detected from property metadata
+                presentationId,
             });
         } catch (error) {
             console.error("Error launching property editor:", error);
+            throw error instanceof Error ? error : new Error(String(error));
         }
     }, []);
 
@@ -76,6 +80,7 @@ export const usePropertyEditor = () => {
         content: string,
         uploadAction?: string,
         contentType: "text/plain" | "text/html" | "text/markdown" = "text/plain",
+        presentationId?: string,
     ) => {
         setPropertyEditorSession({
             id: `${objectCurie}.${propertyName}`,
@@ -85,6 +90,7 @@ export const usePropertyEditor = () => {
             content,
             uploadAction,
             contentType,
+            presentationId,
         });
     }, []);
 

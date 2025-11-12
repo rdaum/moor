@@ -28,6 +28,7 @@ import {
 import type { ServerFeatureSet } from "../lib/rpc-fb.js";
 import { objToString, stringToCurie, uuObjIdToString } from "../lib/var.js";
 import { DialogSheet } from "./DialogSheet.js";
+import { EditorWindow, useTitleBarDrag } from "./EditorWindow.js";
 import { PropertyValueEditor } from "./PropertyValueEditor.js";
 import { VerbEditor } from "./VerbEditor.js";
 
@@ -187,12 +188,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [filter, setFilter] = useState("");
     const [propertyFilter, setPropertyFilter] = useState("");
     const [verbFilter, setVerbFilter] = useState("");
-    const [position, setPosition] = useState({ x: 50, y: 50 });
-    const [size, setSize] = useState({ width: 1000, height: 700 });
-    const [isDragging, setIsDragging] = useState(false);
-    const [isResizing, setIsResizing] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Editor state
@@ -226,6 +221,14 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             deserialize: deserializeVerbIndex,
         },
     );
+    const [lastVerbLocation, setLastVerbLocation] = usePersistentState<string | null>(
+        "moor-object-browser-verb-location",
+        null,
+        {
+            shouldPersist: persistNonNull,
+            deserialize: deserializeStoredString,
+        },
+    );
 
     // Sync selectedVerb when verbs array updates (e.g., after metadata save)
     useEffect(() => {
@@ -242,17 +245,19 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     // Restore verb selection when verbs are loaded (after component remount)
     useEffect(() => {
         if (
-            lastEditorType === "verb" && lastVerbIndex !== null && verbs.length > 0 && !selectedVerb && selectedObject
+            lastEditorType === "verb" && lastVerbIndex !== null && lastVerbLocation !== null && verbs.length > 0
+            && !selectedVerb && selectedObject
         ) {
-            const verb = verbs.find(v => v.location === selectedObject.obj && v.indexInLocation === lastVerbIndex);
+            const verb = verbs.find(v => v.location === lastVerbLocation && v.indexInLocation === lastVerbIndex);
             if (verb) {
                 handleVerbSelect(verb);
                 // Clear the restoration flags so we don't keep re-selecting
                 setLastEditorType(null);
                 setLastVerbIndex(null);
+                setLastVerbLocation(null);
             }
         }
-    }, [verbs, lastEditorType, lastVerbIndex, selectedVerb, selectedObject]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [verbs, lastEditorType, lastVerbIndex, lastVerbLocation, selectedVerb, selectedObject]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [browserPaneHeight, setBrowserPaneHeight] = useState(350); // Fixed pixel height for browser pane
     const [isSplitDragging, setIsSplitDragging] = useState(false);
@@ -315,16 +320,25 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         if (selectedVerb && editorVisible && selectedVerb.indexInLocation !== undefined) {
             setLastEditorType("verb");
             setLastVerbIndex(selectedVerb.indexInLocation);
+            setLastVerbLocation(selectedVerb.location);
         }
-    }, [editorVisible, selectedVerb, setLastEditorType, setLastVerbIndex]);
+    }, [editorVisible, selectedVerb, setLastEditorType, setLastVerbIndex, setLastVerbLocation]);
 
+    // Track previous editorVisible to detect transitions
+    const prevEditorVisibleRef = useRef<boolean | undefined>(undefined);
     useEffect(() => {
-        if (!editorVisible) {
+        const prevVisible = prevEditorVisibleRef.current;
+        prevEditorVisibleRef.current = editorVisible;
+
+        // Only clear restoration state when editor closes (true -> false transition)
+        // Don't clear on initial mount when editorVisible is false
+        if (prevVisible === true && !editorVisible) {
             setLastEditorType(null);
             setLastPropertyName(null);
             setLastVerbIndex(null);
+            setLastVerbLocation(null);
         }
-    }, [editorVisible, setLastEditorType, setLastPropertyName, setLastVerbIndex]);
+    }, [editorVisible, setLastEditorType, setLastPropertyName, setLastVerbIndex, setLastVerbLocation]);
 
     // Load objects on mount
     useEffect(() => {
@@ -1166,37 +1180,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     };
 
     // Mouse event handlers for dragging
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
-        if (e.button !== 0) return;
-        setIsDragging(true);
-        setDragStart({
-            x: e.clientX - position.x,
-            y: e.clientY - position.y,
-        });
-        e.preventDefault();
-    }, [position]);
-
     const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (isDragging) {
-            const newX = e.clientX - dragStart.x;
-            const newY = e.clientY - dragStart.y;
-
-            const maxX = window.innerWidth - size.width;
-            const maxY = window.innerHeight - size.height;
-
-            setPosition({
-                x: Math.max(0, Math.min(maxX, newX)),
-                y: Math.max(0, Math.min(maxY, newY)),
-            });
-        } else if (isResizing) {
-            const deltaX = e.clientX - resizeStart.x;
-            const deltaY = e.clientY - resizeStart.y;
-
-            const newWidth = Math.max(600, resizeStart.width + deltaX);
-            const newHeight = Math.max(400, resizeStart.height + deltaY);
-
-            setSize({ width: newWidth, height: newHeight });
-        } else if (isSplitDragging && containerRef.current) {
+        if (isSplitDragging && containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
             const relativeY = e.clientY - rect.top;
             // Calculate the height for the browser pane, accounting for the title bar
@@ -1212,26 +1197,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const newHeight = Math.max(minHeight, Math.min(maxHeight, relativeY - titleBarHeight));
             setBrowserPaneHeight(newHeight);
         }
-    }, [isDragging, isResizing, isSplitDragging, dragStart, resizeStart, size]);
+    }, [isSplitDragging]);
 
     const handleMouseUp = useCallback(() => {
-        setIsDragging(false);
-        setIsResizing(false);
         setIsSplitDragging(false);
     }, []);
-
-    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-        if (e.button !== 0) return;
-        setIsResizing(true);
-        setResizeStart({
-            x: e.clientX,
-            y: e.clientY,
-            width: size.width,
-            height: size.height,
-        });
-        e.preventDefault();
-        e.stopPropagation();
-    }, [size]);
 
     const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;
@@ -1352,9 +1322,9 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         return { overridden, duplicateNames };
     }, [groupedVerbs]);
 
-    // Add global mouse event listeners
+    // Add global mouse/touch event listeners for internal split dragging
     useEffect(() => {
-        if (isDragging || isResizing || isSplitDragging) {
+        if (isSplitDragging) {
             document.addEventListener("mousemove", handleMouseMove);
             document.addEventListener("mouseup", handleMouseUp);
             document.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -1369,11 +1339,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 document.body.style.userSelect = "";
             };
         }
-    }, [isDragging, isResizing, isSplitDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
-
-    if (!visible) {
-        return null;
-    }
+    }, [isSplitDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
     const baseFontSize = fontSize;
     const secondaryFontSize = Math.max(8, fontSize - 1);
@@ -1501,167 +1467,148 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         return obj.name ? `${id} ("${obj.name}")` : id;
     };
 
-    // Split mode styling
-    const splitStyle = {
-        width: "100%",
-        height: "100%",
-        backgroundColor: "var(--color-bg-input)",
-        border: "1px solid var(--color-border-medium)",
-        display: "flex",
-        flexDirection: "column" as const,
-        overflow: "hidden",
-        fontSize: `${baseFontSize}px`,
-    };
-
-    // Modal mode styling
-    const modalStyle = {
-        position: "fixed" as const,
-        top: `${position.y}px`,
-        left: `${position.x}px`,
-        width: `${size.width}px`,
-        height: `${size.height}px`,
-        backgroundColor: "var(--color-bg-input)",
-        border: "1px solid var(--color-border-medium)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "0 8px 32px var(--color-shadow)",
-        zIndex: 1000,
-        display: "flex",
-        flexDirection: "column" as const,
-        cursor: isDragging ? "grabbing" : "default",
-        fontSize: `${baseFontSize}px`,
-    };
-
     const isSplitDraggable = splitMode && typeof onSplitDrag === "function";
-    const titleMouseDownHandler = isSplitDraggable ? onSplitDrag : (splitMode ? undefined : handleMouseDown);
-    const titleTouchStartHandler = isSplitDraggable ? onSplitTouchStart : undefined;
 
-    return (
-        <>
+    // Title bar component that uses the drag hook (must be inside EditorWindow)
+    const TitleBar: React.FC = () => {
+        const titleBarDragProps = useTitleBarDrag();
+
+        return (
             <div
-                ref={containerRef}
-                className={`object_browser_container ${isFullscreen ? "fullscreen-mobile" : ""}`}
-                role={splitMode ? "region" : "dialog"}
-                aria-modal={splitMode ? undefined : "true"}
-                aria-labelledby="object-browser-title"
-                tabIndex={-1}
-                style={splitMode ? splitStyle : modalStyle}
+                {...(isSplitDraggable
+                    ? {
+                        onMouseDown: onSplitDrag,
+                        onTouchStart: onSplitTouchStart,
+                        style: {
+                            cursor: "row-resize",
+                            touchAction: "none",
+                        },
+                    }
+                    : titleBarDragProps)}
+                className="editor-title-bar"
             >
-                {/* Title bar */}
-                <div
-                    className="editor-title-bar"
-                    onMouseDown={titleMouseDownHandler}
-                    onTouchStart={titleTouchStartHandler}
-                    style={{
-                        borderRadius: splitMode ? "0" : "var(--radius-lg) var(--radius-lg) 0 0",
-                        cursor: isSplitDraggable
-                            ? "row-resize"
-                            : (splitMode ? "default" : (isDragging ? "grabbing" : "grab")),
-                        touchAction: isSplitDraggable ? "none" : "auto",
-                    }}
-                >
-                    <h3 id="object-browser-title" className="editor-title">
-                        Object Browser
-                    </h3>
-                    <div className="flex gap-sm">
-                        <div className="font-size-control" onClick={(e) => e.stopPropagation()}>
-                            <button
-                                onClick={decreaseFontSize}
-                                aria-label="Decrease browser font size"
-                                className="font-size-button"
-                                style={{
-                                    cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
-                                    opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
-                                    fontSize: `${secondaryFontSize}px`,
-                                }}
-                                disabled={fontSize <= MIN_FONT_SIZE}
-                            >
-                                –
-                            </button>
-                            <span
-                                className="font-size-display"
-                                style={{ fontSize: `${secondaryFontSize}px` }}
-                                aria-live="polite"
-                            >
-                                {fontSize}px
-                            </span>
-                            <button
-                                onClick={increaseFontSize}
-                                aria-label="Increase browser font size"
-                                className="font-size-button"
-                                style={{
-                                    cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
-                                    opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
-                                    fontSize: `${secondaryFontSize}px`,
-                                }}
-                                disabled={fontSize >= MAX_FONT_SIZE}
-                            >
-                                +
-                            </button>
-                        </div>
-                        <div className="browser-inherited-controls" onClick={(e) => e.stopPropagation()}>
-                            <span className="browser-inherited-label-text">
-                                Inherited
-                            </span>
-                            <button
-                                type="button"
-                                className={`browser-inherited-toggle ${showInheritedProperties ? "active" : ""}`}
-                                onClick={() => setShowInheritedProperties(prev => !prev)}
-                                aria-label={showInheritedProperties
-                                    ? "Hide inherited properties"
-                                    : "Show inherited properties"}
-                                title={showInheritedProperties
-                                    ? "Hide inherited properties"
-                                    : "Show inherited properties"}
-                            >
-                                P
-                            </button>
-                            <button
-                                type="button"
-                                className={`browser-inherited-toggle ${showInheritedVerbs ? "active" : ""}`}
-                                onClick={() => setShowInheritedVerbs(prev => !prev)}
-                                aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
-                                title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
-                            >
-                                V
-                            </button>
-                        </div>
-                        {/* Split/Float toggle button - only on non-touch devices */}
-                        {!isTouchDevice && onToggleSplitMode && (
-                            <button
-                                className="browser-mode-toggle"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onToggleSplitMode();
-                                }}
-                                aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                                title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
-                                style={{ fontSize: `${secondaryFontSize}px` }}
-                            >
-                                {isInSplitMode ? "🪟" : "⬌"}
-                            </button>
-                        )}
-                        {/* Fullscreen toggle button */}
+                <h3 id="object-browser-title" className="editor-title">
+                    Object Browser
+                </h3>
+                <div className="flex gap-sm">
+                    <div className="font-size-control" onClick={(e) => e.stopPropagation()}>
+                        <button
+                            onClick={decreaseFontSize}
+                            aria-label="Decrease browser font size"
+                            className="font-size-button"
+                            style={{
+                                cursor: fontSize <= MIN_FONT_SIZE ? "not-allowed" : "pointer",
+                                opacity: fontSize <= MIN_FONT_SIZE ? 0.5 : 1,
+                                fontSize: `${secondaryFontSize}px`,
+                            }}
+                            disabled={fontSize <= MIN_FONT_SIZE}
+                        >
+                            –
+                        </button>
+                        <span
+                            className="font-size-display"
+                            style={{ fontSize: `${secondaryFontSize}px` }}
+                            aria-live="polite"
+                        >
+                            {fontSize}px
+                        </span>
+                        <button
+                            onClick={increaseFontSize}
+                            aria-label="Increase browser font size"
+                            className="font-size-button"
+                            style={{
+                                cursor: fontSize >= MAX_FONT_SIZE ? "not-allowed" : "pointer",
+                                opacity: fontSize >= MAX_FONT_SIZE ? 0.5 : 1,
+                                fontSize: `${secondaryFontSize}px`,
+                            }}
+                            disabled={fontSize >= MAX_FONT_SIZE}
+                        >
+                            +
+                        </button>
+                    </div>
+                    <div className="browser-inherited-controls" onClick={(e) => e.stopPropagation()}>
+                        <span className="browser-inherited-label-text">
+                            Inherited
+                        </span>
+                        <button
+                            type="button"
+                            className={`browser-inherited-toggle ${showInheritedProperties ? "active" : ""}`}
+                            onClick={() => setShowInheritedProperties(prev => !prev)}
+                            aria-label={showInheritedProperties
+                                ? "Hide inherited properties"
+                                : "Show inherited properties"}
+                            title={showInheritedProperties
+                                ? "Hide inherited properties"
+                                : "Show inherited properties"}
+                        >
+                            P
+                        </button>
+                        <button
+                            type="button"
+                            className={`browser-inherited-toggle ${showInheritedVerbs ? "active" : ""}`}
+                            onClick={() => setShowInheritedVerbs(prev => !prev)}
+                            aria-label={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                            title={showInheritedVerbs ? "Hide inherited verbs" : "Show inherited verbs"}
+                        >
+                            V
+                        </button>
+                    </div>
+                    {/* Split/Float toggle button - only on non-touch devices */}
+                    {!isTouchDevice && onToggleSplitMode && (
                         <button
                             className="browser-mode-toggle"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setIsFullscreen(prev => !prev);
+                                onToggleSplitMode();
                             }}
-                            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                            aria-label={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
+                            title={isInSplitMode ? "Switch to floating window" : "Switch to split screen"}
                             style={{ fontSize: `${secondaryFontSize}px` }}
                         >
-                            {isFullscreen ? "🗗" : "🗖"}
+                            {isInSplitMode ? "🪟" : "⬌"}
                         </button>
-                        <button
-                            className="editor-btn-close"
-                            onClick={onClose}
-                            aria-label="Close object browser"
-                        >
-                            <span aria-hidden="true">×</span>
-                        </button>
-                    </div>
+                    )}
+                    {/* Fullscreen toggle button */}
+                    <button
+                        className="browser-mode-toggle"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsFullscreen(prev => !prev);
+                        }}
+                        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                        title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                        style={{ fontSize: `${secondaryFontSize}px` }}
+                    >
+                        {isFullscreen ? "🗗" : "🗖"}
+                    </button>
+                    <button
+                        className="editor-btn-close"
+                        onClick={onClose}
+                        aria-label="Close object browser"
+                    >
+                        <span aria-hidden="true">×</span>
+                    </button>
                 </div>
+            </div>
+        );
+    };
+
+    return (
+        <EditorWindow
+            visible={visible}
+            onClose={onClose}
+            splitMode={splitMode}
+            defaultPosition={{ x: 50, y: 50 }}
+            defaultSize={{ width: 1000, height: 700 }}
+            minSize={{ width: 600, height: 400 }}
+            ariaLabel="Object Browser"
+            className={`object_browser_container ${isFullscreen ? "fullscreen-mobile" : ""}`}
+        >
+            <div
+                ref={containerRef}
+                style={{ fontSize: `${baseFontSize}px`, display: "flex", flexDirection: "column", height: "100%" }}
+            >
+                <TitleBar />
 
                 {/* Main content area - 3 panes + editor */}
                 <div className="browser-content">
@@ -2203,94 +2150,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         </div>
                     )}
                 </div>
-
-                {/* Resize handle - only in modal mode */}
-                {!splitMode && (
-                    <div
-                        onMouseDown={handleResizeMouseDown}
-                        onTouchStart={(e) => {
-                            if (e.touches.length === 1) {
-                                const touch = e.touches[0];
-                                handleResizeMouseDown({
-                                    ...e,
-                                    button: 0,
-                                    clientX: touch.clientX,
-                                    clientY: touch.clientY,
-                                    preventDefault: () => e.preventDefault(),
-                                    stopPropagation: () => e.stopPropagation(),
-                                } as unknown as React.MouseEvent<HTMLDivElement>);
-                            }
-                        }}
-                        tabIndex={0}
-                        role="button"
-                        aria-label="Resize browser window"
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                handleResizeMouseDown({
-                                    ...e,
-                                    clientX: size.width + position.x,
-                                    clientY: size.height + position.y,
-                                    button: 0,
-                                } as unknown as React.MouseEvent<HTMLDivElement>);
-                            }
-                        }}
-                        style={{
-                            position: "absolute",
-                            bottom: 0,
-                            right: 0,
-                            width: "22px",
-                            height: "22px",
-                            cursor: "nwse-resize",
-                            borderBottomRightRadius: "var(--radius-lg)",
-                            borderTopLeftRadius: "6px",
-                            backgroundColor: "var(--color-surface-raised)",
-                            borderTop: "1px solid var(--color-border-medium)",
-                            borderLeft: "1px solid var(--color-border-medium)",
-                            boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.1)",
-                            zIndex: 5,
-                        }}
-                    >
-                        <div
-                            style={{
-                                position: "absolute",
-                                inset: "4px",
-                                borderBottom: "2px solid var(--color-border-strong)",
-                                borderRight: "2px solid var(--color-border-strong)",
-                                borderBottomRightRadius: "4px",
-                                pointerEvents: "none",
-                            }}
-                        />
-                        <div
-                            style={{
-                                position: "absolute",
-                                right: "6px",
-                                bottom: "6px",
-                                width: "10px",
-                                height: "10px",
-                                clipPath: "polygon(0 100%, 100% 0, 100% 100%)",
-                                background:
-                                    "linear-gradient(135deg, transparent 0%, transparent 30%, var(--color-border-strong) 30%, var(--color-border-strong) 50%, transparent 50%)",
-                                pointerEvents: "none",
-                            }}
-                        />
-                        <span
-                            aria-hidden="true"
-                            style={{
-                                position: "absolute",
-                                right: "4px",
-                                bottom: "2px",
-                                fontSize: "14px",
-                                color: "var(--color-border-strong)",
-                                lineHeight: 1,
-                                pointerEvents: "none",
-                                userSelect: "none",
-                            }}
-                        >
-                            ↘
-                        </span>
-                    </div>
-                )}
             </div>
             {showCreateDialog && (
                 <CreateChildDialog
@@ -2379,7 +2238,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     errorMessage={editFlagsDialogError}
                 />
             )}
-        </>
+        </EditorWindow>
     );
 };
 

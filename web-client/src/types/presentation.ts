@@ -29,7 +29,13 @@ export interface Presentation {
 }
 
 export type SemanticTarget = "navigation" | "inventory" | "status" | "tools" | "communication" | "help";
-export type PresentationTarget = SemanticTarget | "window" | "verb-editor";
+export type PresentationTarget =
+    | SemanticTarget
+    | "window"
+    | "verb-editor"
+    | "property-editor"
+    | "property-value-editor"
+    | "object-browser";
 
 export const TARGET_TYPES = {
     WINDOW: "window" as const,
@@ -40,4 +46,7 @@ export const TARGET_TYPES = {
     COMMUNICATION: "communication" as const,
     HELP: "help" as const,
     VERB_EDITOR: "verb-editor" as const,
+    PROPERTY_EDITOR: "property-editor" as const,
+    PROPERTY_VALUE_EDITOR: "property-value-editor" as const,
+    OBJECT_BROWSER: "object-browser" as const,
 };
