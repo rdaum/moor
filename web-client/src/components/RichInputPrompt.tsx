@@ -11,13 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import { parse, renderHTML } from "@djot/djot";
-import { AnsiUp } from "ansi_up";
-import DOMPurify from "dompurify";
-import Prism from "prismjs";
 import React, { useCallback, useState } from "react";
+import { renderDjot, renderPlainText } from "../lib/djot-renderer";
 import { InputMetadata } from "../types/input";
-import "../lib/prism-moo";
 
 interface RichInputPromptProps {
     metadata: InputMetadata;
@@ -42,134 +38,16 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     // Render prompt text as djot with ANSI escape codes
     const renderPrompt = useCallback((text: string) => {
         try {
-            // Parse djot markdown and render to HTML
-            const djotAst = parse(text);
-            const djotHtml = renderHTML(djotAst, {
-                overrides: {
-                    link: (node: any, _context: any) => {
-                        const href = node.destination || "";
-
-                        // Extract link text from djot AST
-                        let linkText = "";
-                        if (node.children && node.children.length > 0) {
-                            linkText = node.children.map((child: any) => {
-                                if (child.tag === "str") {
-                                    return child.text || "";
-                                }
-                                return "";
-                            }).join("");
-                        }
-
-                        if (!linkText.trim()) {
-                            linkText = href;
-                        }
-
-                        // For prompts, just render links as plain text with basic styling
-                        return `<span class="prompt-link" style="text-decoration: underline;">${linkText}</span>`;
-                    },
-                } as any,
-            });
-
-            // Sanitize the rendered HTML
-            const sanitizedDjotHtml = DOMPurify.sanitize(djotHtml, {
-                ALLOWED_TAGS: [
-                    "p",
-                    "br",
-                    "div",
-                    "span",
-                    "strong",
-                    "b",
-                    "em",
-                    "i",
-                    "u",
-                    "s",
-                    "ul",
-                    "ol",
-                    "li",
-                    "pre",
-                    "code",
-                    "small",
-                    "sup",
-                    "sub",
-                ],
-                ALLOWED_ATTR: [
-                    "style",
-                    "class",
-                ],
-            });
-
-            // Process ANSI codes
-            const tempDiv = document.createElement("div");
-            tempDiv.innerHTML = sanitizedDjotHtml;
-            const ansi_up = new AnsiUp();
-
-            // Process <pre> blocks for syntax highlighting
-            const preElements = tempDiv.querySelectorAll("pre");
-            preElements.forEach((pre) => {
-                const codeElement = pre.querySelector("code");
-
-                if (codeElement) {
-                    const classes = codeElement.className.split(/\s+/);
-                    const languageClass = classes.find(cls => cls.startsWith("language-"));
-
-                    if (languageClass) {
-                        const language = languageClass.replace("language-", "");
-
-                        if (Prism.languages[language]) {
-                            const code = codeElement.textContent || "";
-                            const highlightedHtml = Prism.highlight(
-                                code,
-                                Prism.languages[language],
-                                language,
-                            );
-                            codeElement.innerHTML = highlightedHtml;
-                            codeElement.classList.add(`language-${language}`);
-                        }
-                        return;
-                    }
-                }
-
-                // ANSI code processing for non-syntax-highlighted pre blocks
-                const preText = pre.textContent || "";
-                if (preText.includes("\x1b[")) {
-                    const ansiHtml = ansi_up.ansi_to_html(preText).replace(/\n/g, "<br>");
-                    pre.innerHTML = ansiHtml;
-                }
-            });
-
-            // Process ANSI codes in all other text nodes
-            function processTextNodesForAnsi(node: Node): void {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    const nodeText = node.textContent || "";
-                    if (nodeText.includes("\x1b[")) {
-                        const ansiHtml = ansi_up.ansi_to_html(nodeText);
-                        const span = document.createElement("span");
-                        span.innerHTML = ansiHtml;
-                        node.parentNode?.replaceChild(span, node);
-                    }
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    const element = node as Element;
-                    if (element.tagName !== "PRE" && element.tagName !== "CODE") {
-                        Array.from(node.childNodes).forEach(processTextNodesForAnsi);
-                    }
-                }
-            }
-
-            processTextNodesForAnsi(tempDiv);
-
-            const processedHtml = tempDiv.innerHTML;
+            // Use centralized djot rendering utility
+            // For prompts, we don't need clickable links, so no linkHandler
+            const processedHtml = renderDjot(text);
 
             return <div dangerouslySetInnerHTML={{ __html: processedHtml }} />;
         } catch (error) {
             // Fallback to plain text with ANSI if djot parsing fails
             console.warn("Failed to parse djot content in prompt:", error);
-            const ansi_up = new AnsiUp();
-            const htmlFromAnsi = ansi_up.ansi_to_html(text);
-            const sanitizedHtml = DOMPurify.sanitize(htmlFromAnsi, {
-                ALLOWED_TAGS: ["span", "div", "br"],
-                ALLOWED_ATTR: ["style", "class"],
-            });
-            return <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />;
+            const plainHtml = renderPlainText(text);
+            return <div dangerouslySetInnerHTML={{ __html: plainHtml }} />;
         }
     }, []);
 
