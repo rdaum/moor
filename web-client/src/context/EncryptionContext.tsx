@@ -42,13 +42,14 @@ export const EncryptionProvider: React.FC<EncryptionProviderProps> = ({
     playerOid,
 }) => {
     const encryption = useEventLogEncryption(authToken, playerOid);
+    const { checkEncryptionStatus } = encryption;
 
     // Check encryption status when auth token changes
     useEffect(() => {
         if (authToken && playerOid) {
-            encryption.checkEncryptionStatus();
+            checkEncryptionStatus();
         }
-    }, [authToken, playerOid]);
+    }, [authToken, playerOid, checkEncryptionStatus]);
 
     return (
         <EncryptionContext.Provider value={encryption}>

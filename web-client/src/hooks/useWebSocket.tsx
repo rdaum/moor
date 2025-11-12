@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { handleClientEventFlatBuffer } from "../lib/rpc-fb";
 import { InputMetadata } from "../types/input";
+import { PresentationData } from "../types/presentation";
 import { Player } from "./useAuth";
 
 export interface WebSocketState {
@@ -36,7 +37,7 @@ export const useWebSocket = (
         presentationHint?: string,
         thumbnail?: { contentType: string; data: string },
     ) => void,
-    onPresentMessage?: (presentData: any) => void,
+    onPresentMessage?: (presentData: PresentationData) => void,
     onUnpresentMessage?: (id: string) => void,
 ) => {
     const [wsState, setWsState] = useState<WebSocketState>({
@@ -52,6 +53,11 @@ export const useWebSocket = (
     const lastEventTimestampRef = useRef<bigint | null>(null);
     const processingRef = useRef<Promise<void>>(Promise.resolve());
     const isDisconnectingRef = useRef(false);
+    const connectionStatusRef = useRef<WebSocketState["connectionStatus"]>("disconnected");
+
+    useEffect(() => {
+        connectionStatusRef.current = wsState.connectionStatus;
+    }, [wsState.connectionStatus]);
 
     // Handle incoming WebSocket messages
     const handleMessage = useCallback(async (event: MessageEvent) => {
@@ -180,7 +186,15 @@ export const useWebSocket = (
                     );
 
                     // Schedule reconnect for non-normal closures
-                    scheduleReconnect(mode);
+                    const delay = 3000;
+                    if (!reconnectTimeoutRef.current) {
+                        reconnectTimeoutRef.current = window.setTimeout(() => {
+                            reconnectTimeoutRef.current = null;
+                            if (connectionStatusRef.current !== "connected") {
+                                connect(mode);
+                            }
+                        }, delay);
+                    }
                 }
             };
         } catch (error) {
@@ -191,23 +205,7 @@ export const useWebSocket = (
                 5,
             );
         }
-    }, [player, onSystemMessage, handleMessage]);
-
-    // Schedule reconnection
-    const scheduleReconnect = useCallback((mode: "connect" | "create") => {
-        if (reconnectTimeoutRef.current) {
-            return; // Already scheduled
-        }
-
-        const delay = 3000; // 3 seconds
-
-        reconnectTimeoutRef.current = window.setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            if (wsState.connectionStatus !== "connected") {
-                connect(mode);
-            }
-        }, delay);
-    }, [connect, wsState.connectionStatus]);
+    }, [handleMessage, onPlayerConnectedChange, onSystemMessage, player]);
 
     // Disconnect from WebSocket
     const disconnect = useCallback(() => {

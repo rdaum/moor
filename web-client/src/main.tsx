@@ -36,6 +36,7 @@ import { PresentationProvider, usePresentationContext } from "./context/Presenta
 import { useWebSocketContext, WebSocketProvider } from "./context/WebSocketContext";
 import { useHistory } from "./hooks/useHistory";
 import { useMCPHandler } from "./hooks/useMCPHandler";
+import { usePersistentState } from "./hooks/usePersistentState";
 import { usePropertyEditor } from "./hooks/usePropertyEditor";
 import { useTitle } from "./hooks/useTitle";
 import { useTouchDevice } from "./hooks/useTouchDevice";
@@ -49,6 +50,19 @@ import "./styles/main.css";
 
 // ObjFlag enum values (must match server-side ObjFlag::Programmer = 1)
 const OBJFLAG_PROGRAMMER = 1 << 1; // Bit position 1 -> value 2
+
+const serializeNumber = (value: number) => value.toString();
+const deserializeNumber = (raw: string): number | null => {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const clampNarrativeFontSize = (size: number) => Math.min(24, Math.max(10, size));
+const serializeNarrativeFontSize = (value: number) => clampNarrativeFontSize(value).toString();
+const deserializeNarrativeFontSize = (raw: string): number | null => {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? clampNarrativeFontSize(parsed) : null;
+};
 
 // Simple React App component to test the setup
 function AppContent({
@@ -86,6 +100,14 @@ function AppContent({
     const { encryptionState, setupEncryption, forgetKey, getKeyForHistoryRequest } = useEncryptionContext();
     const systemTitle = useTitle();
     const [loginMode, setLoginMode] = useState<"connect" | "create">("connect");
+    const player = authState.player;
+    const authToken = player?.authToken ?? null;
+    const playerOid = player?.oid ?? null;
+    const playerFlags = player?.flags;
+    const isPlayerConnected = Boolean(player?.connected);
+    const hasProgrammerAccess = Boolean(
+        authToken && playerFlags !== undefined && (playerFlags & OBJFLAG_PROGRAMMER),
+    );
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [pendingHistoricalMessages, setPendingHistoricalMessages] = useState<NarrativeMessage[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -96,11 +118,14 @@ function AppContent({
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [userSkippedEncryption, setUserSkippedEncryption] = useState(false);
     const [oauth2UserInfo, setOAuth2UserInfo] = useState<OAuth2UserInfo | null>(null);
-    const [splitRatio, setSplitRatio] = useState(() => {
-        // Load saved split ratio or default to 60% for room, 40% for editor
-        const saved = localStorage.getItem("moor-split-ratio");
-        return saved ? parseFloat(saved) : 0.6;
-    });
+    const [splitRatio, setSplitRatio] = usePersistentState<number>(
+        "moor-split-ratio",
+        0.6,
+        {
+            serialize: serializeNumber,
+            deserialize: deserializeNumber,
+        },
+    );
     const [unseenCount, setUnseenCount] = useState(0);
     const [eventLogEnabled, setEventLogEnabled] = useState<boolean | null>(null);
     const [hasShownHistoryUnavailable, setHasShownHistoryUnavailable] = useState(false);
@@ -112,21 +137,14 @@ function AppContent({
     const [forceSplitMode, setForceSplitMode] = useState(false);
     const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isTouchDevice);
     const [isEvalPanelDocked, setIsEvalPanelDocked] = useState(() => isTouchDevice);
-    const [narrativeFontSize, setNarrativeFontSize] = useState(() => {
-        const fallback = 14;
-        if (typeof window === "undefined") {
-            return fallback;
-        }
-        const stored = window.localStorage.getItem("moor-narrative-font-size");
-        if (!stored) {
-            return fallback;
-        }
-        const parsed = parseInt(stored, 10);
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-        return Math.min(24, Math.max(10, parsed));
-    });
+    const [narrativeFontSize, setNarrativeFontSize] = usePersistentState<number>(
+        "moor-narrative-font-size",
+        () => 14,
+        {
+            serialize: serializeNarrativeFontSize,
+            deserialize: deserializeNarrativeFontSize,
+        },
+    );
 
     const toggleSplitMode = useCallback(() => {
         setForceSplitMode(prev => !prev);
@@ -147,12 +165,12 @@ function AppContent({
     }, [isTouchDevice]);
 
     const decreaseNarrativeFontSize = useCallback(() => {
-        setNarrativeFontSize(prev => Math.max(10, prev - 1));
-    }, []);
+        setNarrativeFontSize(prev => clampNarrativeFontSize(prev - 1));
+    }, [setNarrativeFontSize]);
 
     const increaseNarrativeFontSize = useCallback(() => {
-        setNarrativeFontSize(prev => Math.min(24, prev + 1));
-    }, []);
+        setNarrativeFontSize(prev => clampNarrativeFontSize(prev + 1));
+    }, [setNarrativeFontSize]);
 
     useEffect(() => {
         if (isTouchDevice && !isObjectBrowserDocked) {
@@ -165,12 +183,6 @@ function AppContent({
             setIsEvalPanelDocked(true);
         }
     }, [isTouchDevice, isEvalPanelDocked]);
-
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem("moor-narrative-font-size", narrativeFontSize.toString());
-        }
-    }, [narrativeFontSize]);
 
     const handleMessageAppended = useCallback((message: NarrativeMessage) => {
         if (typeof document === "undefined") {
@@ -382,7 +394,7 @@ function AppContent({
         fetchInitialHistory,
         fetchMoreHistory,
         isLoadingHistory,
-    } = useHistory(authState.player?.authToken || null, encryptionKeyForHistory);
+    } = useHistory(authToken, encryptionKeyForHistory);
 
     // Presentation management
     const {
@@ -401,64 +413,50 @@ function AppContent({
         // If there are multiple sessions, close only the current one
         if (editorSessions.length > 1 && editorSession) {
             // Dismiss the presentation for the current session
-            if (editorSession.presentationId && authState.player?.authToken) {
-                dismissPresentation(editorSession.presentationId, authState.player.authToken);
+            if (editorSession.presentationId && authToken) {
+                dismissPresentation(editorSession.presentationId, authToken);
             }
             // Close just this session
             closeEditor(editorSession.id);
         } else {
             // Last session - dismiss all presentations and close all
             const verbEditorPresentations = getVerbEditorPresentations();
-            if (verbEditorPresentations.length > 0 && authState.player?.authToken) {
+            if (verbEditorPresentations.length > 0 && authToken) {
                 verbEditorPresentations.forEach(presentation => {
-                    dismissPresentation(presentation.id, authState.player!.authToken);
+                    dismissPresentation(presentation.id, authToken);
                 });
             }
             closeEditor();
         }
-    }, [
-        editorSessions.length,
-        editorSession,
-        getVerbEditorPresentations,
-        dismissPresentation,
-        authState.player?.authToken,
-        closeEditor,
-    ]);
+    }, [authToken, closeEditor, dismissPresentation, editorSession, editorSessions.length, getVerbEditorPresentations]);
 
     // Handle verb editor presentations from server
     useEffect(() => {
         const verbEditorPresentations = getVerbEditorPresentations();
 
-        // Process each presentation and launch editors for ones we don't have sessions for
-        if (verbEditorPresentations.length > 0 && authState.player?.authToken) {
+        if (verbEditorPresentations.length > 0 && authToken) {
             for (const presentation of verbEditorPresentations) {
-                // Check if we already have a session for this presentation
                 const existingSession = editorSessions.find(s => s.presentationId === presentation.id);
 
                 if (!existingSession) {
-                    // Parse presentation attributes to extract object and verb information
                     const rawObjectId = presentation.attrs.object || presentation.attrs.objectCurie;
                     const verbName = presentation.attrs.verb || presentation.attrs.verbName;
 
                     if (rawObjectId && verbName) {
-                        // Convert to proper CURIE format (handles both numeric and UUID IDs)
                         const objectCurie = stringToCurie(rawObjectId);
 
-                        // Use launchVerbEditor to fetch content via REST API
                         launchVerbEditor(
                             presentation.title,
                             objectCurie,
                             verbName,
-                            authState.player.authToken,
+                            authToken,
                             presentation.id,
                         ).catch((error) => {
-                            // Show error message
                             const errorMsg = `Failed to open verb editor: ${error.message}`;
                             console.log("[VerbEditor] Showing error:", errorMsg);
                             showMessage(errorMsg, 5);
-                            // Clean up the presentation
-                            if (authState.player?.authToken) {
-                                dismissPresentation(presentation.id, authState.player.authToken);
+                            if (authToken) {
+                                dismissPresentation(presentation.id, authToken);
                             }
                         });
                     }
@@ -466,8 +464,6 @@ function AppContent({
             }
         }
 
-        // Close any sessions that no longer have a corresponding presentation
-        // Only close if this was a presentation-triggered editor (no uploadAction means it came from a presentation)
         for (const session of editorSessions) {
             if (session.presentationId && !session.uploadAction) {
                 const hasPresentation = verbEditorPresentations.some(p => p.id === session.presentationId);
@@ -477,12 +473,12 @@ function AppContent({
             }
         }
     }, [
-        getVerbEditorPresentations,
-        editorSessions,
-        launchVerbEditor,
+        authToken,
         closeEditor,
-        authState.player?.authToken,
         dismissPresentation,
+        editorSessions,
+        getVerbEditorPresentations,
+        launchVerbEditor,
         showMessage,
     ]);
 
@@ -491,10 +487,10 @@ function AppContent({
 
     // Handle closing presentations
     const handleClosePresentation = useCallback((id: string) => {
-        if (authState.player?.authToken) {
-            dismissPresentation(id, authState.player.authToken);
+        if (authToken) {
+            dismissPresentation(id, authToken);
         }
-    }, [dismissPresentation, authState.player?.authToken]);
+    }, [authToken, dismissPresentation]);
 
     // WebSocket integration
     const { wsState, connect: connectWS, disconnect: disconnectWS, sendMessage, inputMetadata, clearInputMetadata } =
@@ -505,7 +501,7 @@ function AppContent({
 
     // Clean up all user-specific state when player logs out OR changes
     useEffect(() => {
-        const currentPlayerOid = authState.player?.oid || null;
+        const currentPlayerOid = playerOid;
 
         // Detect logout OR user switch: had a player, now different/none
         if (previousPlayerOidRef.current && previousPlayerOidRef.current !== currentPlayerOid) {
@@ -525,9 +521,7 @@ function AppContent({
             clearAllPresentations();
 
             // Clear narrative messages
-            if (narrativeRef.current) {
-                narrativeRef.current.clearAll();
-            }
+            narrativeRef.current?.clearAll();
 
             // Reset local state
             setHistoryLoaded(false);
@@ -540,11 +534,13 @@ function AppContent({
 
         previousPlayerOidRef.current = currentPlayerOid;
     }, [
-        authState.player?.oid,
-        disconnectWS,
+        clearAllPresentations,
         closeEditor,
         closePropertyEditor,
-        clearAllPresentations,
+        disconnectWS,
+        narrativeRef,
+        playerOid,
+        wsState,
     ]);
 
     // Comprehensive logout handler
@@ -576,16 +572,16 @@ function AppContent({
         }
 
         // Check for auth token (existing user flow)
-        const authToken = urlParams.get("auth_token");
-        const playerOid = urlParams.get("player");
+        const authTokenParam = urlParams.get("auth_token");
+        const playerOidParam = urlParams.get("player");
         const flagsParam = urlParams.get("flags");
-        if (authToken && playerOid) {
+        if (authTokenParam && playerOidParam) {
             // Clear URL parameters immediately
             window.history.replaceState({}, document.title, window.location.pathname);
 
             // Store in localStorage so useAuth can pick it up (persists across reloads)
-            localStorage.setItem("oauth2_auth_token", authToken);
-            localStorage.setItem("oauth2_player_oid", playerOid);
+            localStorage.setItem("oauth2_auth_token", authTokenParam);
+            localStorage.setItem("oauth2_player_oid", playerOidParam);
             if (flagsParam) {
                 localStorage.setItem("oauth2_player_flags", flagsParam);
             }
@@ -732,11 +728,7 @@ function AppContent({
 
     // Load history and connect WebSocket after authentication
     useEffect(() => {
-        if (!authState.player || !authState.player.authToken) {
-            return;
-        }
-
-        if (eventLogEnabled === null) {
+        if (!authToken || eventLogEnabled === null) {
             return;
         }
 
@@ -752,15 +744,12 @@ function AppContent({
             return;
         }
 
-        // Load history when player is authenticated, encryption status has been checked at least once, and history not yet loaded
-        if (eventLogEnabled && authState.player.authToken && !historyLoaded) {
-            // Encryption key is ALWAYS required - events cannot be logged or retrieved without it
+        if (eventLogEnabled && !historyLoaded) {
             if (!encryptionKeyForHistory) {
                 console.error(
                     "[HistoryError] No encryption key available. Cannot load history. User must set up encryption.",
                 );
-                // Still need to connect WebSocket, but skip history loading
-                setHistoryLoaded(true); // Mark as "loaded" to prevent retrying
+                setHistoryLoaded(true);
                 if (!wsState.isConnected) {
                     setTimeout(() => connectWS(loginMode), 100);
                 }
@@ -769,28 +758,21 @@ function AppContent({
 
             console.log("[HistoryDebug] Loading history with encryption key");
             setHistoryLoaded(true);
-
-            // Set history boundary before fetching
             setHistoryBoundaryNow();
 
-            // Load initial history with dynamic sizing
             setTimeout(() => {
-                // Wait a moment for the component to render and get actual size
                 fetchInitialHistory()
                     .then(async (historicalMessages) => {
-                        // Store historical messages to add later when narrative component is available
                         setPendingHistoricalMessages(historicalMessages);
 
                         showMessage("History loaded successfully", 2);
 
-                        // Fetch current presentations BEFORE connecting WebSocket
                         try {
-                            await fetchCurrentPresentations(authState.player!.authToken, encryptionKeyForHistory);
-                        } catch (_error) {
-                            // Continue even if presentations fail to load
+                            await fetchCurrentPresentations(authToken, encryptionKeyForHistory);
+                        } catch {
+                            // ignore
                         }
 
-                        // Connect WebSocket after history and presentations are loaded (if not already connected)
                         if (!wsState.isConnected) {
                             connectWS(loginMode);
                         }
@@ -798,33 +780,31 @@ function AppContent({
                     .catch(async (_error) => {
                         showMessage("Failed to load history, continuing anyway...", 3);
 
-                        // Still try to fetch presentations even if history fails
                         try {
-                            await fetchCurrentPresentations(authState.player!.authToken, encryptionKeyForHistory);
-                        } catch (_error) {
-                            // Continue even if presentations fail to load
+                            await fetchCurrentPresentations(authToken, encryptionKeyForHistory);
+                        } catch {
+                            // ignore
                         }
 
-                        // Connect WebSocket even if history fails (if not already connected)
                         if (!wsState.isConnected) {
                             connectWS(loginMode);
                         }
                     });
-            }, 100); // Wait 100ms for component to render
+            }, 100);
         }
     }, [
-        authState.player?.authToken,
-        historyLoaded,
-        encryptionState.hasCheckedOnce,
-        encryptionKeyForHistory,
-        wsState.isConnected,
+        authToken,
         connectWS,
+        encryptionKeyForHistory,
+        encryptionState.hasCheckedOnce,
+        eventLogEnabled,
+        fetchCurrentPresentations,
+        fetchInitialHistory,
+        historyLoaded,
         loginMode,
         setHistoryBoundaryNow,
-        fetchInitialHistory,
-        fetchCurrentPresentations,
         showMessage,
-        eventLogEnabled,
+        wsState.isConnected,
     ]);
 
     // Track if we were previously connected to distinguish reconnection from initial connection
@@ -887,8 +867,6 @@ function AppContent({
 
         const endDrag = () => {
             setIsDraggingSplit(false);
-            // Save the split ratio to localStorage
-            localStorage.setItem("moor-split-ratio", splitRatioRef.current.toString());
         };
 
         const touchMoveOptions: AddEventListenerOptions = { passive: false, capture: true };
@@ -909,21 +887,16 @@ function AppContent({
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
         };
-    }, [isDraggingSplit]);
+    }, [isDraggingSplit, setSplitRatio]);
 
-    const isConnected = authState.player?.connected || false;
     const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
     const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
+    const isConnected = isPlayerConnected;
     const objectBrowserDocked = isObjectBrowserOpen && isObjectBrowserDocked;
     const evalPanelDocked = isEvalPanelOpen && isEvalPanelDocked;
     const isSplitMode = isConnected
         && (verbEditorDocked || propertyEditorDocked || objectBrowserDocked || evalPanelDocked);
-    const canUseObjectBrowser = Boolean(
-        isConnected
-            && authState.player?.authToken
-            && authState.player?.flags !== undefined
-            && (authState.player.flags & OBJFLAG_PROGRAMMER),
-    );
+    const canUseObjectBrowser = Boolean(isConnected && hasProgrammerAccess);
 
     useEffect(() => {
         if (!isConnected) {
@@ -935,13 +908,13 @@ function AppContent({
     useEffect(() => {
         if (narrativeRef.current && pendingHistoricalMessages.length > 0) {
             narrativeRef.current.addHistoricalMessages(pendingHistoricalMessages);
-            setPendingHistoricalMessages([]); // Clear pending messages
+            setPendingHistoricalMessages([]);
         }
-    }, [isConnected, pendingHistoricalMessages]);
+    }, [isConnected, narrativeRef, pendingHistoricalMessages]);
 
     // Handle loading more history for infinite scroll
     const handleLoadMoreHistory = useCallback(async () => {
-        if (!authState.player?.authToken || isLoadingHistory || eventLogEnabled === false) {
+        if (!authToken || isLoadingHistory || eventLogEnabled === false) {
             return;
         }
 
@@ -952,10 +925,9 @@ function AppContent({
                 narrativeRef.current?.prependHistoricalMessages(moreHistoricalMessages);
             }
         } catch (error) {
-            // History loading failed, but we can continue without it
             console.warn("Failed to load more history:", error);
         }
-    }, [authState.player?.authToken, isLoadingHistory, fetchMoreHistory, eventLogEnabled]);
+    }, [authToken, eventLogEnabled, fetchMoreHistory, isLoadingHistory, narrativeRef]);
 
     return (
         <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -989,12 +961,8 @@ function AppContent({
                     <TopNavBar
                         onSettingsToggle={() => setIsSettingsOpen(true)}
                         onAccountToggle={() => setIsAccountMenuOpen(true)}
-                        onBrowserToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
-                            ? handleOpenObjectBrowser
-                            : undefined}
-                        onEvalToggle={authState.player?.flags && (authState.player.flags & OBJFLAG_PROGRAMMER)
-                            ? handleOpenEvalPanel
-                            : undefined}
+                        onBrowserToggle={hasProgrammerAccess ? handleOpenObjectBrowser : undefined}
+                        onEvalToggle={hasProgrammerAccess ? handleOpenEvalPanel : undefined}
                     />
                 </>
             )}
@@ -1014,8 +982,8 @@ function AppContent({
                 onClose={() => setIsAccountMenuOpen(false)}
                 onLogout={handleLogout}
                 historyAvailable={eventLogEnabled !== false}
-                authToken={authState.player?.authToken ?? null}
-                playerOid={authState.player?.oid ?? null}
+                authToken={authToken}
+                playerOid={playerOid}
             />
 
             {/* Main app layout with narrative interface */}
@@ -1069,7 +1037,7 @@ function AppContent({
                                     onLoadMoreHistory={eventLogEnabled === false ? undefined : handleLoadMoreHistory}
                                     isLoadingHistory={eventLogEnabled === false ? false : isLoadingHistory}
                                     onLinkClick={onLinkClick}
-                                    playerOid={authState.player?.oid}
+                                    playerOid={playerOid}
                                     onMessageAppended={handleMessageAppended}
                                     fontSize={narrativeFontSize}
                                     inputMetadata={inputMetadata}
@@ -1130,7 +1098,7 @@ function AppContent({
                     )}
 
                     {/* Editor Section (in split mode) */}
-                    {isSplitMode && authState.player?.authToken && (
+                    {isSplitMode && authToken && (
                         <div
                             style={{
                                 flex: isSplitMode ? (1 - splitRatio) : 0,
@@ -1148,7 +1116,7 @@ function AppContent({
                                     objectCurie={editorSession.objectCurie}
                                     verbName={editorSession.verbName}
                                     initialContent={editorSession.content}
-                                    authToken={authState.player.authToken}
+                                    authToken={authToken}
                                     uploadAction={editorSession.uploadAction}
                                     onSendMessage={sendMessage}
                                     splitMode={true}
@@ -1168,7 +1136,7 @@ function AppContent({
                                     objectCurie={propertyEditorSession.objectCurie}
                                     propertyName={propertyEditorSession.propertyName}
                                     initialContent={propertyEditorSession.content}
-                                    authToken={authState.player.authToken}
+                                    authToken={authToken}
                                     uploadAction={propertyEditorSession.uploadAction}
                                     onSendMessage={sendMessage}
                                     splitMode={true}
@@ -1182,7 +1150,7 @@ function AppContent({
                                     key="object-browser-instance"
                                     visible={true}
                                     onClose={() => setIsObjectBrowserOpen(false)}
-                                    authToken={authState.player.authToken}
+                                    authToken={authToken}
                                     splitMode={true}
                                     onToggleSplitMode={toggleObjectBrowserDock}
                                     isInSplitMode={true}
@@ -1192,7 +1160,7 @@ function AppContent({
                                 <EvalPanel
                                     visible={isEvalPanelOpen}
                                     onClose={() => setIsEvalPanelOpen(false)}
-                                    authToken={authState.player.authToken}
+                                    authToken={authToken}
                                     splitMode={true}
                                     onToggleSplitMode={toggleEvalPanelDock}
                                     isInSplitMode={true}
@@ -1204,37 +1172,32 @@ function AppContent({
             )}
 
             {/* Editor Modals (floating mode) - render all non-docked sessions */}
-            {authState.player?.authToken && !verbEditorDocked && editorSessions.map((session) => {
-                const authToken = authState.player!.authToken;
-                return (
-                    <VerbEditor
-                        key={session.id}
-                        visible={true}
-                        onClose={() => {
-                            // Close this specific session
-                            closeEditor(session.id);
-                            // Also dismiss presentation if it exists
-                            if (session.presentationId && authState.player?.authToken) {
-                                const verbEditorPresentations = getVerbEditorPresentations();
-                                const presentation = verbEditorPresentations.find(p => p.id === session.presentationId);
-                                if (presentation) {
-                                    dismissPresentation(presentation.id, authState.player.authToken);
-                                }
+            {authToken && !verbEditorDocked && editorSessions.map((session) => (
+                <VerbEditor
+                    key={session.id}
+                    visible={true}
+                    onClose={() => {
+                        closeEditor(session.id);
+                        if (session.presentationId && authToken) {
+                            const verbEditorPresentations = getVerbEditorPresentations();
+                            const presentation = verbEditorPresentations.find(p => p.id === session.presentationId);
+                            if (presentation) {
+                                dismissPresentation(presentation.id, authToken);
                             }
-                        }}
-                        title={session.title}
-                        objectCurie={session.objectCurie}
-                        verbName={session.verbName}
-                        initialContent={session.content}
-                        authToken={authToken}
-                        uploadAction={session.uploadAction}
-                        onSendMessage={sendMessage}
-                        onToggleSplitMode={toggleSplitMode}
-                        isInSplitMode={false}
-                    />
-                );
-            })}
-            {propertyEditorSession && authState.player?.authToken && !propertyEditorDocked && (
+                        }
+                    }}
+                    title={session.title}
+                    objectCurie={session.objectCurie}
+                    verbName={session.verbName}
+                    initialContent={session.content}
+                    authToken={authToken}
+                    uploadAction={session.uploadAction}
+                    onSendMessage={sendMessage}
+                    onToggleSplitMode={toggleSplitMode}
+                    isInSplitMode={false}
+                />
+            ))}
+            {propertyEditorSession && authToken && !propertyEditorDocked && (
                 <PropertyEditor
                     visible={true}
                     onClose={closePropertyEditor}
@@ -1242,7 +1205,7 @@ function AppContent({
                     objectCurie={propertyEditorSession.objectCurie}
                     propertyName={propertyEditorSession.propertyName}
                     initialContent={propertyEditorSession.content}
-                    authToken={authState.player.authToken}
+                    authToken={authToken}
                     uploadAction={propertyEditorSession.uploadAction}
                     onSendMessage={sendMessage}
                     onToggleSplitMode={toggleSplitMode}
@@ -1292,12 +1255,12 @@ function AppContent({
             )}
 
             {/* Object Browser - floating mode */}
-            {isObjectBrowserOpen && !objectBrowserDocked && canUseObjectBrowser && authState.player?.authToken && (
+            {isObjectBrowserOpen && !objectBrowserDocked && canUseObjectBrowser && authToken && (
                 <ObjectBrowser
                     key="object-browser-instance"
                     visible={true}
                     onClose={() => setIsObjectBrowserOpen(false)}
-                    authToken={authState.player.authToken}
+                    authToken={authToken}
                     splitMode={false}
                     onToggleSplitMode={toggleObjectBrowserDock}
                     isInSplitMode={false}
@@ -1305,11 +1268,11 @@ function AppContent({
             )}
 
             {/* Eval Panel - floating mode */}
-            {isEvalPanelOpen && !evalPanelDocked && canUseObjectBrowser && authState.player?.authToken && (
+            {isEvalPanelOpen && !evalPanelDocked && canUseObjectBrowser && authToken && (
                 <EvalPanel
                     visible={true}
                     onClose={() => setIsEvalPanelOpen(false)}
-                    authToken={authState.player.authToken}
+                    authToken={authToken}
                     onToggleSplitMode={toggleEvalPanelDock}
                     isInSplitMode={false}
                 />
@@ -1349,7 +1312,8 @@ function AppWrapper() {
     const { authState, setPlayerConnected, setPlayerFlags } = useAuthContext();
     const { addPresentation, removePresentation } = usePresentationContext();
     const { showMessage } = useSystemMessage();
-    const narrativeRef = useRef<NarrativeRef>(null);
+    const authToken = authState.player?.authToken ?? null;
+    const narrativeRef = useRef<NarrativeRef | null>(null);
 
     // Store verb editor function from AppContent
     const showVerbEditorRef = useRef<
@@ -1378,13 +1342,13 @@ function AppWrapper() {
 
     // Handle MOO link clicks
     const handleLinkClick = useCallback(async (url: string) => {
-        if (!authState.player?.authToken) {
+        if (!authToken) {
             console.warn("Cannot handle link click: No auth token available");
             return;
         }
 
         try {
-            const sysobj = new MoorRemoteObject(oidRef(0), authState.player.authToken);
+            const sysobj = new MoorRemoteObject(oidRef(0), authToken);
             // TODO: Need to convert URL to FlatBuffer Var and pass as argument
             // For now, calling without arguments - the verb may not work correctly
             await sysobj.callVerb("handle_client_url");
@@ -1394,7 +1358,7 @@ function AppWrapper() {
             console.error("Failed to handle link click:", error);
             showMessage(`Failed to handle link: ${error instanceof Error ? error.message : String(error)}`, 5);
         }
-    }, [authState.player?.authToken, showMessage]);
+    }, [authToken, showMessage]);
     const [pendingMessages, setPendingMessages] = useState<
         Array<{
             content: string | string[];
@@ -1479,7 +1443,6 @@ function AppWrapper() {
     // Process pending messages when narrative ref becomes available
     const narrativeCallbackRef = useCallback((node: NarrativeRef | null) => {
         if (node) {
-            // Process any pending messages
             pendingMessages.forEach(({ content, contentType, noNewline, presentationHint, thumbnail }) => {
                 node.addNarrativeContent(
                     content,
@@ -1493,8 +1456,7 @@ function AppWrapper() {
                 setPendingMessages([]);
             }
         }
-        // Also store in the ref for other uses
-        (narrativeRef as any).current = node;
+        narrativeRef.current = node;
     }, [pendingMessages]);
 
     return (

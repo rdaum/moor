@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { VarUnion } from "../generated/moor-var/var-union.js";
+import { usePersistentState } from "../hooks/usePersistentState";
 import { MoorVar } from "../lib/MoorVar.js";
 import { performEvalFlatBuffer, updatePropertyFlatBuffer } from "../lib/rpc-fb.js";
 
@@ -236,35 +237,26 @@ export function PropertyValueEditor({
     const FONT_SIZE_STORAGE_KEY = "moor-code-editor-font-size";
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
-    const [fontSize, setFontSize] = useState(() => {
-        const fallback = 12;
-        if (typeof window === "undefined") {
-            return fallback;
-        }
-        const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
-        if (!stored) {
-            return fallback;
-        }
-        const parsed = parseInt(stored, 10);
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
-    });
-
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSize.toString());
-        }
-    }, [fontSize]);
+    const clampFontSize = (size: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+    const [fontSize, setFontSize] = usePersistentState<number>(
+        FONT_SIZE_STORAGE_KEY,
+        () => 12,
+        {
+            serialize: value => clampFontSize(value).toString(),
+            deserialize: raw => {
+                const parsed = Number(raw);
+                return Number.isFinite(parsed) ? clampFontSize(parsed) : null;
+            },
+        },
+    );
 
     const decreaseFontSize = useCallback(() => {
-        setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
-    }, []);
+        setFontSize(prev => clampFontSize(prev - 1));
+    }, [setFontSize]);
 
     const increaseFontSize = useCallback(() => {
-        setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1));
-    }, []);
+        setFontSize(prev => clampFontSize(prev + 1));
+    }, [setFontSize]);
 
     const handleSave = async () => {
         setIsSaving(true);

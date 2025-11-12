@@ -13,7 +13,17 @@
 
 // ! Command echo toggle component for enabling/disabling input command echoing
 
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { usePersistentState } from "../hooks/usePersistentState";
+
+const ECHO_STORAGE_KEY = "echoCommands";
+
+const serializeEcho = (value: boolean) => value ? "true" : "false";
+const deserializeEcho = (raw: string): boolean | null => {
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    return null;
+};
 
 /**
  * Command echo toggle component for controlling whether typed commands are echoed to output
@@ -21,16 +31,14 @@ import React, { useEffect, useState } from "react";
  * @returns A button that toggles command echoing on/off
  */
 export const CommandEchoToggle: React.FC = () => {
-    // Check if user has a saved preference, default to true (echo enabled)
-    const savedEchoSetting = localStorage.getItem("echoCommands");
-    const [echoEnabled, setEchoEnabled] = useState<boolean>(
-        savedEchoSetting !== null ? savedEchoSetting === "true" : true,
+    const [echoEnabled, setEchoEnabled] = usePersistentState<boolean>(
+        ECHO_STORAGE_KEY,
+        true,
+        {
+            serialize: serializeEcho,
+            deserialize: deserializeEcho,
+        },
     );
-
-    // Save preference when state changes
-    useEffect(() => {
-        localStorage.setItem("echoCommands", echoEnabled.toString());
-    }, [echoEnabled]);
 
     const toggleEcho = () => {
         setEchoEnabled(prev => !prev);
@@ -62,6 +70,10 @@ export const CommandEchoToggle: React.FC = () => {
  * Get the current command echo setting from localStorage
  */
 export const getCommandEchoEnabled = (): boolean => {
-    const savedEchoSetting = localStorage.getItem("echoCommands");
-    return savedEchoSetting !== null ? savedEchoSetting === "true" : true;
+    if (typeof window === "undefined") {
+        return true;
+    }
+    const savedEchoSetting = window.localStorage.getItem(ECHO_STORAGE_KEY);
+    const parsed = savedEchoSetting ? deserializeEcho(savedEchoSetting) : null;
+    return parsed ?? true;
 };

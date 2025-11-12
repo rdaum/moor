@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
+import { usePersistentState } from "../hooks/usePersistentState.js";
 import { useTouchDevice } from "../hooks/useTouchDevice.js";
 import { MoorVar } from "../lib/MoorVar.js";
 import {
@@ -26,6 +27,7 @@ import {
 } from "../lib/rpc-fb.js";
 import type { ServerFeatureSet } from "../lib/rpc-fb.js";
 import { objToString, stringToCurie, uuObjIdToString } from "../lib/var.js";
+import { DialogSheet } from "./DialogSheet.js";
 import { PropertyValueEditor } from "./PropertyValueEditor.js";
 import { VerbEditor } from "./VerbEditor.js";
 
@@ -111,6 +113,51 @@ function formatObjectFlags(flags: number): string {
     return parts.length > 0 ? parts.join("") : "";
 }
 
+const MIN_FONT_SIZE = 10;
+const MAX_FONT_SIZE = 20;
+
+const persistNonNull = <T,>(value: T | null): boolean => value !== null;
+
+const clampFontSize = (value: number): number => {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value));
+};
+
+const deserializeFontSize = (raw: string): number | null => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+        return null;
+    }
+    return clampFontSize(parsed);
+};
+
+const deserializeStoredString = (raw: string): string | null => {
+    if (raw.length === 0) {
+        return "";
+    }
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return raw;
+    }
+};
+
+const deserializeEditorType = (raw: string): "property" | "verb" | null => {
+    const value = deserializeStoredString(raw);
+    return value === "property" || value === "verb" ? value : null;
+};
+
+const deserializePropertyName = (raw: string): string | null => {
+    return deserializeStoredString(raw);
+};
+
+const deserializeVerbIndex = (raw: string): number | null => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+        return null;
+    }
+    return parsed;
+};
+
 export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     visible,
     onClose,
@@ -129,20 +176,11 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [activeTab, setActiveTab] = useState<"objects" | "properties" | "verbs">("objects");
     const [isFullscreen, setIsFullscreen] = useState(useTabLayout); // Start fullscreen on mobile
     const [objects, setObjects] = useState<ObjectData[]>([]);
-    const [selectedObject, setSelectedObject] = useState<ObjectData | null>(() => {
-        // Restore last selected object from localStorage
-        if (typeof window !== "undefined") {
-            const stored = window.localStorage.getItem("moor-object-browser-selected-object");
-            if (stored) {
-                try {
-                    return JSON.parse(stored);
-                } catch {
-                    return null;
-                }
-            }
-        }
-        return null;
-    });
+    const [selectedObject, setSelectedObject] = usePersistentState<ObjectData | null>(
+        "moor-object-browser-selected-object",
+        null,
+        { shouldPersist: persistNonNull },
+    );
     const [properties, setProperties] = useState<PropertyData[]>([]);
     const [verbs, setVerbs] = useState<VerbData[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -164,26 +202,30 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [editorVisible, setEditorVisible] = useState(false);
 
     // Track what type of editor was open (for restoration)
-    const [lastEditorType, setLastEditorType] = useState<"property" | "verb" | null>(() => {
-        if (typeof window !== "undefined") {
-            const stored = window.localStorage.getItem("moor-object-browser-editor-type");
-            return stored as "property" | "verb" | null;
-        }
-        return null;
-    });
-    const [lastPropertyName, setLastPropertyName] = useState<string | null>(() => {
-        if (typeof window !== "undefined") {
-            return window.localStorage.getItem("moor-object-browser-property-name");
-        }
-        return null;
-    });
-    const [lastVerbIndex, setLastVerbIndex] = useState<number | null>(() => {
-        if (typeof window !== "undefined") {
-            const stored = window.localStorage.getItem("moor-object-browser-verb-index");
-            return stored ? parseInt(stored, 10) : null;
-        }
-        return null;
-    });
+    const [lastEditorType, setLastEditorType] = usePersistentState<"property" | "verb" | null>(
+        "moor-object-browser-editor-type",
+        null,
+        {
+            shouldPersist: persistNonNull,
+            deserialize: deserializeEditorType,
+        },
+    );
+    const [lastPropertyName, setLastPropertyName] = usePersistentState<string | null>(
+        "moor-object-browser-property-name",
+        null,
+        {
+            shouldPersist: persistNonNull,
+            deserialize: deserializePropertyName,
+        },
+    );
+    const [lastVerbIndex, setLastVerbIndex] = usePersistentState<number | null>(
+        "moor-object-browser-verb-index",
+        null,
+        {
+            shouldPersist: persistNonNull,
+            deserialize: deserializeVerbIndex,
+        },
+    );
 
     // Sync selectedVerb when verbs array updates (e.g., after metadata save)
     useEffect(() => {
@@ -212,40 +254,21 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         }
     }, [verbs, lastEditorType, lastVerbIndex, selectedVerb, selectedObject]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Editor split state - using pixel height instead of percentage
     const [browserPaneHeight, setBrowserPaneHeight] = useState(350); // Fixed pixel height for browser pane
     const [isSplitDragging, setIsSplitDragging] = useState(false);
-    const MIN_FONT_SIZE = 10;
-    const MAX_FONT_SIZE = 20;
-    const [fontSize, setFontSize] = useState(() => {
-        const fallback = isMobile ? 14 : 12;
-        if (typeof window === "undefined") {
-            return fallback;
-        }
-        const stored = window.localStorage.getItem("moor-object-browser-font-size");
-        if (!stored) {
-            return fallback;
-        }
-        const parsed = parseInt(stored, 10);
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
-    });
-    const [showInheritedProperties, setShowInheritedProperties] = useState(() => {
-        if (typeof window === "undefined") {
-            return true;
-        }
-        const stored = window.localStorage.getItem("moor-object-browser-show-inherited-properties");
-        return stored !== "false";
-    });
-    const [showInheritedVerbs, setShowInheritedVerbs] = useState(() => {
-        if (typeof window === "undefined") {
-            return true;
-        }
-        const stored = window.localStorage.getItem("moor-object-browser-show-inherited-verbs");
-        return stored !== "false";
-    });
+    const [fontSize, setFontSize] = usePersistentState(
+        "moor-object-browser-font-size",
+        () => (isMobile ? 14 : 12),
+        { deserialize: deserializeFontSize },
+    );
+    const [showInheritedProperties, setShowInheritedProperties] = usePersistentState(
+        "moor-object-browser-show-inherited-properties",
+        true,
+    );
+    const [showInheritedVerbs, setShowInheritedVerbs] = usePersistentState(
+        "moor-object-browser-show-inherited-verbs",
+        true,
+    );
     const [serverFeatures, setServerFeatures] = useState<ServerFeatureSet | null>(null);
     const [dollarNames, setDollarNames] = useState<Map<string, string>>(new Map());
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -275,57 +298,33 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [propertyToDelete, setPropertyToDelete] = useState<PropertyData | null>(null);
     const [verbToDelete, setVerbToDelete] = useState<VerbData | null>(null);
     const decreaseFontSize = useCallback(() => {
-        setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
-    }, []);
+        setFontSize(prev => clampFontSize(prev - 1));
+    }, [setFontSize]);
     const increaseFontSize = useCallback(() => {
-        setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1));
-    }, []);
+        setFontSize(prev => clampFontSize(prev + 1));
+    }, [setFontSize]);
 
-    // Save selected object to localStorage whenever it changes
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            if (selectedObject) {
-                window.localStorage.setItem("moor-object-browser-selected-object", JSON.stringify(selectedObject));
-            } else {
-                window.localStorage.removeItem("moor-object-browser-selected-object");
-            }
+        if (selectedProperty && editorVisible) {
+            setLastEditorType("property");
+            setLastPropertyName(selectedProperty.name);
         }
-    }, [selectedObject]);
+    }, [editorVisible, selectedProperty, setLastEditorType, setLastPropertyName]);
 
-    // Save property selection to localStorage
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            if (selectedProperty && editorVisible) {
-                window.localStorage.setItem("moor-object-browser-editor-type", "property");
-                window.localStorage.setItem("moor-object-browser-property-name", selectedProperty.name);
-                setLastEditorType("property");
-                setLastPropertyName(selectedProperty.name);
-            }
+        if (selectedVerb && editorVisible && selectedVerb.indexInLocation !== undefined) {
+            setLastEditorType("verb");
+            setLastVerbIndex(selectedVerb.indexInLocation);
         }
-    }, [selectedProperty, editorVisible]);
+    }, [editorVisible, selectedVerb, setLastEditorType, setLastVerbIndex]);
 
-    // Save verb selection to localStorage
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            if (selectedVerb && editorVisible) {
-                window.localStorage.setItem("moor-object-browser-editor-type", "verb");
-                if (selectedVerb.indexInLocation !== undefined) {
-                    window.localStorage.setItem("moor-object-browser-verb-index", String(selectedVerb.indexInLocation));
-                    setLastEditorType("verb");
-                    setLastVerbIndex(selectedVerb.indexInLocation);
-                }
-            }
+        if (!editorVisible) {
+            setLastEditorType(null);
+            setLastPropertyName(null);
+            setLastVerbIndex(null);
         }
-    }, [selectedVerb, editorVisible]);
-
-    // Clear editor state from localStorage when editor is closed
-    useEffect(() => {
-        if (typeof window !== "undefined" && !editorVisible) {
-            window.localStorage.removeItem("moor-object-browser-editor-type");
-            window.localStorage.removeItem("moor-object-browser-property-name");
-            window.localStorage.removeItem("moor-object-browser-verb-index");
-        }
-    }, [editorVisible]);
+    }, [editorVisible, setLastEditorType, setLastPropertyName, setLastVerbIndex]);
 
     // Load objects on mount
     useEffect(() => {
@@ -500,11 +499,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
     const loadPropertiesAndVerbs = async (obj: ObjectData) => {
         try {
-            // Convert obj.obj to CURIE format using the utility function
             const objectCurie = stringToCurie(obj.obj);
-            console.log("Loading properties/verbs for:", obj.obj, "→", objectCurie);
-
-            // Load properties
             const propsReply = await getPropertiesFlatBuffer(authToken, objectCurie, true);
             const propsLength = propsReply.propertiesLength();
             const propList: PropertyData[] = [];
@@ -519,7 +514,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
                 propList.push({
                     name: nameSymbol?.value() || "",
-                    value: null, // TODO: Fetch actual property value
+                    value: null,
                     owner: objToString(owner) || "",
                     definer: objToString(definer) || "",
                     readable: propInfo.r(),
@@ -529,7 +524,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
             setProperties(propList);
 
-            // Load verbs
             const verbsReply = await getVerbsFlatBuffer(authToken, objectCurie, true);
             const verbsLength = verbsReply.verbsLength();
             const verbList: VerbData[] = [];
@@ -581,7 +575,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
 
             setVerbs(verbList);
-            return propList; // Return the property list for immediate use
+            return propList;
         } catch (error) {
             console.error("Failed to load properties/verbs:", error);
             return []; // Return empty array on error
@@ -615,7 +609,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 const jsValue = moorVar.toJS();
                 // Update the property with both JS value and MoorVar
                 setSelectedProperty({ ...prop, value: jsValue, moorVar });
-                console.log(`Property ${prop.name} value:`, jsValue);
             }
         } catch (error) {
             console.error("Failed to load property value:", error);
@@ -737,14 +730,12 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             // Handle player flag change if needed (requires set_player_flag builtin)
             if (newUser !== currentUser) {
                 const userExpr = `return set_player_flag(${objectExpr}, ${newUser});`;
-                console.debug("Evaluating set_player_flag expression:", userExpr);
                 await performEvalFlatBuffer(authToken, userExpr);
             }
 
             // Handle other flag changes
             if (assignments.length > 0) {
                 const expr = assignments.join("; ") + "; return 1;";
-                console.debug("Evaluating set flags expression:", expr);
                 await performEvalFlatBuffer(authToken, expr);
             }
 
@@ -793,10 +784,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         setIsSubmittingCreate(true);
         setCreateDialogError(null);
         try {
-            console.debug("Evaluating create expression:", expr);
             const previousIds = new Set(objects.map(o => o.obj));
             const result = await performEvalFlatBuffer(authToken, expr);
-            console.debug("Create result:", result, "Type:", typeof result);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
                 const msg = errorResult.error?.msg ?? "create() failed";
@@ -810,7 +799,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     const oidResult = result as { oid?: number };
                     if (typeof oidResult.oid === "number") {
                         createdObjExpr = `#${oidResult.oid}`;
-                        console.debug("Extracted OID object reference:", createdObjExpr);
                     }
                 } else if ("uuid" in result) {
                     const uuidResult = result as { uuid?: string };
@@ -819,22 +807,19 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                         const packedValue = BigInt(uuidResult.uuid);
                         const formattedUuid = uuObjIdToString(packedValue);
                         createdObjExpr = `#${formattedUuid}`;
-                        console.debug("Extracted UUID object reference:", createdObjExpr);
                     }
                 }
             }
             if (!createdObjExpr) {
-                console.debug("Could not extract object reference from result");
+                console.error("Could not extract object reference from create() result");
             }
 
             // Set name if provided
             if (createdObjExpr && form.name.trim().length > 0) {
                 const escapedName = form.name.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
                 const nameExpr = `${createdObjExpr}.name = "${escapedName}"; return 1;`;
-                console.debug("Setting name:", nameExpr);
                 try {
-                    const nameResult = await performEvalFlatBuffer(authToken, nameExpr);
-                    console.debug("Name set result:", nameResult);
+                    await performEvalFlatBuffer(authToken, nameExpr);
                 } catch (error) {
                     console.error("Failed to set name:", error);
                     throw new Error(`Failed to set name: ${error instanceof Error ? error.message : String(error)}`);
@@ -861,10 +846,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                 }
                 if (assignments.length > 0) {
                     const flagsExpr = assignments.join("; ") + "; return 1;";
-                    console.debug("Setting flags:", flagsExpr);
                     try {
-                        const flagsResult = await performEvalFlatBuffer(authToken, flagsExpr);
-                        console.debug("Flags set result:", flagsResult);
+                        await performEvalFlatBuffer(authToken, flagsExpr);
                     } catch (error) {
                         console.error("Failed to set flags:", error);
                         throw new Error(
@@ -908,7 +891,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
         try {
             const recycleExpr = `return recycle(${objectExpr});`;
-            console.debug("Evaluating recycle expression:", recycleExpr);
             const result = await performEvalFlatBuffer(authToken, recycleExpr);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
@@ -960,7 +942,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
         try {
             const expr = `return dump_object(${objectExpr});`;
-            console.debug("Evaluating dump_object expression:", expr);
             const result = await performEvalFlatBuffer(authToken, expr);
 
             // Check for error
@@ -1030,7 +1011,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const expr =
                 `return add_property(${objectExpr}, '${escapedName}, ${form.value}, {${ownerExpr}, "${perms}"});`;
 
-            console.debug("Evaluating add_property expression:", expr);
             const result = await performEvalFlatBuffer(authToken, expr);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
@@ -1087,7 +1067,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const expr =
                 `return add_verb(${objectExpr}, {${ownerExpr}, "${perms}", "${verbNames}"}, {"${dobj}", "${prep}", "${iobj}"});`;
 
-            console.debug("Evaluating add_verb expression:", expr);
             const result = await performEvalFlatBuffer(authToken, expr);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
@@ -1124,7 +1103,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             const verbName = verbToDelete.names[0];
             const expr = `return delete_verb(${objectExpr}, "${verbName}");`;
 
-            console.debug("Evaluating delete_verb expression:", expr);
             const result = await performEvalFlatBuffer(authToken, expr);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
@@ -1164,7 +1142,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             // delete_property(obj, 'name)
             const expr = `return delete_property(${objectExpr}, '${propertyToDelete.name});`;
 
-            console.debug("Evaluating delete_property expression:", expr);
             const result = await performEvalFlatBuffer(authToken, expr);
             if (result && typeof result === "object" && "error" in result) {
                 const errorResult = result as { error?: { msg?: string } };
@@ -1393,30 +1370,6 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             };
         }
     }, [isDragging, isResizing, isSplitDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
-
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem("moor-object-browser-font-size", fontSize.toString());
-        }
-    }, [fontSize]);
-
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem(
-                "moor-object-browser-show-inherited-properties",
-                showInheritedProperties ? "true" : "false",
-            );
-        }
-    }, [showInheritedProperties]);
-
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem(
-                "moor-object-browser-show-inherited-verbs",
-                showInheritedVerbs ? "true" : "false",
-            );
-        }
-    }, [showInheritedVerbs]);
 
     if (!visible) {
         return null;
@@ -2225,7 +2178,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                         readable: selectedVerb.readable,
                                         writable: selectedVerb.writable,
                                         executable: selectedVerb.executable,
-                                        debug: false, // TODO: Need to add debug field to VerbData
+                                        debug: false,
                                     }}
                                     argspec={{
                                         dobj: selectedVerb.dobj,
@@ -2485,153 +2438,141 @@ const CreateChildDialog: React.FC<CreateChildDialogProps> = ({
     };
 
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "520px" }}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="create-object-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="create-object-title">Create Object</h2>
+        <DialogSheet title="Create Object" titleId="create-object-title" onCancel={onCancel}>
+            <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                <label className="form-group">
+                    <span className="form-group-label">Parent (MOO expression)</span>
+                    <input
+                        type="text"
+                        value={parent}
+                        onChange={(e) => setParent(e.target.value)}
+                        placeholder="#-1"
+                        autoFocus
+                        className="form-input font-mono"
+                    />
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Owner (MOO expression)</span>
+                    <input
+                        type="text"
+                        value={owner}
+                        onChange={(e) => setOwner(e.target.value)}
+                        placeholder="player"
+                        className="form-input font-mono"
+                    />
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Object type</span>
+                    <select
+                        value={objectType}
+                        onChange={(e) => setObjectType(e.target.value)}
+                        className="form-input font-mono"
+                    >
+                        {objectTypeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Initialization arguments</span>
+                    <textarea
+                        value={initArgs}
+                        onChange={(e) => setInitArgs(e.target.value)}
+                        placeholder="{}"
+                        rows={3}
+                        className="form-input font-mono"
+                    />
+                    <span className="form-group-hint">
+                        Provide a MOO list literal (for example <code>{"{}"}</code> or{" "}
+                        <code>{"{"}player{"}"}</code>). These arguments are passed to the object's{" "}
+                        <code>:initialize</code> verb if it has one. Leave blank to skip initialization.
+                    </span>
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Name (optional)</span>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Unnamed Object"
+                        className="form-input font-mono"
+                    />
+                </label>
+                <div className="form-group">
+                    <span className="form-group-label">Flags</span>
+                    <div className="permission-flags">
+                        <label className="permission-flag-item">
+                            <input
+                                type="checkbox"
+                                checked={programmer}
+                                onChange={(e) => setProgrammer(e.target.checked)}
+                            />
+                            <span className="permission-flag-icon">p</span>
+                            <span className="permission-flag-text">Programmer</span>
+                        </label>
+                        <label className="permission-flag-item">
+                            <input
+                                type="checkbox"
+                                checked={wizard}
+                                onChange={(e) => setWizard(e.target.checked)}
+                            />
+                            <span className="permission-flag-icon">w</span>
+                            <span className="permission-flag-text">Wizard</span>
+                        </label>
+                        <label className="permission-flag-item">
+                            <input
+                                type="checkbox"
+                                checked={readable}
+                                onChange={(e) => setReadable(e.target.checked)}
+                            />
+                            <span className="permission-flag-icon">r</span>
+                            <span className="permission-flag-text">Readable</span>
+                        </label>
+                        <label className="permission-flag-item">
+                            <input
+                                type="checkbox"
+                                checked={writable}
+                                onChange={(e) => setWritable(e.target.checked)}
+                            />
+                            <span className="permission-flag-icon">W</span>
+                            <span className="permission-flag-text">Writable</span>
+                        </label>
+                        <label className="permission-flag-item">
+                            <input
+                                type="checkbox"
+                                checked={fertile}
+                                onChange={(e) => setFertile(e.target.checked)}
+                            />
+                            <span className="permission-flag-icon">f</span>
+                            <span className="permission-flag-text">Fertile</span>
+                        </label>
+                    </div>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
-                    <label className="form-group">
-                        <span className="form-group-label">Parent (MOO expression)</span>
-                        <input
-                            type="text"
-                            value={parent}
-                            onChange={(e) => setParent(e.target.value)}
-                            placeholder="#-1"
-                            autoFocus
-                            className="form-input font-mono"
-                        />
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Owner (MOO expression)</span>
-                        <input
-                            type="text"
-                            value={owner}
-                            onChange={(e) => setOwner(e.target.value)}
-                            placeholder="player"
-                            className="form-input font-mono"
-                        />
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Object type</span>
-                        <select
-                            value={objectType}
-                            onChange={(e) => setObjectType(e.target.value)}
-                            className="form-input font-mono"
-                        >
-                            {objectTypeOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {option.label}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Initialization arguments</span>
-                        <textarea
-                            value={initArgs}
-                            onChange={(e) => setInitArgs(e.target.value)}
-                            placeholder="{}"
-                            rows={3}
-                            className="form-input font-mono"
-                        />
-                        <span className="form-group-hint">
-                            Provide a MOO list literal (for example <code>{"{}"}</code> or{" "}
-                            <code>{"{"}player{"}"}</code>). These arguments are passed to the object's{" "}
-                            <code>:initialize</code> verb if it has one. Leave blank to skip initialization.
-                        </span>
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Name (optional)</span>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Unnamed Object"
-                            className="form-input font-mono"
-                        />
-                    </label>
-                    <div className="form-group">
-                        <span className="form-group-label">Flags</span>
-                        <div className="permission-flags">
-                            <label className="permission-flag-item">
-                                <input
-                                    type="checkbox"
-                                    checked={programmer}
-                                    onChange={(e) => setProgrammer(e.target.checked)}
-                                />
-                                <span className="permission-flag-icon">p</span>
-                                <span className="permission-flag-text">Programmer</span>
-                            </label>
-                            <label className="permission-flag-item">
-                                <input
-                                    type="checkbox"
-                                    checked={wizard}
-                                    onChange={(e) => setWizard(e.target.checked)}
-                                />
-                                <span className="permission-flag-icon">w</span>
-                                <span className="permission-flag-text">Wizard</span>
-                            </label>
-                            <label className="permission-flag-item">
-                                <input
-                                    type="checkbox"
-                                    checked={readable}
-                                    onChange={(e) => setReadable(e.target.checked)}
-                                />
-                                <span className="permission-flag-icon">r</span>
-                                <span className="permission-flag-text">Readable</span>
-                            </label>
-                            <label className="permission-flag-item">
-                                <input
-                                    type="checkbox"
-                                    checked={writable}
-                                    onChange={(e) => setWritable(e.target.checked)}
-                                />
-                                <span className="permission-flag-icon">W</span>
-                                <span className="permission-flag-text">Writable</span>
-                            </label>
-                            <label className="permission-flag-item">
-                                <input
-                                    type="checkbox"
-                                    checked={fertile}
-                                    onChange={(e) => setFertile(e.target.checked)}
-                                />
-                                <span className="permission-flag-icon">f</span>
-                                <span className="permission-flag-text">Fertile</span>
-                            </label>
-                        </div>
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
                     </div>
-                    {errorMessage && (
-                        <div role="alert" className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-                    <div className="button-group">
-                        <button type="button" onClick={onCancel} className="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="btn btn-primary"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isSubmitting ? "Creating…" : "Create"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="btn btn-primary"
+                        style={{
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                        }}
+                    >
+                        {isSubmitting ? "Creating…" : "Create"}
+                    </button>
+                </div>
+            </form>
+        </DialogSheet>
     );
 };
 
@@ -2651,60 +2592,54 @@ const RecycleObjectDialog: React.FC<RecycleObjectDialogProps> = ({
     errorMessage,
 }) => {
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "480px" }}
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="recycle-object-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="recycle-object-title">Recycle Object?</h2>
+        <DialogSheet
+            title="Recycle Object?"
+            titleId="recycle-object-title"
+            maxWidth="480px"
+            role="alertdialog"
+            onCancel={onCancel}
+        >
+            <div className="dialog-sheet-content form-stack">
+                <div
+                    style={{
+                        padding: "0.75em",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--color-text-error)",
+                        backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                        color: "var(--color-text-primary)",
+                        fontFamily: "inherit",
+                    }}
+                >
+                    <p className="m-0">
+                        Recycling <strong>{objectLabel}</strong> is irreversible. Its contents will move to{" "}
+                        <code>#-1</code>
+                        and <code>:recycle</code> will be invoked if defined.
+                    </p>
                 </div>
-                <div className="dialog-sheet-content form-stack">
-                    <div
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
+                    </div>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={isSubmitting}
+                        className="btn btn-danger"
                         style={{
-                            padding: "0.75em",
-                            borderRadius: "var(--radius-sm)",
-                            border: "1px solid var(--color-text-error)",
-                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                            color: "var(--color-text-primary)",
-                            fontFamily: "inherit",
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
                         }}
                     >
-                        <p className="m-0">
-                            Recycling <strong>{objectLabel}</strong> is irreversible. Its contents will move to{" "}
-                            <code>#-1</code>
-                            and <code>:recycle</code> will be invoked if defined.
-                        </p>
-                    </div>
-                    {errorMessage && (
-                        <div role="alert" className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-                    <div className="button-group">
-                        <button type="button" onClick={onCancel} className="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onConfirm}
-                            disabled={isSubmitting}
-                            className="btn btn-danger"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isSubmitting ? "Recycling…" : "Recycle"}
-                        </button>
-                    </div>
+                        {isSubmitting ? "Recycling…" : "Recycle"}
+                    </button>
                 </div>
             </div>
-        </>
+        </DialogSheet>
     );
 };
 
@@ -2743,132 +2678,120 @@ const AddPropertyDialog: React.FC<AddPropertyDialogProps> = ({
     };
 
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "520px" }}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="add-property-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="add-property-title">Add Property</h2>
+        <DialogSheet title="Add Property" titleId="add-property-title" onCancel={onCancel}>
+            <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                <p className="m-0 text-secondary">
+                    Add a new property to <strong>{objectLabel}</strong>.
+                </p>
+                <label className="form-group">
+                    <span className="form-group-label">Property name</span>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="prop_name"
+                        autoFocus
+                        required
+                        className="form-input font-mono"
+                    />
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Initial value (MOO expression)</span>
+                    <input
+                        type="text"
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        placeholder="0"
+                        required
+                        className="form-input font-mono"
+                    />
+                    <span className="form-group-hint">
+                        Examples: <code>0</code>, <code>""</code>, <code>{"{}"}</code>, <code>player</code>
+                    </span>
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Owner (MOO expression)</span>
+                    <input
+                        type="text"
+                        value={owner}
+                        onChange={(e) => setOwner(e.target.value)}
+                        placeholder="player"
+                        className="form-input font-mono"
+                    />
+                </label>
+                <div className="form-group">
+                    <span className="form-group-label">Permissions</span>
+                    <span className="form-group-hint">
+                        r=read, w=write, c=chown
+                    </span>
+                    <div className="permission-checkboxes">
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("r")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "r");
+                                    } else {
+                                        setPerms(perms.replace("r", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">r</span>
+                        </label>
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("w")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "w");
+                                    } else {
+                                        setPerms(perms.replace("w", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">w</span>
+                        </label>
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("c")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "c");
+                                    } else {
+                                        setPerms(perms.replace("c", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">c</span>
+                        </label>
+                    </div>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
-                    <p className="m-0 text-secondary">
-                        Add a new property to <strong>{objectLabel}</strong>.
-                    </p>
-                    <label className="form-group">
-                        <span className="form-group-label">Property name</span>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="prop_name"
-                            autoFocus
-                            required
-                            className="form-input font-mono"
-                        />
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Initial value (MOO expression)</span>
-                        <input
-                            type="text"
-                            value={value}
-                            onChange={(e) => setValue(e.target.value)}
-                            placeholder="0"
-                            required
-                            className="form-input font-mono"
-                        />
-                        <span className="form-group-hint">
-                            Examples: <code>0</code>, <code>""</code>, <code>{"{}"}</code>, <code>player</code>
-                        </span>
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Owner (MOO expression)</span>
-                        <input
-                            type="text"
-                            value={owner}
-                            onChange={(e) => setOwner(e.target.value)}
-                            placeholder="player"
-                            className="form-input font-mono"
-                        />
-                    </label>
-                    <div className="form-group">
-                        <span className="form-group-label">Permissions</span>
-                        <span className="form-group-hint">
-                            r=read, w=write, c=chown
-                        </span>
-                        <div className="permission-checkboxes">
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("r")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "r");
-                                        } else {
-                                            setPerms(perms.replace("r", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">r</span>
-                            </label>
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("w")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "w");
-                                        } else {
-                                            setPerms(perms.replace("w", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">w</span>
-                            </label>
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("c")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "c");
-                                        } else {
-                                            setPerms(perms.replace("c", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">c</span>
-                            </label>
-                        </div>
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
                     </div>
-                    {errorMessage && (
-                        <div role="alert" className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-                    <div className="button-group">
-                        <button type="button" onClick={onCancel} className="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="btn btn-primary"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isSubmitting ? "Adding…" : "Add Property"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="btn btn-primary"
+                        style={{
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                        }}
+                    >
+                        {isSubmitting ? "Adding…" : "Add Property"}
+                    </button>
+                </div>
+            </form>
+        </DialogSheet>
     );
 };
 
@@ -2929,224 +2852,212 @@ const AddVerbDialog: React.FC<AddVerbDialogProps> = ({
     };
 
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "520px" }}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="add-verb-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="add-verb-title">Add Verb</h2>
+        <DialogSheet title="Add Verb" titleId="add-verb-title" onCancel={onCancel}>
+            <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                <p className="m-0 text-secondary">
+                    Add a new verb to <strong>{objectLabel}</strong>.
+                </p>
+                <div className="form-group">
+                    <span className="form-group-label">Verb type</span>
+                    <div className="verb-type-selector">
+                        <label className="verb-type-option">
+                            <input
+                                type="radio"
+                                name="verbType"
+                                checked={verbType === "method"}
+                                onChange={() => handleVerbTypeChange("method")}
+                            />
+                            <div className="verb-type-description">
+                                <span className="verb-type-title">Method</span>
+                                <span className="verb-type-subtitle">
+                                    Called from code (<code>this none this</code>, with <code>x</code>)
+                                </span>
+                            </div>
+                        </label>
+                        <label className="verb-type-option">
+                            <input
+                                type="radio"
+                                name="verbType"
+                                checked={verbType === "command"}
+                                onChange={() => handleVerbTypeChange("command")}
+                            />
+                            <div className="verb-type-description">
+                                <span className="verb-type-title">Command</span>
+                                <span className="verb-type-subtitle">
+                                    Player command (e.g. <code>this none none</code>, no <code>x</code>)
+                                </span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
-                    <p className="m-0 text-secondary">
-                        Add a new verb to <strong>{objectLabel}</strong>.
-                    </p>
-                    <div className="form-group">
-                        <span className="form-group-label">Verb type</span>
-                        <div className="verb-type-selector">
-                            <label className="verb-type-option">
-                                <input
-                                    type="radio"
-                                    name="verbType"
-                                    checked={verbType === "method"}
-                                    onChange={() => handleVerbTypeChange("method")}
-                                />
-                                <div className="verb-type-description">
-                                    <span className="verb-type-title">Method</span>
-                                    <span className="verb-type-subtitle">
-                                        Called from code (<code>this none this</code>, with <code>x</code>)
-                                    </span>
-                                </div>
-                            </label>
-                            <label className="verb-type-option">
-                                <input
-                                    type="radio"
-                                    name="verbType"
-                                    checked={verbType === "command"}
-                                    onChange={() => handleVerbTypeChange("command")}
-                                />
-                                <div className="verb-type-description">
-                                    <span className="verb-type-title">Command</span>
-                                    <span className="verb-type-subtitle">
-                                        Player command (e.g. <code>this none none</code>, no <code>x</code>)
-                                    </span>
-                                </div>
-                            </label>
-                        </div>
+                <label className="form-group">
+                    <span className="form-group-label">Verb names (space-separated)</span>
+                    <input
+                        type="text"
+                        value={names}
+                        onChange={(e) => setNames(e.target.value)}
+                        placeholder="get take grab"
+                        autoFocus
+                        required
+                        className="form-input font-mono"
+                    />
+                    <span className="form-group-hint">
+                        Example: <code>get take grab</code> creates aliases for the same verb
+                    </span>
+                </label>
+                <label className="form-group">
+                    <span className="form-group-label">Owner (MOO expression)</span>
+                    <input
+                        type="text"
+                        value={owner}
+                        onChange={(e) => setOwner(e.target.value)}
+                        placeholder="player"
+                        className="form-input font-mono"
+                    />
+                </label>
+                <div className="form-group">
+                    <span className="form-group-label">Permissions</span>
+                    <span className="form-group-hint">
+                        r=read, w=write, x=exec, d=raise errors (usually keep on)
+                    </span>
+                    <div className="permission-checkboxes">
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("r")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "r");
+                                    } else {
+                                        setPerms(perms.replace("r", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">r</span>
+                        </label>
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("w")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "w");
+                                    } else {
+                                        setPerms(perms.replace("w", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">w</span>
+                        </label>
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("x")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "x");
+                                    } else {
+                                        setPerms(perms.replace("x", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">x</span>
+                        </label>
+                        <label className="permission-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={perms.includes("d")}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPerms(perms + "d");
+                                    } else {
+                                        setPerms(perms.replace("d", ""));
+                                    }
+                                }}
+                            />
+                            <span className="permission-checkbox-label">d</span>
+                        </label>
                     </div>
-                    <label className="form-group">
-                        <span className="form-group-label">Verb names (space-separated)</span>
-                        <input
-                            type="text"
-                            value={names}
-                            onChange={(e) => setNames(e.target.value)}
-                            placeholder="get take grab"
-                            autoFocus
-                            required
-                            className="form-input font-mono"
-                        />
-                        <span className="form-group-hint">
-                            Example: <code>get take grab</code> creates aliases for the same verb
-                        </span>
-                    </label>
-                    <label className="form-group">
-                        <span className="form-group-label">Owner (MOO expression)</span>
-                        <input
-                            type="text"
-                            value={owner}
-                            onChange={(e) => setOwner(e.target.value)}
-                            placeholder="player"
-                            className="form-input font-mono"
-                        />
-                    </label>
-                    <div className="form-group">
-                        <span className="form-group-label">Permissions</span>
-                        <span className="form-group-hint">
-                            r=read, w=write, x=exec, d=raise errors (usually keep on)
-                        </span>
-                        <div className="permission-checkboxes">
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("r")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "r");
-                                        } else {
-                                            setPerms(perms.replace("r", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">r</span>
-                            </label>
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("w")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "w");
-                                        } else {
-                                            setPerms(perms.replace("w", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">w</span>
-                            </label>
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("x")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "x");
-                                        } else {
-                                            setPerms(perms.replace("x", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">x</span>
-                            </label>
-                            <label className="permission-checkbox-item">
-                                <input
-                                    type="checkbox"
-                                    checked={perms.includes("d")}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setPerms(perms + "d");
-                                        } else {
-                                            setPerms(perms.replace("d", ""));
-                                        }
-                                    }}
-                                />
-                                <span className="permission-checkbox-label">d</span>
-                            </label>
-                        </div>
+                </div>
+                <div className="form-group">
+                    <span className="form-group-label">Verb argument specification</span>
+                    <div className="verb-argspec-grid">
+                        <label className="verb-argspec-column">
+                            <span className="verb-argspec-label">dobj</span>
+                            <select
+                                value={dobj}
+                                onChange={(e) => setDobj(e.target.value)}
+                                className="verb-argspec-select"
+                            >
+                                <option value="none">none</option>
+                                <option value="any">any</option>
+                                <option value="this">this</option>
+                            </select>
+                        </label>
+                        <label className="verb-argspec-column">
+                            <span className="verb-argspec-label">prep</span>
+                            <select
+                                value={prep}
+                                onChange={(e) => setPrep(e.target.value)}
+                                className="verb-argspec-select"
+                            >
+                                <option value="none">none</option>
+                                <option value="any">any</option>
+                                <option value="with">with</option>
+                                <option value="at">at</option>
+                                <option value="in-front-of">in-front-of</option>
+                                <option value="in">in</option>
+                                <option value="on">on</option>
+                                <option value="from">from (out of)</option>
+                                <option value="over">over</option>
+                                <option value="through">through</option>
+                                <option value="under">under</option>
+                                <option value="behind">behind</option>
+                                <option value="beside">beside</option>
+                                <option value="for">for</option>
+                                <option value="is">is</option>
+                                <option value="as">as</option>
+                                <option value="off">off</option>
+                                <option value="named">named</option>
+                            </select>
+                        </label>
+                        <label className="verb-argspec-column">
+                            <span className="verb-argspec-label">iobj</span>
+                            <select
+                                value={iobj}
+                                onChange={(e) => setIobj(e.target.value)}
+                                className="verb-argspec-select"
+                            >
+                                <option value="none">none</option>
+                                <option value="any">any</option>
+                                <option value="this">this</option>
+                            </select>
+                        </label>
                     </div>
-                    <div className="form-group">
-                        <span className="form-group-label">Verb argument specification</span>
-                        <div className="verb-argspec-grid">
-                            <label className="verb-argspec-column">
-                                <span className="verb-argspec-label">dobj</span>
-                                <select
-                                    value={dobj}
-                                    onChange={(e) => setDobj(e.target.value)}
-                                    className="verb-argspec-select"
-                                >
-                                    <option value="none">none</option>
-                                    <option value="any">any</option>
-                                    <option value="this">this</option>
-                                </select>
-                            </label>
-                            <label className="verb-argspec-column">
-                                <span className="verb-argspec-label">prep</span>
-                                <select
-                                    value={prep}
-                                    onChange={(e) => setPrep(e.target.value)}
-                                    className="verb-argspec-select"
-                                >
-                                    <option value="none">none</option>
-                                    <option value="any">any</option>
-                                    <option value="with">with</option>
-                                    <option value="at">at</option>
-                                    <option value="in-front-of">in-front-of</option>
-                                    <option value="in">in</option>
-                                    <option value="on">on</option>
-                                    <option value="from">from (out of)</option>
-                                    <option value="over">over</option>
-                                    <option value="through">through</option>
-                                    <option value="under">under</option>
-                                    <option value="behind">behind</option>
-                                    <option value="beside">beside</option>
-                                    <option value="for">for</option>
-                                    <option value="is">is</option>
-                                    <option value="as">as</option>
-                                    <option value="off">off</option>
-                                    <option value="named">named</option>
-                                </select>
-                            </label>
-                            <label className="verb-argspec-column">
-                                <span className="verb-argspec-label">iobj</span>
-                                <select
-                                    value={iobj}
-                                    onChange={(e) => setIobj(e.target.value)}
-                                    className="verb-argspec-select"
-                                >
-                                    <option value="none">none</option>
-                                    <option value="any">any</option>
-                                    <option value="this">this</option>
-                                </select>
-                            </label>
-                        </div>
+                </div>
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
                     </div>
-                    {errorMessage && (
-                        <div role="alert" className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-                    <div className="button-group">
-                        <button type="button" onClick={onCancel} className="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="btn btn-primary"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isSubmitting ? "Adding…" : "Add Verb"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="btn btn-primary"
+                        style={{
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                        }}
+                    >
+                        {isSubmitting ? "Adding…" : "Add Verb"}
+                    </button>
+                </div>
+            </form>
+        </DialogSheet>
     );
 };
 
@@ -3168,59 +3079,53 @@ const DeleteVerbDialog: React.FC<DeleteVerbDialogProps> = ({
     errorMessage,
 }) => {
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "480px" }}
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="delete-verb-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="delete-verb-title">Remove Verb?</h2>
+        <DialogSheet
+            title="Remove Verb?"
+            titleId="delete-verb-title"
+            maxWidth="480px"
+            role="alertdialog"
+            onCancel={onCancel}
+        >
+            <div className="dialog-sheet-content form-stack">
+                <div
+                    style={{
+                        padding: "0.75em",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--color-text-error)",
+                        backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                        color: "var(--color-text-primary)",
+                        fontFamily: "inherit",
+                    }}
+                >
+                    <p className="m-0">
+                        Remove verb <code>{verbName}</code> from{" "}
+                        <strong>{objectLabel}</strong>? This action cannot be undone.
+                    </p>
                 </div>
-                <div className="dialog-sheet-content form-stack">
-                    <div
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
+                    </div>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={isSubmitting}
+                        className="btn btn-danger"
                         style={{
-                            padding: "0.75em",
-                            borderRadius: "var(--radius-sm)",
-                            border: "1px solid var(--color-text-error)",
-                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                            color: "var(--color-text-primary)",
-                            fontFamily: "inherit",
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
                         }}
                     >
-                        <p className="m-0">
-                            Remove verb <code>{verbName}</code> from{" "}
-                            <strong>{objectLabel}</strong>? This action cannot be undone.
-                        </p>
-                    </div>
-                    {errorMessage && (
-                        <div role="alert" className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-                    <div className="button-group">
-                        <button type="button" onClick={onCancel} className="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onConfirm}
-                            disabled={isSubmitting}
-                            className="btn btn-danger"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isSubmitting ? "Removing…" : "Remove Verb"}
-                        </button>
-                    </div>
+                        {isSubmitting ? "Removing…" : "Remove Verb"}
+                    </button>
                 </div>
             </div>
-        </>
+        </DialogSheet>
     );
 };
 
@@ -3242,59 +3147,53 @@ const DeletePropertyDialog: React.FC<DeletePropertyDialogProps> = ({
     errorMessage,
 }) => {
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "480px" }}
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="delete-property-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="delete-property-title">Delete Property?</h2>
+        <DialogSheet
+            title="Delete Property?"
+            titleId="delete-property-title"
+            maxWidth="480px"
+            role="alertdialog"
+            onCancel={onCancel}
+        >
+            <div className="dialog-sheet-content form-stack">
+                <div
+                    style={{
+                        padding: "0.75em",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--color-text-error)",
+                        backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
+                        color: "var(--color-text-primary)",
+                        fontFamily: "inherit",
+                    }}
+                >
+                    <p className="m-0">
+                        Delete property <code>{propertyName}</code> from{" "}
+                        <strong>{objectLabel}</strong>? This action cannot be undone.
+                    </p>
                 </div>
-                <div className="dialog-sheet-content form-stack">
-                    <div
+                {errorMessage && (
+                    <div role="alert" className="dialog-error">
+                        {errorMessage}
+                    </div>
+                )}
+                <div className="button-group">
+                    <button type="button" onClick={onCancel} className="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={isSubmitting}
+                        className="btn btn-danger"
                         style={{
-                            padding: "0.75em",
-                            borderRadius: "var(--radius-sm)",
-                            border: "1px solid var(--color-text-error)",
-                            backgroundColor: "color-mix(in srgb, var(--color-text-error) 15%, transparent)",
-                            color: "var(--color-text-primary)",
-                            fontFamily: "inherit",
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
                         }}
                     >
-                        <p className="m-0">
-                            Delete property <code>{propertyName}</code> from{" "}
-                            <strong>{objectLabel}</strong>? This action cannot be undone.
-                        </p>
-                    </div>
-                    {errorMessage && (
-                        <div role="alert" className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-                    <div className="button-group">
-                        <button type="button" onClick={onCancel} className="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onConfirm}
-                            disabled={isSubmitting}
-                            className="btn btn-danger"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isSubmitting ? "Deleting…" : "Delete Property"}
-                        </button>
-                    </div>
+                        {isSubmitting ? "Deleting…" : "Delete Property"}
+                    </button>
                 </div>
             </div>
-        </>
+        </DialogSheet>
     );
 };
 
@@ -3369,106 +3268,94 @@ const EditFlagsDialog: React.FC<EditFlagsDialogProps> = ({
     );
 
     return (
-        <>
-            <div className="dialog-sheet-backdrop" onClick={onCancel} role="presentation" aria-hidden="true" />
-            <div
-                className="dialog-sheet"
-                style={{ maxWidth: "520px" }}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="edit-flags-title"
-            >
-                <div className="dialog-sheet-header">
-                    <h2 id="edit-flags-title">Edit Object Flags</h2>
-                </div>
-                <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
-                    <p className="m-0 text-secondary">
-                        Editing flags for <strong>{objectLabel}</strong>
-                    </p>
+        <DialogSheet title="Edit Object Flags" titleId="edit-flags-title" onCancel={onCancel}>
+            <form onSubmit={handleSubmit} className="dialog-sheet-content form-stack">
+                <p className="m-0 text-secondary">
+                    Editing flags for <strong>{objectLabel}</strong>
+                </p>
 
-                    {renderCheckbox(
-                        "Player",
-                        "Object is a player/user object",
-                        user,
-                        setUser,
-                        "u",
-                    )}
+                {renderCheckbox(
+                    "Player",
+                    "Object is a player/user object",
+                    user,
+                    setUser,
+                    "u",
+                )}
 
-                    {renderCheckbox(
-                        "Programmer",
-                        "Object has programmer rights",
-                        programmer,
-                        setProgrammer,
-                        "p",
-                    )}
+                {renderCheckbox(
+                    "Programmer",
+                    "Object has programmer rights",
+                    programmer,
+                    setProgrammer,
+                    "p",
+                )}
 
-                    {renderCheckbox(
-                        "Wizard",
-                        "Object has wizard rights",
-                        wizard,
-                        setWizard,
-                        "w",
-                    )}
+                {renderCheckbox(
+                    "Wizard",
+                    "Object has wizard rights",
+                    wizard,
+                    setWizard,
+                    "w",
+                )}
 
-                    {renderCheckbox(
-                        "Readable",
-                        "Object is publicly readable",
-                        readable,
-                        setReadable,
-                        "r",
-                    )}
+                {renderCheckbox(
+                    "Readable",
+                    "Object is publicly readable",
+                    readable,
+                    setReadable,
+                    "r",
+                )}
 
-                    {renderCheckbox(
-                        "Writable",
-                        "Object is publicly writable",
-                        writable,
-                        setWritable,
-                        "W",
-                    )}
+                {renderCheckbox(
+                    "Writable",
+                    "Object is publicly writable",
+                    writable,
+                    setWritable,
+                    "W",
+                )}
 
-                    {renderCheckbox(
-                        "Fertile",
-                        "Object can be used as a parent for new objects",
-                        fertile,
-                        setFertile,
-                        "f",
-                    )}
+                {renderCheckbox(
+                    "Fertile",
+                    "Object can be used as a parent for new objects",
+                    fertile,
+                    setFertile,
+                    "f",
+                )}
 
-                    {errorMessage && (
-                        <div className="dialog-error">
-                            {errorMessage}
-                        </div>
-                    )}
-
-                    <div className="button-group" style={{ marginTop: "1em" }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            disabled={isSubmitting}
-                            className="btn btn-secondary"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="btn btn-primary"
-                            style={{
-                                opacity: isSubmitting ? 0.6 : 1,
-                                cursor: isSubmitting ? "not-allowed" : "pointer",
-                                fontWeight: 700,
-                            }}
-                        >
-                            {isSubmitting ? "Saving…" : "Save Flags"}
-                        </button>
+                {errorMessage && (
+                    <div className="dialog-error">
+                        {errorMessage}
                     </div>
-                </form>
-            </div>
-        </>
+                )}
+
+                <div className="button-group" style={{ marginTop: "1em" }}>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={isSubmitting}
+                        className="btn btn-secondary"
+                        style={{
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="btn btn-primary"
+                        style={{
+                            opacity: isSubmitting ? 0.6 : 1,
+                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                            fontWeight: 700,
+                        }}
+                    >
+                        {isSubmitting ? "Saving…" : "Save Flags"}
+                    </button>
+                </div>
+            </form>
+        </DialogSheet>
     );
 };
 

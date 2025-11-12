@@ -151,7 +151,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
         if (!prefersReducedMotion.current) {
             setPlaceholderIndex(Math.floor(Math.random() * ENCOURAGING_PLACEHOLDERS.length));
         }
-    }, [input, onSendMessage, onAddToHistory, disabled]);
+    }, [input, onSendMessage, onAddToHistory]);
 
     // Handle paste events
     const handlePaste = useCallback((e: React.ClipboardEvent) => {

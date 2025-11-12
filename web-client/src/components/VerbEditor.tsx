@@ -15,10 +15,13 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
 import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
+import { useTheme } from "./ThemeProvider";
+import { monacoThemeFor } from "./themeSupport";
 
 interface VerbEditorProps {
     visible: boolean;
@@ -96,6 +99,8 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const isTouchDevice = useTouchDevice();
+    const { theme } = useTheme();
+    const monacoTheme = React.useMemo(() => monacoThemeFor(theme), [theme]);
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<CompileError[]>([]);
     const [isCompiling, setIsCompiling] = useState(false);
@@ -107,51 +112,43 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-    const editorThemeObserverRef = useRef<MutationObserver | null>(null);
-    const editorThemeListenerRef = useRef<(() => void) | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const completionProviderRef = useRef<monaco.IDisposable | null>(null);
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
-    const [fontSize, setFontSize] = useState(() => {
-        const fallback = isMobile ? 16 : 12;
-        if (typeof window === "undefined") {
-            return fallback;
-        }
-        const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
-        if (!stored) {
-            return fallback;
-        }
-        const parsed = parseInt(stored, 10);
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
-    });
+    const clampFontSize = (size: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+    const [fontSize, setFontSize] = usePersistentState<number>(
+        FONT_SIZE_STORAGE_KEY,
+        () => (isMobile ? 16 : 12),
+        {
+            serialize: value => clampFontSize(value).toString(),
+            deserialize: raw => {
+                const parsed = Number(raw);
+                return Number.isFinite(parsed) ? clampFontSize(parsed) : null;
+            },
+        },
+    );
 
     // Word wrap state
-    const [wordWrap, setWordWrap] = useState<"on" | "off">(() => {
-        if (typeof window === "undefined") {
-            return isMobile ? "on" : "off";
-        }
-        const stored = window.localStorage.getItem("moor-editor-wordwrap");
-        if (stored === "on" || stored === "off") {
-            return stored;
-        }
-        return isMobile ? "on" : "off";
-    });
+    const [wordWrap, setWordWrap] = usePersistentState<"on" | "off">(
+        "moor-editor-wordwrap",
+        () => (isMobile ? "on" : "off"),
+        {
+            serialize: value => value,
+            deserialize: raw => (raw === "on" || raw === "off" ? raw : null),
+        },
+    );
 
     // Minimap state
-    const [minimapEnabled, setMinimapEnabled] = useState<boolean>(() => {
-        if (typeof window === "undefined") {
-            return !isMobile;
-        }
-        const stored = window.localStorage.getItem("moor-editor-minimap");
-        if (stored === "true") return true;
-        if (stored === "false") return false;
-        return !isMobile;
-    });
+    const [minimapEnabled, setMinimapEnabled] = usePersistentState<boolean>(
+        "moor-editor-minimap",
+        () => !isMobile,
+        {
+            serialize: value => (value ? "true" : "false"),
+            deserialize: raw => (raw === "true" ? true : raw === "false" ? false : null),
+        },
+    );
 
     // Verb metadata editing state
     const [isEditingOwner, setIsEditingOwner] = useState(false);
@@ -201,14 +198,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (editorThemeObserverRef.current) {
-                editorThemeObserverRef.current.disconnect();
-                editorThemeObserverRef.current = null;
-            }
-            if (editorThemeListenerRef.current) {
-                window.removeEventListener("storage", editorThemeListenerRef.current);
-                editorThemeListenerRef.current = null;
-            }
             if (completionProviderRef.current) {
                 completionProviderRef.current.dispose();
                 completionProviderRef.current = null;
@@ -353,9 +342,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
     }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSize.toString());
-        }
         if (editorRef.current) {
             editorRef.current.updateOptions({ fontSize });
         }
@@ -363,9 +349,6 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
     // Save word wrap preference and update editor
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem("moor-editor-wordwrap", wordWrap);
-        }
         if (editorRef.current) {
             editorRef.current.updateOptions({ wordWrap });
         }
@@ -373,13 +356,14 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
     // Save minimap preference and update editor
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem("moor-editor-minimap", minimapEnabled.toString());
-        }
         if (editorRef.current) {
             editorRef.current.updateOptions({ minimap: { enabled: minimapEnabled } });
         }
     }, [minimapEnabled]);
+
+    useEffect(() => {
+        monaco.editor.setTheme(monacoTheme);
+    }, [monacoTheme]);
 
     // Configure MOO language for Monaco
     const handleEditorWillMount = useCallback((monaco: Monaco) => {
@@ -387,7 +371,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         registerMooLanguage(monaco);
     }, []);
 
-    const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;
 
         // Create custom decoration collection for more visible error highlighting
@@ -410,39 +394,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
         `;
         document.head.appendChild(style);
 
-        // Set Monaco theme to match client theme
-        const savedTheme = localStorage.getItem("theme");
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const isDarkTheme = savedTheme
-            ? (savedTheme === "dark" || savedTheme === "crt" || savedTheme === "crt-amber")
-            : prefersDark;
-
-        monaco.editor.setTheme(isDarkTheme ? "vs-dark" : "vs");
-
-        // Listen for theme changes
-        const handleThemeChange = () => {
-            const currentTheme = localStorage.getItem("theme");
-            const currentPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-            const currentIsDarkTheme = currentTheme
-                ? (currentTheme === "dark" || currentTheme === "crt" || currentTheme === "crt-amber")
-                : currentPrefersDark;
-            monaco.editor.setTheme(currentIsDarkTheme ? "vs-dark" : "vs");
-        };
-
-        // Listen for storage changes (theme toggle)
-        window.addEventListener("storage", handleThemeChange);
-        editorThemeListenerRef.current = handleThemeChange; // ref for later disposal
-
-        // Also listen for changes to the light-theme class on body
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === "attributes" && mutation.attributeName === "class") {
-                    handleThemeChange();
-                }
-            });
-        });
-        editorThemeObserverRef.current = observer; // ref for later disposal
-        observer.observe(document.body, { attributes: true });
+        monacoInstance.editor.setTheme(monacoTheme);
 
         // Dispose old completion provider if it exists
         if (completionProviderRef.current) {
@@ -451,7 +403,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
 
         // Register MOO completion provider
         completionProviderRef.current = registerMooCompletionProvider(
-            monaco,
+            monacoInstance,
             authToken,
             objectCurie,
             uploadAction,
@@ -465,7 +417,7 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
             editor.layout();
         }, 100);
         editor.updateOptions({ fontSize });
-    }, [fontSize]);
+    }, [authToken, fontSize, monacoTheme, objectCurie, uploadAction]);
 
     const handleEditorChange = useCallback((value: string | undefined) => {
         setContent(value || "");
@@ -532,10 +484,9 @@ export const VerbEditor: React.FC<VerbEditorProps> = ({
                         const errorType = compileError.errorType();
 
                         // Get the actual error object from the union
-                        const errorObj = unionToCompileErrorUnion(
-                            errorType,
-                            (obj: any) => compileError.error(obj),
-                        );
+                        const accessor: Parameters<typeof unionToCompileErrorUnion>[1] = (obj) =>
+                            compileError.error(obj);
+                        const errorObj = unionToCompileErrorUnion(errorType, accessor);
 
                         if (errorObj instanceof ParseError) {
                             const position = errorObj.errorPosition();

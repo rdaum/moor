@@ -18,7 +18,10 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
+import { useTheme } from "./ThemeProvider";
+import { monacoThemeFor } from "./themeSupport";
 
 interface PropertyEditorProps {
     visible: boolean;
@@ -66,6 +69,8 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
 }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const isTouchDevice = useTouchDevice();
+    const { theme } = useTheme();
+    const monacoTheme = React.useMemo(() => monacoThemeFor(theme), [theme]);
     const [content, setContent] = useState(initialContent);
     const [errors, setErrors] = useState<SaveError[]>([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -76,30 +81,25 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-    const editorThemeObserverRef = useRef<MutationObserver | null>(null);
-    const editorThemeListenerRef = useRef<(() => void) | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const [fontSize, setFontSize] = useState(() => {
-        const fallback = isMobile ? 16 : 12;
-        if (typeof window === "undefined") {
-            return fallback;
-        }
-        const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
-        if (!stored) {
-            return fallback;
-        }
-        const parsed = parseInt(stored, 10);
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
-    });
+    const clampFontSize = (size: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+    const [fontSize, setFontSize] = usePersistentState<number>(
+        FONT_SIZE_STORAGE_KEY,
+        () => (isMobile ? 16 : 12),
+        {
+            serialize: value => clampFontSize(value).toString(),
+            deserialize: raw => {
+                const parsed = Number(raw);
+                return Number.isFinite(parsed) ? clampFontSize(parsed) : null;
+            },
+        },
+    );
     const decreaseFontSize = useCallback(() => {
-        setFontSize(prev => Math.max(MIN_FONT_SIZE, prev - 1));
-    }, []);
+        setFontSize(prev => clampFontSize(prev - 1));
+    }, [setFontSize]);
     const increaseFontSize = useCallback(() => {
-        setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1));
-    }, []);
+        setFontSize(prev => clampFontSize(prev + 1));
+    }, [setFontSize]);
 
     // Parse actual object ID from uploadAction and create enhanced title
     const enhancedTitle = React.useMemo(() => {
@@ -122,14 +122,6 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (editorThemeObserverRef.current) {
-                editorThemeObserverRef.current.disconnect();
-                editorThemeObserverRef.current = null;
-            }
-            if (editorThemeListenerRef.current) {
-                window.removeEventListener("storage", editorThemeListenerRef.current);
-                editorThemeListenerRef.current = null;
-            }
             if (editorRef.current) {
                 editorRef.current.dispose();
             }
@@ -205,13 +197,14 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
     }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSize.toString());
-        }
         if (editorRef.current) {
             editorRef.current.updateOptions({ fontSize });
         }
     }, [fontSize]);
+
+    useEffect(() => {
+        monaco.editor.setTheme(monacoTheme);
+    }, [monacoTheme]);
 
     // Get Monaco language based on content type
     const getLanguage = (type: string) => {
@@ -237,48 +230,15 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
         }
     }, [contentType]);
 
-    const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;
-
-        // Set Monaco theme to match client theme
-        const savedTheme = localStorage.getItem("theme");
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const isDarkTheme = savedTheme ? savedTheme === "dark" : prefersDark;
-
-        monaco.editor.setTheme(isDarkTheme ? "vs-dark" : "vs");
-
-        // Listen for theme changes
-        const handleThemeChange = () => {
-            const currentTheme = localStorage.getItem("theme");
-            const currentPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-            const currentIsDarkTheme = currentTheme ? currentTheme === "dark" : currentPrefersDark;
-            monaco.editor.setTheme(currentIsDarkTheme ? "vs-dark" : "vs");
-        };
-
-        // Listen for storage changes (theme toggle)
-        window.addEventListener("storage", handleThemeChange);
-        editorThemeListenerRef.current = handleThemeChange;
-
-        // Also listen for changes to the light-theme class on body
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === "attributes" && mutation.attributeName === "class") {
-                    handleThemeChange();
-                }
-            });
-        });
-        editorThemeObserverRef.current = observer;
-        observer.observe(document.body, { attributes: true });
-
-        // Focus the editor
+        monacoInstance.editor.setTheme(monacoTheme);
         editor.focus();
-
-        // Force layout update to prevent artifacts
         setTimeout(() => {
             editor.layout();
         }, 100);
         editor.updateOptions({ fontSize });
-    }, [fontSize]);
+    }, [fontSize, monacoTheme]);
 
     const handleEditorChange = useCallback((value: string | undefined) => {
         setContent(value || "");

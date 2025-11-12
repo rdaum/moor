@@ -11,25 +11,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, {
-    createContext,
-    type Dispatch,
-    type SetStateAction,
-    useContext,
-    useEffect,
-    useMemo,
-    useState,
-} from "react";
+import React, { createContext, type Dispatch, type SetStateAction, useContext, useEffect, useMemo } from "react";
+import { usePersistentState } from "../hooks/usePersistentState";
 import {
     applyFontStyle,
     applyThemeToDom,
+    FONT_STORAGE_KEY,
     type FontStyle,
-    persistFontStyle,
-    persistTheme,
+    isFontStyle,
+    isTheme,
     resolveInitialFontStyle,
     resolveInitialTheme,
     RETRO_THEMES,
     type Theme,
+    THEME_STORAGE_KEY,
 } from "./themeSupport";
 
 interface ThemeContextValue {
@@ -47,17 +42,26 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  * and exposes them via React context.
  */
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [theme, setTheme] = useState<Theme>(() => resolveInitialTheme());
-    const [fontStyle, setFontStyle] = useState<FontStyle>(() => resolveInitialFontStyle());
+    const [theme, setTheme] = usePersistentState<Theme>(
+        THEME_STORAGE_KEY,
+        resolveInitialTheme,
+        {
+            serialize: value => value,
+            deserialize: value => (isTheme(value) ? value : null),
+        },
+    );
+    const [fontStyle, setFontStyle] = usePersistentState<FontStyle>(
+        FONT_STORAGE_KEY,
+        resolveInitialFontStyle,
+        {
+            serialize: value => value,
+            deserialize: value => (isFontStyle(value) ? value : null),
+        },
+    );
 
     useEffect(() => {
         applyThemeToDom(theme);
-        persistTheme(theme);
     }, [theme]);
-
-    useEffect(() => {
-        persistFontStyle(fontStyle);
-    }, [fontStyle]);
 
     useEffect(() => {
         if (RETRO_THEMES.has(theme)) {
@@ -73,7 +77,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         fontStyle,
         setFontStyle,
         isRetroTheme: RETRO_THEMES.has(theme),
-    }), [theme, fontStyle]);
+    }), [theme, fontStyle, setTheme, setFontStyle]);
 
     return (
         <ThemeContext.Provider value={value}>

@@ -14,6 +14,7 @@
 import { useCallback, useState } from "react";
 import { NarrativeMessage } from "../components/Narrative";
 import { EventUnion } from "../generated/moor-common/event-union";
+import { NarrativeEvent } from "../generated/moor-common/narrative-event";
 import { NotifyEvent } from "../generated/moor-common/notify-event";
 import { TracebackEvent } from "../generated/moor-common/traceback-event";
 import { MoorVar } from "../lib/MoorVar";
@@ -54,17 +55,33 @@ const filterMCPSequences = (messages: NarrativeMessage[]): NarrativeMessage[] =>
     return filtered;
 };
 
+type TimestampValue = number | string | { secs_since_epoch?: number; nanos_since_epoch?: number } | null;
+
+const normalizeLegacyContentType = (value?: string): "text/plain" | "text/djot" | "text/html" => {
+    if (!value) {
+        return "text/plain";
+    }
+    const normalized = value.replace("_", "/").toLowerCase();
+    if (normalized === "text/djot") {
+        return "text/djot";
+    }
+    if (normalized === "text/html") {
+        return "text/html";
+    }
+    return "text/plain";
+};
+
 interface HistoricalEvent {
     event_id: string;
-    timestamp: any; // Can be string, number, or object with secs_since_epoch/nanos_since_epoch
+    timestamp?: TimestampValue;
     event_type?: string;
-    message: any; // Object with type, content, etc.
-    author?: any;
-    player?: any;
+    message?: unknown;
+    author?: unknown;
+    player?: unknown;
     is_historical?: boolean;
-    data?: any; // Fallback field
-    narrative_event?: any; // FlatBuffer NarrativeEvent (when using client-side decryption)
-    event?: any; // FlatBuffer Event union
+    data?: unknown;
+    narrative_event?: NarrativeEvent;
+    event?: unknown;
 }
 
 export const useHistory = (authToken: string | null, encryptionKey: string | null = null) => {
@@ -83,77 +100,13 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
         return historyBoundary !== null && eventTimestamp < historyBoundary;
     }, [historyBoundary]);
 
-    // Convert historical event to narrative message format (all events become narrative)
-    const convertHistoricalEvent = useCallback((event: HistoricalEvent): NarrativeMessage | null => {
-        try {
-            // Check if this is a FlatBuffer event (from fetchHistoryFlatBuffer)
-            if (event.narrative_event) {
-                return convertFlatBufferHistoricalEvent(event);
-            }
-
-            // Legacy JSON format handling (kept for backwards compatibility)
-            let messageContent = "";
-            let contentType: "text/plain" | "text/djot" | "text/html" = "text/plain";
-
-            if (event.message && typeof event.message === "object") {
-                const msg = event.message as any;
-                if (msg.type === "notify") {
-                    messageContent = msg.content || "";
-                    if (msg.content_type) {
-                        contentType = msg.content_type;
-                    }
-                } else if (msg.type === "traceback") {
-                    messageContent = `ERROR: ${msg.error || ""}`;
-                } else if (msg.type === "present") {
-                    messageContent = `[Presentation: ${msg.presentation || ""}]`;
-                } else if (msg.type === "unpresent") {
-                    messageContent = `[Closed: ${msg.id || ""}]`;
-                } else {
-                    messageContent = msg.content || JSON.stringify(msg);
-                    if (msg.content_type) {
-                        contentType = msg.content_type;
-                    }
-                }
-            } else if (typeof event.message === "string") {
-                messageContent = event.message;
-            } else if (event.data) {
-                messageContent = typeof event.data === "string" ? event.data : JSON.stringify(event.data);
-            }
-
-            let timestamp: number = Date.now();
-
-            if (event.timestamp) {
-                if (typeof event.timestamp === "object" && event.timestamp !== null) {
-                    const ts = event.timestamp as any;
-                    if (ts.secs_since_epoch && typeof ts.secs_since_epoch === "number") {
-                        timestamp = (ts.secs_since_epoch * 1000) + Math.floor((ts.nanos_since_epoch || 0) / 1000000);
-                    }
-                } else if (typeof event.timestamp === "string" || typeof event.timestamp === "number") {
-                    const parsed = new Date(event.timestamp).getTime();
-                    if (!isNaN(parsed)) {
-                        timestamp = parsed;
-                    }
-                }
-            }
-
-            return {
-                id: `history_${event.event_id}_${timestamp}`,
-                content: messageContent,
-                type: "narrative",
-                timestamp,
-                isHistorical: true,
-                contentType,
-            };
-        } catch (error) {
-            return null;
-        }
-    }, []);
-
-    // Convert FlatBuffer historical event to narrative message format
-    const convertFlatBufferHistoricalEvent = useCallback((event: any): NarrativeMessage | null => {
+    const convertFlatBufferHistoricalEvent = useCallback((event: HistoricalEvent): NarrativeMessage | null => {
         try {
             const narrativeEvent = event.narrative_event;
-            const timestamp = event.timestamp; // Already converted to milliseconds
+            if (!narrativeEvent) {
+                return null;
+            }
+            const timestamp = typeof event.timestamp === "number" ? event.timestamp : Date.now();
             const eventId = event.event_id;
 
             const eventData = narrativeEvent.event();
@@ -293,6 +246,92 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
         }
     }, []);
 
+    // Convert historical event to narrative message format (all events become narrative)
+    const convertHistoricalEvent = useCallback((event: HistoricalEvent): NarrativeMessage | null => {
+        if (event.narrative_event) {
+            return convertFlatBufferHistoricalEvent(event);
+        }
+
+        try {
+            let messageContent = "";
+            let contentType: "text/plain" | "text/djot" | "text/html" = "text/plain";
+
+            if (event.message && typeof event.message === "object") {
+                const msg = event.message as Record<string, unknown>;
+                const payloadContent = msg.content;
+                switch (msg.type) {
+                    case "notify":
+                        if (typeof payloadContent === "string") {
+                            messageContent = payloadContent;
+                        } else if (payloadContent !== undefined) {
+                            messageContent = JSON.stringify(payloadContent);
+                        }
+                        contentType = normalizeLegacyContentType(
+                            typeof msg.content_type === "string" ? msg.content_type : undefined,
+                        );
+                        break;
+                    case "traceback":
+                        messageContent = `ERROR: ${typeof msg.error === "string" ? msg.error : ""}`;
+                        break;
+                    case "present":
+                        messageContent = `[Presentation: ${
+                            typeof msg.presentation === "string" ? msg.presentation : ""
+                        }]`;
+                        break;
+                    case "unpresent":
+                        messageContent = `[Closed: ${typeof msg.id === "string" ? msg.id : ""}]`;
+                        break;
+                    default:
+                        if (typeof payloadContent === "string") {
+                            messageContent = payloadContent;
+                        } else if (payloadContent !== undefined) {
+                            messageContent = JSON.stringify(payloadContent);
+                        } else {
+                            messageContent = JSON.stringify(msg);
+                        }
+                        contentType = normalizeLegacyContentType(
+                            typeof msg.content_type === "string" ? msg.content_type : undefined,
+                        );
+                        break;
+                }
+            } else if (typeof event.message === "string") {
+                messageContent = event.message;
+            } else if (event.data) {
+                messageContent = typeof event.data === "string" ? event.data : JSON.stringify(event.data);
+            }
+
+            let timestamp = Date.now();
+            if (event.timestamp) {
+                if (
+                    typeof event.timestamp === "object" && event.timestamp !== null
+                    && "secs_since_epoch" in event.timestamp
+                ) {
+                    const ts = event.timestamp as { secs_since_epoch?: number; nanos_since_epoch?: number };
+                    if (typeof ts.secs_since_epoch === "number") {
+                        timestamp = (ts.secs_since_epoch * 1000) + Math.floor((ts.nanos_since_epoch || 0) / 1000000);
+                    }
+                } else if (typeof event.timestamp === "string" || typeof event.timestamp === "number") {
+                    const parsed = new Date(event.timestamp).getTime();
+                    if (!Number.isNaN(parsed)) {
+                        timestamp = parsed;
+                    }
+                }
+            }
+
+            return {
+                id: `history_${event.event_id}_${timestamp}`,
+                content: messageContent,
+                type: "narrative",
+                timestamp,
+                isHistorical: true,
+                contentType,
+            };
+        } catch (error) {
+            console.error("Failed to convert legacy history event:", error);
+            return null;
+        }
+    }, [convertFlatBufferHistoricalEvent]);
+
     // Fetch history from API
     const fetchHistory = useCallback(async (
         limit: number = 100,
@@ -339,7 +378,7 @@ export const useHistory = (authToken: string | null, encryptionKey: string | nul
         } finally {
             setIsLoadingHistory(false);
         }
-    }, [authToken, encryptionKey, convertHistoricalEvent]);
+    }, [authToken, convertHistoricalEvent, encryptionKey]);
 
     // Calculate optimal initial load based on viewport
     const calculateInitialLoad = useCallback(() => {

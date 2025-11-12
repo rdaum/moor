@@ -17,10 +17,13 @@ import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
 import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
+import { useTheme } from "./ThemeProvider";
+import { monacoThemeFor } from "./themeSupport";
 
 interface EvalPanelProps {
     visible: boolean;
@@ -57,26 +60,25 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const completionProviderRef = useRef<monaco.IDisposable | null>(null);
+    const { theme } = useTheme();
+    const monacoTheme = React.useMemo(() => monacoThemeFor(theme), [theme]);
 
     const FONT_SIZE_STORAGE_KEY = "moor-eval-panel-font-size";
     const MIN_FONT_SIZE = 10;
     const MAX_FONT_SIZE = 24;
 
-    const [fontSize, setFontSize] = useState(() => {
-        const fallback = isMobile ? 14 : 12;
-        if (typeof window === "undefined") {
-            return fallback;
-        }
-        const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
-        if (!stored) {
-            return fallback;
-        }
-        const parsed = parseInt(stored, 10);
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, parsed));
-    });
+    const clampFontSize = (size: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+    const [fontSize, setFontSize] = usePersistentState<number>(
+        FONT_SIZE_STORAGE_KEY,
+        () => (isMobile ? 14 : 12),
+        {
+            serialize: value => clampFontSize(value).toString(),
+            deserialize: raw => {
+                const parsed = Number(raw);
+                return Number.isFinite(parsed) ? clampFontSize(parsed) : null;
+            },
+        },
+    );
 
     // Apply font size to editor when it changes
     useEffect(() => {
@@ -84,6 +86,10 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
             editorRef.current.updateOptions({ fontSize });
         }
     }, [fontSize]);
+
+    useEffect(() => {
+        monaco.editor.setTheme(monacoTheme);
+    }, [monacoTheme]);
 
     const handleEvaluate = useCallback(async () => {
         setIsEvaluating(true);
@@ -137,6 +143,8 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
             authToken,
         );
 
+        monacoInstance.editor.setTheme(monacoTheme);
+
         // Add keybinding for Ctrl+Enter / Cmd+Enter to evaluate
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
             handleEvaluate();
@@ -144,7 +152,7 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
 
         // Focus the editor
         editor.focus();
-    }, [handleEvaluate, authToken]);
+    }, [authToken, handleEvaluate, monacoTheme]);
 
     // Dragging and resizing handlers
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -281,7 +289,6 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                             onClick={() => {
                                 const newSize = Math.max(MIN_FONT_SIZE, fontSize - 1);
                                 setFontSize(newSize);
-                                window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, newSize.toString());
                             }}
                             aria-label="Decrease font size"
                             className="font-size-button"
@@ -296,7 +303,6 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                             onClick={() => {
                                 const newSize = Math.min(MAX_FONT_SIZE, fontSize + 1);
                                 setFontSize(newSize);
-                                window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, newSize.toString());
                             }}
                             aria-label="Increase font size"
                             className="font-size-button"

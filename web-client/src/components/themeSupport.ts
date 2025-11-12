@@ -11,19 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com>
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the Free Software
-// Foundation, version 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
 // ! Shared theme and font helpers for the web client
 
 export type Theme = "dark" | "light" | "crt" | "crt-amber";
@@ -37,48 +24,24 @@ export const FONT_STORAGE_KEY = "font-style";
 const hasWindow = () => typeof window !== "undefined";
 const hasDocument = () => typeof document !== "undefined";
 
-const isTheme = (value: string | null): value is Theme =>
+export const isTheme = (value: string | null): value is Theme =>
     value === "dark" || value === "light" || value === "crt" || value === "crt-amber";
 
-const isFontStyle = (value: string | null): value is FontStyle => value === "proportional" || value === "monospace";
-
-export const loadStoredTheme = (): Theme | null => {
-    if (!hasWindow()) return null;
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return isTheme(stored) ? stored : null;
-};
-
-export const loadStoredFontStyle = (): FontStyle | null => {
-    if (!hasWindow()) return null;
-    const stored = window.localStorage.getItem(FONT_STORAGE_KEY);
-    return isFontStyle(stored) ? stored : null;
-};
+export const isFontStyle = (value: string | null): value is FontStyle =>
+    value === "proportional" || value === "monospace";
 
 export const resolveInitialTheme = (): Theme => {
-    const stored = loadStoredTheme();
-    if (stored) return stored;
-    if (hasWindow()) {
-        const prefersDark = window.matchMedia
-            ? window.matchMedia("(prefers-color-scheme: dark)").matches
-            : false;
-        if (prefersDark) return "dark";
+    if (!hasWindow()) {
+        return "light";
     }
-    return "light";
+    const prefersDark = typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        : false;
+    return prefersDark ? "dark" : "light";
 };
 
 export const resolveInitialFontStyle = (): FontStyle => {
-    const stored = loadStoredFontStyle();
-    return stored ?? "proportional";
-};
-
-export const persistTheme = (theme: Theme) => {
-    if (!hasWindow()) return;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-};
-
-export const persistFontStyle = (fontStyle: FontStyle) => {
-    if (!hasWindow()) return;
-    window.localStorage.setItem(FONT_STORAGE_KEY, fontStyle);
+    return "proportional";
 };
 
 /**
@@ -141,4 +104,8 @@ const updateScanlines = (theme: Theme) => {
         z-index: 1000;
     `;
     document.body.appendChild(staticScanlines);
+};
+
+export const monacoThemeFor = (theme: Theme): "vs" | "vs-dark" => {
+    return theme === "light" ? "vs" : "vs-dark";
 };
