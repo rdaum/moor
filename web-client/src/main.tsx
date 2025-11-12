@@ -43,7 +43,7 @@ import { useVerbEditor } from "./hooks/useVerbEditor";
 import { OAuth2UserInfo } from "./lib/oauth2";
 import { MoorRemoteObject } from "./lib/rpc";
 import { fetchServerFeatures } from "./lib/rpc-fb";
-import { oidRef } from "./lib/var";
+import { oidRef, stringToCurie } from "./lib/var";
 import { PresentationData } from "./types/presentation";
 import "./styles/main.css";
 
@@ -437,10 +437,13 @@ function AppContent({
 
                 if (!existingSession) {
                     // Parse presentation attributes to extract object and verb information
-                    const objectCurie = presentation.attrs.object || presentation.attrs.objectCurie;
+                    const rawObjectId = presentation.attrs.object || presentation.attrs.objectCurie;
                     const verbName = presentation.attrs.verb || presentation.attrs.verbName;
 
-                    if (objectCurie && verbName) {
+                    if (rawObjectId && verbName) {
+                        // Convert to proper CURIE format (handles both numeric and UUID IDs)
+                        const objectCurie = stringToCurie(rawObjectId);
+
                         // Use launchVerbEditor to fetch content via REST API
                         launchVerbEditor(
                             presentation.title,

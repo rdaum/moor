@@ -158,6 +158,37 @@ export function objToCurie(obj: any): string | null {
     return null;
 }
 
+/**
+ * Convert string object ID to CURIE format
+ * Takes output from objToString() and converts to proper CURIE
+ *
+ * @param objStr - Object ID string (e.g., "123" or "000991-9A750B6A58" or "#123" or "oid:123")
+ * @returns CURIE string (e.g., "oid:123" or "uuid:000991-9A750B6A58")
+ */
+export function stringToCurie(objStr: string): string {
+    if (!objStr) return "oid:-1";
+
+    // Strip leading # if present
+    let stripped = objStr.startsWith("#") ? objStr.substring(1) : objStr;
+
+    // If it has a colon, extract the ID part and revalidate
+    // (handles incorrectly-prefixed CURIEs like "oid:0000A9-9A755A4762")
+    if (stripped.includes(":")) {
+        const parts = stripped.split(":");
+        if (parts.length === 2) {
+            stripped = parts[1]; // Get the ID part after the prefix
+        }
+    }
+
+    // UUID format: XXXXXX-XXXXXXXXXX (6 hex chars, dash, 10 hex chars)
+    if (stripped.length === 17 && stripped[6] === "-" && /^[0-9A-Fa-f]{6}-[0-9A-Fa-f]{10}$/.test(stripped)) {
+        return `uuid:${stripped}`;
+    }
+
+    // Numeric ID
+    return `oid:${stripped}`;
+}
+
 export class Error {
     code: string;
     message: string | null;

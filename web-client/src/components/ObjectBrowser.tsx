@@ -25,7 +25,7 @@ import {
     performEvalFlatBuffer,
 } from "../lib/rpc-fb.js";
 import type { ServerFeatureSet } from "../lib/rpc-fb.js";
-import { objToString, uuObjIdToString } from "../lib/var.js";
+import { objToString, stringToCurie, uuObjIdToString } from "../lib/var.js";
 import { PropertyValueEditor } from "./PropertyValueEditor.js";
 import { VerbEditor } from "./VerbEditor.js";
 
@@ -377,16 +377,8 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
     const loadPropertiesAndVerbs = async (obj: ObjectData) => {
         try {
-            // Convert obj.obj to CURIE format
-            // obj.obj could be "#123" or already a CURIE like "oid:123"
-            let objectCurie = obj.obj;
-            if (obj.obj.startsWith("#")) {
-                objectCurie = `oid:${obj.obj.substring(1)}`;
-            } else if (!obj.obj.includes(":")) {
-                // Just a raw number like "123"
-                objectCurie = `oid:${obj.obj}`;
-            }
-
+            // Convert obj.obj to CURIE format using the utility function
+            const objectCurie = stringToCurie(obj.obj);
             console.log("Loading properties/verbs for:", obj.obj, "→", objectCurie);
 
             // Load properties
@@ -492,9 +484,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         if (!selectedObject) return;
 
         try {
-            const objectCurie = prop.definer.includes(":")
-                ? prop.definer
-                : `oid:${prop.definer}`;
+            const objectCurie = stringToCurie(prop.definer);
             const propValue = await getPropertyFlatBuffer(authToken, objectCurie, prop.name);
             const varValue = propValue.value();
             if (varValue) {
@@ -516,9 +506,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
 
         // Fetch verb code from the object where the verb is defined (verb.location)
         try {
-            const objectCurie = verb.location.includes(":")
-                ? verb.location
-                : `oid:${verb.location}`;
+            const objectCurie = stringToCurie(verb.location);
             const verbValue = await getVerbCodeFlatBuffer(authToken, objectCurie, verb.names[0]);
             const codeLength = verbValue.codeLength();
             const lines: string[] = [];
@@ -2049,9 +2037,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                             {selectedProperty && selectedProperty.moorVar && selectedObject && (
                                 <PropertyValueEditor
                                     authToken={authToken}
-                                    objectCurie={selectedProperty.definer.includes(":")
-                                        ? selectedProperty.definer
-                                        : `oid:${selectedProperty.definer}`}
+                                    objectCurie={stringToCurie(selectedProperty.definer)}
                                     propertyName={selectedProperty.name}
                                     propertyValue={selectedProperty.moorVar}
                                     onSave={async () => {
@@ -2105,9 +2091,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                             ? ` (inherited from #${selectedVerb.location})`
                                             : ""
                                     }`}
-                                    objectCurie={selectedVerb.location.includes(":")
-                                        ? selectedVerb.location
-                                        : `oid:${selectedVerb.location}`}
+                                    objectCurie={stringToCurie(selectedVerb.location)}
                                     verbName={selectedVerb.names[0]}
                                     initialContent={verbCode}
                                     authToken={authToken}
