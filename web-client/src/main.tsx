@@ -1177,9 +1177,10 @@ function AppContent({
                                     contentType={propertyEditorSession.contentType}
                                 />
                             )}
-                            {objectBrowserDocked && canUseObjectBrowser && (
+                            {isObjectBrowserOpen && objectBrowserDocked && canUseObjectBrowser && (
                                 <ObjectBrowser
-                                    visible={isObjectBrowserOpen}
+                                    key="object-browser-instance"
+                                    visible={true}
                                     onClose={() => setIsObjectBrowserOpen(false)}
                                     authToken={authState.player.authToken}
                                     splitMode={true}
@@ -1293,9 +1294,11 @@ function AppContent({
             {/* Object Browser - floating mode */}
             {isObjectBrowserOpen && !objectBrowserDocked && canUseObjectBrowser && authState.player?.authToken && (
                 <ObjectBrowser
+                    key="object-browser-instance"
                     visible={true}
                     onClose={() => setIsObjectBrowserOpen(false)}
                     authToken={authState.player.authToken}
+                    splitMode={false}
                     onToggleSplitMode={toggleObjectBrowserDock}
                     isInSplitMode={false}
                 />

@@ -129,7 +129,20 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [activeTab, setActiveTab] = useState<"objects" | "properties" | "verbs">("objects");
     const [isFullscreen, setIsFullscreen] = useState(useTabLayout); // Start fullscreen on mobile
     const [objects, setObjects] = useState<ObjectData[]>([]);
-    const [selectedObject, setSelectedObject] = useState<ObjectData | null>(null);
+    const [selectedObject, setSelectedObject] = useState<ObjectData | null>(() => {
+        // Restore last selected object from localStorage
+        if (typeof window !== "undefined") {
+            const stored = window.localStorage.getItem("moor-object-browser-selected-object");
+            if (stored) {
+                try {
+                    return JSON.parse(stored);
+                } catch {
+                    return null;
+                }
+            }
+        }
+        return null;
+    });
     const [properties, setProperties] = useState<PropertyData[]>([]);
     const [verbs, setVerbs] = useState<VerbData[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -150,6 +163,28 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
     const [verbCode, setVerbCode] = useState<string>("");
     const [editorVisible, setEditorVisible] = useState(false);
 
+    // Track what type of editor was open (for restoration)
+    const [lastEditorType, setLastEditorType] = useState<"property" | "verb" | null>(() => {
+        if (typeof window !== "undefined") {
+            const stored = window.localStorage.getItem("moor-object-browser-editor-type");
+            return stored as "property" | "verb" | null;
+        }
+        return null;
+    });
+    const [lastPropertyName, setLastPropertyName] = useState<string | null>(() => {
+        if (typeof window !== "undefined") {
+            return window.localStorage.getItem("moor-object-browser-property-name");
+        }
+        return null;
+    });
+    const [lastVerbIndex, setLastVerbIndex] = useState<number | null>(() => {
+        if (typeof window !== "undefined") {
+            const stored = window.localStorage.getItem("moor-object-browser-verb-index");
+            return stored ? parseInt(stored, 10) : null;
+        }
+        return null;
+    });
+
     // Sync selectedVerb when verbs array updates (e.g., after metadata save)
     useEffect(() => {
         if (selectedVerb) {
@@ -161,6 +196,21 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
             }
         }
     }, [verbs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Restore verb selection when verbs are loaded (after component remount)
+    useEffect(() => {
+        if (
+            lastEditorType === "verb" && lastVerbIndex !== null && verbs.length > 0 && !selectedVerb && selectedObject
+        ) {
+            const verb = verbs.find(v => v.location === selectedObject.obj && v.indexInLocation === lastVerbIndex);
+            if (verb) {
+                handleVerbSelect(verb);
+                // Clear the restoration flags so we don't keep re-selecting
+                setLastEditorType(null);
+                setLastVerbIndex(null);
+            }
+        }
+    }, [verbs, lastEditorType, lastVerbIndex, selectedVerb, selectedObject]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Editor split state - using pixel height instead of percentage
     const [browserPaneHeight, setBrowserPaneHeight] = useState(350); // Fixed pixel height for browser pane
@@ -231,10 +281,83 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
         setFontSize(prev => Math.min(MAX_FONT_SIZE, prev + 1));
     }, []);
 
+    // Save selected object to localStorage whenever it changes
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            if (selectedObject) {
+                window.localStorage.setItem("moor-object-browser-selected-object", JSON.stringify(selectedObject));
+            } else {
+                window.localStorage.removeItem("moor-object-browser-selected-object");
+            }
+        }
+    }, [selectedObject]);
+
+    // Save property selection to localStorage
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            if (selectedProperty && editorVisible) {
+                window.localStorage.setItem("moor-object-browser-editor-type", "property");
+                window.localStorage.setItem("moor-object-browser-property-name", selectedProperty.name);
+                setLastEditorType("property");
+                setLastPropertyName(selectedProperty.name);
+            }
+        }
+    }, [selectedProperty, editorVisible]);
+
+    // Save verb selection to localStorage
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            if (selectedVerb && editorVisible) {
+                window.localStorage.setItem("moor-object-browser-editor-type", "verb");
+                if (selectedVerb.indexInLocation !== undefined) {
+                    window.localStorage.setItem("moor-object-browser-verb-index", String(selectedVerb.indexInLocation));
+                    setLastEditorType("verb");
+                    setLastVerbIndex(selectedVerb.indexInLocation);
+                }
+            }
+        }
+    }, [selectedVerb, editorVisible]);
+
+    // Clear editor state from localStorage when editor is closed
+    useEffect(() => {
+        if (typeof window !== "undefined" && !editorVisible) {
+            window.localStorage.removeItem("moor-object-browser-editor-type");
+            window.localStorage.removeItem("moor-object-browser-property-name");
+            window.localStorage.removeItem("moor-object-browser-verb-index");
+        }
+    }, [editorVisible]);
+
     // Load objects on mount
     useEffect(() => {
         if (visible) {
-            loadObjects();
+            loadObjects().then((loadedObjects) => {
+                // If we have a saved selection, restore it
+                if (selectedObject) {
+                    // Find the object in the loaded list
+                    const matchingObj = loadedObjects.find(obj => obj.obj === selectedObject.obj);
+                    if (matchingObj) {
+                        // Reload properties and verbs for the restored selection
+                        loadPropertiesAndVerbs(matchingObj).then((loadedProps) => {
+                            setEditingName(matchingObj.name);
+
+                            // Restore property selection if we had one
+                            if (lastEditorType === "property" && lastPropertyName) {
+                                const prop = loadedProps.find(p => p.name === lastPropertyName);
+                                if (prop) {
+                                    handlePropertySelect(prop);
+                                    // Clear the restoration flags
+                                    setLastEditorType(null);
+                                    setLastPropertyName(null);
+                                }
+                            }
+                            // Verb restoration happens in separate effect after verbs load
+                        });
+                    } else {
+                        // Object no longer exists, clear selection
+                        setSelectedObject(null);
+                    }
+                }
+            });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible, authToken]);
