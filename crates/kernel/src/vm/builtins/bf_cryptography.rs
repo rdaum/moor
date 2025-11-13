@@ -17,7 +17,7 @@ use std::{io::Write, str::FromStr};
 
 use age::{
     Decryptor, Encryptor, Recipient as AgeRecipient,
-    secrecy::ExposeSecret,
+    secrecy::{ExposeSecret, SecretString},
     x25519::{Identity, Recipient},
 };
 use argon2::password_hash::{SaltString, rand_core::OsRng};
@@ -366,6 +366,150 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             ))
         }
     }
+}
+
+/// `bytes age_encrypt_with_passphrase(str message, str passphrase)`
+/// Encrypts message using age encryption with a passphrase (scrypt-based key derivation). Programmer-only function.
+/// Returns encrypted data as bytes.
+fn bf_age_encrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("age_encrypt_with_passphrase() requires exactly two arguments"),
+        ));
+    }
+
+    // Check for programmer permissions
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_programmer()
+        .map_err(world_state_bf_err)?;
+
+    // Get the message to encrypt
+    let message = match bf_args.args[0].variant() {
+        Variant::Str(s) => s.as_str(),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_encrypt_with_passphrase() first argument must be a string, was {}",
+                    bf_args.args[0].type_code().to_literal()
+                )
+            })));
+        }
+    };
+
+    // Get the passphrase
+    let passphrase = match bf_args.args[1].variant() {
+        Variant::Str(s) => s.as_str(),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_encrypt_with_passphrase() second argument must be a string, was {}",
+                    bf_args.args[1].type_code().to_literal()
+                )
+            })));
+        }
+    };
+
+    // Create an encryptor with the passphrase
+    let encryptor = Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string().into()));
+
+    // Encrypt the message
+    let mut encrypted = Vec::new();
+    let mut writer = encryptor.wrap_output(&mut encrypted).map_err(|e| {
+        error!("Failed to create encryption writer: {}", e);
+        BfErr::ErrValue(E_INVARG.msg("age_encrypt_with_passphrase() failed to create encryption writer"))
+    })?;
+
+    writer
+        .write_all(message.as_bytes())
+        .and_then(|_| writer.finish())
+        .map_err(|e| {
+            error!("Failed to write message for encryption: {}", e);
+            BfErr::ErrValue(E_INVARG.msg("age_encrypt_with_passphrase() failed to write message for encryption"))
+        })?;
+
+    // Return the encrypted data as bytes
+    Ok(Ret(v_binary(encrypted)))
+}
+
+/// `str age_decrypt_with_passphrase(bytes|str encrypted_message, str passphrase)`
+/// Decrypts age-encrypted message using a passphrase (scrypt-based key derivation). Programmer-only function.
+/// Encrypted message can be bytes or base64-encoded string. Returns decrypted plaintext string.
+fn bf_age_decrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("age_decrypt_with_passphrase() requires exactly two arguments"),
+        ));
+    }
+
+    // Check for programmer permissions
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_programmer()
+        .map_err(world_state_bf_err)?;
+
+    // Get the encrypted message - accept both bytes and base64 string
+    let encrypted = match bf_args.args[0].variant() {
+        Variant::Binary(b) => b.as_bytes().to_vec(),
+        Variant::Str(s) => {
+            BASE64.decode(s.as_str()).map_err(|_| {
+                warn!("Invalid base64 data for decryption");
+                BfErr::ErrValue(
+                    E_INVARG.msg("age_decrypt_with_passphrase() failed to decode base64 data"),
+                )
+            })?
+        }
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_decrypt_with_passphrase() first argument must be bytes or string, was {}",
+                    bf_args.args[0].type_code().to_literal()
+                )
+            })));
+        }
+    };
+
+    // Get the passphrase
+    let passphrase = match bf_args.args[1].variant() {
+        Variant::Str(s) => s.as_str(),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_decrypt_with_passphrase() second argument must be a string, was {}",
+                    bf_args.args[1].type_code().to_literal()
+                )
+            })));
+        }
+    };
+
+    // Create an identity from the passphrase
+    let identity = age::scrypt::Identity::new(SecretString::new(passphrase.to_string().into()));
+
+    // Create a decryptor
+    let decryptor = Decryptor::new_buffered(&encrypted[..]).map_err(|e| {
+        error!("Failed to create decryptor: {}", e);
+        BfErr::ErrValue(E_INVARG.msg("age_decrypt_with_passphrase() failed to create decryptor"))
+    })?;
+
+    // Decrypt the message
+    let mut reader = decryptor
+        .decrypt(std::iter::once(&identity as &dyn age::Identity))
+        .map_err(|e| {
+            warn!("Failed to decrypt with passphrase: {}", e);
+            BfErr::ErrValue(E_INVARG.msg("age_decrypt_with_passphrase() failed to decrypt (wrong passphrase or corrupted data)"))
+        })?;
+
+    let mut decrypted = String::new();
+    reader.read_to_string(&mut decrypted).map_err(|e| {
+        warn!("Decrypted data is not valid UTF-8: {}", e);
+        BfErr::ErrValue(
+            E_INVARG.msg("age_decrypt_with_passphrase() decrypted data is not valid UTF-8"),
+        )
+    })?;
+
+    Ok(Ret(v_string(decrypted)))
 }
 
 /// MOO: `str argon2(str password, str salt [, int iterations] [, int memory] [, int parallelism])`
@@ -996,6 +1140,8 @@ pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("age_generate_keypair")] = bf_age_generate_keypair;
     builtins[offset_for_builtin("age_encrypt")] = bf_age_encrypt;
     builtins[offset_for_builtin("age_decrypt")] = bf_age_decrypt;
+    builtins[offset_for_builtin("age_encrypt_with_passphrase")] = bf_age_encrypt_with_passphrase;
+    builtins[offset_for_builtin("age_decrypt_with_passphrase")] = bf_age_decrypt_with_passphrase;
     builtins[offset_for_builtin("argon2")] = bf_argon2;
     builtins[offset_for_builtin("argon2_verify")] = bf_argon2_verify;
     builtins[offset_for_builtin("crypt")] = bf_crypt;
