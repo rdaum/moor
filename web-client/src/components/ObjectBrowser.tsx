@@ -62,6 +62,7 @@ interface PropertyData {
     definer: string;
     readable: boolean;
     writable: boolean;
+    chown: boolean;
 }
 
 interface VerbData {
@@ -533,6 +534,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                     definer: objToString(definer) || "",
                     readable: propInfo.r(),
                     writable: propInfo.w(),
+                    chown: propInfo.chown(),
                 });
             }
 
@@ -2091,6 +2093,7 @@ export const ObjectBrowser: React.FC<ObjectBrowserProps> = ({
                                     permissions={{
                                         readable: selectedProperty.readable,
                                         writable: selectedProperty.writable,
+                                        chown: selectedProperty.chown,
                                     }}
                                     onNavigateToObject={handleNavigateToObject}
                                     normalizeObjectInput={normalizeObjectInput}

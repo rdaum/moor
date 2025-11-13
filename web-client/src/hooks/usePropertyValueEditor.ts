@@ -24,7 +24,7 @@ export interface PropertyValueEditorSession {
     propertyValue: MoorVar;
     owner?: string;
     definer?: string;
-    permissions?: { readable: boolean; writable: boolean };
+    permissions?: { readable: boolean; writable: boolean; chown: boolean };
     presentationId?: string;
 }
 
@@ -55,6 +55,7 @@ export const usePropertyValueEditor = () => {
                 ? {
                     readable: propInfo.r(),
                     writable: propInfo.w(),
+                    chown: propInfo.chown(),
                 }
                 : undefined,
         };

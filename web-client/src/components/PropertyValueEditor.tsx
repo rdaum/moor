@@ -38,7 +38,7 @@ export interface PropertyValueEditorProps {
     // Property metadata
     owner?: string; // Object ID or CURIE of property owner
     definer?: string; // Object ID or CURIE of property definer
-    permissions?: { readable: boolean; writable: boolean }; // Property permissions
+    permissions?: { readable: boolean; writable: boolean; chown: boolean }; // Property permissions
     onNavigateToObject?: (objId: string) => void; // Callback for clicking object references
     normalizeObjectInput?: (raw: string) => string; // Utility to convert various object formats to MOO expressions
     getDollarName?: (objId: string) => string | null; // Get $ name for an object ID
@@ -236,14 +236,16 @@ export function PropertyValueEditor({
     // Property metadata editing state
     const [isEditingOwner, setIsEditingOwner] = useState(false);
     const [editOwnerValue, setEditOwnerValue] = useState(owner ? `#${owner}` : "");
-    const [editPermissions, setEditPermissions] = useState(permissions || { readable: false, writable: false });
+    const [editPermissions, setEditPermissions] = useState(
+        permissions || { readable: false, writable: false, chown: false },
+    );
     const [isSavingMetadata, setIsSavingMetadata] = useState(false);
     const [metadataSaveSuccess, setMetadataSaveSuccess] = useState(false);
 
     // Sync local state when props change (after save refresh)
     useEffect(() => {
         setEditOwnerValue(owner ? `#${owner}` : "");
-        setEditPermissions(permissions || { readable: false, writable: false });
+        setEditPermissions(permissions || { readable: false, writable: false, chown: false });
     }, [owner, permissions]);
     const FONT_SIZE_STORAGE_KEY = "moor-code-editor-font-size";
     const MIN_FONT_SIZE = 10;
@@ -297,7 +299,9 @@ export function PropertyValueEditor({
         setError(null);
         setMetadataSaveSuccess(false);
         try {
-            const permsStr = `${editPermissions.readable ? "r" : ""}${editPermissions.writable ? "w" : ""}`;
+            const permsStr = `${editPermissions.readable ? "r" : ""}${editPermissions.writable ? "w" : ""}${
+                editPermissions.chown ? "c" : ""
+            }`;
 
             // Use the provided utility to normalize object references
             const objExpr = normalizeObjectInput(objectCurie);
@@ -327,7 +331,7 @@ export function PropertyValueEditor({
         }
     };
 
-    const handleTogglePermission = (perm: "readable" | "writable") => {
+    const handleTogglePermission = (perm: "readable" | "writable" | "chown") => {
         setEditPermissions((prev) => ({
             ...prev,
             [perm]: !prev[perm],
@@ -341,7 +345,8 @@ export function PropertyValueEditor({
     const hasMetadataChanges = isEditingOwner
         || (owner ? `#${owner}` : "") !== editOwnerValue
         || permissions?.readable !== editPermissions.readable
-        || permissions?.writable !== editPermissions.writable;
+        || permissions?.writable !== editPermissions.writable
+        || permissions?.chown !== editPermissions.chown;
 
     // Handle mode changes - warn about unsaved content
     const handleModeChange = (newMode: EditorMode) => {
@@ -624,6 +629,14 @@ export function PropertyValueEditor({
                                     />
                                     w
                                 </label>
+                                <label className="metadata-permission-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={editPermissions.chown}
+                                        onChange={() => handleTogglePermission("chown")}
+                                    />
+                                    c
+                                </label>
                             </div>
                         </div>
                     )}
@@ -644,7 +657,9 @@ export function PropertyValueEditor({
                                 <button
                                     onClick={() => {
                                         setEditOwnerValue(owner ? `#${owner}` : "");
-                                        setEditPermissions(permissions || { readable: false, writable: false });
+                                        setEditPermissions(
+                                            permissions || { readable: false, writable: false, chown: false },
+                                        );
                                         setIsEditingOwner(false);
                                     }}
                                     disabled={isSavingMetadata}
