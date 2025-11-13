@@ -801,6 +801,8 @@ function AppContent({
         const authTokenParam = urlParams.get("auth_token");
         const playerOidParam = urlParams.get("player");
         const flagsParam = urlParams.get("flags");
+        const clientTokenParam = urlParams.get("client_token");
+        const clientIdParam = urlParams.get("client_id");
         if (authTokenParam && playerOidParam) {
             // Clear URL parameters immediately
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -810,6 +812,13 @@ function AppContent({
             localStorage.setItem("oauth2_player_oid", playerOidParam);
             if (flagsParam) {
                 localStorage.setItem("oauth2_player_flags", flagsParam);
+            }
+            // Store client credentials for transparent reconnection
+            if (clientTokenParam) {
+                localStorage.setItem("client_token", clientTokenParam);
+            }
+            if (clientIdParam) {
+                localStorage.setItem("client_id", clientIdParam);
             }
 
             showMessage("Logged in successfully via OAuth2!", 2);
@@ -878,6 +887,13 @@ function AppContent({
                 localStorage.setItem("oauth2_player_oid", result.player);
                 if (result.player_flags !== undefined) {
                     localStorage.setItem("oauth2_player_flags", result.player_flags.toString());
+                }
+                // Store client credentials for transparent reconnection
+                if (result.client_token) {
+                    localStorage.setItem("client_token", result.client_token);
+                }
+                if (result.client_id) {
+                    localStorage.setItem("client_id", result.client_id);
                 }
 
                 showMessage(`Account ${choice.mode === "oauth2_create" ? "created" : "linked"}! Connecting...`, 2);

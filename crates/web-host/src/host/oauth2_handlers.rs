@@ -62,6 +62,8 @@ pub struct OAuth2LoginResponse {
     pub auth_token: Option<String>,
     pub player: Option<String>,
     pub player_flags: Option<u16>,
+    pub client_token: Option<String>,
+    pub client_id: Option<String>,
     pub error: Option<String>,
 }
 
@@ -262,10 +264,12 @@ pub async fn oauth2_callback_handler(
             "Existing OAuth2 user logged in: {} (flags: {})",
             player_obj, player_flags
         );
-        // Return CURIE format (oid:N or uuid:xxx)
+        // Return CURIE format (oid:N or uuid:xxx) and include client credentials for reconnection
         let player_curie = ObjectRef::Id(player_obj).to_curie();
-        let redirect_url =
-            format!("/?auth_token={auth_token}&player={player_curie}&flags={player_flags}");
+        let redirect_url = format!(
+            "/?auth_token={}&player={}&flags={}&client_token={}&client_id={}",
+            auth_token, player_curie, player_flags, client_token.0, client_id
+        );
         Redirect::to(&redirect_url).into_response()
     } else {
         // New user - redirect to account choice page with user info
@@ -402,6 +406,8 @@ pub async fn oauth2_account_choice_handler(
                 auth_token: None,
                 player: None,
                 player_flags: None,
+                client_token: None,
+                client_id: None,
                 error: Some("Authentication failed".to_string()),
             }),
         )
@@ -506,12 +512,14 @@ pub async fn oauth2_account_choice_handler(
             choice.mode, player_obj, player_flags
         );
 
-        // Return JSON with auth token, player CURIE, and flags
+        // Return JSON with auth token, player CURIE, flags, and client credentials for reconnection
         Json(OAuth2LoginResponse {
             success: true,
             auth_token: Some(auth_token.to_string()),
             player: Some(ObjectRef::Id(player_obj).to_curie()),
             player_flags: Some(player_flags),
+            client_token: Some(client_token.0.clone()),
+            client_id: Some(client_id.to_string()),
             error: None,
         })
         .into_response()
@@ -525,6 +533,8 @@ pub async fn oauth2_account_choice_handler(
                 auth_token: None,
                 player: None,
                 player_flags: None,
+                client_token: None,
+                client_id: None,
                 error: Some("Authentication failed".to_string()),
             }),
         )
