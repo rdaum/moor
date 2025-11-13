@@ -22,7 +22,7 @@ use std::{
     },
     time::Duration,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 use zmq::Socket;
 
@@ -221,7 +221,6 @@ impl RpcTransport {
                 let response = message_handler.handle_host_message(host_id, host_message_fb);
                 match Self::pack_host_response(response) {
                     Ok(response) => {
-                        let response_len = response.len();
                         rpc_socket.send_multipart(vec![response], 0)?;
                     }
                     Err(e) => {

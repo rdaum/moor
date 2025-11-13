@@ -42,54 +42,79 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         error: null,
     });
 
-    // Check for auth credentials in localStorage on mount
+    // Check for auth credentials in localStorage on mount and validate them
     useEffect(() => {
-        const oauth2Token = localStorage.getItem("oauth2_auth_token");
-        const oauth2PlayerOid = localStorage.getItem("oauth2_player_oid");
-        const authToken = localStorage.getItem("auth_token");
-        const playerOid = localStorage.getItem("player_oid");
-        const playerFlags = localStorage.getItem("player_flags");
-        const storedClientToken = localStorage.getItem("client_token");
-        const storedClientId = localStorage.getItem("client_id");
+        const validateAndRestore = async () => {
+            const oauth2Token = localStorage.getItem("oauth2_auth_token");
+            const oauth2PlayerOid = localStorage.getItem("oauth2_player_oid");
+            const authToken = localStorage.getItem("auth_token");
+            const playerOid = localStorage.getItem("player_oid");
+            const playerFlags = localStorage.getItem("player_flags");
+            const storedClientToken = localStorage.getItem("client_token");
+            const storedClientId = localStorage.getItem("client_id");
 
-        // Check regular auth
-        if (authToken && playerOid) {
-            const flags = playerFlags ? parseInt(playerFlags, 10) : 0;
+            // Determine which auth token to validate
+            const tokenToValidate = authToken || oauth2Token;
+            const oidToRestore = playerOid || oauth2PlayerOid;
+            const flagsToRestore = playerFlags || localStorage.getItem("oauth2_player_flags");
 
-            setAuthState({
-                player: {
-                    oid: playerOid,
-                    authToken,
-                    connected: false,
-                    flags,
-                    clientToken: storedClientToken,
-                    clientId: storedClientId,
-                },
-                isConnecting: false,
-                error: null,
-            });
+            if (!tokenToValidate || !oidToRestore) {
+                // No stored credentials
+                return;
+            }
 
-            onSystemMessage("Restoring session...", 2);
-        } else if (oauth2Token && oauth2PlayerOid) {
-            // Otherwise, check OAuth to see if there's credentials there to restore.
-            const oauth2Flags = localStorage.getItem("oauth2_player_flags");
-            const flags = oauth2Flags ? parseInt(oauth2Flags, 10) : 0;
+            // Validate the auth token with the server
+            try {
+                const response = await fetch("/auth/validate", {
+                    method: "GET",
+                    headers: {
+                        "X-Moor-Auth-Token": tokenToValidate,
+                    },
+                });
 
-            setAuthState({
-                player: {
-                    oid: oauth2PlayerOid,
-                    authToken: oauth2Token,
-                    connected: false,
-                    flags,
-                    clientToken: storedClientToken,
-                    clientId: storedClientId,
-                },
-                isConnecting: false,
-                error: null,
-            });
+                if (!response.ok) {
+                    // Token is invalid or expired - clear localStorage
+                    console.log("Stored auth token is invalid or expired - clearing");
+                    localStorage.removeItem("auth_token");
+                    localStorage.removeItem("player_oid");
+                    localStorage.removeItem("player_flags");
+                    localStorage.removeItem("oauth2_auth_token");
+                    localStorage.removeItem("oauth2_player_oid");
+                    localStorage.removeItem("oauth2_player_flags");
+                    localStorage.removeItem("client_token");
+                    localStorage.removeItem("client_id");
+                    localStorage.setItem("client_session_active", "false");
+                    return;
+                }
 
-            onSystemMessage("Authenticated via OAuth2! Loading history...", 2);
-        }
+                // Token is valid - restore the session
+                const flags = flagsToRestore ? parseInt(flagsToRestore, 10) : 0;
+
+                setAuthState({
+                    player: {
+                        oid: oidToRestore,
+                        authToken: tokenToValidate,
+                        connected: false,
+                        flags,
+                        clientToken: storedClientToken,
+                        clientId: storedClientId,
+                    },
+                    isConnecting: false,
+                    error: null,
+                });
+
+                if (oauth2Token) {
+                    onSystemMessage("Authenticated via OAuth2! Loading history...", 2);
+                } else {
+                    onSystemMessage("Restoring session...", 2);
+                }
+            } catch (error) {
+                console.error("Error validating auth token:", error);
+                onSystemMessage("Error restoring session", 3);
+            }
+        };
+
+        validateAndRestore();
     }, [onSystemMessage]);
 
     const connect = useCallback(async (

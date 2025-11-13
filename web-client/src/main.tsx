@@ -1162,7 +1162,7 @@ function AppContent({
 
             {/* Login component (shows/hides based on connection state) */}
             <Login
-                visible={!isConnected}
+                visible={!player}
                 welcomeMessage={welcomeMessage}
                 contentType={contentType}
                 isServerReady={isServerReady}

@@ -884,13 +884,13 @@ pub async fn system_property_handler(
 
     // Just return the raw FlatBuffer bytes!
     // No parsing, no JSON conversion - the client will handle it
-    let response = Response::builder()
+    
+
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    response
+        .unwrap()
 }
 
 /// Attach a websocket connection to an existing player.
@@ -1066,13 +1066,13 @@ pub async fn resolve_objref_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
+    
+
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    response
+        .unwrap()
 }
 
 /// FlatBuffer version: POST /fb/eval - evaluate expression
@@ -1138,13 +1138,13 @@ pub async fn invoke_welcome_message_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
+    
+
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    response
+        .unwrap()
 }
 
 /// Health check endpoint - verifies host is healthy and can communicate with daemon

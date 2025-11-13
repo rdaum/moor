@@ -996,8 +996,8 @@ impl RpcMessageHandler {
             .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
 
         if disconnected {
-            if let Some(player) = self.connections.player_object_for_client(client_id) {
-                if let Err(e) = self.submit_disconnected_task(
+            if let Some(player) = self.connections.player_object_for_client(client_id)
+                && let Err(e) = self.submit_disconnected_task(
                     &SYSTEM_OBJECT,
                     scheduler_client,
                     client_id,
@@ -1006,7 +1006,6 @@ impl RpcMessageHandler {
                 ) {
                     error!(error = ?e, "Error submitting user_disconnected task");
                 }
-            }
 
             let Ok(_) = self.connections.remove_client_connection(client_id) else {
                 return Err(RpcMessageError::InternalError(

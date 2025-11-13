@@ -39,6 +39,7 @@ export const useWebSocket = (
     ) => void,
     onPresentMessage?: (presentData: PresentationData) => void,
     onUnpresentMessage?: (id: string) => void,
+    onAuthFailure?: () => void,
 ) => {
     const [wsState, setWsState] = useState<WebSocketState>({
         socket: null,
@@ -54,6 +55,7 @@ export const useWebSocket = (
     const processingRef = useRef<Promise<void>>(Promise.resolve());
     const isDisconnectingRef = useRef(false);
     const connectionStatusRef = useRef<WebSocketState["connectionStatus"]>("disconnected");
+    const hasEverConnectedRef = useRef(false);
 
     useEffect(() => {
         connectionStatusRef.current = wsState.connectionStatus;
@@ -159,6 +161,7 @@ export const useWebSocket = (
                 }));
                 onSystemMessage("Connected!", 2);
                 localStorage.setItem("client_session_active", "true");
+                hasEverConnectedRef.current = true;
 
                 // Update player connection status
                 if (onPlayerConnectedChange) {
@@ -198,12 +201,22 @@ export const useWebSocket = (
                 }
 
                 if (event.code !== 1000) { // 1000 is normal closure
+                    // If we've never successfully connected, this is likely an auth failure
+                    if (!hasEverConnectedRef.current) {
+                        console.log("[WebSocket] Connection failed on initial attempt - likely auth failure");
+                        onSystemMessage("Authentication failed - please log in again", 5);
+                        if (onAuthFailure) {
+                            onAuthFailure();
+                        }
+                        return;
+                    }
+
                     onSystemMessage(
                         `Connection closed: ${event.reason || "Server disconnected"}`,
                         5,
                     );
 
-                    // Schedule reconnect for non-normal closures
+                    // Schedule reconnect for non-normal closures (only if we've connected before)
                     const delay = 3000;
                     if (!reconnectTimeoutRef.current) {
                         reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -303,6 +316,7 @@ export const useWebSocket = (
                 connectionStatus: "disconnected",
             });
             lastEventTimestampRef.current = null;
+            hasEverConnectedRef.current = false;
         }
     }, [player]);
 

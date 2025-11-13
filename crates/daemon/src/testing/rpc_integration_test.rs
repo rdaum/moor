@@ -1281,7 +1281,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+        let (_, _connection_obj) = match establish_result.unwrap().reply {
             moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
                 let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
 
@@ -1337,7 +1337,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             establish_message,
         );
 
-        let (client_token, _connection_obj) = match establish_result.unwrap().reply {
+        let (_, _connection_obj) = match establish_result.unwrap().reply {
             moor_rpc::DaemonToClientReplyUnion::NewConnection(new_conn) => {
                 let token = rpc_common::ClientToken(new_conn.client_token.token.clone());
 

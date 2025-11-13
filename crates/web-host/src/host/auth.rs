@@ -226,3 +226,48 @@ pub fn stateless_rpc_client(
     let (client_id, rpc_client) = host.new_stateless_client();
     Ok((auth_token, client_id, rpc_client))
 }
+
+/// Validate an auth token without establishing a full session
+pub async fn validate_auth_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(host): State<WebHost>,
+    header_map: HeaderMap,
+) -> impl IntoResponse {
+    let auth_token = match extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+
+    debug!("Validating auth token");
+
+    // Try to attach with the token - this validates it can create a session
+    match host
+        .attach_authenticated(auth_token, Some(moor_rpc::ConnectType::NoConnect), addr)
+        .await
+    {
+        Ok((_player, client_id, client_token, rpc_client)) => {
+            // Token is valid - immediately detach since we were just testing
+            let detach_msg = mk_detach_msg(&client_token, false);
+            let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(WsHostError::AuthenticationFailed) => {
+            debug!("Auth token validation failed - token is invalid or expired");
+            Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(e) => {
+            error!("Error validating auth token: {}", e);
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap()
+        }
+    }
+}
