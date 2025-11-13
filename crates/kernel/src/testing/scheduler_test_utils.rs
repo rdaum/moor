@@ -38,7 +38,7 @@ where
     loop {
         match task_handle
             .receiver()
-            .recv_timeout(Duration::from_secs(1))
+            .recv_timeout(Duration::from_secs(5))
             .inspect_err(|e| {
                 eprintln!(
                     "subscriber.recv_timeout() failed for task {}: {e}",
