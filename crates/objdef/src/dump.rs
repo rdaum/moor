@@ -412,7 +412,14 @@ pub fn dump_object_definitions(
         // Pick a file name.
         let file_name = match file_names.get(&o.oid) {
             Some(name) => format!("{name}.moo"),
-            None => format!("object_{}.moo", o.oid.as_u64()),
+            None => {
+                let prefix = if o.flags.contains(ObjFlag::User) {
+                    "player"
+                } else {
+                    "object"
+                };
+                format!("{}_{}.moo", prefix, o.oid.as_u64())
+            }
         };
         let file_path = directory_path.join(file_name);
         let mut file = std::fs::File::create(file_path)?;
