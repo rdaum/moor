@@ -308,10 +308,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
         object_file_contents: &str,
         compile_options: &CompileOptions,
     ) -> Result<(), ObjdefLoaderError> {
-        let compiled_defs =
-            compile_object_definitions(object_file_contents, compile_options, context).map_err(
-                |e| ObjdefLoaderError::ObjectDefParseError(path.to_string_lossy().to_string(), e),
-            )?;
+        let compiled_defs = compile_object_definitions(
+            object_file_contents,
+            compile_options,
+            context,
+        )
+        .map_err(|e| {
+            ObjdefLoaderError::ObjectDefParseError(path.to_string_lossy().to_string(), Box::new(e))
+        })?;
 
         for compiled_def in compiled_defs {
             let oid = compiled_def.oid;
@@ -847,8 +851,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         let key_symbol = key.as_symbol().map_err(|_| {
                             ObjdefLoaderError::ObjectDefParseError(
                                 source_name.clone(),
-                                moor_compiler::ObjDefParseError::ConstantNotFound(format!(
-                                    "Constants map key must be string or symbol, got: {key:?}"
+                                Box::new(moor_compiler::ObjDefParseError::ConstantNotFound(
+                                    format!(
+                                        "Constants map key must be string or symbol, got: {key:?}"
+                                    ),
                                 )),
                             )
                         })?;
@@ -859,7 +865,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     // Parse the constants file content
                     let compile_opts = CompileOptions::default();
                     compile_object_definitions(content, &compile_opts, &mut context).map_err(
-                        |e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e),
+                        |e| {
+                            ObjdefLoaderError::ObjectDefParseError(source_name.clone(), Box::new(e))
+                        },
                     )?;
                 }
             }
@@ -867,8 +875,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
         // Parse the object definition
         let compiled_defs =
-            compile_object_definitions(object_definition, &compile_options, &mut context)
-                .map_err(|e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e))?;
+            compile_object_definitions(object_definition, &compile_options, &mut context).map_err(
+                |e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), Box::new(e)),
+            )?;
 
         // Ensure we got exactly one object
         if compiled_defs.len() != 1 {
@@ -997,8 +1006,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         let key_symbol = key.as_symbol().map_err(|_| {
                             ObjdefLoaderError::ObjectDefParseError(
                                 source_name.clone(),
-                                moor_compiler::ObjDefParseError::ConstantNotFound(format!(
-                                    "Constants map key must be string or symbol, got: {key:?}"
+                                Box::new(moor_compiler::ObjDefParseError::ConstantNotFound(
+                                    format!(
+                                        "Constants map key must be string or symbol, got: {key:?}"
+                                    ),
                                 )),
                             )
                         })?;
@@ -1009,7 +1020,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     // Parse the constants file content
                     let compile_opts = CompileOptions::default();
                     compile_object_definitions(content, &compile_opts, &mut context).map_err(
-                        |e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e),
+                        |e| {
+                            ObjdefLoaderError::ObjectDefParseError(source_name.clone(), Box::new(e))
+                        },
                     )?;
                 }
             }
@@ -1018,8 +1031,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
         // Parse the object definition
         let compile_opts = CompileOptions::default();
         let compiled_defs =
-            compile_object_definitions(object_definition, &compile_opts, &mut context)
-                .map_err(|e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), e))?;
+            compile_object_definitions(object_definition, &compile_opts, &mut context).map_err(
+                |e| ObjdefLoaderError::ObjectDefParseError(source_name.clone(), Box::new(e)),
+            )?;
 
         // Ensure we got exactly one object
         if compiled_defs.len() != 1 {

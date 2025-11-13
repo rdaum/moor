@@ -14,8 +14,9 @@
 use crate::{
     CompileOptions,
     ObjDefParseError::VerbCompileError,
-    codegen::compile_tree,
-    parse::moo::{MooParser, Rule},
+    codegen::compile,
+    diagnostics::build_parse_error_details,
+    parse::objdef::{ObjDefParser, Rule},
 };
 use base64::{Engine, engine::general_purpose};
 use moor_common::{
@@ -93,6 +94,8 @@ pub struct ObjPropOverride {
 
 #[derive(thiserror::Error, Debug)]
 pub enum ObjDefParseError {
+    #[error("Failed to parse object definition: {0}")]
+    ParseError(CompileError),
     #[error("Failed to compile verb: {0}")]
     VerbCompileError(CompileError),
     #[error("Failed to parse verb flags: {0}")]
@@ -526,7 +529,7 @@ fn parse_literal_atom(
 /// Example: "123", "\"hello\"", "{1, 2, 3}", "[1 -> \"a\"]"
 pub fn parse_literal_value(literal_str: &str) -> Result<Var, ObjDefParseError> {
     let mut context = ObjFileContext::new();
-    let mut pairs = match MooParser::parse(Rule::literal, literal_str) {
+    let mut pairs = match ObjDefParser::parse(Rule::literal, literal_str) {
         Ok(pairs) => pairs,
         Err(e) => {
             let ((line, column), end_line_col) = match e.line_col {
@@ -570,7 +573,7 @@ pub fn compile_object_definitions(
     options: &CompileOptions,
     context: &mut ObjFileContext,
 ) -> Result<Vec<ObjectDefinition>, ObjDefParseError> {
-    let mut pairs = match MooParser::parse(Rule::objects_file, objdef) {
+    let mut pairs = match ObjDefParser::parse(Rule::objects_file, objdef) {
         Ok(pairs) => pairs,
         Err(e) => {
             let ((mut line, mut column), mut end_line_col) = match e.line_col {
@@ -578,7 +581,7 @@ pub fn compile_object_definitions(
                 LineColLocation::Span(begin, end) => (begin, Some(end)),
             };
 
-            let (summary, details) = crate::diagnostics::build_parse_error_details(objdef, &e);
+            let (summary, details) = build_parse_error_details(objdef, &e);
 
             if let Some((start, end)) = details.span {
                 let (computed_line, computed_col) = offset_to_line_col(objdef, start);
@@ -590,7 +593,7 @@ pub fn compile_object_definitions(
                 end_line_col = Some((end_line, end_col));
             }
 
-            return Err(VerbCompileError(CompileError::ParseError {
+            return Err(ObjDefParseError::ParseError(CompileError::ParseError {
                 error_position: CompileContext::new((line, column)),
                 end_line_col,
                 context: e.line().to_string(),
@@ -977,13 +980,14 @@ fn parse_verb_decl(
         }
     }
 
-    // Now the verb body, which we will attempt to compile with a specialized form of the regular
-    // compiler.
+    // Now the verb body, which we will attempt to compile with the regular compiler.
+    // Extract the text and compile it as MOO code.
     let verb_body = pairs.next().unwrap();
     let program = match verb_body.as_rule() {
         Rule::verb_statements => {
-            let inner = verb_body.into_inner();
-            compile_tree(inner, compile_options.clone()).map_err(VerbCompileError)?
+            // Extract just the statements text (everything between verb declaration and endverb)
+            let statements_text = verb_body.into_inner().as_str();
+            compile(statements_text, compile_options.clone()).map_err(VerbCompileError)?
         }
         _ => {
             panic!("Expected verb body, got {verb_body:?}");

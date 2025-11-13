@@ -1,0 +1,70 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+// Object definition format grammar - extends moo.pest
+// This grammar defines the format for importing/exporting MOO objects as text files.
+// It references base rules from moo.pest (ident, object, string, statements, expr, etc.)
+
+// "Objects files" are an alternate import format for reading cores or databases, that is designed to be readable and
+// editable by regular tools.
+objects_file = { SOI ~ (object_definition | constant_decl)* ~ EOI }
+
+constant_decl = { "define" ~ ident ~ "=" ~ literal ~ ";"? }
+
+object_definition = {  ^"object" ~ (object | variable) ~ object_attributes ~ (verb_decl | prop_def | prop_set)* ~ "endobject"  }
+object_attributes = { object_attribute+ }
+object_attribute = { name_attr | parent_attr | owner_attr | location_attr | wizard_attr | prog_attr | player_attr | fertile_attr | read_attr | write_attr }
+name_attr = { "name" ~ ":" ~ (string | variable )}
+owner_attr = { "owner" ~ ":" ~ ( object | variable ) }
+parent_attr = { "parent" ~ ":" ~ ( object | variable ) }
+location_attr = { "location" ~ ":" ~ ( object | variable ) }
+wizard_attr = { "wizard" ~ ":" ~ boolean}
+prog_attr = { "programmer" ~ ":" ~ boolean}
+player_attr = { "player" ~ ":" ~ boolean}
+fertile_attr = { "fertile" ~ ":" ~ boolean}
+read_attr = { "readable" ~ ":" ~ boolean }
+write_attr = { "writeable" ~ ":" ~ boolean }
+
+verb_decl = { ^"verb" ~ verb_name ~ "(" ~ verbargspec ~ ")" ~ owner_attr ~ flags_attr ~ verb_statements  }
+verb_statements = { statements ~ "endverb" }
+
+// A verb name for a textdump is actually more permissive than ident, since you can embed them in :("string") style dispatch
+// Beyond wildcards, they also permit special characters like #, %, etc.
+// So we'll accept either a string literal, or a single alphanumeric-ish ident
+verb_name = { string | verbident }
+verbident = { PROPCHARS+ }
+
+verbargspec = {argspec ~ PREP_CHARACTERS ~ argspec }
+argspec = {"this" | "none" | "any"}
+flagchars = @{ ASCII_ALPHA* }
+flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
+
+literal = { literal_atom | literal_map | literal_lambda | literal_list | literal_flyweight | variable }
+variable = { ident }
+literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | ident  }
+literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
+literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}" ~ !"=>") | "{}" }
+literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slot)* ~ ("," ~ literal_flyweight_contents)? ~ ">" }
+literal_flyweight_slot = { "." ~ ident ~ "=" ~ literal }
+literal_flyweight_contents = { "{" ~ (literal ~ ("," ~ literal)*)? ~ "}" }
+literal_lambda = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr ~ lambda_metadata? }
+lambda_metadata = { "with" ~ lambda_captured? ~ lambda_self_ref? }
+lambda_captured = { "captured" ~ "[" ~ (captured_var_map ~ ("," ~ captured_var_map)*)? ~ "]" }
+captured_var_map = { "{" ~ (captured_var_entry ~ ("," ~ captured_var_entry)*)? ~ "}" }
+captured_var_entry = { ident ~ ":" ~ literal }
+lambda_self_ref = { "self" ~ literal }
+prop_def = {"property" ~ propname ~ propinfo ~ ("=" ~ literal)? ~ ";" }
+prop_set = {"override" ~ propname ~ propinfo? ~ ("=" ~ literal)? ~ ";" }
+unquoted_propname = { PROPCHARS+ }
+propname = { string | unquoted_propname }
+propinfo = {"(" ~ owner_attr ~ "," ~ flags_attr ~ ")"}

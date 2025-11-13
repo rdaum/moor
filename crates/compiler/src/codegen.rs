@@ -13,7 +13,6 @@
 
 //! Takes the AST and turns it into a list of opcodes.
 
-use pest::iterators::Pairs;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -28,7 +27,7 @@ use crate::{
         Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
     },
-    parse::{CompileOptions, Parse, moo::Rule, parse_program, parse_tree},
+    parse::{CompileOptions, Parse, parse_program},
 };
 use moor_common::{
     builtins::BUILTINS,
@@ -1430,15 +1429,6 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
 /// Compile from a program string, starting at the "program" rule.
 pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
     let parse = parse_program(program, options.clone())?;
-
-    do_compile(parse, options)
-}
-
-/// Compile from an already-parsed tree stating at the `statements` rule.
-pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Program, CompileError> {
-    let parse = parse_tree(tree, options.clone())?;
-
-    // TODO: we'll have to adjust line numbers accordingly to who called us?
 
     do_compile(parse, options)
 }

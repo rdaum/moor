@@ -51,10 +51,19 @@ use moor_common::model::{
 };
 use moor_var::program::{DeclType, names::Names};
 
+/// Regular moo grammar
 pub mod moo {
     #[derive(Parser)]
     #[grammar = "src/moo.pest"]
     pub struct MooParser;
+}
+
+/// Grammar when wrapped up in an objdef file
+pub mod objdef {
+    #[derive(Parser)]
+    #[grammar = "src/moo.pest"]
+    #[grammar = "src/objdef.pest"]
+    pub struct ObjDefParser;
 }
 
 // Rule to Expression mapping - a single source of truth for bidirectional mapping
@@ -1936,25 +1945,6 @@ impl TreeTransformer {
         self.do_transform(program)
     }
 
-    fn transform_statements(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
-        let mut program = Vec::new();
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::statements => {
-                    let statements = pair.into_inner();
-                    let parsed_statements = self.clone().parse_statements(statements)?;
-                    program.extend(parsed_statements);
-                }
-
-                _ => {
-                    panic!("Unexpected rule: {:?}", pair.as_rule());
-                }
-            }
-        }
-
-        self.do_transform(program)
-    }
-
     fn do_transform(self: Rc<Self>, mut program: Vec<Stmt>) -> Result<Parse, CompileError> {
         let unbound_names = self.names.borrow_mut();
         // Annotate the "true" line numbers of the AST nodes.
@@ -2048,11 +2038,6 @@ fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
     }
 
     (line, column)
-}
-
-pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, CompileError> {
-    let tree_transform = TreeTransformer::new(options);
-    tree_transform.transform_statements(pairs)
 }
 
 #[cfg(test)]

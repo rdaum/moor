@@ -25,8 +25,8 @@ use itertools::Itertools;
 use moor_var::{Symbol, Var, v_int, v_list, v_map, v_str, v_sym};
 use pest::error::{Error, ErrorVariant, InputLocation};
 
-use crate::parse::moo::Rule;
 use moor_common::model::{CompileContext, CompileError, ParseErrorDetails};
+use pest::RuleType;
 
 /// Verbosity levels for rendering diagnostics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,9 +161,9 @@ pub fn format_compile_error(
 }
 
 /// Produce a human-friendly summary string plus structured diagnostic details for a Pest error.
-pub fn build_parse_error_details(
+pub fn build_parse_error_details<R: RuleType + std::fmt::Debug>(
     program_text: &str,
-    error: &Error<Rule>,
+    error: &Error<R>,
 ) -> (String, ParseErrorDetails) {
     let summary = summarize_error(error);
     let expected_tokens = extract_expected_tokens(error);
@@ -224,7 +224,7 @@ fn format_parse_error(
     lines
 }
 
-fn summarize_error(error: &Error<Rule>) -> String {
+fn summarize_error<R: RuleType + std::fmt::Debug>(error: &Error<R>) -> String {
     let ErrorVariant::ParsingError {
         positives,
         negatives,
@@ -261,7 +261,7 @@ fn summarize_error(error: &Error<Rule>) -> String {
     }
 }
 
-fn extract_expected_tokens(error: &Error<Rule>) -> Vec<String> {
+fn extract_expected_tokens<R: RuleType + std::fmt::Debug>(error: &Error<R>) -> Vec<String> {
     let tokens = error
         .parse_attempts()
         .map(|parse_attempts| {
@@ -295,7 +295,10 @@ fn extract_expected_tokens(error: &Error<Rule>) -> Vec<String> {
     dedupe_strings(tokens)
 }
 
-fn collect_notes(program_text: &str, error: &Error<Rule>) -> Vec<String> {
+fn collect_notes<R: RuleType + std::fmt::Debug>(
+    program_text: &str,
+    error: &Error<R>,
+) -> Vec<String> {
     let mut notes = Vec::new();
 
     notes.extend(
@@ -354,7 +357,10 @@ fn dedupe_strings(strings: Vec<String>) -> Vec<String> {
     out
 }
 
-fn compute_span(program_text: &str, error: &Error<Rule>) -> Range<usize> {
+fn compute_span<R: RuleType + std::fmt::Debug>(
+    program_text: &str,
+    error: &Error<R>,
+) -> Range<usize> {
     match error.location {
         InputLocation::Pos(pos) => {
             let end = min(program_text.len(), pos.saturating_add(1));
@@ -428,146 +434,147 @@ fn dedupe_descriptions(descriptions: &[RuleDescriptor]) -> Vec<RuleDescriptor> {
     out
 }
 
-fn describe_rule(rule: &Rule) -> RuleDescriptor {
-    use Rule::*;
-
-    match rule {
-        add | sub | mul | div | modulus | pow | land | lor | eq | neq | lt | gt | lte | gte
-        | in_range | bitand | bitor | bitxor | bitshl | bitlshr | bitshr => RuleDescriptor {
+fn describe_rule<R: RuleType + std::fmt::Debug>(rule: &R) -> RuleDescriptor {
+    // Match on the stringified rule name to provide detailed descriptions
+    let rule_str = format!("{:?}", rule);
+    match rule_str.as_str() {
+        "add" | "sub" | "mul" | "div" | "modulus" | "pow" | "land" | "lor" | "eq" | "neq"
+        | "lt" | "gt" | "lte" | "gte" | "in_range" | "bitand" | "bitor" | "bitxor" | "bitshl"
+        | "bitlshr" | "bitshr" => RuleDescriptor {
             label: Cow::Borrowed("an operator"),
             hint: Some(Cow::Borrowed(
                 "Use operators like +, -, *, /, %, &&, ||, ==, !=, <, >, etc.",
             )),
             group: Cow::Borrowed("binary_operator"),
         },
-        assign => RuleDescriptor {
+        "assign" => RuleDescriptor {
             label: Cow::Borrowed("an assignment"),
             hint: Some(Cow::Borrowed(
                 "Assignments use = with a variable name on the left, e.g. foo = expr.",
             )),
             group: Cow::Borrowed("assignment"),
         },
-        index_range => RuleDescriptor {
+        "index_range" => RuleDescriptor {
             label: Cow::Borrowed("a range index like [1..5]"),
             hint: Some(Cow::Borrowed(
                 "Range indexing uses [start..end] to get a slice.",
             )),
             group: Cow::Borrowed("index_range"),
         },
-        index_single => RuleDescriptor {
+        "index_single" => RuleDescriptor {
             label: Cow::Borrowed("an index like [1]"),
             hint: Some(Cow::Borrowed(
                 "Single indexing uses [position] to get one element.",
             )),
             group: Cow::Borrowed("index_single"),
         },
-        verb_call | verb_expr_call => RuleDescriptor {
+        "verb_call" | "verb_expr_call" => RuleDescriptor {
             label: Cow::Borrowed("a verb call like :verb(args)"),
             hint: Some(Cow::Borrowed(
                 "Verb calls use :verb_name(...) or :expr(...).",
             )),
             group: Cow::Borrowed("verb_call"),
         },
-        prop | prop_expr => RuleDescriptor {
+        "prop" | "prop_expr" => RuleDescriptor {
             label: Cow::Borrowed("a property access like .name"),
             hint: None,
             group: Cow::Borrowed("property_access"),
         },
-        cond_expr => RuleDescriptor {
+        "cond_expr" => RuleDescriptor {
             label: Cow::Borrowed("a conditional"),
             hint: Some(Cow::Borrowed(
                 "Conditional expressions use `? then_expr | else_expr`.",
             )),
             group: Cow::Borrowed("conditional_expr"),
         },
-        arglist => RuleDescriptor {
+        "arglist" => RuleDescriptor {
             label: Cow::Borrowed("an argument list `(…)`"),
             hint: Some(Cow::Borrowed(
                 "Function calls require parentheses around arguments.",
             )),
             group: Cow::Borrowed("argument_list"),
         },
-        integer => RuleDescriptor {
+        "integer" => RuleDescriptor {
             label: Cow::Borrowed("an integer literal"),
             hint: None,
             group: Cow::Borrowed("integer_literal"),
         },
-        float => RuleDescriptor {
+        "float" => RuleDescriptor {
             label: Cow::Borrowed("a floating-point literal"),
             hint: None,
             group: Cow::Borrowed("float_literal"),
         },
-        string => RuleDescriptor {
+        "string" => RuleDescriptor {
             label: Cow::Borrowed("a string literal"),
             hint: Some(Cow::Borrowed(
                 "Strings must be surrounded by double quotes.",
             )),
             group: Cow::Borrowed("string_literal"),
         },
-        list => RuleDescriptor {
+        "list" => RuleDescriptor {
             label: Cow::Borrowed("a list literal like {1, 2, 3}"),
             hint: Some(Cow::Borrowed("List literals go inside braces `{}`.")),
             group: Cow::Borrowed("list_literal"),
         },
-        map => RuleDescriptor {
+        "map" => RuleDescriptor {
             label: Cow::Borrowed("a map literal like [key -> value]"),
             hint: None,
             group: Cow::Borrowed("map_literal"),
         },
-        lambda => RuleDescriptor {
+        "lambda" => RuleDescriptor {
             label: Cow::Borrowed("a lambda body `{params} => expr`"),
             hint: Some(Cow::Borrowed(
                 "Lambda expressions use `{param, ...} => expression`.",
             )),
             group: Cow::Borrowed("lambda"),
         },
-        fn_expr => RuleDescriptor {
+        "fn_expr" => RuleDescriptor {
             label: Cow::Borrowed("a function expression `fn (...) ... endfn`"),
             hint: Some(Cow::Borrowed(
                 "Function expressions use `fn (params) ... endfn`.",
             )),
             group: Cow::Borrowed("fn_expr"),
         },
-        builtin_call => RuleDescriptor {
+        "builtin_call" => RuleDescriptor {
             label: Cow::Borrowed("a builtin function call"),
             hint: None,
             group: Cow::Borrowed("builtin_call"),
         },
-        ident => RuleDescriptor {
+        "ident" => RuleDescriptor {
             label: Cow::Borrowed("an identifier"),
             hint: Some(Cow::Borrowed(
                 "Identifiers start with a letter or underscore and may contain digits.",
             )),
             group: Cow::Borrowed("identifier"),
         },
-        verb_decl => RuleDescriptor {
+        "verb_decl" => RuleDescriptor {
             label: Cow::Borrowed("a verb declaration"),
             hint: Some(Cow::Borrowed(
                 "Verb declarations use: verb name (this none this) owner: #1 flags: \"rxd\"",
             )),
             group: Cow::Borrowed("verb_decl"),
         },
-        prop_def => RuleDescriptor {
+        "prop_def" => RuleDescriptor {
             label: Cow::Borrowed("a property definition"),
             hint: Some(Cow::Borrowed(
                 "Property definitions use: property name (owner: #1, flags: \"\") = value;",
             )),
             group: Cow::Borrowed("prop_def"),
         },
-        prop_set => RuleDescriptor {
+        "prop_set" => RuleDescriptor {
             label: Cow::Borrowed("a property override"),
             hint: Some(Cow::Borrowed(
                 "Property overrides use: override name = value; or override name (owner: #1, flags: \"\") = value;",
             )),
             group: Cow::Borrowed("prop_set"),
         },
-        expr | primary => RuleDescriptor {
+        "expr" | "primary" => RuleDescriptor {
             label: Cow::Borrowed("an expression"),
             hint: None,
             group: Cow::Borrowed("expression"),
         },
-        number | digits | digit_part | fraction | pos_exponent | neg_exponent | exponent_float
-        | point_float => RuleDescriptor {
+        "number" | "digits" | "digit_part" | "fraction" | "pos_exponent" | "neg_exponent"
+        | "exponent_float" | "point_float" => RuleDescriptor {
             label: Cow::Borrowed("a numeric literal"),
             hint: None,
             group: Cow::Borrowed("number"),
@@ -583,7 +590,7 @@ fn describe_rule(rule: &Rule) -> RuleDescriptor {
     }
 }
 
-fn format_rule_name(rule: &Rule) -> String {
+fn format_rule_name<R: RuleType + std::fmt::Debug>(rule: &R) -> String {
     let debug = format!("{rule:?}");
     debug
         .split('_')

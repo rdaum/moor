@@ -1003,9 +1003,10 @@ impl RpcMessageHandler {
                     client_id,
                     &player,
                     &connection,
-                ) {
-                    error!(error = ?e, "Error submitting user_disconnected task");
-                }
+                )
+            {
+                error!(error = ?e, "Error submitting user_disconnected task");
+            }
 
             let Ok(_) = self.connections.remove_client_connection(client_id) else {
                 return Err(RpcMessageError::InternalError(

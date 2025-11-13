@@ -884,7 +884,6 @@ pub async fn system_property_handler(
 
     // Just return the raw FlatBuffer bytes!
     // No parsing, no JSON conversion - the client will handle it
-    
 
     Response::builder()
         .status(StatusCode::OK)
@@ -1066,8 +1065,6 @@ pub async fn resolve_objref_handler(
         Err(status) => return status.into_response(),
     };
 
-    
-
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
@@ -1137,8 +1134,6 @@ pub async fn invoke_welcome_message_handler(
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
-
-    
 
     Response::builder()
         .status(StatusCode::OK)

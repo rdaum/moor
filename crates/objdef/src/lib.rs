@@ -48,7 +48,7 @@ pub enum ObjdefLoaderError {
     #[error("Error reading object file: {1}")]
     ObjectFileReadError(PathBuf, io::Error),
     #[error("Could not parse object definition from {0}: {1}")]
-    ObjectDefParseError(String, ObjDefParseError),
+    ObjectDefParseError(String, Box<ObjDefParseError>),
     #[error("Could not create object from {0}: {1}")]
     CouldNotCreateObject(String, Obj, WorldStateError),
     #[error("Could not set object parent from {0}: {1}")]
@@ -96,10 +96,14 @@ impl ObjdefLoaderError {
 
     pub fn compile_error(&self) -> Option<(&str, &CompileError)> {
         match self {
-            ObjdefLoaderError::ObjectDefParseError(
-                source,
-                ObjDefParseError::VerbCompileError(error),
-            ) => Some((source.as_str(), error)),
+            ObjdefLoaderError::ObjectDefParseError(source, box_error) => {
+                if let moor_compiler::ObjDefParseError::VerbCompileError(error) = box_error.as_ref()
+                {
+                    Some((source.as_str(), error))
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
