@@ -3,7 +3,6 @@
 import * as flatbuffers from "flatbuffers";
 
 import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
 
 export class SetEventLogPublicKey {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -26,44 +25,45 @@ export class SetEventLogPublicKey {
         return (obj || new SetEventLogPublicKey()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
-    }
-
     authToken(obj?: AuthToken): AuthToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 4);
         return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     publicKey(): string | null;
     publicKey(optionalEncoding: flatbuffers.Encoding): string | Uint8Array | null;
     publicKey(optionalEncoding?: any): string | Uint8Array | null {
-        const offset = this.bb!.__offset(this.bb_pos, 8);
+        const offset = this.bb!.__offset(this.bb_pos, 6);
         return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
     }
 
     static startSetEventLogPublicKey(builder: flatbuffers.Builder) {
-        builder.startObject(3);
-    }
-
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+        builder.startObject(2);
     }
 
     static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(1, authTokenOffset, 0);
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static addPublicKey(builder: flatbuffers.Builder, publicKeyOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(2, publicKeyOffset, 0);
+        builder.addFieldOffset(1, publicKeyOffset, 0);
     }
 
     static endSetEventLogPublicKey(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
-        builder.requiredField(offset, 6); // auth_token
-        builder.requiredField(offset, 8); // public_key
+        builder.requiredField(offset, 4); // auth_token
+        builder.requiredField(offset, 6); // public_key
         return offset;
+    }
+
+    static createSetEventLogPublicKey(
+        builder: flatbuffers.Builder,
+        authTokenOffset: flatbuffers.Offset,
+        publicKeyOffset: flatbuffers.Offset,
+    ): flatbuffers.Offset {
+        SetEventLogPublicKey.startSetEventLogPublicKey(builder);
+        SetEventLogPublicKey.addAuthToken(builder, authTokenOffset);
+        SetEventLogPublicKey.addPublicKey(builder, publicKeyOffset);
+        return SetEventLogPublicKey.endSetEventLogPublicKey(builder);
     }
 }

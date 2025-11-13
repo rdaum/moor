@@ -20,7 +20,7 @@ import { PresentationData } from "../types/presentation";
 interface WebSocketContextType {
     wsState: WebSocketState;
     connect: (mode: "connect" | "create") => Promise<void>;
-    disconnect: () => void;
+    disconnect: (reason?: string) => void;
     sendMessage: (message: string) => boolean;
     inputMetadata: InputMetadata | null;
     clearInputMetadata: () => void;

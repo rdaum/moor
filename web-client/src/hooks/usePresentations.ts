@@ -14,6 +14,7 @@
 import * as flatbuffers from "flatbuffers";
 import { useCallback, useState } from "react";
 import { decryptEventBlob } from "../lib/age-decrypt";
+import { buildAuthHeaders } from "../lib/authHeaders";
 import { getCurrentPresentationsFlatBuffer } from "../lib/rpc-fb";
 import { Presentation, PresentationData, SemanticTarget, TARGET_TYPES } from "../types/presentation";
 import { useMediaQuery } from "./useMediaQuery";
@@ -178,11 +179,10 @@ export const usePresentations = () => {
     // API call to dismiss a presentation on the server
     const dismissPresentation = useCallback(async (id: string, authToken: string) => {
         try {
+            const headers = buildAuthHeaders(authToken);
             const response = await fetch(`/api/presentations/${encodeURIComponent(id)}`, {
                 method: "DELETE",
-                headers: {
-                    "X-Moor-Auth-Token": authToken,
-                },
+                headers,
             });
 
             if (!response.ok) {

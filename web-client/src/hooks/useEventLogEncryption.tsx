@@ -16,6 +16,7 @@
 
 import { useCallback, useState } from "react";
 import { identityFromDerivedBytes, publicKeyFromIdentity } from "../lib/age-decrypt";
+import { buildAuthHeaders } from "../lib/authHeaders";
 
 interface EncryptionState {
     hasEncryption: boolean;
@@ -101,8 +102,9 @@ export const useEventLogEncryption = (
         setEncryptionState(prev => ({ ...prev, isChecking: true }));
 
         try {
+            const headers = buildAuthHeaders(authToken);
             const response = await fetch("/api/event-log/pubkey", {
-                headers: { "X-Moor-Auth-Token": authToken },
+                headers,
             });
 
             if (!response.ok) {
@@ -156,12 +158,11 @@ export const useEventLogEncryption = (
 
             // Send only the public key to server (NOT derived bytes or identity)
             console.log("Sending public key to server...");
+            const headers = buildAuthHeaders(authToken);
+            headers["Content-Type"] = "application/json";
             const response = await fetch("/api/event-log/pubkey", {
                 method: "PUT",
-                headers: {
-                    "X-Moor-Auth-Token": authToken,
-                    "Content-Type": "application/json",
-                },
+                headers,
                 body: JSON.stringify({ public_key: publicKey }),
             });
 

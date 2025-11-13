@@ -4,7 +4,7 @@ import * as flatbuffers from "flatbuffers";
 
 import { ObjectRef } from "../moor-common/object-ref.js";
 import { Symbol } from "../moor-common/symbol.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
+import { AuthToken } from "../moor-rpc/auth-token.js";
 
 export class RequestSysProp {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -24,9 +24,9 @@ export class RequestSysProp {
         return (obj || new RequestSysProp()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
+    authToken(obj?: AuthToken): AuthToken | null {
         const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
+        return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     object(obj?: ObjectRef): ObjectRef | null {
@@ -43,8 +43,8 @@ export class RequestSysProp {
         builder.startObject(3);
     }
 
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+    static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static addObject(builder: flatbuffers.Builder, objectOffset: flatbuffers.Offset) {
@@ -57,7 +57,6 @@ export class RequestSysProp {
 
     static endRequestSysProp(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
         builder.requiredField(offset, 6); // object
         builder.requiredField(offset, 8); // property
         return offset;

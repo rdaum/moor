@@ -21,7 +21,7 @@ use axum::{
 use moor_common::model::ObjectRef;
 use moor_schema::rpc as moor_rpc;
 use moor_var::Symbol;
-use rpc_common::{mk_detach_msg, mk_properties_msg, mk_retrieve_msg};
+use rpc_common::{mk_properties_msg, mk_retrieve_msg};
 use serde::Deserialize;
 use std::net::SocketAddr;
 
@@ -33,16 +33,16 @@ pub struct PropertiesQuery {
 /// FlatBuffer version: GET /fb/properties/{object} - list properties
 pub async fn properties_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path(object): Path<String>,
     Query(query): Query<PropertiesQuery>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
+    let auth_token = match auth::extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+    let (client_id, mut rpc_client) = host.new_stateless_client();
 
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
@@ -50,42 +50,32 @@ pub async fn properties_handler(
 
     let inherited = query.inherited.unwrap_or(false);
 
-    let props_msg = mk_properties_msg(&client_token, &auth_token, &object_ref, inherited);
+    let props_msg = mk_properties_msg(&auth_token, &object_ref, inherited);
 
     let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, props_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
-
-    response
+        .unwrap()
 }
 
 /// FlatBuffer version: GET /fb/properties/{object}/{name} - retrieve property value
 pub async fn property_retrieval_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path((object, prop_name)): Path<(String, String)>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
+    let auth_token = match auth::extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+    let (client_id, mut rpc_client) = host.new_stateless_client();
 
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
@@ -94,7 +84,6 @@ pub async fn property_retrieval_handler(
     let prop_name = Symbol::mk(&prop_name);
 
     let retrieve_msg = mk_retrieve_msg(
-        &client_token,
         &auth_token,
         &object_ref,
         moor_rpc::EntityType::Property,
@@ -106,19 +95,9 @@ pub async fn property_retrieval_handler(
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
-
-    response
+        .unwrap()
 }

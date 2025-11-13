@@ -5,7 +5,6 @@ import * as flatbuffers from "flatbuffers";
 import { ObjectRef } from "../moor-common/object-ref.js";
 import { Symbol } from "../moor-common/symbol.js";
 import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
 import { Var } from "../moor-var/var.js";
 
 export class UpdateProperty {
@@ -26,62 +25,52 @@ export class UpdateProperty {
         return (obj || new UpdateProperty()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
-    }
-
     authToken(obj?: AuthToken): AuthToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 4);
         return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     object(obj?: ObjectRef): ObjectRef | null {
-        const offset = this.bb!.__offset(this.bb_pos, 8);
+        const offset = this.bb!.__offset(this.bb_pos, 6);
         return offset ? (obj || new ObjectRef()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     property(obj?: Symbol): Symbol | null {
-        const offset = this.bb!.__offset(this.bb_pos, 10);
+        const offset = this.bb!.__offset(this.bb_pos, 8);
         return offset ? (obj || new Symbol()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     value(obj?: Var): Var | null {
-        const offset = this.bb!.__offset(this.bb_pos, 12);
+        const offset = this.bb!.__offset(this.bb_pos, 10);
         return offset ? (obj || new Var()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     static startUpdateProperty(builder: flatbuffers.Builder) {
-        builder.startObject(5);
-    }
-
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+        builder.startObject(4);
     }
 
     static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(1, authTokenOffset, 0);
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static addObject(builder: flatbuffers.Builder, objectOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(2, objectOffset, 0);
+        builder.addFieldOffset(1, objectOffset, 0);
     }
 
     static addProperty(builder: flatbuffers.Builder, propertyOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(3, propertyOffset, 0);
+        builder.addFieldOffset(2, propertyOffset, 0);
     }
 
     static addValue(builder: flatbuffers.Builder, valueOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(4, valueOffset, 0);
+        builder.addFieldOffset(3, valueOffset, 0);
     }
 
     static endUpdateProperty(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
-        builder.requiredField(offset, 6); // auth_token
-        builder.requiredField(offset, 8); // object
-        builder.requiredField(offset, 10); // property
-        builder.requiredField(offset, 12); // value
+        builder.requiredField(offset, 4); // auth_token
+        builder.requiredField(offset, 6); // object
+        builder.requiredField(offset, 8); // property
+        builder.requiredField(offset, 10); // value
         return offset;
     }
 }

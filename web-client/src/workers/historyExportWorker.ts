@@ -27,6 +27,7 @@ import { HistoryResponseReply } from "../generated/moor-rpc/history-response-rep
 import { ReplyResultUnion, unionToReplyResultUnion } from "../generated/moor-rpc/reply-result-union.js";
 import { ReplyResult } from "../generated/moor-rpc/reply-result.js";
 import { decryptEventBlob } from "../lib/age-decrypt.js";
+import { buildAuthHeaders } from "../lib/authHeaders";
 import { MoorVar } from "../lib/MoorVar.js";
 
 // Message types
@@ -188,9 +189,7 @@ async function fetchAllHistoryEncrypted(authToken: string, ageIdentity: string):
         console.log(`[Worker] Fetching batch: ${url}`);
         const response = await fetch(url, {
             method: "GET",
-            headers: {
-                "X-Moor-Auth-Token": authToken,
-            },
+            headers: buildAuthHeaders(authToken),
         });
 
         if (!response.ok) {

@@ -20,6 +20,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
+import { buildAuthHeaders } from "../lib/authHeaders";
 import { EditorWindow, useTitleBarDrag } from "./EditorWindow";
 import { useTheme } from "./ThemeProvider";
 import { monacoThemeFor } from "./themeSupport";
@@ -211,10 +212,11 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     `/properties/${encodeURIComponent(objectCurie)}/${encodeURIComponent(propertyName)}`,
                     {
                         method: "POST",
-                        headers: {
-                            "X-Moor-Auth-Token": authToken,
-                            "Content-Type": "text/plain",
-                        },
+                        headers: (() => {
+                            const headers = buildAuthHeaders(authToken);
+                            headers["Content-Type"] = "text/plain";
+                            return headers;
+                        })(),
                         body: content,
                     },
                 );

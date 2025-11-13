@@ -1296,8 +1296,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         };
 
         // Step 2: Request a system property
+        let auth_token = message_handler.make_auth_token(&SYSTEM_OBJECT);
         let sysprop_message = mk_request_sys_prop_msg(
-            &client_token,
+            Some(&auth_token),
             &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
             &moor_var::Symbol::mk("name"),
         );
@@ -1351,8 +1352,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         };
 
         // Request a system property - should fail due to DatabaseIssues scenario
+        let auth_token = message_handler.make_auth_token(&SYSTEM_OBJECT);
         let sysprop_message = mk_request_sys_prop_msg(
-            &client_token,
+            Some(&auth_token),
             &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
             &moor_var::Symbol::mk("welcome_message"),
         );
@@ -1662,10 +1664,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Test verb introspection
         let verbs_message = mk_verbs_msg(
-            &client_token,
             &auth_token,
             &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
-            false, // inherited = false for testing
+            false,
         );
 
         let verbs_result = transport.process_client_message(
@@ -1687,10 +1688,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Test property introspection
         let props_message = mk_properties_msg(
-            &client_token,
             &auth_token,
             &moor_common::model::ObjectRef::Id(SYSTEM_OBJECT),
-            false, // inherited = false for testing
+            false,
         );
 
         let props_result = transport.process_client_message(

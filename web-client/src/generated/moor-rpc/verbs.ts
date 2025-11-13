@@ -4,7 +4,6 @@ import * as flatbuffers from "flatbuffers";
 
 import { ObjectRef } from "../moor-common/object-ref.js";
 import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
 
 export class Verbs {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -24,51 +23,41 @@ export class Verbs {
         return (obj || new Verbs()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
-    }
-
     authToken(obj?: AuthToken): AuthToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 4);
         return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     object(obj?: ObjectRef): ObjectRef | null {
-        const offset = this.bb!.__offset(this.bb_pos, 8);
+        const offset = this.bb!.__offset(this.bb_pos, 6);
         return offset ? (obj || new ObjectRef()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     inherited(): boolean {
-        const offset = this.bb!.__offset(this.bb_pos, 10);
+        const offset = this.bb!.__offset(this.bb_pos, 8);
         return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
     }
 
     static startVerbs(builder: flatbuffers.Builder) {
-        builder.startObject(4);
-    }
-
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+        builder.startObject(3);
     }
 
     static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(1, authTokenOffset, 0);
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static addObject(builder: flatbuffers.Builder, objectOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(2, objectOffset, 0);
+        builder.addFieldOffset(1, objectOffset, 0);
     }
 
     static addInherited(builder: flatbuffers.Builder, inherited: boolean) {
-        builder.addFieldInt8(3, +inherited, +false);
+        builder.addFieldInt8(2, +inherited, +false);
     }
 
     static endVerbs(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
-        builder.requiredField(offset, 6); // auth_token
-        builder.requiredField(offset, 8); // object
+        builder.requiredField(offset, 4); // auth_token
+        builder.requiredField(offset, 6); // object
         return offset;
     }
 }

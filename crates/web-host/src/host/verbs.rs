@@ -40,15 +40,15 @@ pub struct VerbsQuery {
 /// FlatBuffer version: GET /fb/verbs/{object}/{name} - retrieve verb code
 pub async fn verb_retrieval_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path((object, name)): Path<(String, String)>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
+    let auth_token = match auth::extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+    let (client_id, mut rpc_client) = host.new_stateless_client();
 
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
@@ -56,49 +56,33 @@ pub async fn verb_retrieval_handler(
 
     let name = Symbol::mk(&name);
 
-    let retrieve_msg = mk_retrieve_msg(
-        &client_token,
-        &auth_token,
-        &object_ref,
-        moor_rpc::EntityType::Verb,
-        &name,
-    );
+    let retrieve_msg = mk_retrieve_msg(&auth_token, &object_ref, moor_rpc::EntityType::Verb, &name);
 
     let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, retrieve_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
-
-    response
+        .unwrap()
 }
 
 /// FlatBuffer version: GET /fb/verbs/{object} - list verbs
 pub async fn verbs_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path(object): Path<String>,
     Query(query): Query<VerbsQuery>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
+    let auth_token = match auth::extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+    let (client_id, mut rpc_client) = host.new_stateless_client();
 
     let Some(object_ref) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
@@ -106,28 +90,18 @@ pub async fn verbs_handler(
 
     let inherited = query.inherited.unwrap_or(false);
 
-    let verbs_msg = mk_verbs_msg(&client_token, &auth_token, &object_ref, inherited);
+    let verbs_msg = mk_verbs_msg(&auth_token, &object_ref, inherited);
 
     let reply_bytes = match web_host::rpc_call(client_id, &mut rpc_client, verbs_msg).await {
         Ok(bytes) => bytes,
         Err(status) => return status.into_response(),
     };
 
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
-
-    response
+        .unwrap()
 }
 
 /// Extract task_id from a TaskSubmitted response

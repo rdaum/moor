@@ -268,7 +268,7 @@ pub async fn compile(
     verb_contents: Vec<String>,
 ) {
     // Query verbs (optional - just for logging)
-    let verbs_message = mk_verbs_msg(&client_token, &auth_token, &ObjectRef::Id(oid), false);
+    let verbs_message = mk_verbs_msg(&auth_token, &ObjectRef::Id(oid), false);
 
     let reply_bytes = rpc_client
         .make_client_rpc_call(client_id, verbs_message)

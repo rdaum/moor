@@ -496,6 +496,7 @@ table HostBroadcastEvent {
 
 union HostClientToDaemonMessageUnion {
     ConnectionEstablish,
+    Reattach,
     RequestSysProp,
     LoginCommand,
     Attach,
@@ -532,8 +533,18 @@ table ConnectionEstablish {
     connection_attributes: [ConnectionAttribute];
 }
 
-table RequestSysProp {
+table Reattach {
     client_token: ClientToken (required);
+    auth_token: AuthToken (required);
+    peer_addr: string;
+    local_port: uint16;
+    remote_port: uint16;
+    acceptable_content_types: [MoorCommon.Symbol];
+    connection_attributes: [ConnectionAttribute];
+}
+
+table RequestSysProp {
+    auth_token: AuthToken;
     object: MoorCommon.ObjectRef (required);
     property: MoorCommon.Symbol (required);
 }
@@ -563,7 +574,6 @@ table Command {
 }
 
 table Verbs {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     object: MoorCommon.ObjectRef (required);
     inherited: bool;
@@ -578,14 +588,12 @@ table InvokeVerb {
 }
 
 table Properties {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     object: MoorCommon.ObjectRef (required);
     inherited: bool;
 }
 
 table Retrieve {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     object: MoorCommon.ObjectRef (required);
     entity_type: EntityType;
@@ -621,7 +629,6 @@ table Eval {
 }
 
 table Resolve {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     objref: MoorCommon.ObjectRef (required);
 }
@@ -635,18 +642,15 @@ table ClientPong {
 }
 
 table RequestHistory {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     history_recall: HistoryRecall (required);
 }
 
 table RequestCurrentPresentations {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
 }
 
 table DismissPresentation {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     presentation_id: string (required);
 }
@@ -664,28 +668,23 @@ table Detach {
 }
 
 table GetEventLogPublicKey {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
 }
 
 table SetEventLogPublicKey {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     public_key: string (required);
 }
 
 table DeleteEventLogHistory {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
 }
 
 table ListObjects {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
 }
 
 table UpdateProperty {
-    client_token: ClientToken (required);
     auth_token: AuthToken (required);
     object: MoorCommon.ObjectRef (required);
     property: MoorCommon.Symbol (required);
@@ -700,7 +699,7 @@ table InvokeSystemHandler {
 }
 
 table CallSystemVerb {
-    client_token: ClientToken (required);
+    auth_token: AuthToken;
     verb: MoorCommon.Symbol (required);
     args: [MoorVar.Var] (required);
 }

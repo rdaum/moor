@@ -3,7 +3,6 @@
 import * as flatbuffers from "flatbuffers";
 
 import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
 
 export class DeleteEventLogHistory {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -29,32 +28,31 @@ export class DeleteEventLogHistory {
         return (obj || new DeleteEventLogHistory()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
-    }
-
     authToken(obj?: AuthToken): AuthToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 4);
         return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     static startDeleteEventLogHistory(builder: flatbuffers.Builder) {
-        builder.startObject(2);
-    }
-
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+        builder.startObject(1);
     }
 
     static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(1, authTokenOffset, 0);
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static endDeleteEventLogHistory(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
-        builder.requiredField(offset, 6); // auth_token
+        builder.requiredField(offset, 4); // auth_token
         return offset;
+    }
+
+    static createDeleteEventLogHistory(
+        builder: flatbuffers.Builder,
+        authTokenOffset: flatbuffers.Offset,
+    ): flatbuffers.Offset {
+        DeleteEventLogHistory.startDeleteEventLogHistory(builder);
+        DeleteEventLogHistory.addAuthToken(builder, authTokenOffset);
+        return DeleteEventLogHistory.endDeleteEventLogHistory(builder);
     }
 }

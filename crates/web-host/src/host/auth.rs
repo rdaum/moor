@@ -30,6 +30,26 @@ use std::net::SocketAddr;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
+pub fn extract_auth_token_header(header_map: &HeaderMap) -> Result<AuthToken, StatusCode> {
+    header_map
+        .get("X-Moor-Auth-Token")
+        .and_then(|value| value.to_str().ok())
+        .map(|token| AuthToken(token.to_string()))
+        .ok_or(StatusCode::FORBIDDEN)
+}
+
+pub fn extract_client_credentials(header_map: &HeaderMap) -> Option<(Uuid, ClientToken)> {
+    let client_token = header_map
+        .get("X-Moor-Client-Token")
+        .and_then(|value| value.to_str().ok())
+        .map(|token| ClientToken(token.to_string()))?;
+    let client_id = header_map
+        .get("X-Moor-Client-Id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|s| Uuid::parse_str(s).ok())?;
+    Some((client_id, client_token))
+}
+
 #[derive(Deserialize)]
 pub struct AuthRequest {
     player: String,
@@ -149,6 +169,8 @@ async fn auth_handler(
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .header("X-Moor-Auth-Token", auth_token.0)
+        .header("X-Moor-Client-Token", client_token.0.clone())
+        .header("X-Moor-Client-Id", client_id.to_string())
         .body(Body::from(reply_bytes))
         .unwrap()
 }
@@ -158,27 +180,49 @@ pub async fn auth_auth(
     addr: SocketAddr,
     header_map: HeaderMap,
 ) -> Result<(AuthToken, Uuid, ClientToken, RpcClient), StatusCode> {
-    let auth_token = match header_map.get("X-Moor-Auth-Token") {
-        Some(auth_token) => match auth_token.to_str() {
-            Ok(auth_token) => AuthToken(auth_token.to_string()),
-            Err(e) => {
-                error!("Unable to parse auth token: {}", e);
+    let auth_token = extract_auth_token_header(&header_map)?;
+
+    if let Some((client_id, client_token)) = extract_client_credentials(&header_map) {
+        match host
+            .reattach_authenticated(auth_token.clone(), client_id, client_token.clone(), addr)
+            .await
+        {
+            Ok((_player, _, confirmed_token, rpc_client)) => {
+                return Ok((auth_token, client_id, confirmed_token, rpc_client));
+            }
+            Err(WsHostError::AuthenticationFailed) => {
+                warn!(
+                    client_id = ?client_id,
+                    "Reattach failed, falling back to attach flow"
+                );
+            }
+            Err(WsHostError::RpcError(e)) => {
+                error!("Reattach RPC failure: {}", e);
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
-        },
-        None => {
-            error!("No auth token provided");
-            return Err(StatusCode::FORBIDDEN);
         }
-    };
+    }
 
-    let (_player, client_id, client_token, rpc_client) = host
-        .attach_authenticated(auth_token.clone(), None, addr)
-        .await
-        .map_err(|e| match e {
-            WsHostError::AuthenticationFailed => StatusCode::UNAUTHORIZED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        })?;
+    host.attach_authenticated(
+        auth_token.clone(),
+        Some(moor_rpc::ConnectType::NoConnect),
+        addr,
+    )
+    .await
+    .map(|(_player, client_id, client_token, rpc_client)| {
+        (auth_token, client_id, client_token, rpc_client)
+    })
+    .map_err(|e| match e {
+        WsHostError::AuthenticationFailed => StatusCode::UNAUTHORIZED,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    })
+}
 
-    Ok((auth_token, client_id, client_token, rpc_client))
+pub fn stateless_rpc_client(
+    host: &WebHost,
+    header_map: &HeaderMap,
+) -> Result<(AuthToken, Uuid, RpcClient), StatusCode> {
+    let auth_token = extract_auth_token_header(header_map)?;
+    let (client_id, rpc_client) = host.new_stateless_client();
+    Ok((auth_token, client_id, rpc_client))
 }

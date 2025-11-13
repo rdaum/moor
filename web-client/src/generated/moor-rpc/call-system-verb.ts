@@ -3,7 +3,7 @@
 import * as flatbuffers from "flatbuffers";
 
 import { Symbol } from "../moor-common/symbol.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
+import { AuthToken } from "../moor-rpc/auth-token.js";
 import { Var } from "../moor-var/var.js";
 
 export class CallSystemVerb {
@@ -24,9 +24,9 @@ export class CallSystemVerb {
         return (obj || new CallSystemVerb()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
+    authToken(obj?: AuthToken): AuthToken | null {
         const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
+        return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     verb(obj?: Symbol): Symbol | null {
@@ -53,8 +53,8 @@ export class CallSystemVerb {
         builder.startObject(3);
     }
 
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+    static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static addVerb(builder: flatbuffers.Builder, verbOffset: flatbuffers.Offset) {
@@ -79,7 +79,6 @@ export class CallSystemVerb {
 
     static endCallSystemVerb(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
         builder.requiredField(offset, 6); // verb
         builder.requiredField(offset, 8); // args
         return offset;

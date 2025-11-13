@@ -77,6 +77,7 @@ import { VarList } from "../generated/moor-var/var-list.js";
 import { VarUnion } from "../generated/moor-var/var-union.js";
 import { Var } from "../generated/moor-var/var.js";
 import { decryptEventBlob } from "./age-decrypt.js";
+import { buildAuthHeaders } from "./authHeaders";
 import { parseInputMetadata } from "./input-metadata.js";
 import { MoorVar } from "./MoorVar.js";
 
@@ -211,12 +212,11 @@ function extractFailureError(replyResult: ReplyResult, context: string): never {
  */
 export async function performEvalFlatBuffer(authToken: string, expr: string): Promise<any> {
     try {
+        const headers = buildAuthHeaders(authToken);
         const response = await fetch("/fb/eval", {
             method: "POST",
             body: expr,
-            headers: {
-                "X-Moor-Auth-Token": authToken,
-            },
+            headers,
         });
 
         if (!response.ok) {
@@ -484,11 +484,10 @@ export async function fetchHistoryFlatBuffer(
 
         const url = `/fb/api/history?${params}`;
 
+        const headers = buildAuthHeaders(authToken);
         const response = await fetch(url, {
             method: "GET",
-            headers: {
-                "X-Moor-Auth-Token": authToken,
-            },
+            headers,
         });
 
         if (!response.ok) {
@@ -1103,11 +1102,10 @@ export async function getVerbsFlatBuffer(
         params.set("inherited", "true");
     }
 
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/verbs/${objectCurie}?${params}`, {
         method: "GET",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
     });
 
     if (!response.ok) {
@@ -1177,11 +1175,10 @@ export async function getVerbCodeFlatBuffer(
     objectCurie: string,
     verbName: string,
 ): Promise<VerbValue> {
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/verbs/${objectCurie}/${encodeURIComponent(verbName)}`, {
         method: "GET",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
     });
 
     if (!response.ok) {
@@ -1269,12 +1266,11 @@ export async function invokeVerbFlatBuffer(
     // Can't use argsBytes.buffer directly as it might be larger than the actual data
     const bodyBuffer = argsBytes.slice(0, argsBytes.length).buffer as ArrayBuffer;
 
+    const headers = buildAuthHeaders(authToken);
+    headers["Content-Type"] = "application/x-flatbuffer";
     const response = await fetch(`/fb/verbs/${objectCurie}/${encodeURIComponent(verbName)}/invoke`, {
         method: "POST",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-            "Content-Type": "application/x-flatbuffer",
-        },
+        headers,
         body: bodyBuffer,
     });
 
@@ -1322,11 +1318,10 @@ export async function getPropertiesFlatBuffer(
         params.set("inherited", "true");
     }
 
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/properties/${objectCurie}?${params}`, {
         method: "GET",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
     });
 
     if (!response.ok) {
@@ -1396,11 +1391,10 @@ export async function getPropertyFlatBuffer(
     objectCurie: string,
     propertyName: string,
 ): Promise<PropertyValue> {
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/properties/${objectCurie}/${encodeURIComponent(propertyName)}`, {
         method: "GET",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
     });
 
     if (!response.ok) {
@@ -1466,11 +1460,10 @@ export async function getPropertyFlatBuffer(
 export async function getCurrentPresentationsFlatBuffer(
     authToken: string,
 ): Promise<CurrentPresentations> {
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/api/presentations`, {
         method: "GET",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
     });
 
     if (!response.ok) {
@@ -1542,11 +1535,10 @@ export async function compileVerbFlatBuffer(
     verbName: string,
     code: string,
 ): Promise<{ success: true } | { success: false; error: CompileError | string }> {
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/verbs/${objectCurie}/${verbName}`, {
         method: "POST",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
         body: code,
     });
 
@@ -1878,11 +1870,10 @@ export async function invokeWelcomeMessageFlatBuffer(): Promise<{
 export async function listObjectsFlatBuffer(
     authToken: string,
 ): Promise<ListObjectsReply> {
+    const headers = buildAuthHeaders(authToken);
     const response = await fetch(`/fb/objects`, {
         method: "GET",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-        },
+        headers,
     });
 
     if (!response.ok) {
@@ -1956,12 +1947,11 @@ export async function updatePropertyFlatBuffer(
 ): Promise<void> {
     // Send MOO literal string directly (like eval endpoint)
     // Backend will parse it into a Var
+    const headers = buildAuthHeaders(authToken);
+    headers["Content-Type"] = "text/plain";
     const response = await fetch(`/fb/properties/${objectCurie}/${encodeURIComponent(propertyName)}`, {
         method: "POST",
-        headers: {
-            "X-Moor-Auth-Token": authToken,
-            "Content-Type": "text/plain",
-        },
+        headers,
         body: value,
     });
 

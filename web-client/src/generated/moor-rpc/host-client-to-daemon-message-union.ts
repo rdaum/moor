@@ -17,6 +17,7 @@ import { LoginCommand } from "../moor-rpc/login-command.js";
 import { OutOfBand } from "../moor-rpc/out-of-band.js";
 import { Program } from "../moor-rpc/program.js";
 import { Properties } from "../moor-rpc/properties.js";
+import { Reattach } from "../moor-rpc/reattach.js";
 import { RequestCurrentPresentations } from "../moor-rpc/request-current-presentations.js";
 import { RequestHistory } from "../moor-rpc/request-history.js";
 import { RequestSysProp } from "../moor-rpc/request-sys-prop.js";
@@ -31,32 +32,33 @@ import { Verbs } from "../moor-rpc/verbs.js";
 export enum HostClientToDaemonMessageUnion {
     NONE = 0,
     ConnectionEstablish = 1,
-    RequestSysProp = 2,
-    LoginCommand = 3,
-    Attach = 4,
-    Command = 5,
-    Verbs = 6,
-    InvokeVerb = 7,
-    Properties = 8,
-    Retrieve = 9,
-    Program = 10,
-    RequestedInput = 11,
-    OutOfBand = 12,
-    Eval = 13,
-    Resolve = 14,
-    ClientPong = 15,
-    RequestHistory = 16,
-    RequestCurrentPresentations = 17,
-    DismissPresentation = 18,
-    SetClientAttribute = 19,
-    Detach = 20,
-    GetEventLogPublicKey = 21,
-    SetEventLogPublicKey = 22,
-    DeleteEventLogHistory = 23,
-    ListObjects = 24,
-    UpdateProperty = 25,
-    InvokeSystemHandler = 26,
-    CallSystemVerb = 27,
+    Reattach = 2,
+    RequestSysProp = 3,
+    LoginCommand = 4,
+    Attach = 5,
+    Command = 6,
+    Verbs = 7,
+    InvokeVerb = 8,
+    Properties = 9,
+    Retrieve = 10,
+    Program = 11,
+    RequestedInput = 12,
+    OutOfBand = 13,
+    Eval = 14,
+    Resolve = 15,
+    ClientPong = 16,
+    RequestHistory = 17,
+    RequestCurrentPresentations = 18,
+    DismissPresentation = 19,
+    SetClientAttribute = 20,
+    Detach = 21,
+    GetEventLogPublicKey = 22,
+    SetEventLogPublicKey = 23,
+    DeleteEventLogHistory = 24,
+    ListObjects = 25,
+    UpdateProperty = 26,
+    InvokeSystemHandler = 27,
+    CallSystemVerb = 28,
 }
 
 export function unionToHostClientToDaemonMessageUnion(
@@ -80,6 +82,7 @@ export function unionToHostClientToDaemonMessageUnion(
             | OutOfBand
             | Program
             | Properties
+            | Reattach
             | RequestCurrentPresentations
             | RequestHistory
             | RequestSysProp
@@ -108,6 +111,7 @@ export function unionToHostClientToDaemonMessageUnion(
         | OutOfBand
         | Program
         | Properties
+        | Reattach
         | RequestCurrentPresentations
         | RequestHistory
         | RequestSysProp
@@ -137,6 +141,7 @@ export function unionToHostClientToDaemonMessageUnion(
     | OutOfBand
     | Program
     | Properties
+    | Reattach
     | RequestCurrentPresentations
     | RequestHistory
     | RequestSysProp
@@ -154,6 +159,8 @@ export function unionToHostClientToDaemonMessageUnion(
             return null;
         case "ConnectionEstablish":
             return accessor(new ConnectionEstablish())! as ConnectionEstablish;
+        case "Reattach":
+            return accessor(new Reattach())! as Reattach;
         case "RequestSysProp":
             return accessor(new RequestSysProp())! as RequestSysProp;
         case "LoginCommand":
@@ -233,6 +240,7 @@ export function unionListToHostClientToDaemonMessageUnion(
             | OutOfBand
             | Program
             | Properties
+            | Reattach
             | RequestCurrentPresentations
             | RequestHistory
             | RequestSysProp
@@ -261,6 +269,7 @@ export function unionListToHostClientToDaemonMessageUnion(
         | OutOfBand
         | Program
         | Properties
+        | Reattach
         | RequestCurrentPresentations
         | RequestHistory
         | RequestSysProp
@@ -291,6 +300,7 @@ export function unionListToHostClientToDaemonMessageUnion(
     | OutOfBand
     | Program
     | Properties
+    | Reattach
     | RequestCurrentPresentations
     | RequestHistory
     | RequestSysProp
@@ -308,6 +318,8 @@ export function unionListToHostClientToDaemonMessageUnion(
             return null;
         case "ConnectionEstablish":
             return accessor(index, new ConnectionEstablish())! as ConnectionEstablish;
+        case "Reattach":
+            return accessor(index, new Reattach())! as Reattach;
         case "RequestSysProp":
             return accessor(index, new RequestSysProp())! as RequestSysProp;
         case "LoginCommand":

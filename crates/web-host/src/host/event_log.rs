@@ -24,8 +24,7 @@ use axum::{
 use moor_schema::rpc as moor_rpc;
 use planus::ReadAsRoot;
 use rpc_common::{
-    mk_detach_msg, mk_dismiss_presentation_msg, mk_request_current_presentations_msg,
-    mk_request_history_msg,
+    mk_dismiss_presentation_msg, mk_request_current_presentations_msg, mk_request_history_msg,
 };
 use serde_derive::Deserialize;
 use serde_json::json;
@@ -81,13 +80,13 @@ pub struct HistoryQuery {
 /// Client-side decryption: returns encrypted events, no key needed in header
 pub async fn history_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Query(query): Query<HistoryQuery>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
+    let (auth_token, client_id, mut rpc_client) =
+        match auth::stateless_rpc_client(&host, &header_map) {
+            Ok(ctx) => ctx,
             Err(status) => return status.into_response(),
         };
 
@@ -129,7 +128,6 @@ pub async fn history_handler(
     };
 
     let history_msg = mk_request_history_msg(
-        &client_token,
         &auth_token,
         Box::new(moor_rpc::HistoryRecall {
             recall: history_recall_union,
@@ -159,36 +157,26 @@ pub async fn history_handler(
 
     // Return the entire HistoryResponse as FlatBuffer bytes
     // Client will parse the FlatBuffer and decrypt the encrypted_blob field of each event
-    let response = axum::response::Response::builder()
+    axum::response::Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    // Detach RPC connection
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-    }
-
-    response
+        .unwrap()
 }
 
 /// REST endpoint to get player's event log public key
 pub async fn get_pubkey_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
+    let (auth_token, client_id, mut rpc_client) =
+        match auth::stateless_rpc_client(&host, &header_map) {
+            Ok(ctx) => ctx,
             Err(status) => return status.into_response(),
         };
 
-    let get_pubkey_msg = rpc_common::mk_get_event_log_pubkey_msg(&client_token, &auth_token);
+    let get_pubkey_msg = rpc_common::mk_get_event_log_pubkey_msg(&auth_token);
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, get_pubkey_msg).await {
         Ok(bytes) => bytes,
@@ -216,31 +204,22 @@ pub async fn get_pubkey_handler(
         "public_key": public_key
     }));
 
-    // Detach RPC connection
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
     response.into_response()
 }
 
 /// REST endpoint to delete all event history for the authenticated player
 pub async fn delete_history_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
+    let (auth_token, client_id, mut rpc_client) =
+        match auth::stateless_rpc_client(&host, &header_map) {
+            Ok(ctx) => ctx,
             Err(status) => return status.into_response(),
         };
 
-    let delete_msg = rpc_common::mk_delete_event_log_history_msg(&client_token, &auth_token);
+    let delete_msg = rpc_common::mk_delete_event_log_history_msg(&auth_token);
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, delete_msg).await {
         Ok(bytes) => bytes,
@@ -264,15 +243,6 @@ pub async fn delete_history_handler(
         "success": success
     }));
 
-    // Detach RPC connection
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
     response.into_response()
 }
 
@@ -280,13 +250,13 @@ pub async fn delete_history_handler(
 /// Expects JSON body with `public_key` field containing age public key string (age1...)
 pub async fn set_pubkey_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Json(payload): Json<serde_json::Value>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
+    let (auth_token, client_id, mut rpc_client) =
+        match auth::stateless_rpc_client(&host, &header_map) {
+            Ok(ctx) => ctx,
             Err(status) => return status.into_response(),
         };
 
@@ -298,8 +268,7 @@ pub async fn set_pubkey_handler(
         }
     };
 
-    let set_pubkey_msg =
-        rpc_common::mk_set_event_log_pubkey_msg(&client_token, &auth_token, public_key);
+    let set_pubkey_msg = rpc_common::mk_set_event_log_pubkey_msg(&auth_token, public_key);
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, set_pubkey_msg).await {
         Ok(bytes) => bytes,
@@ -336,33 +305,23 @@ pub async fn set_pubkey_handler(
         "status": "set"
     }));
 
-    // Detach RPC connection
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
     response.into_response()
 }
 
 /// REST endpoint to dismiss a specific presentation for the authenticated player
 pub async fn dismiss_presentation_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path(presentation_id): Path<String>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
+    let (auth_token, client_id, mut rpc_client) =
+        match auth::stateless_rpc_client(&host, &header_map) {
+            Ok(ctx) => ctx,
             Err(status) => return status.into_response(),
         };
 
-    let dismiss_msg =
-        mk_dismiss_presentation_msg(&client_token, &auth_token, presentation_id.clone());
+    let dismiss_msg = mk_dismiss_presentation_msg(&auth_token, presentation_id.clone());
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, dismiss_msg).await {
         Ok(bytes) => bytes,
@@ -384,31 +343,22 @@ pub async fn dismiss_presentation_handler(
         "presentation_id": presentation_id
     }));
 
-    // We're done with this RPC connection, so we detach it.
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
     response.into_response()
 }
 
 /// FlatBuffer version: GET /fb/api/presentations - return raw flatbuffer bytes
 pub async fn presentations_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
+    let (auth_token, client_id, mut rpc_client) =
+        match auth::stateless_rpc_client(&host, &header_map) {
+            Ok(ctx) => ctx,
             Err(status) => return status.into_response(),
         };
 
-    let presentations_msg = mk_request_current_presentations_msg(&client_token, &auth_token);
+    let presentations_msg = mk_request_current_presentations_msg(&auth_token);
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, presentations_msg).await {
         Ok(bytes) => bytes,
@@ -416,18 +366,9 @@ pub async fn presentations_handler(
     };
 
     // Return raw FlatBuffer bytes
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
-        .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    if let Err(e) = rpc_client.make_client_rpc_call(client_id, detach_msg).await {
-        error!("Failed to send detach to RPC server: {}", e);
-    }
-
-    response
+        .unwrap()
 }

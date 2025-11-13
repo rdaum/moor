@@ -175,14 +175,14 @@ pub fn mk_set_client_attribute_msg(
 /// Build a RequestSysProp message
 #[inline]
 pub fn mk_request_sys_prop_msg(
-    client_token: &ClientToken,
+    auth_token: Option<&AuthToken>,
     object: &ObjectRef,
     property: &Symbol,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::RequestSysProp(Box::new(
             rpc::RequestSysProp {
-                client_token: client_token_fb(client_token),
+                auth_token: auth_token.map(auth_token_fb),
                 object: objectref_fb(object),
                 property: symbol_fb(property),
             },
@@ -228,17 +228,39 @@ pub fn mk_connection_establish_msg(
     }
 }
 
+/// Build a Reattach message
+#[inline]
+pub fn mk_reattach_msg(
+    client_token: &ClientToken,
+    auth_token: &AuthToken,
+    peer_addr: Option<String>,
+    local_port: Option<u16>,
+    remote_port: Option<u16>,
+    acceptable_content_types: Option<Vec<rpc::Symbol>>,
+    connection_attributes: Option<Vec<rpc::ConnectionAttribute>>,
+) -> rpc::HostClientToDaemonMessage {
+    rpc::HostClientToDaemonMessage {
+        message: rpc::HostClientToDaemonMessageUnion::Reattach(Box::new(rpc::Reattach {
+            client_token: client_token_fb(client_token),
+            auth_token: auth_token_fb(auth_token),
+            peer_addr,
+            local_port: local_port.unwrap_or_default(),
+            remote_port: remote_port.unwrap_or_default(),
+            acceptable_content_types,
+            connection_attributes,
+        })),
+    }
+}
+
 /// Build a Verbs message
 #[inline]
 pub fn mk_verbs_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     object: &ObjectRef,
     inherited: bool,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::Verbs(Box::new(rpc::Verbs {
-            client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             object: objectref_fb(object),
             inherited,
@@ -249,14 +271,12 @@ pub fn mk_verbs_msg(
 /// Build a Properties message
 #[inline]
 pub fn mk_properties_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     object: &ObjectRef,
     inherited: bool,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::Properties(Box::new(rpc::Properties {
-            client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             object: objectref_fb(object),
             inherited,
@@ -267,7 +287,6 @@ pub fn mk_properties_msg(
 /// Build a Retrieve message
 #[inline]
 pub fn mk_retrieve_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     object: &ObjectRef,
     entity_type: rpc::EntityType,
@@ -275,7 +294,6 @@ pub fn mk_retrieve_msg(
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::Retrieve(Box::new(rpc::Retrieve {
-            client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             object: objectref_fb(object),
             entity_type,
@@ -311,13 +329,11 @@ pub fn mk_attach_msg(
 /// Build a Resolve message
 #[inline]
 pub fn mk_resolve_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     objref: &ObjectRef,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::Resolve(Box::new(rpc::Resolve {
-            client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
             objref: objectref_fb(objref),
         })),
@@ -327,14 +343,12 @@ pub fn mk_resolve_msg(
 /// Build a RequestHistory message
 #[inline]
 pub fn mk_request_history_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     history_recall: Box<rpc::HistoryRecall>,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::RequestHistory(Box::new(
             rpc::RequestHistory {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 history_recall,
             },
@@ -345,13 +359,11 @@ pub fn mk_request_history_msg(
 /// Build a RequestCurrentPresentations message
 #[inline]
 pub fn mk_request_current_presentations_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::RequestCurrentPresentations(Box::new(
             rpc::RequestCurrentPresentations {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
             },
         )),
@@ -361,14 +373,12 @@ pub fn mk_request_current_presentations_msg(
 /// Build a DismissPresentation message
 #[inline]
 pub fn mk_dismiss_presentation_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     presentation_id: String,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::DismissPresentation(Box::new(
             rpc::DismissPresentation {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 presentation_id,
             },
@@ -378,14 +388,10 @@ pub fn mk_dismiss_presentation_msg(
 
 /// Build a GetEventLogPublicKey message
 #[inline]
-pub fn mk_get_event_log_pubkey_msg(
-    client_token: &ClientToken,
-    auth_token: &AuthToken,
-) -> rpc::HostClientToDaemonMessage {
+pub fn mk_get_event_log_pubkey_msg(auth_token: &AuthToken) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::GetEventLogPublicKey(Box::new(
             rpc::GetEventLogPublicKey {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
             },
         )),
@@ -395,14 +401,12 @@ pub fn mk_get_event_log_pubkey_msg(
 /// Build a SetEventLogPublicKey message
 #[inline]
 pub fn mk_set_event_log_pubkey_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     public_key: String,
 ) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::SetEventLogPublicKey(Box::new(
             rpc::SetEventLogPublicKey {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 public_key,
             },
@@ -412,14 +416,10 @@ pub fn mk_set_event_log_pubkey_msg(
 
 /// Build a DeleteEventLogHistory message
 #[inline]
-pub fn mk_delete_event_log_history_msg(
-    client_token: &ClientToken,
-    auth_token: &AuthToken,
-) -> rpc::HostClientToDaemonMessage {
+pub fn mk_delete_event_log_history_msg(auth_token: &AuthToken) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::DeleteEventLogHistory(Box::new(
             rpc::DeleteEventLogHistory {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
             },
         )),
@@ -454,13 +454,9 @@ pub fn mk_invoke_verb_msg(
 
 /// Build a ListObjects message
 #[inline]
-pub fn mk_list_objects_msg(
-    client_token: &ClientToken,
-    auth_token: &AuthToken,
-) -> rpc::HostClientToDaemonMessage {
+pub fn mk_list_objects_msg(auth_token: &AuthToken) -> rpc::HostClientToDaemonMessage {
     rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::ListObjects(Box::new(rpc::ListObjects {
-            client_token: client_token_fb(client_token),
             auth_token: auth_token_fb(auth_token),
         })),
     }
@@ -469,7 +465,6 @@ pub fn mk_list_objects_msg(
 /// Build an UpdateProperty message
 #[inline]
 pub fn mk_update_property_msg(
-    client_token: &ClientToken,
     auth_token: &AuthToken,
     object: &ObjectRef,
     property: &Symbol,
@@ -478,7 +473,6 @@ pub fn mk_update_property_msg(
     Some(rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::UpdateProperty(Box::new(
             rpc::UpdateProperty {
-                client_token: client_token_fb(client_token),
                 auth_token: auth_token_fb(auth_token),
                 object: objectref_fb(object),
                 property: symbol_fb(property),
@@ -517,7 +511,7 @@ pub fn mk_invoke_system_handler_msg(
 /// Build a CallSystemVerb message
 #[inline]
 pub fn mk_call_system_verb_msg(
-    client_token: &ClientToken,
+    auth_token: Option<&AuthToken>,
     verb: &Symbol,
     args: Vec<&Var>,
 ) -> Option<rpc::HostClientToDaemonMessage> {
@@ -530,7 +524,7 @@ pub fn mk_call_system_verb_msg(
     Some(rpc::HostClientToDaemonMessage {
         message: rpc::HostClientToDaemonMessageUnion::CallSystemVerb(Box::new(
             rpc::CallSystemVerb {
-                client_token: client_token_fb(client_token),
+                auth_token: auth_token.map(auth_token_fb),
                 verb: symbol_fb(verb),
                 args: args_fb,
             },

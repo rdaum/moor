@@ -129,7 +129,20 @@ export const useWebSocket = (
             // Build WebSocket URL
             const baseUrl = window.location.host;
             const isSecure = window.location.protocol === "https:";
-            const wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${player.authToken}`;
+
+            // Get client tokens from localStorage for reconnection
+            const clientToken = localStorage.getItem("client_token");
+            const clientId = localStorage.getItem("client_id");
+            const sessionActive = localStorage.getItem("client_session_active") === "true";
+
+            // Add tokens as query params if available
+            let wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${player.authToken}`;
+            if (sessionActive && clientToken && clientId) {
+                wsUrl += `?client_token=${encodeURIComponent(clientToken)}&client_id=${encodeURIComponent(clientId)}`;
+                console.log("[WebSocket] Reconnecting with existing client_id:", clientId);
+            } else {
+                console.log("[WebSocket] New connection (no stored tokens)");
+            }
 
             console.log("[WebSocket] Creating new WebSocket to:", wsUrl);
             const ws = new WebSocket(wsUrl);
@@ -145,6 +158,7 @@ export const useWebSocket = (
                     connectionStatus: "connected",
                 }));
                 onSystemMessage("Connected!", 2);
+                localStorage.setItem("client_session_active", "true");
 
                 // Update player connection status
                 if (onPlayerConnectedChange) {
@@ -173,6 +187,10 @@ export const useWebSocket = (
                     connectionStatus: "disconnected",
                 }));
                 socketRef.current = null;
+
+                if (event.reason === "LOGOUT") {
+                    localStorage.setItem("client_session_active", "false");
+                }
 
                 // Update player connection status
                 if (onPlayerConnectedChange) {
@@ -208,7 +226,7 @@ export const useWebSocket = (
     }, [handleMessage, onPlayerConnectedChange, onSystemMessage, player]);
 
     // Disconnect from WebSocket
-    const disconnect = useCallback(() => {
+    const disconnect = useCallback((reason?: string) => {
         isDisconnectingRef.current = true;
 
         if (reconnectTimeoutRef.current) {
@@ -227,7 +245,7 @@ export const useWebSocket = (
             oldSocket.onclose = null;
 
             // Close the socket
-            oldSocket.close(1000, "Manual disconnect");
+            oldSocket.close(1000, reason ?? "Manual disconnect");
 
             // Immediately clear state
             setWsState({
@@ -235,6 +253,10 @@ export const useWebSocket = (
                 isConnected: false,
                 connectionStatus: "disconnected",
             });
+        }
+
+        if (reason === "LOGOUT") {
+            localStorage.setItem("client_session_active", "false");
         }
 
         // Allow reconnect after a short delay

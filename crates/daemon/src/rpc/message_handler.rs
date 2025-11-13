@@ -344,11 +344,14 @@ impl MessageHandler for RpcMessageHandler {
             HostClientToDaemonMessageUnionRef::ConnectionEstablish(conn_est) => {
                 self.handle_connection_establish(client_id, conn_est)
             }
+            HostClientToDaemonMessageUnionRef::Reattach(reattach) => {
+                self.handle_reattach(scheduler_client, client_id, reattach)
+            }
             HostClientToDaemonMessageUnionRef::ClientPong(pong) => {
                 self.handle_client_pong(client_id, pong)
             }
             HostClientToDaemonMessageUnionRef::RequestSysProp(req) => {
-                self.handle_request_sys_prop(scheduler_client, client_id, req)
+                self.handle_request_sys_prop(scheduler_client, req)
             }
             HostClientToDaemonMessageUnionRef::LoginCommand(login) => {
                 self.handle_login_command(scheduler_client, client_id, login)
@@ -763,6 +766,53 @@ impl RpcMessageHandler {
         Ok(mk_new_connection_reply(token, &oid))
     }
 
+    fn handle_reattach(
+        &self,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        reattach: moor_rpc::ReattachRef<'_>,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let client_token = reattach
+            .client_token()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| client_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+        let connection = self.client_auth(client_token.clone(), client_id)?;
+
+        let auth_token = reattach
+            .auth_token()
+            .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))
+            .and_then(|r| auth_token_from_ref(r).map_err(RpcMessageError::InvalidRequest))?;
+        let player = self.validate_auth_token(auth_token, None)?;
+
+        let Some(current_player) = self.connections.player_object_for_client(client_id) else {
+            return Err(RpcMessageError::NoConnection);
+        };
+
+        if current_player != player {
+            return Err(RpcMessageError::PermissionDenied);
+        }
+
+        if let Err(e) = self
+            .connections
+            .record_client_activity(client_id, connection)
+        {
+            warn!(error = ?e, client_id = ?client_id, "Failed to refresh client activity during reattach");
+        }
+
+        let player_flags = scheduler_client.get_object_flags(&player).unwrap_or(0);
+
+        Ok(DaemonToClientReply {
+            reply: DaemonToClientReplyUnion::AttachResult(Box::new(moor_rpc::AttachResult {
+                success: true,
+                client_token: Some(Box::new(moor_rpc::ClientToken {
+                    token: client_token.0,
+                })),
+                player: Some(Box::new(obj_to_flatbuffer_struct(&player))),
+                player_flags,
+            })),
+        })
+    }
+
     fn handle_client_pong(
         &self,
         client_id: Uuid,
@@ -794,15 +844,20 @@ impl RpcMessageHandler {
     fn handle_request_sys_prop(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
         req: moor_rpc::RequestSysPropRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let connection = self.extract_client_token(&req, client_id, |r| r.client_token())?;
-
+        let player = match req.auth_token() {
+            Ok(Some(auth_ref)) => {
+                let auth_token =
+                    auth_token_from_ref(auth_ref).map_err(RpcMessageError::InvalidRequest)?;
+                self.validate_auth_token(auth_token, None)?
+            }
+            _ => SYSTEM_OBJECT,
+        };
         let object = extract_object_ref_rpc(&req, "object", |r| r.object())?;
         let property = extract_symbol_rpc(&req, "property", |r| r.property())?;
 
-        self.request_sys_prop(scheduler_client, connection, object, property)
+        self.request_sys_prop(scheduler_client, player, object, property)
     }
 
     fn handle_login_command(
@@ -940,24 +995,30 @@ impl RpcMessageHandler {
             .disconnected()
             .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
 
-        if disconnected
-            && let Some(player) = self.connections.player_object_for_client(client_id)
-            && let Err(e) = self.submit_disconnected_task(
-                &SYSTEM_OBJECT,
-                scheduler_client,
-                client_id,
-                &player,
-                &connection,
-            )
-        {
-            error!(error = ?e, "Error submitting user_disconnected task");
-        }
+        if disconnected {
+            if let Some(player) = self.connections.player_object_for_client(client_id) {
+                if let Err(e) = self.submit_disconnected_task(
+                    &SYSTEM_OBJECT,
+                    scheduler_client,
+                    client_id,
+                    &player,
+                    &connection,
+                ) {
+                    error!(error = ?e, "Error submitting user_disconnected task");
+                }
+            }
 
-        let Ok(_) = self.connections.remove_client_connection(client_id) else {
-            return Err(RpcMessageError::InternalError(
-                "Unable to remove client connection".to_string(),
-            ));
-        };
+            let Ok(_) = self.connections.remove_client_connection(client_id) else {
+                return Err(RpcMessageError::InternalError(
+                    "Unable to remove client connection".to_string(),
+                ));
+            };
+        } else if let Err(e) = self
+            .connections
+            .record_client_activity(client_id, connection)
+        {
+            warn!(error = ?e, "Unable to refresh client activity on soft detach");
+        }
 
         Ok(mk_disconnected_reply())
     }
@@ -1054,15 +1115,10 @@ impl RpcMessageHandler {
     fn handle_retrieve(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         retr: moor_rpc::RetrieveRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &retr,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&retr, |r| r.auth_token())?;
 
         let who = extract_object_ref_rpc(&retr, "object", |r| r.object())?;
         let retr_type = extract_field_rpc(&retr, "entity_type", |r| r.entity_type())?;
@@ -1146,15 +1202,10 @@ impl RpcMessageHandler {
     fn handle_resolve(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         resolve: moor_rpc::ResolveRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &resolve,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&resolve, |r| r.auth_token())?;
 
         let objref = extract_object_ref_rpc(&resolve, "objref", |r| r.objref())?;
 
@@ -1176,15 +1227,10 @@ impl RpcMessageHandler {
     fn handle_properties(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         props: moor_rpc::PropertiesRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &props,
-            client_id,
-            |p| p.client_token(),
-            |p| p.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&props, |p| p.auth_token())?;
 
         let obj = extract_object_ref_rpc(&props, "object", |p| p.object())?;
 
@@ -1224,15 +1270,10 @@ impl RpcMessageHandler {
     fn handle_verbs(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         verbs: moor_rpc::VerbsRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &verbs,
-            client_id,
-            |v| v.client_token(),
-            |v| v.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&verbs, |v| v.auth_token())?;
 
         let obj = extract_object_ref_rpc(&verbs, "object", |v| v.object())?;
 
@@ -1780,15 +1821,10 @@ impl RpcMessageHandler {
 
     fn handle_get_event_log_pubkey(
         &self,
-        client_id: Uuid,
+        _client_id: Uuid,
         req: moor_rpc::GetEventLogPublicKeyRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &req,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&req, |r| r.auth_token())?;
 
         let public_key = self.event_log.get_pubkey(player);
 
@@ -1801,15 +1837,10 @@ impl RpcMessageHandler {
 
     fn handle_set_event_log_pubkey(
         &self,
-        client_id: Uuid,
+        _client_id: Uuid,
         req: moor_rpc::SetEventLogPublicKeyRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &req,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&req, |r| r.auth_token())?;
 
         let public_key = extract_string_rpc(&req, "public_key", |r| r.public_key())?;
 
@@ -1827,15 +1858,10 @@ impl RpcMessageHandler {
 
     fn handle_delete_event_log_history(
         &self,
-        client_id: Uuid,
+        _client_id: Uuid,
         req: moor_rpc::DeleteEventLogHistoryRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &req,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&req, |r| r.auth_token())?;
 
         let success = match self.event_log.delete_all_events(player) {
             Ok(_) => true,
@@ -1858,15 +1884,10 @@ impl RpcMessageHandler {
     fn handle_list_objects(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         req: moor_rpc::ListObjectsRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &req,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&req, |r| r.auth_token())?;
 
         // Get list of all objects the player can see
         let objects = scheduler_client.list_objects(&player).map_err(|e| {
@@ -1960,15 +1981,10 @@ impl RpcMessageHandler {
     fn handle_update_property(
         &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         req: moor_rpc::UpdatePropertyRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let (_connection, player) = self.extract_and_verify_tokens(
-            &req,
-            client_id,
-            |r| r.client_token(),
-            |r| r.auth_token(),
-        )?;
+        let player = self.extract_auth_token(&req, |r| r.auth_token())?;
 
         let object = extract_object_ref_rpc(&req, "object", |r| r.object())?;
         let property = extract_symbol_rpc(&req, "property", |r| r.property())?;
@@ -1995,9 +2011,14 @@ impl RpcMessageHandler {
         client_id: Uuid,
         call: moor_rpc::CallSystemVerbRef<'_>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        // Only validate client token (no auth token required for system verbs)
-        let _connection = self.extract_client_token(&call, client_id, |c| c.client_token())?;
-
+        let player = match call.auth_token() {
+            Ok(Some(auth_token_ref)) => {
+                let auth_token = auth_token_from_ref(auth_token_ref)
+                    .map_err(|e| RpcMessageError::InvalidRequest(e.to_string()))?;
+                self.validate_auth_token(auth_token, None)?
+            }
+            _ => SYSTEM_OBJECT,
+        };
         let verb = extract_symbol_rpc(&call, "verb", |c| c.verb())?;
 
         let args_vec = call
@@ -2012,7 +2033,7 @@ impl RpcMessageHandler {
         self.submit_system_verb_task(
             scheduler_client,
             client_id,
-            &SYSTEM_OBJECT,                // Execute as system object
+            &player,
             &ObjectRef::Id(SYSTEM_OBJECT), // Target system object
             verb,
             args,

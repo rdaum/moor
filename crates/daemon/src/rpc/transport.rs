@@ -147,7 +147,6 @@ impl RpcTransport {
                     return Ok(());
                 }
                 Ok(request) => {
-                    debug!("Received RPC request on daemon, {} parts", request.len());
                     if let Err(e) = Self::process_request(
                         &rpc_socket,
                         request,
@@ -212,8 +211,6 @@ impl RpcTransport {
                     return Ok(());
                 };
 
-                debug!(host_id = %host_id, "Processing host RPC message on daemon");
-
                 // Decode the actual HostToDaemonMessage from request_body
                 let Ok(host_message_fb) = HostToDaemonMessageRef::read_as_root(request_body) else {
                     Self::reply_invalid_request(rpc_socket, "Could not decode host message")?;
@@ -226,10 +223,6 @@ impl RpcTransport {
                     Ok(response) => {
                         let response_len = response.len();
                         rpc_socket.send_multipart(vec![response], 0)?;
-                        debug!(
-                            response_bytes = response_len,
-                            "Sent host RPC response from daemon"
-                        );
                     }
                     Err(e) => {
                         error!(error = ?e, "Failed to encode host response");
@@ -247,8 +240,6 @@ impl RpcTransport {
                     return Ok(());
                 };
 
-                debug!(client_id = %client_id, "Processing client RPC message on daemon");
-
                 // Decode the actual HostClientToDaemonMessage from request_body
                 let Ok(request_fb) =
                     moor_rpc::HostClientToDaemonMessageRef::read_as_root(request_body)
@@ -263,12 +254,9 @@ impl RpcTransport {
                     client_id,
                     request_fb,
                 );
-                debug!(client_id = %client_id, "Sending client RPC response from daemon");
                 match Self::pack_client_response(response) {
                     Ok(response) => {
-                        let response_len = response.len();
                         rpc_socket.send_multipart(vec![response], 0)?;
-                        debug!(client_id = %client_id, response_bytes = response_len, "Sent client RPC response from daemon");
                     }
                     Err(e) => {
                         error!(error = ?e, "Failed to encode client response");

@@ -48,6 +48,8 @@ pub struct WebSocketConnection {
     pub(crate) rpc_client: RpcClient,
     pub(crate) handler_object: Obj,
     pub(crate) pending_task: Option<PendingTask>,
+    pub(crate) close_code: Option<u16>,
+    pub(crate) is_logout: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -59,7 +61,10 @@ pub struct PendingTask {
 pub enum ReadEvent {
     Command(Message),
     InputReply(Message),
-    ConnectionClose,
+    ConnectionClose {
+        close_code: Option<u16>,
+        is_logout: bool,
+    },
     PendingEvent,
     Ping(Vec<u8>),
 }
@@ -109,7 +114,10 @@ impl WebSocketConnection {
 
                 loop {
                     let Some(Ok(msg)) = ws_receiver.next().await else {
-                        return ReadEvent::ConnectionClose;
+                        return ReadEvent::ConnectionClose {
+                            close_code: None,
+                            is_logout: false,
+                        };
                     };
 
                     // Filter out WebSocket control frames (ping, pong, close)
@@ -132,8 +140,24 @@ impl WebSocketConnection {
                             trace!("Received pong from client");
                             continue;
                         }
-                        Message::Close(_) => {
-                            return ReadEvent::ConnectionClose;
+                        Message::Close(close_frame) => {
+                            let close_code = close_frame.as_ref().map(|f| f.code);
+                            let close_reason = close_frame.as_ref().map(|f| f.reason.to_string());
+                            if let Some(frame) = &close_frame {
+                                debug!(
+                                    "WebSocket close frame received: code={}, reason={:?}",
+                                    frame.code, frame.reason
+                                );
+                            }
+                            // Check if the reason is "LOGOUT" to determine if this is an explicit logout
+                            let is_logout = close_reason.as_deref() == Some("LOGOUT");
+                            if is_logout {
+                                debug!("Detected explicit logout from close reason");
+                            }
+                            return ReadEvent::ConnectionClose {
+                                close_code,
+                                is_logout,
+                            };
                         }
                     }
                 }
@@ -148,8 +172,10 @@ impl WebSocketConnection {
                         ReadEvent::InputReply(line) =>{
                             self.process_requested_input_line(line, &mut expecting_input).await;
                         }
-                        ReadEvent::ConnectionClose => {
-                            info!("Connection closed");
+                        ReadEvent::ConnectionClose { close_code, is_logout } => {
+                            self.close_code = close_code;
+                            self.is_logout = is_logout;
+                            info!("Connection closed with code: {:?}, is_logout: {}", close_code, is_logout);
                             break;
                         }
                         ReadEvent::PendingEvent => {
@@ -222,8 +248,14 @@ impl WebSocketConnection {
             }
         }
 
-        // We're done now send detach.
-        let detach_msg = mk_detach_msg(&self.client_token, true);
+        // Detach transport
+        // Use the is_logout flag from the close reason to determine if session should be destroyed
+        // If close reason was "LOGOUT", destroy session. Otherwise, keep alive for reconnection.
+        debug!(
+            "Detaching connection: close_code={:?}, is_logout={}, disconnected={}",
+            self.close_code, self.is_logout, self.is_logout
+        );
+        let detach_msg = mk_detach_msg(&self.client_token, self.is_logout);
         self.rpc_client
             .make_client_rpc_call(self.client_id, detach_msg)
             .await

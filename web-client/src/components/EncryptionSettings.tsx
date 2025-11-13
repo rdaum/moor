@@ -18,6 +18,7 @@ import { useAuthContext } from "../context/AuthContext";
 import { useEncryptionContext } from "../context/EncryptionContext";
 import { useHistoryExport } from "../hooks/useHistoryExport";
 import { useTitle } from "../hooks/useTitle";
+import { buildAuthHeaders } from "../lib/authHeaders";
 import { EncryptionPasswordPrompt } from "./EncryptionPasswordPrompt";
 import { EncryptionSetupPrompt } from "./EncryptionSetupPrompt";
 
@@ -58,11 +59,10 @@ export const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({ isAvaila
             if (!authToken) {
                 throw new Error("No auth token found");
             }
+            const headers = buildAuthHeaders(authToken);
             const response = await fetch("/api/event-log/history", {
                 method: "DELETE",
-                headers: {
-                    "X-Moor-Auth-Token": authToken,
-                },
+                headers,
             });
 
             if (!response.ok) {

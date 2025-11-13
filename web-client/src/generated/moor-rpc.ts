@@ -121,6 +121,7 @@ export { Properties } from "./moor-rpc/properties.js";
 export { PropertyRetrievalFailed } from "./moor-rpc/property-retrieval-failed.js";
 export { PropertyUpdated } from "./moor-rpc/property-updated.js";
 export { PropertyValue } from "./moor-rpc/property-value.js";
+export { Reattach } from "./moor-rpc/reattach.js";
 export { RegisterHost } from "./moor-rpc/register-host.js";
 export { ReplyResultUnion } from "./moor-rpc/reply-result-union.js";
 export { ReplyResult } from "./moor-rpc/reply-result.js";

@@ -25,6 +25,8 @@ export interface Player {
     authToken: string;
     connected: boolean;
     flags: number;
+    clientToken?: string | null;
+    clientId?: string | null;
 }
 
 export interface AuthState {
@@ -40,23 +42,47 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         error: null,
     });
 
-    // Check for OAuth2 credentials in localStorage on mount
+    // Check for auth credentials in localStorage on mount
     useEffect(() => {
         const oauth2Token = localStorage.getItem("oauth2_auth_token");
         const oauth2PlayerOid = localStorage.getItem("oauth2_player_oid");
+        const authToken = localStorage.getItem("auth_token");
+        const playerOid = localStorage.getItem("player_oid");
+        const playerFlags = localStorage.getItem("player_flags");
+        const storedClientToken = localStorage.getItem("client_token");
+        const storedClientId = localStorage.getItem("client_id");
 
-        if (oauth2Token && oauth2PlayerOid) {
-            // Get flags from localStorage (stored during OAuth2 login)
+        // Check regular auth
+        if (authToken && playerOid) {
+            const flags = playerFlags ? parseInt(playerFlags, 10) : 0;
+
+            setAuthState({
+                player: {
+                    oid: playerOid,
+                    authToken,
+                    connected: false,
+                    flags,
+                    clientToken: storedClientToken,
+                    clientId: storedClientId,
+                },
+                isConnecting: false,
+                error: null,
+            });
+
+            onSystemMessage("Restoring session...", 2);
+        } else if (oauth2Token && oauth2PlayerOid) {
+            // Otherwise, check OAuth to see if there's credentials there to restore.
             const oauth2Flags = localStorage.getItem("oauth2_player_flags");
             const flags = oauth2Flags ? parseInt(oauth2Flags, 10) : 0;
 
-            // Set auth state (keep credentials in localStorage for future sessions)
             setAuthState({
                 player: {
                     oid: oauth2PlayerOid,
                     authToken: oauth2Token,
                     connected: false,
                     flags,
+                    clientToken: storedClientToken,
+                    clientId: storedClientId,
                 },
                 isConnecting: false,
                 error: null,
@@ -119,6 +145,8 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 new flatbuffers.ByteBuffer(bytes),
             );
             const authToken = result.headers.get("X-Moor-Auth-Token");
+            const clientToken = result.headers.get("X-Moor-Client-Token");
+            const clientId = result.headers.get("X-Moor-Client-Id");
 
             // Validate authentication token
             if (!authToken) {
@@ -127,6 +155,12 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 onSystemMessage(error, 5);
                 setAuthState(prev => ({ ...prev, isConnecting: false, error }));
                 return;
+            }
+
+            // Store client tokens for reconnection
+            if (clientToken && clientId) {
+                localStorage.setItem("client_token", clientToken);
+                localStorage.setItem("client_id", clientId);
             }
 
             // Extract player info from LoginResult
@@ -205,12 +239,19 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
 
             const playerFlags = loginResult.playerFlags() || 0;
 
+            // Store auth state in localStorage for session persistence
+            localStorage.setItem("auth_token", authToken);
+            localStorage.setItem("player_oid", playerOid);
+            localStorage.setItem("player_flags", playerFlags.toString());
+
             // Update player state (authorized but not yet connected)
             const player: Player = {
                 oid: playerOid,
                 authToken,
                 connected: false,
                 flags: playerFlags,
+                clientToken: clientToken ?? null,
+                clientId: clientId ?? null,
             };
 
             setAuthState({
@@ -239,6 +280,17 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         // Clear OAuth2 credentials from localStorage
         localStorage.removeItem("oauth2_auth_token");
         localStorage.removeItem("oauth2_player_oid");
+        localStorage.removeItem("oauth2_player_flags");
+
+        // Clear regular auth credentials
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("player_oid");
+        localStorage.removeItem("player_flags");
+
+        // Clear client tokens for reconnection
+        localStorage.removeItem("client_token");
+        localStorage.removeItem("client_id");
+        localStorage.setItem("client_session_active", "false");
 
         setAuthState({
             player: null,

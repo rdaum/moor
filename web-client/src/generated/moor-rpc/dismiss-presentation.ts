@@ -3,7 +3,6 @@
 import * as flatbuffers from "flatbuffers";
 
 import { AuthToken } from "../moor-rpc/auth-token.js";
-import { ClientToken } from "../moor-rpc/client-token.js";
 
 export class DismissPresentation {
     bb: flatbuffers.ByteBuffer | null = null;
@@ -26,44 +25,45 @@ export class DismissPresentation {
         return (obj || new DismissPresentation()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
 
-    clientToken(obj?: ClientToken): ClientToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 4);
-        return offset ? (obj || new ClientToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
-    }
-
     authToken(obj?: AuthToken): AuthToken | null {
-        const offset = this.bb!.__offset(this.bb_pos, 6);
+        const offset = this.bb!.__offset(this.bb_pos, 4);
         return offset ? (obj || new AuthToken()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
     }
 
     presentationId(): string | null;
     presentationId(optionalEncoding: flatbuffers.Encoding): string | Uint8Array | null;
     presentationId(optionalEncoding?: any): string | Uint8Array | null {
-        const offset = this.bb!.__offset(this.bb_pos, 8);
+        const offset = this.bb!.__offset(this.bb_pos, 6);
         return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
     }
 
     static startDismissPresentation(builder: flatbuffers.Builder) {
-        builder.startObject(3);
-    }
-
-    static addClientToken(builder: flatbuffers.Builder, clientTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(0, clientTokenOffset, 0);
+        builder.startObject(2);
     }
 
     static addAuthToken(builder: flatbuffers.Builder, authTokenOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(1, authTokenOffset, 0);
+        builder.addFieldOffset(0, authTokenOffset, 0);
     }
 
     static addPresentationId(builder: flatbuffers.Builder, presentationIdOffset: flatbuffers.Offset) {
-        builder.addFieldOffset(2, presentationIdOffset, 0);
+        builder.addFieldOffset(1, presentationIdOffset, 0);
     }
 
     static endDismissPresentation(builder: flatbuffers.Builder): flatbuffers.Offset {
         const offset = builder.endObject();
-        builder.requiredField(offset, 4); // client_token
-        builder.requiredField(offset, 6); // auth_token
-        builder.requiredField(offset, 8); // presentation_id
+        builder.requiredField(offset, 4); // auth_token
+        builder.requiredField(offset, 6); // presentation_id
         return offset;
+    }
+
+    static createDismissPresentation(
+        builder: flatbuffers.Builder,
+        authTokenOffset: flatbuffers.Offset,
+        presentationIdOffset: flatbuffers.Offset,
+    ): flatbuffers.Offset {
+        DismissPresentation.startDismissPresentation(builder);
+        DismissPresentation.addAuthToken(builder, authTokenOffset);
+        DismissPresentation.addPresentationId(builder, presentationIdOffset);
+        return DismissPresentation.endDismissPresentation(builder);
     }
 }

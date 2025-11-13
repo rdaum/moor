@@ -15,6 +15,7 @@
 // Handles launching and managing property editing sessions
 
 import { useCallback, useState } from "react";
+import { buildAuthHeaders } from "../lib/authHeaders";
 
 export interface PropertyEditorSession {
     id: string;
@@ -44,9 +45,7 @@ export const usePropertyEditor = () => {
                 `/properties/${encodeURIComponent(objectCurie)}/${encodeURIComponent(propertyName)}`,
                 {
                     method: "GET",
-                    headers: {
-                        "X-Moor-Auth-Token": authToken,
-                    },
+                    headers: buildAuthHeaders(authToken),
                 },
             );
 

@@ -202,7 +202,6 @@ impl RpcClient {
         }
 
         // Create a new socket
-        debug!("Creating new RPC socket");
         self.create_socket().await
     }
 
@@ -212,9 +211,7 @@ impl RpcClient {
 
         if pool.len() < self.config.max_pool_size {
             pool.push_back(socket);
-            debug!("Returned socket to pool, pool size: {}", pool.len());
         } else {
-            debug!("Pool full, discarding socket");
             drop(socket);
         }
     }
@@ -264,7 +261,6 @@ impl RpcClient {
 
         let message = Multipart::from(vec![message_type_bytes, rpc_msg_payload]);
 
-        debug!(client_id = %client_id, "Sending RPC client request to daemon");
         let rpc_reply_sock = match socket.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
@@ -278,7 +274,6 @@ impl RpcClient {
             }
         };
 
-        debug!(client_id = %client_id, "Waiting for RPC client response from daemon");
         let (msg, recv_sock) = match rpc_reply_sock.recv().await {
             Ok((msg, recv_sock)) => (msg, recv_sock),
             Err(e) => {
@@ -294,7 +289,6 @@ impl RpcClient {
 
         // Return raw reply bytes - caller will decode the FlatBuffer
         let reply_bytes = msg[0].to_vec();
-        debug!(client_id = %client_id, response_bytes = reply_bytes.len(), "Received RPC client response from daemon");
 
         Ok((reply_bytes, recv_sock))
     }
@@ -322,7 +316,6 @@ impl RpcClient {
 
         let message = Multipart::from(vec![message_type_bytes, rpc_msg_payload]);
 
-        debug!(host_id = %host_id, "Sending RPC host request to daemon");
         let rpc_reply_sock = match socket.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
@@ -336,7 +329,6 @@ impl RpcClient {
             }
         };
 
-        debug!(host_id = %host_id, "Waiting for RPC host response from daemon");
         let (msg, recv_sock) = match rpc_reply_sock.recv().await {
             Ok((msg, recv_sock)) => (msg, recv_sock),
             Err(e) => {
@@ -352,7 +344,6 @@ impl RpcClient {
 
         // Return raw reply bytes - caller will decode the FlatBuffer
         let reply_bytes = msg[0].to_vec();
-        debug!(host_id = %host_id, response_bytes = reply_bytes.len(), "Received RPC host response from daemon");
 
         Ok((reply_bytes, recv_sock))
     }

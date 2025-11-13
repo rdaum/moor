@@ -16,7 +16,7 @@
 use crate::host::{auth, ws_connection::WebSocketConnection};
 use axum::{
     body::{Body, Bytes},
-    extract::{ConnectInfo, Path, State, WebSocketUpgrade},
+    extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -30,8 +30,10 @@ use rpc_async_client::{rpc_client::RpcClient, zmq};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, mk_attach_msg, mk_call_system_verb_msg,
     mk_connection_establish_msg, mk_detach_host_msg, mk_detach_msg, mk_eval_msg,
-    mk_get_server_features_msg, mk_register_host_msg, mk_request_sys_prop_msg, mk_resolve_msg,
+    mk_get_server_features_msg, mk_reattach_msg, mk_register_host_msg, mk_request_sys_prop_msg,
+    mk_resolve_msg,
 };
+use serde::Deserialize;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::{
@@ -40,7 +42,7 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tmq::{request, subscribe};
+use tmq::subscribe;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -152,6 +154,14 @@ pub enum LoginType {
     Create,
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub struct ReattachQuery {
+    #[serde(default)]
+    client_token: Option<String>,
+    #[serde(default)]
+    client_id: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct WebHost {
     zmq_context: tmq::Context,
@@ -197,24 +207,18 @@ impl WebHost {
 }
 
 impl WebHost {
-    /// Contact the RPC server to validate an auth token, and return the object ID of the player
-    /// and the client token and rpc client to use for the connection.
-    pub async fn attach_authenticated(
-        &self,
-        auth_token: AuthToken,
-        connect_type: Option<moor_rpc::ConnectType>,
-        peer_addr: SocketAddr,
-    ) -> Result<(Obj, Uuid, ClientToken, RpcClient), WsHostError> {
-        let zmq_ctx = self.zmq_context.clone();
-        // Establish a connection to the RPC server
-        let client_id = Uuid::new_v4();
-        // Configure CURVE encryption if keys provided
-        let _socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
-        // Note: socket_builder is no longer used directly since we use ManagedRpcClient
+    pub fn create_rpc_client(&self) -> RpcClient {
+        self.build_rpc_client()
+    }
 
-        // Create managed RPC client with connection pooling and cancellation safety
-        let rpc_client = RpcClient::new_with_defaults(
-            std::sync::Arc::new(zmq_ctx.clone()),
+    pub fn new_stateless_client(&self) -> (Uuid, RpcClient) {
+        (Uuid::new_v4(), self.create_rpc_client())
+    }
+
+    fn build_rpc_client(&self) -> RpcClient {
+        let zmq_ctx = self.zmq_context.clone();
+        RpcClient::new_with_defaults(
+            Arc::new(zmq_ctx.clone()),
             self.rpc_addr.clone(),
             self.curve_keys
                 .as_ref()
@@ -225,7 +229,19 @@ impl WebHost {
                         server_public: server_public.clone(),
                     }
                 }),
-        );
+        )
+    }
+
+    /// Contact the RPC server to validate an auth token, and return the object ID of the player
+    /// and the client token and rpc client to use for the connection.
+    pub async fn attach_authenticated(
+        &self,
+        auth_token: AuthToken,
+        connect_type: Option<moor_rpc::ConnectType>,
+        peer_addr: SocketAddr,
+    ) -> Result<(Obj, Uuid, ClientToken, RpcClient), WsHostError> {
+        let client_id = Uuid::new_v4();
+        let rpc_client = self.build_rpc_client();
 
         // Perform reverse DNS lookup for hostname
         debug!("Starting reverse DNS lookup for {}", peer_addr.ip());
@@ -327,6 +343,118 @@ impl WebHost {
         Ok((player, client_id, client_token, rpc_client))
     }
 
+    pub async fn reattach_authenticated(
+        &self,
+        auth_token: AuthToken,
+        client_id: Uuid,
+        client_token: ClientToken,
+        peer_addr: SocketAddr,
+    ) -> Result<(Obj, Uuid, ClientToken, RpcClient), WsHostError> {
+        let rpc_client = self.build_rpc_client();
+
+        debug!("Starting reverse DNS lookup for {}", peer_addr.ip());
+        let hostname = match resolve_hostname(peer_addr.ip()).await {
+            Ok(hostname) => hostname,
+            Err(e) => {
+                debug!(
+                    "Failed to resolve {} ({}), using IP address",
+                    peer_addr.ip(),
+                    e
+                );
+                peer_addr.to_string()
+            }
+        };
+
+        let content_types = vec![
+            moor_rpc::Symbol {
+                value: "text_html".to_string(),
+            },
+            moor_rpc::Symbol {
+                value: "text_djot".to_string(),
+            },
+            moor_rpc::Symbol {
+                value: "text_plain".to_string(),
+            },
+        ];
+
+        let reattach_msg = mk_reattach_msg(
+            &client_token,
+            &auth_token,
+            Some(hostname),
+            Some(self.local_port),
+            Some(peer_addr.port()),
+            Some(content_types),
+            None,
+        );
+
+        let reply_bytes = match rpc_client
+            .make_client_rpc_call(client_id, reattach_msg)
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Unable to reattach: {}", e);
+                return Err(WsHostError::RpcError(eyre!(e)));
+            }
+        };
+
+        let reply = moor_rpc::ReplyResultRef::read_as_root(&reply_bytes)
+            .map_err(|e| WsHostError::RpcError(eyre!("Failed to parse reply: {}", e)))?;
+
+        let (client_token, player) = match reply.result().expect("Missing result") {
+            moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                let daemon_reply = client_success.reply().expect("Missing reply");
+                match daemon_reply.reply().expect("Missing reply union") {
+                    moor_rpc::DaemonToClientReplyUnionRef::AttachResult(attach_result) => {
+                        if attach_result.success().expect("Missing success") {
+                            let client_token_ref = attach_result
+                                .client_token()
+                                .expect("Missing client_token")
+                                .expect("Client token is None");
+                            let confirmed_client_token = ClientToken(
+                                client_token_ref.token().expect("Missing token").to_string(),
+                            );
+                            let player_ref = attach_result
+                                .player()
+                                .expect("Missing player")
+                                .expect("Player is None");
+                            let player_struct = moor_rpc::Obj::try_from(player_ref)
+                                .expect("Failed to convert player");
+                            let player = obj_from_flatbuffer_struct(&player_struct)
+                                .expect("Failed to decode player");
+                            (confirmed_client_token, player)
+                        } else {
+                            warn!("Connection reattach failed from {}", peer_addr);
+                            return Err(WsHostError::AuthenticationFailed);
+                        }
+                    }
+                    _ => {
+                        error!("Unexpected response from RPC server");
+                        return Err(WsHostError::RpcError(eyre!(
+                            "Unexpected response from RPC server"
+                        )));
+                    }
+                }
+            }
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let msg = failure
+                    .error()
+                    .ok()
+                    .and_then(|e| e.message().ok().flatten())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "unknown error".to_string());
+                warn!("Reattach rejected: {}", msg);
+                return Err(WsHostError::AuthenticationFailed);
+            }
+            moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
+                error!("Unexpected host success response");
+                return Err(WsHostError::RpcError(eyre!("Unexpected host success")));
+            }
+        };
+
+        Ok((player, client_id, client_token, rpc_client))
+    }
+
     /// Actually instantiate the connection now that we've validated the auth token.
     pub async fn start_ws_connection(
         &self,
@@ -407,6 +535,8 @@ impl WebHost {
             auth_token,
             rpc_client,
             pending_task: None,
+            close_code: None,
+            is_logout: false,
         })
     }
 
@@ -450,25 +580,7 @@ impl WebHost {
         &self,
         addr: SocketAddr,
     ) -> Result<(Uuid, RpcClient, ClientToken), WsHostError> {
-        let zmq_ctx = self.zmq_context.clone();
-        // Configure CURVE encryption if keys provided
-        let _socket_builder = request(&zmq_ctx).set_rcvtimeo(5000).set_sndtimeo(5000);
-        // Note: socket_builder is no longer used directly since we use ManagedRpcClient
-
-        // Create managed RPC client with connection pooling and cancellation safety
-        let rpc_client = RpcClient::new_with_defaults(
-            std::sync::Arc::new(zmq_ctx.clone()),
-            self.rpc_addr.clone(),
-            self.curve_keys
-                .as_ref()
-                .map(|(client_secret, client_public, server_public)| {
-                    rpc_async_client::rpc_client::CurveKeys {
-                        client_secret: client_secret.clone(),
-                        client_public: client_public.clone(),
-                        server_public: server_public.clone(),
-                    }
-                }),
-        );
+        let rpc_client = self.build_rpc_client();
 
         let client_id = Uuid::new_v4();
 
@@ -740,18 +852,13 @@ pub async fn features_handler(State(host): State<WebHost>) -> Response {
 
 pub async fn system_property_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
     Path(path): Path<String>,
 ) -> Response {
-    let (client_id, mut rpc_client, client_token) =
-        match host.establish_client_connection(addr).await {
-            Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
-            Err(WsHostError::AuthenticationFailed) => return StatusCode::FORBIDDEN.into_response(),
-            Err(e) => {
-                error!("Unable to establish connection: {}", e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let auth_token = auth::extract_auth_token_header(&header_map).ok();
+    let mut rpc_client = host.create_rpc_client();
+    let client_id = Uuid::new_v4();
 
     // Parse the path into object reference and property name
     let path_parts: Vec<&str> = path.split('/').collect();
@@ -765,7 +872,7 @@ pub async fn system_property_handler(
     };
 
     let sysprop_msg = mk_request_sys_prop_msg(
-        &client_token,
+        auth_token.as_ref(),
         &ObjectRef::SysObj(obj_path),
         &Symbol::mk(property_name),
     );
@@ -783,15 +890,6 @@ pub async fn system_property_handler(
         .body(Body::from(reply_bytes))
         .unwrap();
 
-    // We're done with this RPC connection, so we detach it.
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
-
     response
 }
 
@@ -802,28 +900,52 @@ async fn attach(
     connect_type: moor_rpc::ConnectType,
     host: &WebHost,
     auth_token: String,
+    client_hint: Option<(Uuid, ClientToken)>,
 ) -> impl IntoResponse + use<> {
     debug!("Connection from {}", addr);
 
     let auth_token = AuthToken(auth_token);
 
-    let (player, client_id, client_token, rpc_client) = match host
-        .attach_authenticated(auth_token.clone(), Some(connect_type), addr)
-        .await
-    {
-        Ok(connection_details) => connection_details,
-        Err(WsHostError::AuthenticationFailed) => {
-            return Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::empty())
-                .unwrap();
+    let reattach_details = if let Some((hint_id, hint_token)) = client_hint.clone() {
+        match host
+            .reattach_authenticated(auth_token.clone(), hint_id, hint_token.clone(), addr)
+            .await
+        {
+            Ok(details) => Some(details),
+            Err(WsHostError::AuthenticationFailed) => None,
+            Err(e) => {
+                error!("Reattach attempt failed: {}", e);
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap();
+            }
         }
-        Err(e) => {
-            error!("Unable to validate auth token: {}", e);
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::empty())
-                .unwrap();
+    } else {
+        None
+    };
+
+    let (player, client_id, client_token, rpc_client) = if let Some(details) = reattach_details {
+        details
+    } else {
+        match host
+            .attach_authenticated(auth_token.clone(), Some(connect_type), addr)
+            .await
+        {
+            Ok(connection_details) => connection_details,
+            Err(WsHostError::AuthenticationFailed) => {
+                return Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .body(Body::empty())
+                    .unwrap();
+            }
+            Err(e) => {
+                error!("Unable to validate auth token: {}", e);
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap();
+            }
         }
     };
 
@@ -854,6 +976,7 @@ pub async fn ws_connect_attach_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
+    Query(query): Query<ReattachQuery>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse + use<> {
     debug!(
@@ -863,12 +986,20 @@ pub async fn ws_connect_attach_handler(
     let client_addr = get_client_addr(&headers, addr);
     info!("WebSocket connection from {}", client_addr);
 
+    let client_hint = match (&query.client_id, &query.client_token) {
+        (Some(id), Some(token_str)) => Uuid::parse_str(id)
+            .ok()
+            .map(|uuid| (uuid, ClientToken(token_str.clone()))),
+        _ => None,
+    };
+
     attach(
         ws,
         client_addr,
         moor_rpc::ConnectType::Connected,
         &ws_host,
         token,
+        client_hint,
     )
     .await
 }
@@ -879,6 +1010,7 @@ pub async fn ws_create_attach_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
+    Query(query): Query<ReattachQuery>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse + use<> {
     debug!(
@@ -888,12 +1020,20 @@ pub async fn ws_create_attach_handler(
     let client_addr = get_client_addr(&headers, addr);
     info!("WebSocket connection from {}", client_addr);
 
+    let client_hint = match (&query.client_id, &query.client_token) {
+        (Some(id), Some(token_str)) => Uuid::parse_str(id)
+            .ok()
+            .map(|uuid| (uuid, ClientToken(token_str.clone()))),
+        _ => None,
+    };
+
     attach(
         ws,
         client_addr,
         moor_rpc::ConnectType::Created,
         &ws_host,
         token,
+        client_hint,
     )
     .await
 }
@@ -901,15 +1041,16 @@ pub async fn ws_create_attach_handler(
 /// FlatBuffer version: GET /fb/objects/{object} - resolve object reference
 pub async fn resolve_objref_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     header_map: HeaderMap,
     Path(object): Path<String>,
 ) -> Response {
-    let (auth_token, client_id, client_token, mut rpc_client) =
-        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
-            Ok(connection_details) => connection_details,
-            Err(status) => return status.into_response(),
-        };
+    let auth_token = match auth::extract_auth_token_header(&header_map) {
+        Ok(token) => token,
+        Err(status) => return status.into_response(),
+    };
+    let mut rpc_client = host.create_rpc_client();
+    let client_id = Uuid::new_v4();
 
     let objref = match ObjectRef::parse_curie(&object) {
         None => {
@@ -918,7 +1059,7 @@ pub async fn resolve_objref_handler(
         Some(oref) => oref,
     };
 
-    let resolve_msg = mk_resolve_msg(&client_token, &auth_token, &objref);
+    let resolve_msg = mk_resolve_msg(&auth_token, &objref);
 
     let reply_bytes = match rpc_call(client_id, &mut rpc_client, resolve_msg).await {
         Ok(bytes) => bytes,
@@ -930,14 +1071,6 @@ pub async fn resolve_objref_handler(
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
         .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
 
     response
 }
@@ -983,23 +1116,16 @@ pub async fn eval_handler(
 /// FlatBuffer version: GET /fb/invoke_welcome_message - invoke #0:do_login_command
 pub async fn invoke_welcome_message_handler(
     State(host): State<WebHost>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
 ) -> Response {
-    let (client_id, mut rpc_client, client_token) =
-        match host.establish_client_connection(addr).await {
-            Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
-            Err(WsHostError::AuthenticationFailed) => return StatusCode::FORBIDDEN.into_response(),
-            Err(e) => {
-                error!("Unable to establish connection: {}", e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let mut rpc_client = host.create_rpc_client();
+    let client_id = Uuid::new_v4();
 
     // Create the system verb call for #0:do_login_command
     let verb = Symbol::mk("do_login_command");
     let args: Vec<&moor_var::Var> = vec![]; // No arguments for do_login_command
 
-    let call_system_verb_msg = match mk_call_system_verb_msg(&client_token, &verb, args) {
+    let call_system_verb_msg = match mk_call_system_verb_msg(None, &verb, args) {
         Some(msg) => msg,
         None => {
             error!("Failed to create CallSystemVerb message");
@@ -1017,14 +1143,6 @@ pub async fn invoke_welcome_message_handler(
         .header("Content-Type", "application/x-flatbuffer")
         .body(Body::from(reply_bytes))
         .unwrap();
-
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
 
     response
 }

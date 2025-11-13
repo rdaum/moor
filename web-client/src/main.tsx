@@ -774,9 +774,10 @@ function AppContent({
             narrativeRef.current.clearAll();
         }
         setUnseenCount(0);
+        disconnectWS("LOGOUT");
         // Just disconnect from auth - the useEffect above will handle all cleanup
         disconnect();
-    }, [disconnect, narrativeRef]);
+    }, [disconnect, disconnectWS, narrativeRef]);
 
     // Handle OAuth2 callback from URL parameters
     useEffect(() => {
