@@ -41,29 +41,29 @@ Given an encrypted message as bytes (such as from age_encrypt) or base-64 encode
 => "secret data"
 ```
 
-### `age_encrypt_with_passphrase`
+### `age_passphrase_encrypt`
 
 ```
-BYTES encrypted_message = age_encrypt_with_passphrase(STR message, STR passphrase)
+BYTES encrypted_message = age_passphrase_encrypt(STR message, STR passphrase)
 ```
 Encrypts the given message using a passphrase (scrypt-based key derivation). Returns the encrypted message as bytes. Note that scrypt is intentionally slow (typically 1-3 seconds) to resist brute-force attacks.
 
 **Example:**
 ```
-;age_encrypt_with_passphrase("secret data", "my passphrase")
+;age_passphrase_encrypt("secret data", "my passphrase")
 => b"base-64-data-here"
 ```
 
-### `age_decrypt_with_passphrase`
+### `age_passphrase_decrypt`
 
 ```
-STR data = age_decrypt_with_passphrase(BYTES|STR encrypted_data, STR passphrase)
+STR data = age_passphrase_decrypt(BYTES|STR encrypted_data, STR passphrase)
 ```
 Decrypts an age-encrypted message using a passphrase. Encrypted data can be provided as bytes or base-64 encoded string. Note that scrypt is intentionally slow (typically 1-3 seconds) to resist brute-force attacks.
 
 **Example:**
 ```
-;age_decrypt_with_passphrase(encrypted, "my passphrase")
+;age_passphrase_decrypt(encrypted, "my passphrase")
 => "secret data"
 ```
 

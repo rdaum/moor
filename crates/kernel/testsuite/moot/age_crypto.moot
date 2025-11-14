@@ -98,59 +98,59 @@ E_INVARG
 > return decrypted1 == "multi recipient" && decrypted2 == "multi recipient";
 1
 
-// Test age_encrypt_with_passphrase returns bytes (BINARY = 17)
-; encrypted = age_encrypt_with_passphrase("message", "password");
+// Test age_passphrase_encrypt returns bytes (BINARY = 17)
+; encrypted = age_passphrase_encrypt("message", "password");
 > return typeof(encrypted) == 17;
 1
 
-// Test age_encrypt_with_passphrase and age_decrypt_with_passphrase round trip
-; encrypted = age_encrypt_with_passphrase("message", "password");
-> decrypted = age_decrypt_with_passphrase(encrypted, "password");
+// Test age_passphrase_encrypt and age_passphrase_decrypt round trip
+; encrypted = age_passphrase_encrypt("message", "password");
+> decrypted = age_passphrase_decrypt(encrypted, "password");
 > return decrypted == "message";
 1
 
-// Test age_decrypt_with_passphrase accepts base64 string
-; encrypted = age_encrypt_with_passphrase("message", "password");
+// Test age_passphrase_decrypt accepts base64 string
+; encrypted = age_passphrase_encrypt("message", "password");
 > b64_encrypted = encode_base64(encrypted);
-> decrypted = age_decrypt_with_passphrase(b64_encrypted, "password");
+> decrypted = age_passphrase_decrypt(b64_encrypted, "password");
 > return decrypted == "message";
 1
 
-// Test age_decrypt_with_passphrase with wrong passphrase
-; encrypted = age_encrypt_with_passphrase("message", "password");
-> age_decrypt_with_passphrase(encrypted, "wrongpassword");
+// Test age_passphrase_decrypt with wrong passphrase
+; encrypted = age_passphrase_encrypt("message", "password");
+> age_passphrase_decrypt(encrypted, "wrongpassword");
 E_INVARG
 
-// Test age_encrypt_with_passphrase with too few arguments
-; age_encrypt_with_passphrase("message");
+// Test age_passphrase_encrypt with too few arguments
+; age_passphrase_encrypt("message");
 E_ARGS
 
-// Test age_encrypt_with_passphrase with too many arguments
-; age_encrypt_with_passphrase("message", "password", "extra");
+// Test age_passphrase_encrypt with too many arguments
+; age_passphrase_encrypt("message", "password", "extra");
 E_ARGS
 
-// Test age_decrypt_with_passphrase with too few arguments
-; age_decrypt_with_passphrase("data");
+// Test age_passphrase_decrypt with too few arguments
+; age_passphrase_decrypt("data");
 E_ARGS
 
-// Test age_decrypt_with_passphrase with too many arguments
-; encrypted = age_encrypt_with_passphrase("message", "password");
-> age_decrypt_with_passphrase(encrypted, "password", "extra");
+// Test age_passphrase_decrypt with too many arguments
+; encrypted = age_passphrase_encrypt("message", "password");
+> age_passphrase_decrypt(encrypted, "password", "extra");
 E_ARGS
 
-// Test age_encrypt_with_passphrase with invalid message type
-; age_encrypt_with_passphrase(123, "password");
+// Test age_passphrase_encrypt with invalid message type
+; age_passphrase_encrypt(123, "password");
 E_TYPE
 
-// Test age_encrypt_with_passphrase with invalid passphrase type
-; age_encrypt_with_passphrase("message", 123);
+// Test age_passphrase_encrypt with invalid passphrase type
+; age_passphrase_encrypt("message", 123);
 E_TYPE
 
-// Test age_decrypt_with_passphrase with invalid encrypted data type
-; age_decrypt_with_passphrase(123, "password");
+// Test age_passphrase_decrypt with invalid encrypted data type
+; age_passphrase_decrypt(123, "password");
 E_TYPE
 
-// Test age_decrypt_with_passphrase with invalid passphrase type
-; encrypted = age_encrypt_with_passphrase("message", "password");
-> age_decrypt_with_passphrase(encrypted, 123);
+// Test age_passphrase_decrypt with invalid passphrase type
+; encrypted = age_passphrase_encrypt("message", "password");
+> age_passphrase_decrypt(encrypted, 123);
 E_TYPE

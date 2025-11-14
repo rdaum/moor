@@ -268,8 +268,8 @@ Functions not part of the original LambdaMOO, but added in moor
 | [`age_generate_keypair`](crypto.md#age_generate_keypair)                       | Generates a new X25519 keypair for use with age encryption                    |       |
 | [`age_encrypt`](crypto.md#age_encrypt)                                         | Encrypts a message using age encryption for one or more recipients             |       |
 | [`age_decrypt`](crypto.md#age_decrypt)                                         | Decrypts an age-encrypted message using one or more private keys               |       |
-| [`age_encrypt_with_passphrase`](crypto.md#age_encrypt_with_passphrase)         | Encrypts a message using age encryption with a passphrase                      |       |
-| [`age_decrypt_with_passphrase`](crypto.md#age_decrypt_with_passphrase)         | Decrypts an age-encrypted message using a passphrase                           |       |
+| [`age_passphrase_encrypt`](crypto.md#age_passphrase_encrypt)                   | Encrypts a message using age encryption with a passphrase                      |       |
+| [`age_passphrase_decrypt`](crypto.md#age_passphrase_decrypt)                   | Decrypts an age-encrypted message using a passphrase                           |       |
 
 ### Expanded error handling
 

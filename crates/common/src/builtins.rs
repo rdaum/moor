@@ -543,14 +543,14 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin(
-            "age_encrypt_with_passphrase",
+            "age_passphrase_encrypt",
             Q(2),
             Q(2),
             vec![Typed(TYPE_STR), Typed(TYPE_STR)],
             true,
         ),
         mk_builtin(
-            "age_decrypt_with_passphrase",
+            "age_passphrase_decrypt",
             Q(2),
             Q(2),
             vec![Typed(TYPE_STR), Typed(TYPE_STR)],

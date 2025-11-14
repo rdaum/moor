@@ -368,13 +368,13 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// `bytes age_encrypt_with_passphrase(str message, str passphrase)`
+/// `bytes age_passphrase_encrypt(str message, str passphrase)`
 /// Encrypts message using age encryption with a passphrase (scrypt-based key derivation). Programmer-only function.
 /// Returns encrypted data as bytes.
-fn bf_age_encrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+fn bf_age_passphrase_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("age_encrypt_with_passphrase() requires exactly two arguments"),
+            E_ARGS.msg("age_passphrase_encrypt() requires exactly two arguments"),
         ));
     }
 
@@ -391,7 +391,7 @@ fn bf_age_encrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
         _ => {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                 format!(
-                    "age_encrypt_with_passphrase() first argument must be a string, was {}",
+                    "age_passphrase_encrypt() first argument must be a string, was {}",
                     bf_args.args[0].type_code().to_literal()
                 )
             })));
@@ -404,7 +404,7 @@ fn bf_age_encrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
         _ => {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                 format!(
-                    "age_encrypt_with_passphrase() second argument must be a string, was {}",
+                    "age_passphrase_encrypt() second argument must be a string, was {}",
                     bf_args.args[1].type_code().to_literal()
                 )
             })));
@@ -418,7 +418,7 @@ fn bf_age_encrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
     let mut encrypted = Vec::new();
     let mut writer = encryptor.wrap_output(&mut encrypted).map_err(|e| {
         error!("Failed to create encryption writer: {}", e);
-        BfErr::ErrValue(E_INVARG.msg("age_encrypt_with_passphrase() failed to create encryption writer"))
+        BfErr::ErrValue(E_INVARG.msg("age_passphrase_encrypt() failed to create encryption writer"))
     })?;
 
     writer
@@ -426,20 +426,20 @@ fn bf_age_encrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
         .and_then(|_| writer.finish())
         .map_err(|e| {
             error!("Failed to write message for encryption: {}", e);
-            BfErr::ErrValue(E_INVARG.msg("age_encrypt_with_passphrase() failed to write message for encryption"))
+            BfErr::ErrValue(E_INVARG.msg("age_passphrase_encrypt() failed to write message for encryption"))
         })?;
 
     // Return the encrypted data as bytes
     Ok(Ret(v_binary(encrypted)))
 }
 
-/// `str age_decrypt_with_passphrase(bytes|str encrypted_message, str passphrase)`
+/// `str age_passphrase_decrypt(bytes|str encrypted_message, str passphrase)`
 /// Decrypts age-encrypted message using a passphrase (scrypt-based key derivation). Programmer-only function.
 /// Encrypted message can be bytes or base64-encoded string. Returns decrypted plaintext string.
-fn bf_age_decrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+fn bf_age_passphrase_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("age_decrypt_with_passphrase() requires exactly two arguments"),
+            E_ARGS.msg("age_passphrase_decrypt() requires exactly two arguments"),
         ));
     }
 
@@ -457,14 +457,14 @@ fn bf_age_decrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
             BASE64.decode(s.as_str()).map_err(|_| {
                 warn!("Invalid base64 data for decryption");
                 BfErr::ErrValue(
-                    E_INVARG.msg("age_decrypt_with_passphrase() failed to decode base64 data"),
+                    E_INVARG.msg("age_passphrase_decrypt() failed to decode base64 data"),
                 )
             })?
         }
         _ => {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                 format!(
-                    "age_decrypt_with_passphrase() first argument must be bytes or string, was {}",
+                    "age_passphrase_decrypt() first argument must be bytes or string, was {}",
                     bf_args.args[0].type_code().to_literal()
                 )
             })));
@@ -477,7 +477,7 @@ fn bf_age_decrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
         _ => {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                 format!(
-                    "age_decrypt_with_passphrase() second argument must be a string, was {}",
+                    "age_passphrase_decrypt() second argument must be a string, was {}",
                     bf_args.args[1].type_code().to_literal()
                 )
             })));
@@ -490,7 +490,7 @@ fn bf_age_decrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
     // Create a decryptor
     let decryptor = Decryptor::new_buffered(&encrypted[..]).map_err(|e| {
         error!("Failed to create decryptor: {}", e);
-        BfErr::ErrValue(E_INVARG.msg("age_decrypt_with_passphrase() failed to create decryptor"))
+        BfErr::ErrValue(E_INVARG.msg("age_passphrase_decrypt() failed to create decryptor"))
     })?;
 
     // Decrypt the message
@@ -498,14 +498,14 @@ fn bf_age_decrypt_with_passphrase(bf_args: &mut BfCallState<'_>) -> Result<BfRet
         .decrypt(std::iter::once(&identity as &dyn age::Identity))
         .map_err(|e| {
             warn!("Failed to decrypt with passphrase: {}", e);
-            BfErr::ErrValue(E_INVARG.msg("age_decrypt_with_passphrase() failed to decrypt (wrong passphrase or corrupted data)"))
+            BfErr::ErrValue(E_INVARG.msg("age_passphrase_decrypt() failed to decrypt (wrong passphrase or corrupted data)"))
         })?;
 
     let mut decrypted = String::new();
     reader.read_to_string(&mut decrypted).map_err(|e| {
         warn!("Decrypted data is not valid UTF-8: {}", e);
         BfErr::ErrValue(
-            E_INVARG.msg("age_decrypt_with_passphrase() decrypted data is not valid UTF-8"),
+            E_INVARG.msg("age_passphrase_decrypt() decrypted data is not valid UTF-8"),
         )
     })?;
 
@@ -1140,8 +1140,8 @@ pub(crate) fn register_bf_cryptography(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("age_generate_keypair")] = bf_age_generate_keypair;
     builtins[offset_for_builtin("age_encrypt")] = bf_age_encrypt;
     builtins[offset_for_builtin("age_decrypt")] = bf_age_decrypt;
-    builtins[offset_for_builtin("age_encrypt_with_passphrase")] = bf_age_encrypt_with_passphrase;
-    builtins[offset_for_builtin("age_decrypt_with_passphrase")] = bf_age_decrypt_with_passphrase;
+    builtins[offset_for_builtin("age_passphrase_encrypt")] = bf_age_passphrase_encrypt;
+    builtins[offset_for_builtin("age_passphrase_decrypt")] = bf_age_passphrase_decrypt;
     builtins[offset_for_builtin("argon2")] = bf_argon2;
     builtins[offset_for_builtin("argon2_verify")] = bf_argon2_verify;
     builtins[offset_for_builtin("crypt")] = bf_crypt;
