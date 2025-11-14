@@ -362,15 +362,26 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         rows={metadata.rows || 4}
                         autoFocus
                     />
-                    <button
-                        type="button"
-                        className="rich_input_button rich_input_button_primary"
-                        onClick={submitCurrentValue}
-                        disabled={disabled || !trimmedValue}
-                        aria-label="Submit text"
-                    >
-                        Submit
-                    </button>
+                    <div className="rich_input_buttons">
+                        <button
+                            type="button"
+                            className="rich_input_button rich_input_button_primary"
+                            onClick={submitCurrentValue}
+                            disabled={disabled || !trimmedValue}
+                            aria-label="Submit text"
+                        >
+                            Submit
+                        </button>
+                        <button
+                            type="button"
+                            className="rich_input_button"
+                            onClick={() => handleSubmit("@abort")}
+                            disabled={disabled}
+                            aria-label="Cancel"
+                        >
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             </div>
         );
