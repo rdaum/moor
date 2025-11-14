@@ -505,16 +505,24 @@ fn main() -> Result<(), Report> {
             ) {
                 error!("Import failed: {}", import_error);
 
-                // Delete the entire data directory if the import fails since it was freshly created.
-                if let Err(e) = std::fs::remove_dir_all(&args.data_dir) {
+                // Delete only the database file/directory if the import fails since it was freshly created.
+                // We don't want to delete the entire data directory as it may contain other databases
+                // (connections, tasks, event logs) and system data (keys, enrollment tokens).
+                let cleanup_result = if resolved_db_path.is_dir() {
+                    std::fs::remove_dir_all(&resolved_db_path)
+                } else {
+                    std::fs::remove_file(&resolved_db_path)
+                };
+
+                if let Err(e) = cleanup_result {
                     panic!(
-                        "Failed to remove data directory {:?} after import failure: {}",
-                        args.data_dir, e
+                        "Failed to remove database {:?} after import failure: {}",
+                        resolved_db_path, e
                     );
                 } else {
                     info!(
-                        "Removed bad data directory {:?} after import failure",
-                        args.data_dir
+                        "Removed failed database {:?} after import failure",
+                        resolved_db_path
                     );
                 }
 
