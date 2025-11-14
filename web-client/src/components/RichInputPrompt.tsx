@@ -36,6 +36,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     const [showAlternative, setShowAlternative] = useState(false);
     const baseId = useId();
     const textInputId = `${baseId}-text`;
+    const textAreaId = `${baseId}-textarea`;
     const numberInputId = `${baseId}-number`;
     const choiceSelectId = `${baseId}-choice`;
     const alternativeInputId = `${baseId}-alternative`;
@@ -330,6 +331,43 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         onClick={submitCurrentValue}
                         disabled={disabled || !trimmedValue}
                         aria-label="Submit number"
+                    >
+                        Submit
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Text area input type
+    if (metadata.input_type === "text_area") {
+        return (
+            <div className="rich_input_prompt">
+                {renderPromptLabel(textAreaId)}
+                <div className="rich_input_text_container">
+                    <textarea
+                        id={textAreaId}
+                        className="rich_input_textarea"
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.ctrlKey) {
+                                e.preventDefault();
+                                submitCurrentValue();
+                            }
+                        }}
+                        placeholder={metadata.placeholder}
+                        disabled={disabled}
+                        aria-label={metadata.prompt || "Enter text"}
+                        rows={metadata.rows || 4}
+                        autoFocus
+                    />
+                    <button
+                        type="button"
+                        className="rich_input_button rich_input_button_primary"
+                        onClick={submitCurrentValue}
+                        disabled={disabled || !trimmedValue}
+                        aria-label="Submit text"
                     >
                         Submit
                     </button>
