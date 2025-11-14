@@ -429,6 +429,8 @@ impl Listener {
                 is_binary_mode: false,
                 hold_input: None,
                 disable_oob: false,
+                pending_line_mode: None,
+                collecting_input: false,
             };
 
             tcp_connection.run().await?;

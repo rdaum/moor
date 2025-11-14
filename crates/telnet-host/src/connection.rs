@@ -99,15 +99,124 @@ pub(crate) struct TelnetConnection {
     /// When Some, input is held in the buffer for read() calls; when None, input is processed as commands
     pub(crate) hold_input: Option<Vec<String>>,
     pub(crate) disable_oob: bool,
+    /// Pending line mode to switch to (for text_area input)
+    pub(crate) pending_line_mode: Option<LineMode>,
+    /// Currently collecting input (allows input even when pending_task is set)
+    pub(crate) collecting_input: bool,
 }
 
 /// The input modes the telnet session can be in.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum LineMode {
+pub(crate) enum LineMode {
     /// Receiving input
     Input,
     /// Spooling up .program input.
     SpoolingProgram(String, String),
+    /// Collecting multiline text_area input
+    CollectingTextArea(Uuid),
+}
+
+/// Metadata for input requests, matching the web client's InputMetadata
+#[derive(Debug, Clone)]
+struct InputMetadata {
+    input_type: Option<String>,
+    prompt: Option<String>,
+    choices: Option<Vec<String>>,
+    min: Option<i64>,
+    max: Option<i64>,
+    default: Option<Var>,
+    placeholder: Option<String>,
+    rows: Option<i64>,
+    alternative_label: Option<String>,
+    alternative_placeholder: Option<String>,
+}
+
+impl InputMetadata {
+    /// Parse metadata from RequestInputEvent
+    fn from_metadata_pairs(
+        metadata: Option<planus::Vector<'_, planus::Result<moor_rpc::MetadataPairRef<'_>>>>,
+    ) -> Self {
+        let mut result = Self {
+            input_type: None,
+            prompt: None,
+            choices: None,
+            min: None,
+            max: None,
+            default: None,
+            placeholder: None,
+            rows: None,
+            alternative_label: None,
+            alternative_placeholder: None,
+        };
+
+        let Some(metadata) = metadata else {
+            return result;
+        };
+
+        for pair_result in metadata {
+            let Ok(pair) = pair_result else {
+                continue;
+            };
+
+            let Ok(key_ref) = pair.key() else {
+                continue;
+            };
+            let Ok(key_str) = key_ref.value() else {
+                continue;
+            };
+
+            let Ok(_value_ref) = pair.value() else {
+                continue;
+            };
+            let Ok(value) = extract_var(&pair, "value", |p| p.value()) else {
+                continue;
+            };
+
+            match key_str {
+                "input_type" => {
+                    result.input_type = value.as_string().map(|s| s.to_string());
+                }
+                "prompt" => {
+                    result.prompt = value.as_string().map(|s| s.to_string());
+                }
+                "choices" => {
+                    if let Variant::List(list) = value.variant() {
+                        let choices: Vec<String> = list
+                            .iter()
+                            .filter_map(|v| v.as_string().map(|s| s.to_string()))
+                            .collect();
+                        if !choices.is_empty() {
+                            result.choices = Some(choices);
+                        }
+                    }
+                }
+                "min" => {
+                    result.min = value.as_integer();
+                }
+                "max" => {
+                    result.max = value.as_integer();
+                }
+                "default" => {
+                    result.default = Some(value.clone());
+                }
+                "placeholder" => {
+                    result.placeholder = value.as_string().map(|s| s.to_string());
+                }
+                "rows" => {
+                    result.rows = value.as_integer();
+                }
+                "alternative_label" => {
+                    result.alternative_label = value.as_string().map(|s| s.to_string());
+                }
+                "alternative_placeholder" => {
+                    result.alternative_placeholder = value.as_string().map(|s| s.to_string());
+                }
+                _ => {}
+            }
+        }
+
+        result
+    }
 }
 
 fn describe_compile_error(compile_error: CompileError) -> String {
@@ -177,6 +286,157 @@ pub enum ReadEvent {
 }
 
 const TASK_TIMEOUT: Duration = Duration::from_secs(10);
+
+impl InputMetadata {
+    /// Display the input prompt to the user based on the input type
+    async fn display_prompt(&self, conn: &mut TelnetConnection) -> Result<(), eyre::Error> {
+        // Render the prompt using markdown if present
+        if let Some(prompt) = &self.prompt {
+            // Try to get terminal width from connection attributes
+            let width = conn
+                .connection_attributes
+                .get(&Symbol::mk("columns"))
+                .and_then(|v| v.as_integer())
+                .and_then(|w| if w > 0 { Some(w as usize) } else { None });
+
+            let formatted = markdown_to_ansi_with_width(prompt, width);
+            conn.send_line(&formatted).await?;
+        }
+
+        let input_type = self.input_type.as_deref().unwrap_or("text");
+
+        match input_type {
+            "yes_no" => {
+                conn.send_line("Enter 'yes' or 'no'").await?;
+            }
+            "yes_no_alternative" => {
+                conn.send_line("Enter 'yes', 'no', or describe an alternative")
+                    .await?;
+            }
+            "choice" => {
+                if let Some(choices) = &self.choices {
+                    conn.send_line("Choose one of:").await?;
+                    for (i, choice) in choices.iter().enumerate() {
+                        conn.send_line(&format!("  {}. {}", i + 1, choice)).await?;
+                    }
+                    conn.send_line("Enter the number or text of your choice")
+                        .await?;
+                }
+            }
+            "number" => {
+                let mut msg = "Enter a number".to_string();
+                if let Some(min) = self.min {
+                    if let Some(max) = self.max {
+                        msg.push_str(&format!(" (between {} and {})", min, max));
+                    } else {
+                        msg.push_str(&format!(" (minimum {})", min));
+                    }
+                } else if let Some(max) = self.max {
+                    msg.push_str(&format!(" (maximum {})", max));
+                }
+                conn.send_line(&msg).await?;
+            }
+            "text_area" => {
+                conn.send_line("Enter your text. Use '.' on a line by itself to finish")
+                    .await?;
+            }
+            "confirmation" => {
+                conn.send_line("Press Enter to continue").await?;
+            }
+            "text" => {
+                if let Some(placeholder) = &self.placeholder {
+                    conn.send_line(&format!("({})", placeholder)).await?;
+                }
+            }
+            _ => {
+                // Unknown input type, treat as text
+                if let Some(placeholder) = &self.placeholder {
+                    conn.send_line(&format!("({})", placeholder)).await?;
+                }
+            }
+        }
+
+        conn.flush().await?;
+        Ok(())
+    }
+
+    /// Validate and convert user input based on the input type
+    fn validate_input(&self, input: &str) -> Result<Var, String> {
+        let input_type = self.input_type.as_deref().unwrap_or("text");
+
+        match input_type {
+            "yes_no" => {
+                let normalized = input.trim().to_lowercase();
+                match normalized.as_str() {
+                    "yes" | "y" => Ok(v_str("yes")),
+                    "no" | "n" => Ok(v_str("no")),
+                    _ => Err("Please enter 'yes' or 'no'".to_string()),
+                }
+            }
+            "yes_no_alternative" => {
+                let normalized = input.trim().to_lowercase();
+                match normalized.as_str() {
+                    "yes" | "y" => Ok(v_str("yes")),
+                    "no" | "n" => Ok(v_str("no")),
+                    _ => {
+                        // Treat anything else as alternative text
+                        if !normalized.is_empty() {
+                            Ok(v_str(&format!("alternative: {}", input.trim())))
+                        } else {
+                            Err("Please enter 'yes', 'no', or describe an alternative".to_string())
+                        }
+                    }
+                }
+            }
+            "choice" => {
+                if let Some(choices) = &self.choices {
+                    // Try to parse as a number first
+                    if let Ok(num) = input.trim().parse::<usize>()
+                        && num > 0
+                        && num <= choices.len()
+                    {
+                        return Ok(v_str(&choices[num - 1]));
+                    }
+                    // Try to match the text
+                    let normalized = input.trim().to_lowercase();
+                    for choice in choices {
+                        if choice.to_lowercase() == normalized {
+                            return Ok(v_str(choice));
+                        }
+                    }
+                    Err(format!(
+                        "Please enter a number 1-{} or one of the listed choices",
+                        choices.len()
+                    ))
+                } else {
+                    Ok(v_str(input))
+                }
+            }
+            "number" => {
+                match input.trim().parse::<i64>() {
+                    Ok(num) => {
+                        // Validate min/max
+                        if let Some(min) = self.min
+                            && num < min
+                        {
+                            return Err(format!("Number must be at least {}", min));
+                        }
+                        if let Some(max) = self.max
+                            && num > max
+                        {
+                            return Err(format!("Number must be at most {}", max));
+                        }
+                        Ok(Var::mk_integer(num))
+                    }
+                    Err(_) => Err("Please enter a valid number".to_string()),
+                }
+            }
+            "confirmation" => Ok(v_str("ok")),
+            "text" | "text_area" => Ok(v_str(input)),
+            _ => Ok(v_str(input)), // Unknown input type, treat as text
+        }
+    }
+}
 
 impl TelnetConnection {
     /// Send a line with automatic newline appending (like LambdaMOO's network_send_line)
@@ -356,7 +616,14 @@ impl TelnetConnection {
                     self.send_bytes(b.as_bytes()).await?;
                     return Ok(());
                 }
-                let Ok(formatted) = output_format(&value, content_type) else {
+                // Get terminal width from connection attributes if available
+                let width = self
+                    .connection_attributes
+                    .get(&Symbol::mk("columns"))
+                    .and_then(|v| v.as_integer())
+                    .and_then(|w| if w > 0 { Some(w as usize) } else { None });
+
+                let Ok(formatted) = output_format(&value, content_type, width) else {
                     warn!("Failed to format message: {:?}", value);
                     return Ok(());
                 };
@@ -532,14 +799,16 @@ impl TelnetConnection {
         }
 
         let mut line_mode = LineMode::Input;
-        let mut expecting_input = VecDeque::new();
+        let mut expecting_input: VecDeque<(Uuid, InputMetadata)> = VecDeque::new();
         let mut program_input = Vec::new();
+        let mut textarea_input = Vec::new();
         loop {
             // We should not send the next line until we've received a narrative event for the
             // previous.
             let input_future = async {
                 if let Some(pt) = &self.pending_task
                     && expecting_input.is_empty()
+                    && !self.collecting_input
                     && pt.start_time.elapsed() > TASK_TIMEOUT
                 {
                     error!(
@@ -547,7 +816,10 @@ impl TelnetConnection {
                         pt.task_id
                     );
                     self.pending_task = None;
-                } else if self.pending_task.is_some() && expecting_input.is_empty() {
+                } else if self.pending_task.is_some()
+                    && expecting_input.is_empty()
+                    && !self.collecting_input
+                {
                     return ReadEvent::PendingEvent;
                 }
 
@@ -589,11 +861,15 @@ impl TelnetConnection {
                                 debug!("Holding input due to hold-input option: {}", line);
                                 buffer.push(line);
                             } else {
-                                line_mode = self.handle_command(&mut program_input, line_mode, line).await.expect("Unable to process command");
+                                line_mode = self.handle_command(&mut program_input, &mut textarea_input, &mut expecting_input, line_mode, line).await.expect("Unable to process command");
+                                // Update collecting_input flag after command processing
+                                self.collecting_input = !expecting_input.is_empty() || matches!(line_mode, LineMode::CollectingTextArea(_));
                             }
                         }
                         ReadEvent::InputReply(input_data) =>{
                             self.process_requested_input_line(input_data, &mut expecting_input).await.expect("Unable to process input reply");
+                            // Update collecting_input flag after processing input
+                            self.collecting_input = !expecting_input.is_empty() || matches!(line_mode, LineMode::CollectingTextArea(_));
                         }
                         ReadEvent::ConnectionClose => {
                             info!("Connection closed");
@@ -630,6 +906,12 @@ impl TelnetConnection {
                     if let Some(input_request) = self.handle_narrative_event(event_union).await? {
                         expecting_input.push_back(input_request);
                     }
+                    // Check if we need to switch line mode (for text_area)
+                    if let Some(new_mode) = self.pending_line_mode.take() {
+                        line_mode = new_mode;
+                    }
+                    // Update collecting_input flag based on state
+                    self.collecting_input = !expecting_input.is_empty() || matches!(line_mode, LineMode::CollectingTextArea(_));
                 }
             }
         }
@@ -638,6 +920,8 @@ impl TelnetConnection {
     async fn handle_command(
         &mut self,
         program_input: &mut Vec<String>,
+        textarea_input: &mut Vec<String>,
+        expecting_input: &mut VecDeque<(Uuid, InputMetadata)>,
         line_mode: LineMode,
         line: String,
     ) -> Result<LineMode, eyre::Error> {
@@ -756,7 +1040,8 @@ impl TelnetConnection {
                                 self.handle_task_error(scheduler_error).await?;
                             }
                             _ => {
-                                bail!("Unhandled RPC error");
+                                error!("Unhandled RPC error code in .program: {:?}", error_code);
+                                self.send_line("An error occurred.").await?;
                             }
                         }
                     }
@@ -770,6 +1055,113 @@ impl TelnetConnection {
                 program_input.push(line);
             }
             return Ok(line_mode);
+        }
+
+        // Handle text_area collection mode
+        if let LineMode::CollectingTextArea(request_id) = &line_mode {
+            if line == "." || line.trim() == "@abort" {
+                // Done collecting, send the input
+                let Some(auth_token) = self.auth_token.clone() else {
+                    bail!("Received input before auth token was set");
+                };
+
+                // If @abort, send just "@abort", otherwise join collected lines
+                let input_var = if line.trim() == "@abort" {
+                    v_str("@abort")
+                } else {
+                    let text = std::mem::take(textarea_input).join("\n");
+                    v_str(&text)
+                };
+
+                if let Some(input_msg) =
+                    mk_requested_input_msg(&self.client_token, &auth_token, *request_id, &input_var)
+                {
+                    let result = self
+                        .rpc_client
+                        .make_client_rpc_call(self.client_id, input_msg)
+                        .await?;
+
+                    // Process the response
+                    let reply_ref = moor_rpc::ReplyResultRef::read_as_root(&result)
+                        .map_err(|e| eyre::eyre!("Invalid flatbuffer: {}", e))?;
+
+                    match reply_ref
+                        .result()
+                        .map_err(|e| eyre::eyre!("Missing result: {}", e))?
+                    {
+                        moor_rpc::ReplyResultUnionRef::ClientSuccess(client_success) => {
+                            let daemon_reply = client_success
+                                .reply()
+                                .map_err(|e| eyre::eyre!("Missing reply: {}", e))?;
+                            match daemon_reply
+                                .reply()
+                                .map_err(|e| eyre::eyre!("Missing reply union: {}", e))?
+                            {
+                                moor_rpc::DaemonToClientReplyUnionRef::TaskSubmitted(
+                                    task_submitted,
+                                ) => {
+                                    let task_id = task_submitted
+                                        .task_id()
+                                        .map_err(|e| eyre::eyre!("Missing task_id: {}", e))?
+                                        as usize;
+
+                                    self.pending_task = Some(PendingTask {
+                                        task_id,
+                                        start_time: Instant::now(),
+                                    });
+                                }
+                                moor_rpc::DaemonToClientReplyUnionRef::InputThanks(_) => {
+                                    // Input was accepted
+                                }
+                                _ => {
+                                    bail!("Unexpected RPC success for text_area input");
+                                }
+                            }
+                        }
+                        moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                            let error_ref = failure
+                                .error()
+                                .map_err(|e| eyre::eyre!("Missing error: {}", e))?;
+                            let error_code = error_ref
+                                .error_code()
+                                .map_err(|e| eyre::eyre!("Missing error_code: {}", e))?;
+                            match error_code {
+                                moor_rpc::RpcMessageErrorCode::TaskError => {
+                                    let scheduler_err_ref = error_ref
+                                        .scheduler_error()
+                                        .map_err(|e| eyre::eyre!("Missing scheduler_error: {}", e))?
+                                        .ok_or_else(|| eyre::eyre!("Scheduler error is None"))?;
+                                    let e = rpc_common::scheduler_error_from_ref(scheduler_err_ref)
+                                        .map_err(|e| {
+                                            eyre::eyre!("Failed to decode scheduler error: {}", e)
+                                        })?;
+                                    self.handle_task_error(e).await?;
+                                }
+                                _ => {
+                                    error!(
+                                        "Unhandled RPC error code for text_area input: {:?}",
+                                        error_code
+                                    );
+                                    self.send_line("An error occurred processing your input.")
+                                        .await?;
+                                }
+                            }
+                        }
+                        _ => {
+                            bail!("Unexpected response type for text_area input");
+                        }
+                    }
+                }
+
+                // Remove from expecting_input queue
+                expecting_input.retain(|(id, _)| id != request_id);
+
+                return Ok(LineMode::Input);
+            } else {
+                // Keep collecting lines
+                textarea_input.push(line);
+                return Ok(line_mode);
+            }
         }
 
         // Handle special built-in commands before regular command processing
@@ -910,7 +1302,7 @@ impl TelnetConnection {
     async fn handle_narrative_event(
         &mut self,
         event_ref: moor_rpc::ClientEventUnionRef<'_>,
-    ) -> Result<Option<Uuid>, eyre::Error> {
+    ) -> Result<Option<(Uuid, InputMetadata)>, eyre::Error> {
         match event_ref {
             moor_rpc::ClientEventUnionRef::SystemMessageEvent(sys_msg) => {
                 let msg = sys_msg
@@ -941,7 +1333,14 @@ impl TelnetConnection {
                         content_type,
                         ..
                     } => {
-                        let output_str = output_format(msg, *content_type)?;
+                        // Get terminal width from connection attributes if available
+                        let width = self
+                            .connection_attributes
+                            .get(&Symbol::mk("columns"))
+                            .and_then(|v| v.as_integer())
+                            .and_then(|w| if w > 0 { Some(w as usize) } else { None });
+
+                        let output_str = output_format(msg, *content_type, width)?;
                         self.send_line(&output_str)
                             .await
                             .expect("Unable to send message to client");
@@ -955,6 +1354,11 @@ impl TelnetConnection {
                                 .await
                                 .with_context(|| "Unable to send message to client")?;
                         }
+                    }
+                    Event::Present(_) => {
+                        // Present events are for web UI elements (editors, etc.)
+                        // Telnet clients don't support these, so just ignore
+                        trace!("Ignoring Present event in telnet client");
                     }
                     _ => {
                         // We don't handle these events in the telnet client.
@@ -972,6 +1376,11 @@ impl TelnetConnection {
                     .map_err(|e| eyre::eyre!("Missing request_id data: {}", e))?;
                 let request_id = Uuid::from_slice(request_id_data)
                     .map_err(|e| eyre::eyre!("Invalid request UUID: {}", e))?;
+
+                // Parse the input metadata
+                let metadata_result = request_input.metadata().ok().and_then(|opt| opt);
+                let metadata = InputMetadata::from_metadata_pairs(metadata_result);
+
                 // If hold_input is active and has buffered input, return it immediately
                 if let Some(ref mut buffer) = self.hold_input
                     && let Some(input_line) = buffer.drain(..1).next()
@@ -996,8 +1405,17 @@ impl TelnetConnection {
                     return Ok(None);
                 }
 
-                // No buffered input available, wait for user input
-                Ok(Some(request_id))
+                // Display the prompt based on input type
+                metadata.display_prompt(self).await?;
+
+                // For text_area, switch to collection mode instead of adding to expecting_input
+                if metadata.input_type.as_deref() == Some("text_area") {
+                    self.pending_line_mode = Some(LineMode::CollectingTextArea(request_id));
+                    Ok(None)
+                } else {
+                    // Store the request with metadata for later processing
+                    Ok(Some((request_id, metadata)))
+                }
             }
             moor_rpc::ClientEventUnionRef::DisconnectEvent(_) => {
                 self.pending_task = None;
@@ -1218,8 +1636,23 @@ impl TelnetConnection {
                         // Send suffix after task error
                         self.send_output_suffix().await?;
                     }
+                    moor_rpc::RpcMessageErrorCode::PermissionDenied => {
+                        self.send_line("Permission denied.").await?;
+                        self.send_output_suffix().await?;
+                    }
+                    moor_rpc::RpcMessageErrorCode::InvalidRequest => {
+                        self.send_line("Invalid request.").await?;
+                        self.send_output_suffix().await?;
+                    }
+                    moor_rpc::RpcMessageErrorCode::InternalError => {
+                        self.send_line("Internal server error.").await?;
+                        self.send_output_suffix().await?;
+                    }
                     _ => {
-                        bail!("Unhandled RPC error");
+                        error!("Unhandled RPC error code: {:?}", error_code);
+                        self.send_line("An error occurred processing your request.")
+                            .await?;
+                        self.send_output_suffix().await?;
                     }
                 }
             }
@@ -1233,12 +1666,48 @@ impl TelnetConnection {
     async fn process_requested_input_line(
         &mut self,
         input_data: Var,
-        expecting_input: &mut VecDeque<Uuid>,
+        expecting_input: &mut VecDeque<(Uuid, InputMetadata)>,
     ) -> Result<(), eyre::Error> {
-        let Some(input_request_id) = expecting_input.front() else {
+        let Some((input_request_id, metadata)) = expecting_input.front() else {
             bail!("Attempt to send reply to input request without an input request");
         };
 
+        // Validate the input based on metadata
+        let Some(input_str) = input_data.as_string() else {
+            // Binary input, pass through as-is
+            return self
+                .send_validated_input(*input_request_id, input_data, expecting_input)
+                .await;
+        };
+
+        // Special case: @abort always passes through without validation
+        if input_str.trim() == "@abort" {
+            return self
+                .send_validated_input(*input_request_id, v_str("@abort"), expecting_input)
+                .await;
+        }
+
+        match metadata.validate_input(input_str) {
+            Ok(validated_input) => {
+                self.send_validated_input(*input_request_id, validated_input, expecting_input)
+                    .await
+            }
+            Err(err_msg) => {
+                // Validation failed, show error and keep the request in queue
+                self.send_line(&err_msg).await?;
+                self.send_line("Please try again:").await?;
+                self.flush().await?;
+                Ok(())
+            }
+        }
+    }
+
+    async fn send_validated_input(
+        &mut self,
+        input_request_id: Uuid,
+        input_data: Var,
+        expecting_input: &mut VecDeque<(Uuid, InputMetadata)>,
+    ) -> Result<(), eyre::Error> {
         let Some(auth_token) = self.auth_token.clone() else {
             bail!("Received input reply before auth token was set");
         };
@@ -1246,7 +1715,7 @@ impl TelnetConnection {
         let Some(input_msg) = mk_requested_input_msg(
             &self.client_token,
             &auth_token,
-            *input_request_id,
+            input_request_id,
             &input_data,
         ) else {
             bail!("Failed to serialize input var");
@@ -1310,7 +1779,12 @@ impl TelnetConnection {
                         self.handle_task_error(e).await?;
                     }
                     _ => {
-                        bail!("Unhandled RPC error");
+                        error!(
+                            "Unhandled RPC error code in input processing: {:?}",
+                            error_code
+                        );
+                        self.send_line("An error occurred processing your input.")
+                            .await?;
                     }
                 }
             }
@@ -1391,18 +1865,31 @@ impl TelnetConnection {
     }
 }
 
-fn markdown_to_ansi(markdown: &str) -> String {
-    let skin = MadSkin::default_dark();
-    // TODO: permit different text stylings here. e.g. user themes for colours, styling, etc.
-    //   will require custom host-side commands to set these.
-    skin.text(markdown, None).to_string()
+fn markdown_to_ansi_with_width(markdown: &str, _width: Option<usize>) -> String {
+    let mut skin = MadSkin::default_dark();
+
+    // Disable inverse styling on code blocks - use black background instead
+    // This makes code blocks visible without the jarring inverse video effect
+    skin.code_block
+        .set_bg(termimad::crossterm::style::Color::AnsiValue(0));
+    skin.inline_code
+        .set_bg(termimad::crossterm::style::Color::AnsiValue(0));
+
+    // Use a very large width to disable wrapping - let the terminal handle it naturally
+    // This prevents termimad from inserting line breaks and padding
+    // We *could* use the NAWS negotiated width here but for many clients this is simply undesirable.
+    skin.text(markdown, Some(10000)).to_string()
 }
 
 /// Produce the right kind of "telnet" compatible output for the given content.
-fn output_format(content: &Var, content_type: Option<Symbol>) -> Result<String, eyre::Error> {
+fn output_format(
+    content: &Var,
+    content_type: Option<Symbol>,
+    width: Option<usize>,
+) -> Result<String, eyre::Error> {
     match content.variant() {
-        Variant::Str(s) => output_str_format(s.as_str(), content_type),
-        Variant::Sym(s) => output_str_format(&s.as_arc_string(), content_type),
+        Variant::Str(s) => output_str_format(s.as_str(), content_type, width),
+        Variant::Sym(s) => output_str_format(&s.as_arc_string(), content_type, width),
         Variant::List(l) => {
             // If the content is a list, it must be a list of strings.
             let mut output = String::new();
@@ -1415,24 +1902,30 @@ fn output_format(content: &Var, content_type: Option<Symbol>) -> Result<String, 
                 }
                 output.push_str(item_str);
             }
-            output_str_format(&output, content_type)
+            output_str_format(&output, content_type, width)
         }
         _ => bail!("Unsupported content type: {:?}", content.variant()),
     }
 }
 
-fn output_str_format(content: &str, content_type: Option<Symbol>) -> Result<String, eyre::Error> {
+fn output_str_format(
+    content: &str,
+    content_type: Option<Symbol>,
+    width: Option<usize>,
+) -> Result<String, eyre::Error> {
     let Some(content_type) = content_type else {
         return Ok(content.to_string());
     };
     let content_type = content_type.as_arc_string();
     Ok(match content_type.as_str() {
-        CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => markdown_to_ansi(content),
+        CONTENT_TYPE_MARKDOWN | CONTENT_TYPE_MARKDOWN_SLASH => {
+            markdown_to_ansi_with_width(content, width)
+        }
         CONTENT_TYPE_DJOT | CONTENT_TYPE_DJOT_SLASH => {
             // For now, we treat Djot as markdown.
-            // In the future, we might want to support Djot specifically, but in realiy, djot
+            // In the future, we might want to support Djot specifically, but in reality, djot
             // is mainly a (safer) subset of markdown.
-            markdown_to_ansi(content)
+            markdown_to_ansi_with_width(content, width)
         }
         // text/plain, None, or unknown
         _ => content.to_string(),
