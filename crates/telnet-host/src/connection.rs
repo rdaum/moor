@@ -750,7 +750,13 @@ impl TelnetConnection {
                     let Some(item) = item else {
                         bail!("Connection closed before login");
                     };
-                    let item = item.unwrap();
+                    let item = match item {
+                        Ok(i) => i,
+                        Err(e) => {
+                            warn!("Failure to decode: {:?}", e);
+                            continue;
+                        }
+                    };
                     let line = match item {
                         ConnectionItem::Line(line) => line,
                         ConnectionItem::Bytes(_) => {

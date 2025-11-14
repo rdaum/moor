@@ -58,8 +58,6 @@ pub enum ConnectionCodecError {
     MaxLineLengthExceeded,
     /// IO error occurred
     Io(io::Error),
-    /// UTF-8 decoding error in text mode
-    Utf8(std::str::Utf8Error),
 }
 
 impl fmt::Display for ConnectionCodecError {
@@ -69,7 +67,6 @@ impl fmt::Display for ConnectionCodecError {
                 write!(f, "maximum line length exceeded")
             }
             ConnectionCodecError::Io(e) => write!(f, "IO error: {e}"),
-            ConnectionCodecError::Utf8(e) => write!(f, "UTF-8 error: {e}"),
         }
     }
 }
@@ -79,12 +76,6 @@ impl std::error::Error for ConnectionCodecError {}
 impl From<io::Error> for ConnectionCodecError {
     fn from(e: io::Error) -> Self {
         ConnectionCodecError::Io(e)
-    }
-}
-
-impl From<std::str::Utf8Error> for ConnectionCodecError {
-    fn from(e: std::str::Utf8Error) -> Self {
-        ConnectionCodecError::Utf8(e)
     }
 }
 
@@ -191,8 +182,9 @@ impl ConnectionCodec {
                 self.is_discarding = false;
                 self.last_input_was_cr = is_cr;
 
-                // Convert to string and return
-                let line_str = std::str::from_utf8(&line_bytes)?.to_string();
+                // Convert to string using lossy conversion to handle non-UTF8 bytes
+                // Invalid sequences become � (U+FFFD REPLACEMENT CHARACTER)
+                let line_str = String::from_utf8_lossy(&line_bytes).into_owned();
                 return Ok(Some(line_str));
             }
 
@@ -483,5 +475,42 @@ mod tests {
             .unwrap();
         assert_eq!(codec.mode(), &ConnectionMode::Text);
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_non_utf8_handling() {
+        let mut codec = ConnectionCodec::new();
+
+        // Create buffer with valid ASCII, then invalid UTF-8, then more ASCII
+        // 0xFF is not valid UTF-8
+        let mut buf = BytesMut::from(&b"hello \xFF world\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => {
+                // Invalid byte should be replaced with U+FFFD (replacement character)
+                assert!(line.contains('\u{FFFD}'));
+                assert!(line.starts_with("hello"));
+                assert!(line.ends_with("world"));
+            }
+            _ => panic!("Expected line"),
+        }
+    }
+
+    #[test]
+    fn test_completely_invalid_utf8() {
+        let mut codec = ConnectionCodec::new();
+
+        // Multiple invalid UTF-8 bytes
+        let mut buf = BytesMut::from(&b"\xFF\xFE\xFD\n"[..]);
+
+        let item = codec.decode(&mut buf).unwrap().unwrap();
+        match item {
+            ConnectionItem::Line(line) => {
+                // All three invalid bytes should become replacement characters
+                assert_eq!(line.chars().filter(|&c| c == '\u{FFFD}').count(), 3);
+            }
+            _ => panic!("Expected line"),
+        }
     }
 }
