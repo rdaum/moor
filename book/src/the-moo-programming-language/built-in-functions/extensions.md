@@ -27,6 +27,8 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `age_generate_keypair` - Generates a new X25519 keypair for use with age encryption
 - `age_encrypt` - Encrypts a message using age encryption for one or more recipients, outputs as base64
 - `age_decrypt` - Decrypts a base64-encoded age-encrypted message using one or more private keys
+- `age_encrypt_with_passphrase` - Encrypts a message using age encryption with a passphrase
+- `age_decrypt_with_passphrase` - Decrypts an age-encrypted message using a passphrase
 
 **Administration:**
 

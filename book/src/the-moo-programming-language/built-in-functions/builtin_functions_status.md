@@ -217,11 +217,8 @@ Functions not in the original LambdaMOO, but were in Toast, and ported over
 
 | Name                                                     | Complete | Notes                                                               |
 |----------------------------------------------------------|----------|---------------------------------------------------------------------|
-| [`age_generate_keypair`](crypto.md#age_generate_keypair) | &check;  | Generates a new X25519 keypair for use with age encryption.         |
-| [`age_encrypt`](crypto.md#age_encrypt)                   | &check;  | Encrypts a message using age encryption for one or more recipients. |
-| [`age_decrypt`](crypto.md#age_decrypt)                   | &check;  | Decrypts an age-encrypted message using one or more private keys.   |
 | [`argon2`](crypto.md#argon2)                             | &check;  | Same signature as function in ToastSunt                             |
-| [`arong2_verify`](crypto.md#argon2_verify)               | &check;  | Same signature as function in ToastSunt                             |
+| [`argon2_verify`](crypto.md#argon2_verify)               | &check;  | Same signature as function in ToastSunt                             |
 | [`ftime`](server.md#ftime)                               | &check;  | Slight differents in return value, see notes in BfFtime             |
 | [`encode_base64`](strings.md#encode_base64)              | &check;  |                                                                     |
 | [`decode_base64`](strings.md#decode_base64)              | &check;  |                                                                     |
@@ -263,6 +260,16 @@ Functions not part of the original LambdaMOO, but added in moor
 | `flyslotset`    | Returns a copy of the flyweight with a slot added or updated             | Available only if the flyweights feature is turned on |
 | `flyslotremove` | Returns a copy of the flyweight with the given slot removed, if present  | Available only if the flyweights feature is turned on |
 | `tosym`         | Turns the given value into a Symbol                                      | Available only if the symbols feature is turned on    |
+
+### Cryptography
+
+| Name                                                                            | Description                                                                    | Notes |
+|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------|-------|
+| [`age_generate_keypair`](crypto.md#age_generate_keypair)                       | Generates a new X25519 keypair for use with age encryption                    |       |
+| [`age_encrypt`](crypto.md#age_encrypt)                                         | Encrypts a message using age encryption for one or more recipients             |       |
+| [`age_decrypt`](crypto.md#age_decrypt)                                         | Decrypts an age-encrypted message using one or more private keys               |       |
+| [`age_encrypt_with_passphrase`](crypto.md#age_encrypt_with_passphrase)         | Encrypts a message using age encryption with a passphrase                      |       |
+| [`age_decrypt_with_passphrase`](crypto.md#age_decrypt_with_passphrase)         | Decrypts an age-encrypted message using a passphrase                           |       |
 
 ### Expanded error handling
 
