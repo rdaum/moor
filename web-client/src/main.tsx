@@ -1479,6 +1479,7 @@ function AppContent({
                         if (result.success) {
                             setShowPasswordPrompt(false);
                             setUserSkippedEncryption(false);
+                            setHistoryLoaded(false);
                         }
                         return result;
                     }}
@@ -1501,6 +1502,7 @@ function AppContent({
                         if (result.success) {
                             setShowEncryptionSetup(false);
                             setUserSkippedEncryption(false);
+                            setHistoryLoaded(false);
                         }
                         return result;
                     }}
