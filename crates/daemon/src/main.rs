@@ -398,6 +398,11 @@ fn main() -> Result<(), Report> {
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it. If generate-keypair flag is set and keys don't exist, generate them.
     let (private_key, public_key) = if public_key_path.exists() && private_key_path.exists() {
+        info!(
+            "Loading existing keypair from {}/{}",
+            public_key_path.display(),
+            private_key_path.display()
+        );
         load_keypair(&public_key_path, &private_key_path).map_err(|e| {
             eyre!(
                 "Unable to load keypair from public and private key files: {}",
@@ -407,6 +412,11 @@ fn main() -> Result<(), Report> {
     } else if args.generate_keypair {
         // Generate keypair if flag is set and files don't exist
         generate_keypair(&public_key_path, &private_key_path)?;
+        info!(
+            "Generated keypair to {}/{}",
+            public_key_path.display(),
+            private_key_path.display()
+        );
         load_keypair(&public_key_path, &private_key_path)
             .map_err(|e| eyre!("Unable to load generated keypair: {}", e))?
     } else {
