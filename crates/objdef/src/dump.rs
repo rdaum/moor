@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::import_export_id;
+use crate::{import_export_hierarchy, import_export_id};
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, loader::SnapshotInterface,
     prop_flags_string, verb_perms_string,
@@ -261,6 +261,52 @@ fn extract_from_import_export_ids(
     (index_names, file_names)
 }
 
+/// Extract hierarchy path from an object's import_export_hierarchy property
+/// Returns a vector of path components, or empty vector if no hierarchy is set
+fn extract_hierarchy_path(od: &ObjectDefinition) -> Vec<String> {
+    let import_export_hierarchy_sym = import_export_hierarchy();
+
+    // Look for import_export_hierarchy in both definitions and overrides
+    let hierarchy_value = od
+        .property_definitions
+        .iter()
+        .find(|pd| pd.name == import_export_hierarchy_sym)
+        .and_then(|pd| pd.value.as_ref())
+        .or_else(|| {
+            od.property_overrides
+                .iter()
+                .find(|po| po.name == import_export_hierarchy_sym)
+                .and_then(|po| po.value.as_ref())
+        });
+
+    if let Some(value) = hierarchy_value {
+        // Handle list of strings
+        if let Some(list) = value.as_list() {
+            return list
+                .iter()
+                .filter_map(|v| {
+                    if let Some(s) = v.as_string() {
+                        Some(s.to_string())
+                    } else if let Ok(sym) = v.as_symbol() {
+                        Some(sym.as_arc_string().to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+        }
+        // Handle single string
+        if let Some(s) = value.as_string() {
+            return vec![s.to_string()];
+        }
+        if let Ok(sym) = value.as_symbol() {
+            return vec![sym.as_arc_string().to_string()];
+        }
+    }
+
+    Vec::new()
+}
+
 fn extract_from_sysobj_heuristic(
     object_defs: &[ObjectDefinition],
 ) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
@@ -365,20 +411,52 @@ fn collect_top_level_constants(sysobj: &ObjectDefinition, candidates: &mut Vec<C
 
 fn generate_constants_file(
     index_names: &HashMap<Obj, String>,
+    hierarchies: &HashMap<Obj, Vec<String>>,
     directory_path: &Path,
 ) -> Result<(), ObjectDumpError> {
-    let mut lines = Vec::new();
-    // Sort incrementally by object id.
-    let mut objects: Vec<_> = index_names.iter().collect();
-    objects.sort_by(|a, b| a.0.as_u64().cmp(&b.0.as_u64()));
-    for i in objects {
-        let obj_ref = canon_name(i.0, &HashMap::new()); // Use canon_name for proper objdef format
-        lines.push(format!(
-            "define {} = {};",
-            i.1.to_ascii_uppercase(),
-            obj_ref
-        ));
+    // Group constants by their hierarchy path
+    let mut grouped: HashMap<String, Vec<(Obj, String)>> = HashMap::new();
+
+    for (obj, constant_name) in index_names.iter() {
+        let hierarchy_path = hierarchies
+            .get(obj)
+            .map(|h| h.join("/"))
+            .unwrap_or_default();
+        grouped
+            .entry(hierarchy_path)
+            .or_default()
+            .push((*obj, constant_name.clone()));
     }
+
+    // Sort hierarchy groups
+    let mut sorted_groups: Vec<_> = grouped.into_iter().collect();
+    sorted_groups.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut lines = Vec::new();
+
+    for (hierarchy_path, mut objects) in sorted_groups {
+        // Sort objects within each group by object id
+        objects.sort_by(|a, b| a.0.as_u64().cmp(&b.0.as_u64()));
+
+        // Add comment header for this group (skip for root level)
+        if !hierarchy_path.is_empty() {
+            if !lines.is_empty() {
+                lines.push(String::new()); // Empty line before group
+            }
+            lines.push(format!("// {}", hierarchy_path));
+        }
+
+        // Add constants for this group
+        for (obj, constant_name) in objects {
+            let obj_ref = canon_name(&obj, &HashMap::new());
+            lines.push(format!(
+                "define {} = {};",
+                constant_name.to_ascii_uppercase(),
+                obj_ref
+            ));
+        }
+    }
+
     let constants = lines.join("\n");
     let constants_file = directory_path.join("constants.moo");
     let mut constants_file = std::fs::File::create(constants_file)?;
@@ -393,6 +471,12 @@ pub fn dump_object_definitions(
     // Extract constant names and file names
     let (index_names, file_names) = extract_system_object_references(object_defs);
 
+    // Extract hierarchies for all objects
+    let hierarchies: HashMap<Obj, Vec<String>> = object_defs
+        .iter()
+        .map(|od| (od.oid, extract_hierarchy_path(od)))
+        .collect();
+
     // Separate anonymous objects from regular objects
     let (anonymous_objects, regular_objects): (Vec<_>, Vec<_>) =
         object_defs.iter().partition(|o| o.oid.is_anonymous());
@@ -405,10 +489,25 @@ pub fn dump_object_definitions(
     std::fs::create_dir_all(directory_path)?;
 
     // Constants index, for friendlier names (only for regular objects)
-    generate_constants_file(&index_names, directory_path)?;
+    generate_constants_file(&index_names, &hierarchies, directory_path)?;
 
-    // Dump regular objects - one file per object
+    // Dump regular objects - one file per object in their respective subdirectories
     for o in regular_objects {
+        // Get hierarchy path for this object
+        let hierarchy = hierarchies.get(&o.oid).cloned().unwrap_or_default();
+
+        // Build the target directory path
+        let target_dir = if hierarchy.is_empty() {
+            directory_path.to_path_buf()
+        } else {
+            let mut path = directory_path.to_path_buf();
+            for component in &hierarchy {
+                path.push(component);
+            }
+            std::fs::create_dir_all(&path)?;
+            path
+        };
+
         // Pick a file name.
         let file_name = match file_names.get(&o.oid) {
             Some(name) => format!("{name}.moo"),
@@ -421,7 +520,7 @@ pub fn dump_object_definitions(
                 format!("{}_{}.moo", prefix, o.oid.as_u64())
             }
         };
-        let file_path = directory_path.join(file_name);
+        let file_path = target_dir.join(file_name);
         let mut file = std::fs::File::create(file_path)?;
 
         let lines = dump_object(&index_names, o)?;
@@ -429,22 +528,43 @@ pub fn dump_object_definitions(
         file.write_all(objstr.as_bytes())?;
     }
 
-    // Dump all anonymous objects into a single file
+    // Dump anonymous objects - group by hierarchy
     if !anonymous_objects.is_empty() {
-        let anon_file_path = directory_path.join("_anonymous_objects.moo");
-        let mut anon_file = std::fs::File::create(anon_file_path)?;
-
-        let mut all_anon_lines = Vec::new();
-        for (i, o) in anonymous_objects.iter().enumerate() {
-            if i > 0 {
-                all_anon_lines.push(String::new()); // Empty line between objects
-            }
-            let lines = dump_object(&index_names, o)?;
-            all_anon_lines.extend(lines);
+        // Group anonymous objects by their hierarchy
+        let mut anon_by_hierarchy: HashMap<Vec<String>, Vec<&ObjectDefinition>> = HashMap::new();
+        for o in &anonymous_objects {
+            let hierarchy = hierarchies.get(&o.oid).cloned().unwrap_or_default();
+            anon_by_hierarchy.entry(hierarchy).or_default().push(o);
         }
 
-        let anon_objstr = all_anon_lines.join("\n");
-        anon_file.write_all(anon_objstr.as_bytes())?;
+        // Write each hierarchy group to its own _anonymous_objects.moo file
+        for (hierarchy, objects) in anon_by_hierarchy {
+            let target_dir = if hierarchy.is_empty() {
+                directory_path.to_path_buf()
+            } else {
+                let mut path = directory_path.to_path_buf();
+                for component in &hierarchy {
+                    path.push(component);
+                }
+                std::fs::create_dir_all(&path)?;
+                path
+            };
+
+            let anon_file_path = target_dir.join("_anonymous_objects.moo");
+            let mut anon_file = std::fs::File::create(anon_file_path)?;
+
+            let mut all_anon_lines = Vec::new();
+            for (i, o) in objects.iter().enumerate() {
+                if i > 0 {
+                    all_anon_lines.push(String::new()); // Empty line between objects
+                }
+                let lines = dump_object(&index_names, o)?;
+                all_anon_lines.extend(lines);
+            }
+
+            let anon_objstr = all_anon_lines.join("\n");
+            anon_file.write_all(anon_objstr.as_bytes())?;
+        }
     }
 
     info!(

@@ -25,6 +25,13 @@ fn import_export_id() -> Symbol {
     *IMPORT_EXPORT_ID.get_or_init(|| Symbol::mk("import_export_id"))
 }
 
+/// Property name used to determine object's subdirectory hierarchy in objdef dumps
+pub static IMPORT_EXPORT_HIERARCHY: OnceLock<Symbol> = OnceLock::new();
+
+fn import_export_hierarchy() -> Symbol {
+    *IMPORT_EXPORT_HIERARCHY.get_or_init(|| Symbol::mk("import_export_hierarchy"))
+}
+
 #[cfg(test)]
 mod conflict_tests;
 

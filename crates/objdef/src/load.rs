@@ -193,6 +193,32 @@ impl<'a> ObjectDefinitionLoader<'a> {
         (should_proceed, Some(conflict_record))
     }
 
+    /// Recursively collect all .moo files in a directory tree
+    fn collect_moo_files_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+
+        if path.is_dir() {
+            for entry in std::fs::read_dir(path)? {
+                let entry = entry?;
+                let entry_path = entry.path();
+
+                if entry_path.is_dir() {
+                    // Recursively collect files from subdirectories
+                    files.extend(Self::collect_moo_files_recursive(&entry_path)?);
+                } else if entry_path.is_file()
+                    && entry_path
+                        .extension()
+                        .map(|ext| ext == "moo")
+                        .unwrap_or(false)
+                {
+                    files.push(entry_path);
+                }
+            }
+        }
+
+        Ok(files)
+    }
+
     /// Read an entire directory of objdef files, along with `constants.moo`, process them, and
     /// load them into the database.
     pub fn load_objdef_directory(
@@ -213,18 +239,15 @@ impl<'a> ObjectDefinitionLoader<'a> {
         let mut compile_options = compile_options.clone();
         compile_options.call_unsupported_builtins = true;
 
-        // Collect all the file names,
-        let filenames: Vec<_> = dirpath
-            .read_dir()
-            .expect("Unable to open import directory")
-            .filter_map(|entry| entry.ok())
-            .filter_map(|e| e.path().is_file().then(|| e.path()))
-            .filter(|path| path.extension().map(|ext| ext == "moo").unwrap_or(false))
-            .collect();
-        // and if there's a "constants.moo" put that at the top to parse first
+        // Recursively collect all .moo files
+        let filenames = Self::collect_moo_files_recursive(dirpath)
+            .expect("Unable to recursively read import directory");
+
+        // Find constants.moo in the root directory and parse it first
         let constants_file = filenames
             .iter()
-            .find(|f| f.file_name().unwrap() == "constants.moo");
+            .find(|f| f.file_name().unwrap() == "constants.moo" && f.parent().unwrap() == dirpath);
+
         if let Some(constants_file) = constants_file {
             let constants_file_contents = std::fs::read_to_string(constants_file)
                 .map_err(|e| ObjdefLoaderError::ObjectFileReadError(constants_file.clone(), e))?;
