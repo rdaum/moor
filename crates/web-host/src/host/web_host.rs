@@ -123,27 +123,51 @@ fn get_client_addr(headers: &HeaderMap, connect_addr: SocketAddr) -> SocketAddr 
 /// Cached DNS resolver to avoid recreating on every connection
 /// Initialized lazily on first use
 static DNS_RESOLVER: LazyLock<TokioResolver> = LazyLock::new(|| {
-    debug!("Initializing DNS resolver (first use)");
-    TokioResolver::builder_tokio()
-        .expect("Failed to create DNS resolver builder")
-        .build()
+    debug!("DNS resolver initialization STARTING");
+    let builder = TokioResolver::builder_tokio().expect("Failed to create DNS resolver builder");
+    debug!("DNS resolver builder created, calling build()");
+    let resolver = builder.build();
+    debug!("DNS resolver initialization COMPLETE");
+    resolver
 });
 
 /// Perform async reverse DNS lookup for an IP address with timeout
 async fn resolve_hostname(ip: IpAddr) -> Result<String, eyre::Error> {
+    debug!(
+        "resolve_hostname: Acquiring DNS resolver reference for {}",
+        ip
+    );
+
     // Get the cached resolver (created once, reused for all connections)
     let resolver = &*DNS_RESOLVER;
 
+    debug!("resolve_hostname: DNS resolver acquired, creating lookup future");
+
     // Perform reverse DNS lookup with 2 second timeout
     let lookup_future = resolver.reverse_lookup(ip);
-    let response = timeout(Duration::from_secs(2), lookup_future)
-        .await
-        .map_err(|_| eyre::eyre!("DNS lookup timeout"))??;
+
+    debug!("resolve_hostname: Starting timeout wrapper (2s) for reverse lookup");
+    let timeout_result = timeout(Duration::from_secs(2), lookup_future).await;
+
+    debug!("resolve_hostname: Timeout wrapper returned for {}", ip);
+
+    let response = timeout_result.map_err(|_| {
+        warn!("DNS lookup timeout (2s) for {}", ip);
+        eyre::eyre!("DNS lookup timeout")
+    })??;
+
+    debug!("resolve_hostname: Got DNS response, extracting hostname");
 
     // Get the first hostname from the response
     if let Some(name) = response.iter().next() {
-        Ok(name.to_string().trim_end_matches('.').to_string())
+        let hostname = name.to_string().trim_end_matches('.').to_string();
+        debug!(
+            "resolve_hostname: Successfully resolved {} to {}",
+            ip, hostname
+        );
+        Ok(hostname)
     } else {
+        debug!("resolve_hostname: No PTR record found for {}", ip);
         Err(eyre::eyre!("No PTR record found"))
     }
 }
@@ -244,22 +268,29 @@ impl WebHost {
         let rpc_client = self.build_rpc_client();
 
         // Perform reverse DNS lookup for hostname
-        debug!("Starting reverse DNS lookup for {}", peer_addr.ip());
+        debug!(
+            "attach_authenticated: About to call resolve_hostname for {}",
+            peer_addr.ip()
+        );
         let hostname = match resolve_hostname(peer_addr.ip()).await {
             Ok(hostname) => {
-                debug!("Resolved {} to hostname: {}", peer_addr.ip(), hostname);
+                debug!(
+                    "attach_authenticated: Resolved {} to hostname: {}",
+                    peer_addr.ip(),
+                    hostname
+                );
                 hostname
             }
             Err(e) => {
                 debug!(
-                    "Failed to resolve {} ({}), using IP address",
+                    "attach_authenticated: Failed to resolve {} ({}), using IP address",
                     peer_addr.ip(),
                     e
                 );
                 peer_addr.to_string()
             }
         };
-        debug!("DNS lookup complete, continuing with attach");
+        debug!("attach_authenticated: DNS lookup complete, continuing with attach");
 
         let content_types = vec![
             moor_rpc::Symbol {
@@ -352,18 +383,29 @@ impl WebHost {
     ) -> Result<(Obj, Uuid, ClientToken, RpcClient), WsHostError> {
         let rpc_client = self.build_rpc_client();
 
-        debug!("Starting reverse DNS lookup for {}", peer_addr.ip());
+        debug!(
+            "reattach_authenticated: About to call resolve_hostname for {}",
+            peer_addr.ip()
+        );
         let hostname = match resolve_hostname(peer_addr.ip()).await {
-            Ok(hostname) => hostname,
+            Ok(hostname) => {
+                debug!(
+                    "reattach_authenticated: Resolved {} to hostname: {}",
+                    peer_addr.ip(),
+                    hostname
+                );
+                hostname
+            }
             Err(e) => {
                 debug!(
-                    "Failed to resolve {} ({}), using IP address",
+                    "reattach_authenticated: Failed to resolve {} ({}), using IP address",
                     peer_addr.ip(),
                     e
                 );
                 peer_addr.to_string()
             }
         };
+        debug!("reattach_authenticated: DNS lookup complete, continuing with reattach");
 
         let content_types = vec![
             moor_rpc::Symbol {

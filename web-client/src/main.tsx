@@ -323,6 +323,7 @@ function AppContent({
 
     // Computed values (must be declared before any effects/callbacks that use them)
     const isConnected = isPlayerConnected;
+    const hasPlayer = Boolean(player);
     const canUseObjectBrowser = Boolean(isConnected && hasProgrammerAccess);
     const verbEditorDocked = !!editorSession && (isTouchDevice || forceSplitMode);
     const propertyEditorDocked = !!propertyEditorSession && (isTouchDevice || forceSplitMode);
@@ -1220,7 +1221,7 @@ function AppContent({
             />
 
             {/* Main app layout with narrative interface */}
-            {isConnected && (
+            {hasPlayer && (
                 <main
                     className="app_layout"
                     role="main"
@@ -1264,8 +1265,8 @@ function AppContent({
                             <section role="main" aria-label="Game narrative and input">
                                 <Narrative
                                     ref={narrativeCallbackRef}
-                                    visible={isConnected}
-                                    connected={isConnected}
+                                    visible={hasPlayer}
+                                    connectionStatus={wsState.connectionStatus}
                                     onSendMessage={sendMessage}
                                     onLoadMoreHistory={eventLogEnabled === false ? undefined : handleLoadMoreHistory}
                                     isLoadingHistory={eventLogEnabled === false ? false : isLoadingHistory}

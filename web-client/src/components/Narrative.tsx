@@ -31,7 +31,7 @@ export interface NarrativeMessage {
 
 interface NarrativeProps {
     visible: boolean;
-    connected: boolean;
+    connectionStatus: "disconnected" | "connecting" | "connected" | "error";
     onSendMessage: (message: string) => void;
     onLoadMoreHistory?: () => void;
     isLoadingHistory?: boolean;
@@ -71,7 +71,7 @@ const getCommandHistoryStorageKey = (playerOid?: string | null) => {
 
 export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     visible,
-    connected,
+    connectionStatus,
     onSendMessage,
     onLoadMoreHistory,
     isLoadingHistory = false,
@@ -82,6 +82,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
     inputMetadata,
     onClearInputMetadata,
 }, ref) => {
+    const connected = connectionStatus === "connected";
     const [messages, setMessages] = useState<NarrativeMessage[]>([]);
     const [commandHistory, setCommandHistory] = useState<string[]>([]);
     const narrativeContainerRef = useRef<HTMLDivElement>(null);
@@ -341,6 +342,86 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                     onClearInputMetadata={onClearInputMetadata}
                 />
             </div>
+
+            {/* Connection status overlay */}
+            {(connectionStatus === "connecting" || connectionStatus === "error") && (
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "rgba(0, 0, 0, 0.3)",
+                        backdropFilter: "blur(4px)",
+                        borderRadius: "var(--radius-lg)",
+                        zIndex: 100,
+                    }}
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "16px",
+                            padding: "32px",
+                            backgroundColor: "var(--color-bg-primary)",
+                            borderRadius: "var(--radius-lg)",
+                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                        }}
+                    >
+                        {connectionStatus === "connecting"
+                            ? (
+                                <>
+                                    <div className="loading-spinner large" />
+                                    <div
+                                        style={{
+                                            color: "var(--color-text-primary)",
+                                            fontSize: "16px",
+                                            fontWeight: 600,
+                                            fontFamily: "var(--font-ui)",
+                                        }}
+                                    >
+                                        Connecting to server...
+                                    </div>
+                                </>
+                            )
+                            : (
+                                <>
+                                    <div
+                                        style={{
+                                            color: "var(--color-text-error)",
+                                            fontSize: "24px",
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        ⚠
+                                    </div>
+                                    <div
+                                        style={{
+                                            color: "var(--color-text-error)",
+                                            fontSize: "16px",
+                                            fontWeight: 600,
+                                            fontFamily: "var(--font-ui)",
+                                        }}
+                                    >
+                                        Connection error
+                                    </div>
+                                    <div
+                                        style={{
+                                            color: "var(--color-text-secondary)",
+                                            fontSize: "14px",
+                                            fontFamily: "var(--font-ui)",
+                                            textAlign: "center",
+                                        }}
+                                    >
+                                        Retrying connection...
+                                    </div>
+                                </>
+                            )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 });
