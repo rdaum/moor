@@ -386,29 +386,23 @@ fn bf_age_passphrase_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
         .map_err(world_state_bf_err)?;
 
     // Get the message to encrypt
-    let message = match bf_args.args[0].variant() {
-        Variant::Str(s) => s.as_str(),
-        _ => {
-            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-                format!(
-                    "age_passphrase_encrypt() first argument must be a string, was {}",
-                    bf_args.args[0].type_code().to_literal()
-                )
-            })));
-        }
+    let Some(message) = bf_args.args[0].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "age_passphrase_encrypt() first argument must be a string, was {}",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
     // Get the passphrase
-    let passphrase = match bf_args.args[1].variant() {
-        Variant::Str(s) => s.as_str(),
-        _ => {
-            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-                format!(
-                    "age_passphrase_encrypt() second argument must be a string, was {}",
-                    bf_args.args[1].type_code().to_literal()
-                )
-            })));
-        }
+    let Some(passphrase) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "age_passphrase_encrypt() second argument must be a string, was {}",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
     };
 
     // Create an encryptor with the passphrase
@@ -451,15 +445,19 @@ fn bf_age_passphrase_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
         .map_err(world_state_bf_err)?;
 
     // Get the encrypted message - accept both bytes and base64 string
-    let encrypted = match bf_args.args[0].variant() {
-        Variant::Binary(b) => b.as_bytes().to_vec(),
+    // When Binary, we can use the bytes directly without copying
+    // When String (base64), we must decode to a Vec
+    let encrypted_data: Vec<u8>;
+    let encrypted_slice = match bf_args.args[0].variant() {
+        Variant::Binary(b) => b.as_bytes(),
         Variant::Str(s) => {
-            BASE64.decode(s.as_str()).map_err(|_| {
+            encrypted_data = BASE64.decode(s.as_str()).map_err(|_| {
                 warn!("Invalid base64 data for decryption");
                 BfErr::ErrValue(
                     E_INVARG.msg("age_passphrase_decrypt() failed to decode base64 data"),
                 )
-            })?
+            })?;
+            &encrypted_data[..]
         }
         _ => {
             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
@@ -472,23 +470,20 @@ fn bf_age_passphrase_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
     };
 
     // Get the passphrase
-    let passphrase = match bf_args.args[1].variant() {
-        Variant::Str(s) => s.as_str(),
-        _ => {
-            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-                format!(
-                    "age_passphrase_decrypt() second argument must be a string, was {}",
-                    bf_args.args[1].type_code().to_literal()
-                )
-            })));
-        }
+    let Some(passphrase) = bf_args.args[1].as_string() else {
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "age_passphrase_decrypt() second argument must be a string, was {}",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
     };
 
     // Create an identity from the passphrase
     let identity = age::scrypt::Identity::new(SecretString::new(passphrase.to_string().into()));
 
     // Create a decryptor
-    let decryptor = Decryptor::new_buffered(&encrypted[..]).map_err(|e| {
+    let decryptor = Decryptor::new_buffered(encrypted_slice).map_err(|e| {
         error!("Failed to create decryptor: {}", e);
         BfErr::ErrValue(E_INVARG.msg("age_passphrase_decrypt() failed to create decryptor"))
     })?;
