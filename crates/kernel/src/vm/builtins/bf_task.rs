@@ -58,6 +58,57 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
 
+/// Suspends the task if tick count is within a threshold of the maximum.
+/// MOO: `bool suspend_if_needed([num threshold])`
+///
+/// If no threshold is provided, defaults to 500 ticks.
+/// If the remaining ticks are less than or equal to the threshold, suspends with a commit
+/// (which causes a commit and immediate resume in a new transaction) and returns true.
+/// Otherwise, returns false without suspending.
+fn bf_suspend_if_needed(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() > 1 {
+        return Err(ErrValue(
+            E_ARGS.msg("suspend_if_needed() requires 0 or 1 arguments"),
+        ));
+    }
+
+    let threshold = if bf_args.args.is_empty() {
+        500
+    } else {
+        match bf_args.args[0].variant() {
+            Variant::Float(threshold) => *threshold as i64,
+            Variant::Int(threshold) => *threshold,
+            _ => {
+                return Err(ErrValue(E_TYPE.msg(
+                    "suspend_if_needed() requires a number as the first argument",
+                )));
+            }
+        }
+    };
+
+    if threshold < 0 {
+        return Err(ErrValue(E_INVARG.msg(
+            "suspend_if_needed() requires a non-negative number as the first argument",
+        )));
+    }
+
+    // Calculate remaining ticks
+    let ticks_left = bf_args
+        .exec_state
+        .max_ticks
+        .saturating_sub(bf_args.exec_state.tick_count);
+
+    // If we're within the threshold, suspend with commit (immediate commit/resume)
+    if ticks_left < threshold as usize {
+        Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit(
+            bf_args.v_bool(true),
+        ))))
+    } else {
+        // Otherwise, just return without suspending
+        Ok(Ret(bf_args.v_bool(false)))
+    }
+}
+
 /// Commits the current transaction and suspends the task, optionally returning a value.
 /// MOO: `any commit([any value])`
 fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -557,6 +608,7 @@ fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 pub(crate) fn register_bf_task(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("suspend")] = bf_suspend;
+    builtins[offset_for_builtin("suspend_if_needed")] = bf_suspend_if_needed;
     builtins[offset_for_builtin("queued_tasks")] = bf_queued_tasks;
     builtins[offset_for_builtin("active_tasks")] = bf_active_tasks;
     builtins[offset_for_builtin("queue_info")] = bf_queue_info;

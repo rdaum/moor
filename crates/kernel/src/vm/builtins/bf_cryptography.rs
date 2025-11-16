@@ -406,7 +406,8 @@ fn bf_age_passphrase_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
     };
 
     // Create an encryptor with the passphrase
-    let encryptor = Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string().into()));
+    let encryptor =
+        Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string().into()));
 
     // Encrypt the message
     let mut encrypted = Vec::new();
@@ -420,7 +421,9 @@ fn bf_age_passphrase_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
         .and_then(|_| writer.finish())
         .map_err(|e| {
             error!("Failed to write message for encryption: {}", e);
-            BfErr::ErrValue(E_INVARG.msg("age_passphrase_encrypt() failed to write message for encryption"))
+            BfErr::ErrValue(
+                E_INVARG.msg("age_passphrase_encrypt() failed to write message for encryption"),
+            )
         })?;
 
     // Return the encrypted data as bytes
@@ -493,15 +496,15 @@ fn bf_age_passphrase_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
         .decrypt(std::iter::once(&identity as &dyn age::Identity))
         .map_err(|e| {
             warn!("Failed to decrypt with passphrase: {}", e);
-            BfErr::ErrValue(E_INVARG.msg("age_passphrase_decrypt() failed to decrypt (wrong passphrase or corrupted data)"))
+            BfErr::ErrValue(E_INVARG.msg(
+                "age_passphrase_decrypt() failed to decrypt (wrong passphrase or corrupted data)",
+            ))
         })?;
 
     let mut decrypted = String::new();
     reader.read_to_string(&mut decrypted).map_err(|e| {
         warn!("Decrypted data is not valid UTF-8: {}", e);
-        BfErr::ErrValue(
-            E_INVARG.msg("age_passphrase_decrypt() decrypted data is not valid UTF-8"),
-        )
+        BfErr::ErrValue(E_INVARG.msg("age_passphrase_decrypt() decrypted data is not valid UTF-8"))
     })?;
 
     Ok(Ret(v_string(decrypted)))

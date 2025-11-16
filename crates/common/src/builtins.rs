@@ -755,6 +755,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             vec![Typed(TYPE_STR), Typed(TYPE_STR)],
             true,
         ),
+        mk_builtin("suspend_if_needed", Q(0), Q(1), vec![AnyNum], true),
     ]
 }
 

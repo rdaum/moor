@@ -100,7 +100,7 @@ This does however, have some implications for how tasks are written:
   occur. This means that tasks should not rely on a specific amount of time to complete, and should be written to
   handle being re-executed multiple times.
 
-For explicit transaction management, the following functions are available at the wizard level:
+For explicit transaction management, the following functions are available:
 
 - The (wizard-only) `commit([value])` function commits the mutations made by a task to the database, then suspends
   and resumes the task in a new transaction. If provided, `value` is returned when the task resumes; otherwise,
@@ -109,3 +109,8 @@ For explicit transaction management, the following functions are available at th
   changes and then return a result that depends on those committed changes being visible.
 - The (wizard-only) `rollback()` function is used to abort the current task, reverting any changes made to the database
   since the last commit.
+- The `suspend_if_needed([threshold])` function checks if the remaining tick count is below the specified threshold
+  (defaulting to 500 ticks). If so, it commits the current transaction and immediately resumes in a new transaction,
+  returning `true`. If the tick budget is still sufficient, it returns `false` without suspending. This is useful
+  for long-running tasks that need to periodically commit their work to avoid hitting the tick limit, while
+  minimizing unnecessary commits when plenty of ticks remain.
