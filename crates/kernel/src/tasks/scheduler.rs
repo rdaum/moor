@@ -760,7 +760,7 @@ impl Scheduler {
                 // Clear the concurrent GC flag
                 self.gc_mark_in_progress = false;
 
-                info!(
+                debug!(
                     "GC mark phase completed, received {} unreachable objects",
                     unreachable_objects.len()
                 );
@@ -778,7 +778,7 @@ impl Scheduler {
 
                 // Check if there's work to do
                 if unreachable_objects.is_empty() {
-                    info!(
+                    debug!(
                         "Minor GC cycle #{}: mark phase found no objects to collect, skipping sweep phase",
                         self.gc_cycle_count
                     );
@@ -1775,7 +1775,7 @@ impl Scheduler {
         let time_since_last_gc = self.gc_last_cycle_time.elapsed();
 
         if time_since_last_gc >= gc_interval {
-            info!(
+            debug!(
                 "Triggering automatic GC after {} seconds of inactivity (interval: {} seconds)",
                 time_since_last_gc.as_secs(),
                 gc_interval.as_secs()
@@ -1948,23 +1948,23 @@ impl Scheduler {
             0
         };
 
-	// Only log the collection if we actually collected some objects or if it took an unusual amount of time.
+        // Only log the collection if we actually collected some objects or if it took an unusual amount of time.
         let sweep_duration = start_time.elapsed();
-	if collected != 0 || sweep_duration > Duration::from_secs(5) {
-	    if sweep_duration> Duration::from_secs(5) {
-		warn!(
-		    "GC sweep: {} objects collected in *{:.2}ms*",
-		    collected,
-		    sweep_duration.as_secs_f64() * 1000.0
-		);
-	    } else {
-		info!(
-		    "GC sweep: {} objects collected in {:.2}ms",
-		    collected,
-		    sweep_duration.as_secs_f64() * 1000.0
-		);
-	    }
-	}
+        if collected != 0 || sweep_duration > Duration::from_secs(5) {
+            if sweep_duration > Duration::from_secs(5) {
+                warn!(
+                    "GC sweep: {} objects collected in *{:.2}ms*",
+                    collected,
+                    sweep_duration.as_secs_f64() * 1000.0
+                );
+            } else {
+                info!(
+                    "GC sweep: {} objects collected in {:.2}ms",
+                    collected,
+                    sweep_duration.as_secs_f64() * 1000.0
+                );
+            }
+        }
 
         // Commit the sweep phase transaction
         match gc.commit() {
