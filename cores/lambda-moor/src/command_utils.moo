@@ -318,8 +318,8 @@ object COMMAND_UTILS
 
     "Use the builtin for efficient commit when time is 0";
     if (time == 0)
-      "Use 4000 tick threshold to match legacy behavior";
-      if (suspend_if_needed(4000))
+      "Builtin defaults to 4000 tick threshold";
+      if (suspend_if_needed())
         if (ann && valid(player))
           player:tell(tostr(@ann));
         endif

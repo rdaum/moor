@@ -61,7 +61,7 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// Suspends the task if tick count is within a threshold of the maximum.
 /// MOO: `bool suspend_if_needed([num threshold])`
 ///
-/// If no threshold is provided, defaults to 500 ticks.
+/// If no threshold is provided, defaults to 4000 ticks.
 /// If the remaining ticks are less than or equal to the threshold, suspends with a commit
 /// (which causes a commit and immediate resume in a new transaction) and returns true.
 /// Otherwise, returns false without suspending.
@@ -73,7 +73,7 @@ fn bf_suspend_if_needed(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let threshold = if bf_args.args.is_empty() {
-        500
+        4000
     } else {
         match bf_args.args[0].variant() {
             Variant::Float(threshold) => *threshold as i64,

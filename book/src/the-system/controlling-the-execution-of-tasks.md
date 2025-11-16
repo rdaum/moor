@@ -48,14 +48,14 @@ for item in (large_list)
     process_item(item);
 
     // Check if we're running low on ticks and commit if needed
-    // Default threshold is 500 ticks
+    // Default threshold is 4000 ticks
     if (suspend_if_needed())
         // We committed and resumed - continue with fresh tick budget
     endif
 endfor
 ```
 
-The function checks the remaining tick count against a threshold (500 ticks by default). If fewer ticks remain than
+The function checks the remaining tick count against a threshold (4000 ticks by default). If fewer ticks remain than
 the threshold, it commits the current transaction and immediately resumes in a new transaction with a fresh tick
 budget, returning `true`. If plenty of ticks remain, it simply returns `false` without suspending.
 

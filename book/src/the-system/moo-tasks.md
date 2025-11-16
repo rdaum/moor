@@ -110,7 +110,7 @@ For explicit transaction management, the following functions are available:
 - The (wizard-only) `rollback()` function is used to abort the current task, reverting any changes made to the database
   since the last commit.
 - The `suspend_if_needed([threshold])` function checks if the remaining tick count is below the specified threshold
-  (defaulting to 500 ticks). If so, it commits the current transaction and immediately resumes in a new transaction,
+  (defaulting to 4000 ticks). If so, it commits the current transaction and immediately resumes in a new transaction,
   returning `true`. If the tick budget is still sufficient, it returns `false` without suspending. This is useful
   for long-running tasks that need to periodically commit their work to avoid hitting the tick limit, while
   minimizing unnecessary commits when plenty of ticks remain.
