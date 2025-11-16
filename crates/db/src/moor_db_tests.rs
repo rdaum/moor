@@ -1529,6 +1529,592 @@ mod tests {
             .expect("Unable to get verb");
     }
 
+    /// Ensures verb cache invalidation reacts correctly to reparenting.
+    /// Populate cache for a child inheriting from parent A, reparent
+    /// it to parent B, and assert resolution now hits B while the cache
+    /// is forced to refresh.
+    #[test]
+    fn test_verb_resolution_updates_after_reparent() {
+        let db = test_db();
+        let verb_name = Symbol::mk("reparent_verb");
+
+        let (parent_a, parent_b, child) = {
+            let mut tx = db.start_transaction();
+
+            let parent_a = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "parent_a",
+                    ),
+                )
+                .unwrap();
+            let parent_b = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "parent_b",
+                    ),
+                )
+                .unwrap();
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent_a,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "child",
+                    ),
+                )
+                .unwrap();
+
+            for (parent, name) in [(parent_a, "v_from_a"), (parent_b, "v_from_b")] {
+                tx.add_object_verb(
+                    &parent,
+                    &parent,
+                    &[verb_name],
+                    ProgramType::MooR(Program::new()),
+                    BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec,
+                    VerbArgsSpec::none_none_none(),
+                )
+                .unwrap_or_else(|_| panic!("Unable to add verb {name}"));
+            }
+
+            tx.commit().unwrap();
+            (parent_a, parent_b, child)
+        };
+
+        // Populate verb cache while child inherits from parent_a
+        {
+            let tx = db.start_transaction();
+            let verb = tx
+                .resolve_verb(&child, verb_name, None, None)
+                .expect("Child failed to resolve verb before reparent");
+            assert_eq!(
+                verb.location(),
+                parent_a,
+                "Verb should initially resolve from parent_a"
+            );
+        }
+
+        // Reparent child to parent_b (this should invalidate cached ancestry for the child only)
+        {
+            let mut tx = db.start_transaction();
+            tx.set_object_parent(&child, &parent_b)
+                .expect("Unable to reparent child");
+            tx.commit().unwrap();
+        }
+
+        // Child should now resolve the verb from parent_b
+        {
+            let tx = db.start_transaction();
+            let verb = tx
+                .resolve_verb(&child, verb_name, None, None)
+                .expect("Child failed to resolve verb after reparent");
+            assert_eq!(
+                verb.location(),
+                parent_b,
+                "Verb resolution should reflect the new parent"
+            );
+        }
+    }
+
+    /// Verifies cached verb metadata is refreshed after the parent verb
+    /// changes. We resolve once to populate, update the parent's flags,
+    /// then ensure the child now reads the new flag set.
+    #[test]
+    fn test_verb_resolution_updates_after_parent_verb_mutation() {
+        let db = test_db();
+        let verb_name = Symbol::mk("mutable_verb");
+
+        let (parent, child, verb_uuid) = {
+            let mut tx = db.start_transaction();
+            let parent = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "parent",
+                    ),
+                )
+                .unwrap();
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "child",
+                    ),
+                )
+                .unwrap();
+            tx.add_object_verb(
+                &parent,
+                &parent,
+                &[verb_name],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Read),
+                VerbArgsSpec::none_none_none(),
+            )
+            .unwrap();
+            tx.commit().unwrap();
+
+            let tx = db.start_transaction();
+            let verb = tx
+                .get_verb_by_name(&parent, verb_name)
+                .expect("Parent missing verb");
+            (parent, child, verb.uuid())
+        };
+
+        // Populate cache with the original verb definition
+        {
+            let tx = db.start_transaction();
+            let verb = tx
+                .resolve_verb(&child, verb_name, None, None)
+                .expect("Initial resolve should succeed");
+            assert!(
+                verb.flags().contains(VerbFlag::Read) && !verb.flags().contains(VerbFlag::Write),
+                "Initial verb flags should be read-only"
+            );
+        }
+
+        // Update verb flags to include write
+        {
+            let mut tx = db.start_transaction();
+            let attrs = VerbAttrs {
+                definer: None,
+                owner: None,
+                names: None,
+                flags: Some(BitEnum::new_with(VerbFlag::Write)),
+                args_spec: None,
+                program: None,
+            };
+            tx.update_verb(&parent, verb_uuid, attrs)
+                .expect("Failed to update verb definition");
+            tx.commit().unwrap();
+        }
+
+        // Cache should no longer serve stale flags
+        {
+            let tx = db.start_transaction();
+            let verb = tx
+                .resolve_verb(&child, verb_name, None, None)
+                .expect("Resolve after update should succeed");
+            assert!(
+                verb.flags().contains(VerbFlag::Write),
+                "Updated verb flags should include write"
+            );
+        }
+    }
+
+    /// Confirms that deleting a parent verb invalidates any cached hits
+    /// for descendants. After warming the cache, remove the verb and
+    /// expect the child lookup to return VerbNotFound.
+    #[test]
+    fn test_verb_resolution_fails_after_parent_verb_delete() {
+        let db = test_db();
+        let verb_name = Symbol::mk("delete_me");
+
+        let (parent, child, verb_uuid) = {
+            let mut tx = db.start_transaction();
+            let parent = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "parent",
+                    ),
+                )
+                .unwrap();
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "child",
+                    ),
+                )
+                .unwrap();
+            tx.add_object_verb(
+                &parent,
+                &parent,
+                &[verb_name],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Read),
+                VerbArgsSpec::none_none_none(),
+            )
+            .unwrap();
+            tx.commit().unwrap();
+
+            let tx = db.start_transaction();
+            let verb = tx
+                .get_verb_by_name(&parent, verb_name)
+                .expect("Parent missing verb");
+            (parent, child, verb.uuid())
+        };
+
+        // Populate the cache so the delete must invalidate it
+        {
+            let tx = db.start_transaction();
+            tx.resolve_verb(&child, verb_name, None, None)
+                .expect("Initial resolve should succeed");
+        }
+
+        // Delete the verb from the parent
+        {
+            let mut tx = db.start_transaction();
+            tx.delete_verb(&parent, verb_uuid)
+                .expect("Failed to delete parent verb");
+            tx.commit().unwrap();
+        }
+
+        // Child should no longer resolve the verb
+        {
+            let tx = db.start_transaction();
+            let result = tx.resolve_verb(&child, verb_name, None, None);
+            assert!(
+                matches!(result, Err(WorldStateError::VerbNotFound(_, _))),
+                "Verb resolution should fail after delete"
+            );
+        }
+    }
+
+    /// Reparents an entire subtree to a different root and asserts only
+    /// descendants of that subtree observe the new verb provider while
+    /// disjoint branches keep using the original cache entries.
+    #[test]
+    fn test_reparent_subtree_only_invalidate_descendants() {
+        let db = test_db();
+        let verb_name = Symbol::mk("shared_verb");
+
+        let (root_primary, root_alternate, branch_a, branch_b_child, branch_c_child) = {
+            let mut tx = db.start_transaction();
+
+            let root_primary = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "root_primary",
+                    ),
+                )
+                .unwrap();
+            let root_alternate = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "root_alternate",
+                    ),
+                )
+                .unwrap();
+
+            // Root primary and alternate both define the same verb name.
+            for (obj, label) in [(root_primary, "primary"), (root_alternate, "alternate")] {
+                tx.add_object_verb(
+                    &obj,
+                    &obj,
+                    &[verb_name],
+                    ProgramType::MooR(Program::new()),
+                    BitEnum::new_with(VerbFlag::Read),
+                    VerbArgsSpec::none_none_none(),
+                )
+                .unwrap_or_else(|_| panic!("Unable to add {label} verb"));
+            }
+
+            let branch_a = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        root_primary,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "branch_a",
+                    ),
+                )
+                .unwrap();
+            let branch_b_child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        branch_a,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "branch_b_child",
+                    ),
+                )
+                .unwrap();
+            let branch_c = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        root_primary,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "branch_c",
+                    ),
+                )
+                .unwrap();
+            let branch_c_child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        branch_c,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "branch_c_child",
+                    ),
+                )
+                .unwrap();
+
+            tx.commit().unwrap();
+            (
+                root_primary,
+                root_alternate,
+                branch_a,
+                branch_b_child,
+                branch_c_child,
+            )
+        };
+
+        // Populate caches for both subtrees (branch B child and branch C child both inherit from root_primary)
+        {
+            let tx = db.start_transaction();
+            let verb_b = tx
+                .resolve_verb(&branch_b_child, verb_name, None, None)
+                .expect("Branch B child should inherit verb before reparent");
+            assert_eq!(verb_b.location(), root_primary);
+            let verb_c = tx
+                .resolve_verb(&branch_c_child, verb_name, None, None)
+                .expect("Branch C child should inherit verb before reparent");
+            assert_eq!(verb_c.location(), root_primary);
+        }
+
+        // Reparent branch_a (and by extension branch_b_child) under root_alternate.
+        {
+            let mut tx = db.start_transaction();
+            tx.set_object_parent(&branch_a, &root_alternate)
+                .expect("Failed to reparent branch_a");
+            tx.commit().unwrap();
+        }
+
+        // Branch B child should now resolve from the alternate root, but Branch C child should remain on the primary root.
+        {
+            let tx = db.start_transaction();
+            let verb_b = tx
+                .resolve_verb(&branch_b_child, verb_name, None, None)
+                .expect("Branch B child should resolve after reparent");
+            assert_eq!(
+                verb_b.location(),
+                root_alternate,
+                "Branch B child should inherit verb from alternate root after reparent"
+            );
+
+            let verb_c = tx
+                .resolve_verb(&branch_c_child, verb_name, None, None)
+                .expect("Branch C child should still resolve verb");
+            assert_eq!(
+                verb_c.location(),
+                root_primary,
+                "Branch C child should remain tied to primary root"
+            );
+        }
+    }
+
+    /// Mutates and deletes verbs on one root while ensuring a disjoint
+    /// branch keeps serving cached results from its own root. This
+    /// proves selective invalidation stays scoped to the touched tree.
+    #[test]
+    fn test_disjoint_branch_verb_mutation_isolated() {
+        let db = test_db();
+        let verb_name = Symbol::mk("shared_isolation");
+
+        let (root_one, root_two, child_one, child_two, verb_one_uuid) = {
+            let mut tx = db.start_transaction();
+
+            let root_one = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "root_one",
+                    ),
+                )
+                .unwrap();
+            let root_two = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "root_two",
+                    ),
+                )
+                .unwrap();
+
+            for obj in [root_one, root_two] {
+                tx.add_object_verb(
+                    &obj,
+                    &obj,
+                    &[verb_name],
+                    ProgramType::MooR(Program::new()),
+                    BitEnum::new_with(VerbFlag::Read),
+                    VerbArgsSpec::none_none_none(),
+                )
+                .expect("Unable to add shared_isolation verb");
+            }
+
+            let child_one = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        root_one,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "child_one",
+                    ),
+                )
+                .unwrap();
+            let child_two = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(
+                        NOTHING,
+                        root_two,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read),
+                        "child_two",
+                    ),
+                )
+                .unwrap();
+
+            tx.commit().unwrap();
+
+            let tx = db.start_transaction();
+            let verb_one = tx
+                .get_verb_by_name(&root_one, verb_name)
+                .expect("Root one verb missing");
+            tx.get_verb_by_name(&root_two, verb_name)
+                .expect("Root two verb missing");
+
+            (root_one, root_two, child_one, child_two, verb_one.uuid())
+        };
+
+        // Populate caches
+        {
+            let tx = db.start_transaction();
+            let v1 = tx
+                .resolve_verb(&child_one, verb_name, None, None)
+                .expect("child_one should resolve verb");
+            assert_eq!(v1.location(), root_one);
+            let v2 = tx
+                .resolve_verb(&child_two, verb_name, None, None)
+                .expect("child_two should resolve verb");
+            assert_eq!(v2.location(), root_two);
+        }
+
+        // Mutate root_one's verb flags, leave root_two untouched.
+        {
+            let mut tx = db.start_transaction();
+            let attrs = VerbAttrs {
+                definer: None,
+                owner: None,
+                names: None,
+                flags: Some(BitEnum::new_with(VerbFlag::Write)),
+                args_spec: None,
+                program: None,
+            };
+            tx.update_verb(&root_one, verb_one_uuid, attrs)
+                .expect("Failed to update root_one verb");
+            tx.commit().unwrap();
+        }
+
+        // child_one should see the updated flags, child_two should still resolve root_two with original permissions.
+        {
+            let tx = db.start_transaction();
+            let v1 = tx
+                .resolve_verb(&child_one, verb_name, None, None)
+                .expect("child_one should resolve verb after update");
+            assert!(
+                v1.flags().contains(VerbFlag::Write),
+                "child_one should see updated write flag"
+            );
+            let v2 = tx
+                .resolve_verb(&child_two, verb_name, None, None)
+                .expect("child_two should still resolve verb");
+            assert_eq!(
+                v2.location(),
+                root_two,
+                "child_two should remain tied to root_two after unrelated mutation"
+            );
+            assert!(
+                v2.flags().contains(VerbFlag::Read) && !v2.flags().contains(VerbFlag::Write),
+                "child_two verb flags should remain unchanged"
+            );
+        }
+
+        // Delete verb on root_one and ensure child_two still resolves via root_two
+        {
+            let mut tx = db.start_transaction();
+            tx.delete_verb(&root_one, verb_one_uuid)
+                .expect("Failed to delete root_one verb");
+            tx.commit().unwrap();
+        }
+
+        {
+            let tx = db.start_transaction();
+            // child_one should now fail
+            let result = tx.resolve_verb(&child_one, verb_name, None, None);
+            assert!(
+                matches!(result, Err(WorldStateError::VerbNotFound(_, _))),
+                "child_one should fail after root_one verb delete"
+            );
+
+            // child_two still succeeds
+            let v2 = tx
+                .resolve_verb(&child_two, verb_name, None, None)
+                .expect("child_two should remain unaffected by delete on disjoint branch");
+            assert_eq!(v2.location(), root_two);
+        }
+    }
+
     #[test]
     fn test_create_immediate_destroy() {
         // equiv of recycle(create($nothing));
