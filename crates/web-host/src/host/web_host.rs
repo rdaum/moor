@@ -361,9 +361,15 @@ impl WebHost {
                     }
                 }
             }
-            moor_rpc::ReplyResultUnionRef::Failure(_) => {
-                error!("RPC failure in attach");
-                return Err(WsHostError::RpcError(eyre!("RPC failure")));
+            moor_rpc::ReplyResultUnionRef::Failure(failure) => {
+                let msg = failure
+                    .error()
+                    .ok()
+                    .and_then(|e| e.message().ok().flatten())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "unknown error".to_string());
+                debug!("Attach rejected: {}", msg);
+                return Err(WsHostError::AuthenticationFailed);
             }
             moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
                 error!("Unexpected host success response");
@@ -485,7 +491,7 @@ impl WebHost {
                     .and_then(|e| e.message().ok().flatten())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "unknown error".to_string());
-                warn!("Reattach rejected: {}", msg);
+                debug!("Reattach rejected: {}", msg);
                 return Err(WsHostError::AuthenticationFailed);
             }
             moor_rpc::ReplyResultUnionRef::HostSuccess(_) => {
