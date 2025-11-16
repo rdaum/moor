@@ -314,17 +314,30 @@ object COMMAND_UTILS
   verb suspend_if_needed (this none this) owner: #2 flags: "rxd"
     "Usage:  $command_utils:suspend_if_needed(<time>[, @<announcement>])";
     "See if we're running out of ticks or seconds, and if so suspend(<time>) and return true.  If more than one arg is given, print the remainder with player:tell.";
-    if (ticks_left() < 4000 || seconds_left() < 2)
-      "Note: above computation should be the same as :running_out_of_time.";
-      {?time = 10, @ann} = args;
-      if (ann && valid(player))
-        player:tell(tostr(@ann));
+    {?time = 10, @ann} = args;
+
+    "Use the builtin for efficient commit when time is 0";
+    if (time == 0)
+      "Use 4000 tick threshold to match legacy behavior";
+      if (suspend_if_needed(4000))
+        if (ann && valid(player))
+          player:tell(tostr(@ann));
+        endif
+        return 1;
       endif
-      amount = max(time, min($login:current_lag(), 10));
-      set_task_perms(caller_perms());
-      "this is trying to back off according to lag...";
-      suspend(amount);
-      return 1;
+    else
+      "Legacy behavior: check manually and suspend with time delay";
+      if (ticks_left() < 4000 || seconds_left() < 2)
+        "Note: above computation should be the same as :running_out_of_time.";
+        if (ann && valid(player))
+          player:tell(tostr(@ann));
+        endif
+        amount = max(time, min($login:current_lag(), 10));
+        set_task_perms(caller_perms());
+        "this is trying to back off according to lag...";
+        suspend(amount);
+        return 1;
+      endif
     endif
   endverb
 
