@@ -5,7 +5,7 @@
 set -e  # Exit on any error
 
 COWBELL_DIR="cowbell"
-REPO_URL="https://github.com/rdaum/cowbell.git"
+REPO_URL="https://codeberg.org/timbran/cowbell.git"
 
 # Check if cowbell directory already exists
 if [ -d "$COWBELL_DIR" ]; then
