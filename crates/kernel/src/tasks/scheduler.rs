@@ -1862,7 +1862,7 @@ impl Scheduler {
             return Ok(());
         }
 
-        info!(
+        debug!(
             "Waiting for {} active tasks to finish before GC sweep phase",
             self.task_q.active.len()
         );
@@ -1891,7 +1891,7 @@ impl Scheduler {
         &mut self,
         unreachable_objects: std::collections::HashSet<Obj>,
     ) -> Result<(), SchedulerError> {
-        info!(
+        debug!(
             "Starting blocking sweep phase for {} unreachable objects",
             unreachable_objects.len()
         );
@@ -1948,12 +1948,23 @@ impl Scheduler {
             0
         };
 
+	// Only log the collection if we actually collected some objects or if it took an unusual amount of time.
         let sweep_duration = start_time.elapsed();
-        info!(
-            "GC sweep: {} objects collected in {:.2}ms",
-            collected,
-            sweep_duration.as_secs_f64() * 1000.0
-        );
+	if collected != 0 || sweep_duration > Duration::from_secs(5) {
+	    if sweep_duration> Duration::from_secs(5) {
+		warn!(
+		    "GC sweep: {} objects collected in *{:.2}ms*",
+		    collected,
+		    sweep_duration.as_secs_f64() * 1000.0
+		);
+	    } else {
+		info!(
+		    "GC sweep: {} objects collected in {:.2}ms",
+		    collected,
+		    sweep_duration.as_secs_f64() * 1000.0
+		);
+	    }
+	}
 
         // Commit the sweep phase transaction
         match gc.commit() {
