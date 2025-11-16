@@ -14,6 +14,7 @@
 #[cfg(test)]
 mod tests {
     use crate::{DatabaseConfig, ObjAndUUIDHolder};
+    use std::collections::HashSet;
 
     use crate::moor_db::MoorDB;
     use moor_common::{
@@ -1982,7 +1983,7 @@ mod tests {
         }
     }
 
-    /// Test property operations across transactions using high-level APIs  
+    /// Test property operations across transactions using high-level APIs
     #[test]
     fn test_batch_recycle_objects() {
         let db = test_db();
@@ -2057,8 +2058,8 @@ mod tests {
         assert!(tx.object_valid(&content).unwrap());
 
         // Test batch recycling multiple objects at once
-        let objects_to_recycle = vec![child1, child2, content];
-        tx.batch_recycle_objects(&objects_to_recycle).unwrap();
+        let objects_to_recycle = HashSet::from([child1, child2, content]);
+        tx.recycle_objects(&objects_to_recycle).unwrap();
 
         // Verify all objects were recycled
         assert!(!tx.object_valid(&child1).unwrap());
@@ -2101,7 +2102,7 @@ mod tests {
         let mut tx = db.start_transaction();
 
         // Test that batch recycling an empty list doesn't cause issues
-        tx.batch_recycle_objects(&[]).unwrap();
+        tx.recycle_objects(&HashSet::new()).unwrap();
 
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
     }
@@ -2112,7 +2113,7 @@ mod tests {
         let mut tx = db.start_transaction();
 
         // Create enough objects to trigger the bulk path (>50)
-        let mut objects = Vec::new();
+        let mut objects = HashSet::new();
         let parent = tx
             .create_object(
                 ObjectKind::NextObjid,
@@ -2134,7 +2135,7 @@ mod tests {
                     ),
                 )
                 .unwrap();
-            objects.push(obj);
+            objects.insert(obj);
         }
 
         // Add some properties to a few objects
@@ -2161,7 +2162,7 @@ mod tests {
         }
 
         // Test bulk batch recycling (should use bulk path since len > 50)
-        tx.batch_recycle_objects(&objects).unwrap();
+        tx.recycle_objects(&objects).unwrap();
 
         // Verify all objects were recycled
         for obj in &objects {
@@ -2239,7 +2240,8 @@ mod tests {
         {
             let mut tx = db2.start_transaction();
             // Recycle children in batch (skip parent)
-            tx.batch_recycle_objects(&objects2[1..]).unwrap();
+            let sans_parent: HashSet<_> = objects2[1..].iter().cloned().collect();
+            tx.recycle_objects(&sans_parent).unwrap();
             tx.commit().unwrap();
         }
 

@@ -30,6 +30,7 @@ use moor_common::{
 use moor_var::{
     ByteSized, NOTHING, Obj, Symbol, Var, program::ProgramType, v_empty_map, v_map, v_none,
 };
+use std::collections::HashSet;
 use std::{
     collections::VecDeque,
     hash::Hash,
@@ -80,6 +81,17 @@ impl WorldStateTransaction {
                 "Error getting object flags: {e:?}"
             ))),
         }
+    }
+
+    /// Bulk validity check for multiple objects
+    /// Returns only the objects that are valid
+    pub fn valid_objects<T: Iterator<Item = Obj>>(
+        &self,
+        objs: T,
+    ) -> Result<HashSet<Obj>, WorldStateError> {
+        self.object_flags.check_domains(objs).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error checking object flags: {e:?}"))
+        })
     }
 
     pub fn ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
@@ -370,17 +382,11 @@ impl WorldStateTransaction {
 
     /// Optimized batch recycling for garbage collection sweep phase.
     /// Reduces transaction overhead and cache flushes compared to individual recycle_object calls.
-    pub fn batch_recycle_objects(&mut self, objects: &[Obj]) -> Result<(), WorldStateError> {
+    pub fn recycle_objects(&mut self, objects: &HashSet<Obj>) -> Result<(), WorldStateError> {
         if objects.is_empty() {
             return Ok(());
         }
 
-        // Use individual query approach - testing showed this performs better than bulk loading
-        self.batch_recycle_objects_individual(objects)
-    }
-
-    /// Optimized batch recycling using individual queries - good for smaller batches
-    fn batch_recycle_objects_individual(&mut self, objects: &[Obj]) -> Result<(), WorldStateError> {
         // Pre-collect all relationship data to minimize individual queries
         let mut contents_to_move = Vec::new();
         let mut children_to_reparent = Vec::new();
@@ -408,22 +414,6 @@ impl WorldStateTransaction {
             }
         }
 
-        self.apply_batch_recycle_changes(
-            objects,
-            contents_to_move,
-            children_to_reparent,
-            properties_to_delete,
-        )
-    }
-
-    /// Common logic for applying batch recycle changes
-    fn apply_batch_recycle_changes(
-        &mut self,
-        objects: &[Obj],
-        contents_to_move: Vec<Obj>,
-        children_to_reparent: Vec<(Obj, Obj)>,
-        properties_to_delete: Vec<(Obj, Uuid)>,
-    ) -> Result<(), WorldStateError> {
         // Bulk update location relationships directly on the relation
         for content in contents_to_move {
             upsert(&mut self.object_location, content, NOTHING).map_err(|e| {
@@ -1800,7 +1790,7 @@ impl WorldStateTransaction {
 impl WorldStateTransaction {
     pub(crate) fn scan_anonymous_object_references(
         &mut self,
-    ) -> Result<Vec<(Obj, std::collections::HashSet<Obj>)>, WorldStateError> {
+    ) -> Result<Vec<(Obj, HashSet<Obj>)>, WorldStateError> {
         let mut reference_map = std::collections::HashMap::new();
 
         // Get all objects once - this is the only get_all() call we need
@@ -1811,19 +1801,19 @@ impl WorldStateTransaction {
 
         // For each object, check for anonymous references using targeted queries
         for (obj, _flags) in all_objects {
-            let mut obj_refs = std::collections::HashSet::new();
+            let mut obj_refs = HashSet::new();
 
-            // 1. Check property values for anonymous object references
+            // 1. Get property definitions (used for both values and metadata checks)
             let propdefs = match self.get_properties(&obj) {
                 Ok(propdefs) => propdefs,
                 Err(_) => continue, // Object might not have properties
             };
 
+            // Check property values for anonymous object references
             for propdef in propdefs.iter() {
                 if let Ok((Some(prop_value), _perms)) = self.retrieve_property(&obj, propdef.uuid())
                 {
-                    let anon_refs = crate::extract_anonymous_refs(&prop_value);
-                    obj_refs.extend(anon_refs);
+                    crate::extract_anonymous_refs(&prop_value, &mut obj_refs);
                 }
             }
 
@@ -1855,17 +1845,15 @@ impl WorldStateTransaction {
                 }
             }
 
-            // 5. Check property definitions for object references
-            if let Ok(propdefs) = self.get_properties(&obj) {
-                for propdef in propdefs.iter() {
-                    // Check definer field
-                    if propdef.definer().is_anonymous() {
-                        obj_refs.insert(propdef.definer());
-                    }
-                    // Check location field
-                    if propdef.location().is_anonymous() {
-                        obj_refs.insert(propdef.location());
-                    }
+            // 5. Check property definitions for object references (reuse propdefs from above)
+            for propdef in propdefs.iter() {
+                // Check definer field
+                if propdef.definer().is_anonymous() {
+                    obj_refs.insert(propdef.definer());
+                }
+                // Check location field
+                if propdef.location().is_anonymous() {
+                    obj_refs.insert(propdef.location());
                 }
             }
 
@@ -1878,9 +1866,7 @@ impl WorldStateTransaction {
         Ok(reference_map.into_iter().collect())
     }
 
-    pub(crate) fn get_anonymous_objects(
-        &self,
-    ) -> Result<std::collections::HashSet<Obj>, WorldStateError> {
+    pub(crate) fn get_anonymous_objects(&self) -> Result<HashSet<Obj>, WorldStateError> {
         // Get all objects and filter for anonymous ones
         let all_objects = self.get_objects()?;
         let anonymous_objects = all_objects
@@ -1892,21 +1878,22 @@ impl WorldStateTransaction {
 
     pub(crate) fn collect_unreachable_anonymous_objects(
         &mut self,
-        unreachable_objects: &std::collections::HashSet<Obj>,
+        unreachable_objects: &HashSet<Obj>,
     ) -> Result<usize, WorldStateError> {
-        // Filter and collect only anonymous objects that still exist
-        let mut objects_to_recycle = Vec::new();
-        for obj in unreachable_objects {
-            if obj.is_anonymous() && self.object_valid(obj)? {
-                objects_to_recycle.push(*obj);
-            }
-        }
+        // Filter to only anonymous objects
+        let anonymous_objects = unreachable_objects
+            .iter()
+            .filter(|obj| obj.is_anonymous())
+            .cloned();
+
+        // Bulk check validity - only recycle objects that still exist
+        let objects_to_recycle = self.valid_objects(anonymous_objects)?;
 
         let collected = objects_to_recycle.len();
 
         if !objects_to_recycle.is_empty() {
             // Use batch recycling for better performance
-            self.batch_recycle_objects(&objects_to_recycle)?;
+            self.recycle_objects(&objects_to_recycle)?;
         }
 
         Ok(collected)

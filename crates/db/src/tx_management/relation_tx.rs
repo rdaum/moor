@@ -15,6 +15,7 @@ use crate::tx_management::{Canonical, Error, Timestamp, Tx, indexes::RelationInd
 use ahash::AHasher;
 use indexmap::IndexMap;
 use moor_common::model::WorldStateError;
+use std::collections::HashSet;
 use std::{
     collections::HashMap,
     hash::{BuildHasherDefault, Hash},
@@ -442,6 +443,45 @@ where
 
     pub fn has_domain(&self, domain: &Domain) -> Result<bool, Error> {
         Ok(self.get(domain)?.is_some())
+    }
+
+    /// Bulk check existence of multiple domains efficiently
+    /// Returns a Vec of domains that exist (are valid)
+    pub fn check_domains<T: Iterator<Item = Domain>>(
+        &self,
+        domains: T,
+    ) -> Result<HashSet<Domain>, Error> {
+        let mut valid_domains = HashSet::new();
+
+        for domain in domains {
+            // Check local operations first (if we have mutations)
+            if self.index.has_local_mutations
+                && let Some(op) = self.index.local_operations.get(&domain)
+            {
+                match &op.operation {
+                    OpType::Delete => continue, // Not valid
+                    OpType::Insert(_) | OpType::Update(_) => {
+                        valid_domains.insert(domain.clone());
+                        continue;
+                    }
+                }
+            }
+
+            // Check master entries
+            if self.index.master_entries.index_lookup(&domain).is_some() {
+                valid_domains.insert(domain.clone());
+                continue;
+            }
+
+            // Check backing source
+            if let Some((ts, _)) = self.backing_source.get(&domain)?
+                && ts <= self.tx.ts
+            {
+                valid_domains.insert(domain.clone());
+            }
+        }
+
+        Ok(valid_domains)
     }
 
     pub fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {

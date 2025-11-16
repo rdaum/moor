@@ -17,13 +17,15 @@ use std::{collections::HashSet, sync::Arc, thread, time::Instant};
 
 use flume::{self, Sender};
 use moor_var::Obj;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     config::Config,
     tasks::{sched_counters, scheduler_client::SchedulerClientMsg},
 };
-use moor_common::{tasks::SchedulerError, util::PerfTimerGuard};
+use moor_common::{
+    tasks::SchedulerError, tasks::SchedulerError::GarbageCollectionFailed, util::PerfTimerGuard,
+};
 
 /// Spawn a thread to perform concurrent GC mark phase
 pub fn spawn_gc_mark_phase(
@@ -46,11 +48,11 @@ pub fn spawn_gc_mark_phase(
                     })
                     .is_err()
                 {
-                    eprintln!("Failed to send GC mark phase results to scheduler");
+                    error!("Failed to send GC mark phase results to scheduler");
                 }
             }
             Err(e) => {
-                eprintln!("GC mark phase failed: {e}");
+                error!("GC mark phase failed: {e}");
                 // Send empty results to indicate failure
                 if scheduler_sender
                     .send(SchedulerClientMsg::GCMarkPhaseComplete {
@@ -59,7 +61,7 @@ pub fn spawn_gc_mark_phase(
                     })
                     .is_err()
                 {
-                    eprintln!("Failed to send GC mark phase failure to scheduler");
+                    error!("Failed to send GC mark phase failure to scheduler");
                 }
             }
         }
@@ -72,8 +74,6 @@ fn run_gc_mark_phase(
     vm_refs: HashSet<Obj>,
     _gc_cycle_count: u64,
 ) -> Result<HashSet<Obj>, SchedulerError> {
-    use moor_common::tasks::SchedulerError::GarbageCollectionFailed;
-
     let start_time = Instant::now();
     let perfc = sched_counters();
     let _t = PerfTimerGuard::new(&perfc.gc_mark_phase);
@@ -83,12 +83,6 @@ fn run_gc_mark_phase(
         .get_anonymous_objects()
         .map_err(|e| GarbageCollectionFailed(format!("Failed to get anonymous objects: {e}")))?;
 
-    // Filter VM references to anonymous objects only
-    let anon_vm_refs: HashSet<Obj> = vm_refs
-        .into_iter()
-        .filter(|obj| obj.is_anonymous())
-        .collect();
-
     // Get all DB references to anonymous objects
     let db_refs = gc
         .scan_anonymous_object_references()
@@ -97,15 +91,11 @@ fn run_gc_mark_phase(
     // Mark reachable objects
     let mut reachable_objects = HashSet::new();
 
-    // Mark objects referenced from VM
-    reachable_objects.extend(anon_vm_refs.iter().copied());
+    // Mark objects referenced from VM (filter to anonymous only)
+    reachable_objects.extend(vm_refs.into_iter().filter(|obj| obj.is_anonymous()));
 
     // Mark objects referenced from DB
-    for (_referrer, referenced_objects) in &db_refs {
-        for referenced in referenced_objects {
-            reachable_objects.insert(*referenced);
-        }
-    }
+    reachable_objects.extend(db_refs.iter().flat_map(|(_, refs)| refs.iter().copied()));
 
     // Find unreachable objects
     let unreachable_objects: HashSet<Obj> = all_anon_objects

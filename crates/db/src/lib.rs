@@ -15,8 +15,8 @@
 
 use moor_common::model::{CommitResult, WorldState, WorldStateError, WorldStateSource};
 use moor_var::{ByteSized, EncodingError, Obj, Var};
+use std::collections::HashSet;
 use std::{cmp::Ordering, path::Path, sync::Arc};
-
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -127,19 +127,17 @@ impl Database for TxDB {
     }
 }
 
-/// Helper function to extract anonymous object references from a Var
-fn extract_anonymous_refs(var: &Var) -> Vec<Obj> {
-    let mut refs = Vec::new();
-    extract_anonymous_refs_recursive(var, &mut refs);
-    refs
+/// Helper function to extract anonymous object references from a Var into a HashSet
+fn extract_anonymous_refs(var: &Var, refs: &mut HashSet<Obj>) {
+    extract_anonymous_refs_recursive(var, refs);
 }
 
 /// Recursively extract anonymous object references from a Var
-fn extract_anonymous_refs_recursive(var: &Var, refs: &mut Vec<Obj>) {
+fn extract_anonymous_refs_recursive(var: &Var, refs: &mut HashSet<Obj>) {
     match var.variant() {
         moor_var::Variant::Obj(obj) => {
             if obj.is_anonymous() {
-                refs.push(*obj);
+                refs.insert(*obj);
             }
         }
         moor_var::Variant::List(list) => {
@@ -157,7 +155,7 @@ fn extract_anonymous_refs_recursive(var: &Var, refs: &mut Vec<Obj>) {
             // Check delegate
             let delegate = flyweight.delegate();
             if delegate.is_anonymous() {
-                refs.push(*delegate);
+                refs.insert(*delegate);
             }
 
             // Check slots (Symbol -> Var pairs)
