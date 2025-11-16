@@ -44,7 +44,7 @@ services:
     image: alpine:latest
     container_name: "moor-init-enrollment"
     volumes:
-      - moor-enrollment:/root/.config/moor
+      - moor-config:/root/.config/moor
     command: >
       sh -c "
         if [ ! -f /root/.config/moor/enrollment-token ]; then
@@ -75,7 +75,7 @@ services:
     working_dir: /moor
     volumes:
       - ./:/db
-      - moor-enrollment:/root/.config/moor
+      - moor-config:/root/.config/moor
       - moor-allowed-hosts:/root/.local/share/moor/allowed-hosts
     command: >
       ./moor-daemon
@@ -115,7 +115,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - moor-enrollment:/root/.config/moor:ro
+      - moor-config:/root/.config/moor:ro
       - ./moor-telnet-host-data:/moor/.moor-host-data
     command:
       - ./moor-telnet-host
@@ -163,7 +163,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - moor-enrollment:/root/.config/moor:ro
+      - moor-config:/root/.config/moor:ro
       - ./moor-web-host-data:/moor/.moor-host-data
     command:
       - ./moor-web-host
@@ -197,7 +197,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - moor-enrollment:/root/.config/moor:ro
+      - moor-config:/root/.config/moor:ro
       - ./moor-curl-worker-data:/moor/.moor-host-data
     command:
       - ./moor-curl-worker
@@ -216,5 +216,5 @@ services:
         condition: service_started
 
 volumes:
-  moor-enrollment:
+  moor-config:
   moor-allowed-hosts:

@@ -38,6 +38,10 @@ networks:
   # An internal network for the mooR system, to allow the different components to communicate with each other.
   moor_net:
 
+# Named volumes for persistent application data
+volumes:
+  moor-config:
+
 services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
@@ -51,11 +55,11 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
-      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./:/db
       - ./moor-ipc:/var/run/moor
+      - moor-config:/root/.config/moor
     command: >
       ./moor-daemon
         /db/moor-data
@@ -82,11 +86,11 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
-      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-telnet-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
+      - moor-config:/root/.config/moor:ro
     command:
       - ./moor-telnet-host
       - --telnet-address=0.0.0.0
@@ -129,11 +133,11 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
-      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-web-host-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
+      - moor-config:/root/.config/moor:ro
     command:
       - ./moor-web-host
       - --listen-address=0.0.0.0:8081
@@ -162,11 +166,11 @@ services:
     user: "${USER_ID}:${GROUP_ID}"
     environment:
       - RUST_BACKTRACE=1
-      - HOME=/tmp
     working_dir: /moor
     volumes:
       - ./moor-curl-worker-data:/moor/.moor-host-data
       - ./moor-ipc:/var/run/moor
+      - moor-config:/root/.config/moor:ro
     command:
       - ./moor-curl-worker
       - --rpc-address=ipc:///var/run/moor/rpc.sock

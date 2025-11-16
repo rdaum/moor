@@ -413,7 +413,7 @@ fn main() -> Result<(), Report> {
         // Generate keypair if flag is set and files don't exist
         generate_keypair(&public_key_path, &private_key_path)?;
         info!(
-            "Generated keypair to {}/{}",
+            "Generated keypair to {} / {}",
             public_key_path.display(),
             private_key_path.display()
         );
