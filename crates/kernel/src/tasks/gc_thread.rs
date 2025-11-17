@@ -95,7 +95,7 @@ fn run_gc_mark_phase(
     reachable_objects.extend(vm_refs.into_iter().filter(|obj| obj.is_anonymous()));
 
     // Mark objects referenced from DB
-    reachable_objects.extend(db_refs.iter().flat_map(|(_, refs)| refs.iter().copied()));
+    reachable_objects.extend(db_refs.iter().flat_map(|(_, refs)| refs.clone()));
 
     // Find unreachable objects
     let unreachable_objects: HashSet<Obj> = all_anon_objects
