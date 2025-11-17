@@ -126,6 +126,7 @@ repository issue tracker](https://codeberg.org/timbran/moor/issues).
 | [`format_compile_error`](verbs.md#format_compile_error) | &check;  | mooR extension. Formats structured compilation errors    |
 | [`disassemble`](verbs.md#disassemble)                   | &check;  | Output looks nothing like LambdaMOO's                    |
 | [`verb_code`](verbs.md#verb_code)                       | &check;  |                                                          |
+| [`prepositions`](verbs.md#prepositions)                 | &check;  | mooR extension. Returns list of all valid prepositions   |
 
 ### Values / encoding
 

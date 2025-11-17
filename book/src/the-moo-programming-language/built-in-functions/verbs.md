@@ -14,7 +14,7 @@
 2. A string representing the permission flags: 'r' (read), 'w' (write), 'x' (execute), 'd' (debug)
 3. A string containing the verb names (aliases) separated by spaces
 
-**Note:** Requires read permission on the verb. 
+**Note:** Requires read permission on the verb.
 
 ### `set_verb_info`
 
@@ -24,9 +24,9 @@
 - : The object with the verb to modify `object`
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 - : A list containing permission information: `[owner, permissions, names]`
-  - : The new owner of the verb (object reference) `owner`
-  - : A string containing the permission flags (combination of 'r', 'w', 'x', 'd') `permissions`
-  - : A string containing space-separated verb names/aliases `names`
+    - : The new owner of the verb (object reference) `owner`
+    - : A string containing the permission flags (combination of 'r', 'w', 'x', 'd') `permissions`
+    - : A string containing space-separated verb names/aliases `names`
 
 `info`
 
@@ -59,15 +59,15 @@
 - : The object with the verb to modify `object`
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 - : A list containing argument specifications: `[dobj, prep, iobj]`
-  - : String specifying direct object behavior `dobj`
-  - : String specifying the preposition `prep`
-  - : String specifying indirect object behavior `iobj`
+    - : String specifying direct object behavior `dobj`
+    - : String specifying the preposition `prep`
+    - : String specifying indirect object behavior `iobj`
 
 `args`
 
 **Returns:** `none`
 
-**Note:** Requires appropriate permissions to modify the verb. 
+**Note:** Requires appropriate permissions to modify the verb.
 
 ## Verb Code Functions
 
@@ -82,7 +82,7 @@
 - `indent`: Optional integer specifying indentation amount (default: 0)
 
 **Returns:** A list of strings, each representing a line of the verb's source code  
-**Note:** Requires read permission on the verb and programmer bit. 
+**Note:** Requires read permission on the verb and programmer bit.
 
 ### `set_verb_code`
 
@@ -93,19 +93,21 @@
 - `verb-desc`: Either the verb name or a positive integer representing the verb's position (1-based)
 - `code`: A list of strings, each representing a line of the verb's source code
 - `verbosity`: (Optional) Controls error output detail level (default: 2)
-  - `0` - Summary: Brief error message only
-  - `1` - Context: Message with error location (graphical display when output_mode > 0)
-  - `2` - Detailed: Message, location, and diagnostic hints (default)
-  - `3` - Structured: Returns error data as a map for programmatic handling
+    - `0` - Summary: Brief error message only
+    - `1` - Context: Message with error location (graphical display when output_mode > 0)
+    - `2` - Detailed: Message, location, and diagnostic hints (default)
+    - `3` - Structured: Returns error data as a map for programmatic handling
 - `output_mode`: (Optional) Controls error formatting style (default: 0)
-  - `0` - Plain text without special characters
-  - `1` - Graphics characters for visual clarity
-  - `2` - Graphics with ANSI color codes
+    - `0` - Plain text without special characters
+    - `1` - Graphics characters for visual clarity
+    - `2` - Graphics with ANSI color codes
 
 **Returns:**
+
 - On success: empty list `{}`
 - On compilation failure with `verbosity` 0-2: list of formatted error strings
-- On compilation failure with `verbosity` 3: map containing structured error data (use `format_compile_error()` to format)
+- On compilation failure with `verbosity` 3: map containing structured error data (use `format_compile_error()` to
+  format)
 
 **Note:** Requires appropriate permissions to modify the verb and programmer bit.
 
@@ -137,7 +139,7 @@ formatted = format_compile_error(err, 0);  // Summary only
 - : A list containing argument specifications (same format as in ) `args`set_verb_args``
 
 **Returns:** `none`  
-**Note:** Requires appropriate permissions to add verbs to the object and programmer bit. 
+**Note:** Requires appropriate permissions to add verbs to the object and programmer bit.
 
 ### `delete_verb`
 
@@ -148,7 +150,7 @@ formatted = format_compile_error(err, 0);  // Summary only
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 
 **Returns:** `none`  
-**Note:** Requires ownership of the verb or the object and programmer bit. 
+**Note:** Requires ownership of the verb or the object and programmer bit.
 
 ## Error Formatting Functions
 
@@ -159,17 +161,18 @@ formatted = format_compile_error(err, 0);  // Summary only
 
 - `error`: Map containing compilation error data (from `set_verb_code()` or `eval()` with `verbosity` 3)
 - `verbosity`: (Optional) Controls output detail level (default: 2)
-  - `0` - Summary: Brief error message only
-  - `1` - Context: Message with error location (graphical display when output_mode > 0)
-  - `2` - Detailed: Message, location, and diagnostic hints
+    - `0` - Summary: Brief error message only
+    - `1` - Context: Message with error location (graphical display when output_mode > 0)
+    - `2` - Detailed: Message, location, and diagnostic hints
 - `output_mode`: (Optional) Controls formatting style (default: 0)
-  - `0` - Plain text without special characters
-  - `1` - Graphics characters for visual clarity
-  - `2` - Graphics with ANSI color codes
+    - `0` - Plain text without special characters
+    - `1` - Graphics characters for visual clarity
+    - `2` - Graphics with ANSI color codes
 
 **Returns:** List of formatted error strings
 
-**Note:** Use this function to format structured error maps returned by `set_verb_code()` or `eval()` when called with `verbosity` 3.
+**Note:** Use this function to format structured error maps returned by `set_verb_code()` or `eval()` when called with
+`verbosity` 3.
 
 **Example:**
 
@@ -199,7 +202,7 @@ colored = format_compile_error(err, 2, 2);
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 
 **Returns:** A list of strings showing the internal compiled representation of the verb  
-**Note:** Output format is not standardized and may change between versions. 
+**Note:** Output format is not standardized and may change between versions.
 
 ### `respond_to`
 
@@ -227,16 +230,46 @@ Verbs in this system use a permission model based on the following flags:
 
 These permissions are represented as a string (e.g., "rwxd" for all permissions, "rx" for read and execute only).
 
+### `prepositions`
+
+**Description:** Returns a list of all valid prepositions that can be used in verb argument specifications.
+
+**Arguments:** None
+
+**Returns:** A list of preposition entries. Each entry is a list containing three elements:
+
+1. The preposition ID (1-indexed, 1-16)
+2. The canonical/short form (single preposition string)
+3. A list of all valid alternate forms for that preposition
+
+**Example:**
+
+```moo
+prepositions()
+=> {
+  {1, "with", {"with", "using"}},
+  {2, "at", {"at", "to"}},
+  {3, "in-front-of", {"in front of", "in-front-of"}},
+  {4, "in", {"in", "inside", "into"}},
+  ...
+  {16, "named", {"named", "called", "known as"}}
+}
+```
+
+**Note:** This is useful for introspection and for code that needs to validate or work with prepositions
+programmatically.
+
 ## Verb Arguments Specification
 
 The verb arguments specification consists of three components:
 
 1. **Direct Object (dobj)** - Can be one of:
-   - "this" - Object must match the verb's location
-   - "none" - No object expected
-   - "any" - Any object is acceptable
+    - "this" - Object must match the verb's location
+    - "none" - No object expected
+    - "any" - Any object is acceptable
 
-2. **Preposition (prep)** - Specifies the preposition, like "with", "at", "in", etc.
+2. **Preposition (prep)** - Specifies the preposition, like "with", "at", "in", etc. Use `prepositions()` to get a list
+   of valid values.
 3. **Indirect Object (iobj)** - Same options as Direct Object
 
 These specifications control how the parsing system matches player commands to verbs.

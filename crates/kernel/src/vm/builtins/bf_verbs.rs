@@ -25,6 +25,7 @@ use crate::{
     },
 };
 use moor_common::{
+    matching::{all_prepositions, get_preposition_forms},
     model::{
         ArgSpec, CompileContext, CompileError, HasUuid, Named, ObjFlag, ParseErrorDetails,
         VerbArgsSpec, VerbAttrs, VerbDef, VerbFlag, WorldStateError, parse_preposition_spec,
@@ -878,6 +879,26 @@ fn bf_format_compile_error(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
     Ok(Ret(v_list(error_vars.as_slice())))
 }
 
+/// MOO: `list prepositions()`
+/// Returns a list of all valid prepositions. Each entry is `{id, short_form, {all_forms}}`.
+/// IDs are 1-indexed for MOO compatibility (0 = id 1, 1 = id 2, etc.).
+fn bf_prepositions(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let preps = all_prepositions();
+    let mut result = Vec::new();
+
+    for (index, prep) in preps.iter().enumerate() {
+        // 1-indexed for MOO
+        let id = (index + 1) as i64;
+        let short_form = v_str(prep.to_string_single());
+        let forms = get_preposition_forms(*prep);
+        let forms_list = v_list_iter(forms.into_iter().map(v_str));
+
+        result.push(v_list(&[id.into(), short_form, forms_list]));
+    }
+
+    Ok(Ret(v_list(&result)))
+}
+
 pub(crate) fn register_bf_verbs(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("verb_info")] = bf_verb_info;
     builtins[offset_for_builtin("set_verb_info")] = bf_set_verb_info;
@@ -890,4 +911,5 @@ pub(crate) fn register_bf_verbs(builtins: &mut [BuiltinFunction]) {
     builtins[offset_for_builtin("delete_verb")] = bf_delete_verb;
     builtins[offset_for_builtin("disassemble")] = bf_disassemble;
     builtins[offset_for_builtin("respond_to")] = bf_respond_to;
+    builtins[offset_for_builtin("prepositions")] = bf_prepositions;
 }

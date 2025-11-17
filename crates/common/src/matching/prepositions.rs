@@ -184,7 +184,7 @@ fn find_preposition_fuzzy(prep: &str) -> Option<Preposition> {
 }
 
 /// Get all possible string forms for a preposition (for fuzzy matching)
-fn get_preposition_forms(prep: Preposition) -> Vec<&'static str> {
+pub fn get_preposition_forms(prep: Preposition) -> Vec<&'static str> {
     match prep {
         Preposition::WithUsing => vec!["with", "using"],
         Preposition::AtTo => vec!["at", "to"],
@@ -203,6 +203,28 @@ fn get_preposition_forms(prep: Preposition) -> Vec<&'static str> {
         Preposition::OffOf => vec!["off", "off of"],
         Preposition::NamedCalled => vec!["named", "called", "known as"],
     }
+}
+
+/// Get all prepositions in order (0-15), useful for introspection
+pub fn all_prepositions() -> [Preposition; 16] {
+    [
+        Preposition::WithUsing,
+        Preposition::AtTo,
+        Preposition::InFrontOf,
+        Preposition::IntoIn,
+        Preposition::OnTopOfOn,
+        Preposition::OutOf,
+        Preposition::Over,
+        Preposition::Through,
+        Preposition::Under,
+        Preposition::Behind,
+        Preposition::Beside,
+        Preposition::ForAbout,
+        Preposition::Is,
+        Preposition::As,
+        Preposition::OffOf,
+        Preposition::NamedCalled,
+    ]
 }
 
 #[cfg(test)]

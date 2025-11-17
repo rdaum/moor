@@ -756,6 +756,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("suspend_if_needed", Q(0), Q(1), vec![AnyNum], true),
+        mk_builtin("prepositions", Q(0), Q(0), vec![], true),
     ]
 }
 

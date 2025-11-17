@@ -34,7 +34,10 @@ pub use complex_object_matcher::ComplexObjectNameMatcher;
 pub use match_env::DefaultObjectNameMatcher;
 pub use ws_match_env::WsMatchEnv;
 
-pub use prepositions::{Preposition, find_preposition, find_preposition_for_command};
+pub use prepositions::{
+    Preposition, all_prepositions, find_preposition, find_preposition_for_command,
+    get_preposition_forms,
+};
 
 /// Result from object name matching, containing both the match result and any ambiguous candidates.
 #[derive(Clone, Eq, PartialEq, Debug)]
