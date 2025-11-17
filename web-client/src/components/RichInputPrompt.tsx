@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useId, useMemo, useState } from "react";
+import React, { useCallback, useId, useMemo, useState, useRef } from "react";
 import { renderDjot, renderPlainText } from "../lib/djot-renderer";
 import { InputMetadata } from "../types/input";
 
@@ -40,7 +40,11 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     const numberInputId = `${baseId}-number`;
     const choiceSelectId = `${baseId}-choice`;
     const alternativeInputId = `${baseId}-alternative`;
+    const alternativeDescriptionId = `${baseId}-alternative-description`;
+    const promptStatusId = `${baseId}-prompt-status`;
     const trimmedValue = value.trim();
+    const alternativeButtonRef = useRef<HTMLButtonElement>(null);
+    const alternativeTextareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Render prompt text as djot with ANSI escape codes
     const renderPrompt = useCallback((text: string) => {
@@ -90,11 +94,11 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         }
 
         return (
-            <div className="rich_input_prompt_text" role="status">
+            <div className="rich_input_prompt_text" role="status" aria-live="polite" id={promptStatusId} tabIndex={-1}>
                 {renderPrompt(metadata.prompt)}
             </div>
         );
-    }, [metadata.prompt, renderPrompt]);
+    }, [metadata.prompt, renderPrompt, promptStatusId]);
 
     const renderPromptLabel = useCallback((targetId: string) => {
         if (!metadata.prompt) {
@@ -112,7 +116,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
     if (metadata.input_type === "yes_no_alternative") {
         if (showAlternative) {
             return (
-                <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Respond"}>
+                <div className="rich_input_prompt" role="application" aria-label={metadata.prompt || "Respond"}>
                     {promptStatus}
                     <div className="rich_input_buttons">
                         <button
@@ -143,12 +147,16 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                             Cancel
                         </button>
                     </div>
-                    <div className="rich_input_alternative_container">
-                        <label htmlFor={alternativeInputId} className="rich_input_prompt_text">
+                    <div className="rich_input_alternative_container" role="group" aria-labelledby={`${baseId}-alternative-label`}>
+                        <label htmlFor={alternativeInputId} className="rich_input_prompt_text" id={`${baseId}-alternative-label`}>
                             {renderPrompt(metadata.alternative_label || "Describe your alternative:")}
                         </label>
+                        <div id={alternativeDescriptionId} className="sr-only">
+                            {metadata.alternative_placeholder || "Enter your alternative suggestion in the text area below. Press Ctrl+Enter to submit."}
+                        </div>
                         <div className="rich_input_text_container">
                             <textarea
+                                ref={alternativeTextareaRef}
                                 id={alternativeInputId}
                                 className="rich_input_textarea"
                                 value={value}
@@ -162,6 +170,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                                 placeholder={metadata.alternative_placeholder || "Enter your alternative..."}
                                 disabled={disabled}
                                 aria-label={metadata.alternative_label || "Alternative suggestion"}
+                                aria-describedby={alternativeDescriptionId}
                                 rows={4}
                                 autoFocus
                             />
@@ -181,7 +190,7 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
         }
 
         return (
-            <div className="rich_input_prompt" role="group" aria-label={metadata.prompt || "Respond"}>
+            <div className="rich_input_prompt" role="application" aria-label={metadata.prompt || "Respond"}>
                 {promptStatus}
                 <div className="rich_input_buttons">
                     <button
@@ -205,9 +214,13 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                     <button
                         type="button"
                         className="rich_input_button"
-                        onClick={() => setShowAlternative(true)}
+                        onClick={() => {
+                            setShowAlternative(true);
+                        }}
                         disabled={disabled}
                         aria-label="Suggest alternative"
+                        aria-expanded={false}
+                        ref={alternativeButtonRef}
                     >
                         Alternative...
                     </button>
@@ -260,7 +273,6 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                                 className={`rich_input_button ${index === 0 ? "rich_input_button_primary" : ""}`}
                                 onClick={() => handleSubmit(choice)}
                                 disabled={disabled}
-                                aria-label={choice}
                             >
                                 {choice}
                             </button>
@@ -296,7 +308,6 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                         className="rich_input_button rich_input_button_primary"
                         onClick={submitCurrentValue}
                         disabled={disabled || !trimmedValue}
-                        aria-label="Submit choice"
                     >
                         Submit
                     </button>
