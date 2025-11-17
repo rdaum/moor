@@ -166,6 +166,8 @@ struct BenchmarkRow {
     find_avg: String,
     #[tabled(rename = "sched_msg avg")]
     sched_msg_avg: String,
+    #[tabled(rename = "wakeup avg")]
+    wakeup_avg: String,
 }
 
 fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre::Error> {
@@ -629,7 +631,15 @@ async fn load_test_workload(
         let baseline_setup_task_count = counters.setup_task.invocations().sum();
         let baseline_setup_task_nanos = counters.setup_task.cumulative_duration_nanos().sum();
         let baseline_sched_msg_count = counters.handle_scheduler_msg.invocations().sum();
-        let baseline_sched_msg_nanos = counters.handle_scheduler_msg.cumulative_duration_nanos().sum();
+        let baseline_sched_msg_nanos = counters
+            .handle_scheduler_msg
+            .cumulative_duration_nanos()
+            .sum();
+        let baseline_wakeup_count = counters.task_wakeup_latency.invocations().sum();
+        let baseline_wakeup_nanos = counters
+            .task_wakeup_latency
+            .cumulative_duration_nanos()
+            .sum();
         let baseline_find_verb_count = db_counters().find_method_verb_on.invocations().sum();
         let baseline_find_verb_nanos = db_counters()
             .find_method_verb_on
@@ -722,10 +732,27 @@ async fn load_test_workload(
             0
         };
 
-        let sched_msg_count = counters.handle_scheduler_msg.invocations().sum() - baseline_sched_msg_count;
-        let sched_msg_total_nanos = counters.handle_scheduler_msg.cumulative_duration_nanos().sum() - baseline_sched_msg_nanos;
+        let sched_msg_count =
+            counters.handle_scheduler_msg.invocations().sum() - baseline_sched_msg_count;
+        let sched_msg_total_nanos = counters
+            .handle_scheduler_msg
+            .cumulative_duration_nanos()
+            .sum()
+            - baseline_sched_msg_nanos;
         let sched_msg_avg_nanos = if sched_msg_count > 0 {
             (sched_msg_total_nanos / sched_msg_count) as u64
+        } else {
+            0
+        };
+
+        let wakeup_count = counters.task_wakeup_latency.invocations().sum() - baseline_wakeup_count;
+        let wakeup_total_nanos = counters
+            .task_wakeup_latency
+            .cumulative_duration_nanos()
+            .sum()
+            - baseline_wakeup_nanos;
+        let wakeup_avg_nanos = if wakeup_count > 0 {
+            (wakeup_total_nanos / wakeup_count) as u64
         } else {
             0
         };
@@ -742,11 +769,12 @@ async fn load_test_workload(
             setup_avg: format!("{}ns", setup_task_avg_nanos),
             find_avg: format!("{}ns", find_verb_avg_nanos),
             sched_msg_avg: format!("{}ns", sched_msg_avg_nanos),
+            wakeup_avg: format!("{}ns", wakeup_avg_nanos),
         });
 
         // Clear screen and redraw table
         eprint!("\x1B[2J\x1B[1;1H"); // ANSI clear screen and move to top
-        eprintln!("{}", Table::new(&table_rows).to_string());
+        eprintln!("{}", Table::new(&table_rows));
 
         results.push(r);
 

@@ -1506,6 +1506,7 @@ pub(crate) fn task_from_flatbuffer(fb: &fb::Task) -> Result<KernelTask, TaskConv
 
     Ok(KernelTask {
         task_id: fb.task_id as usize,
+        creation_time: minstant::Instant::now(),
         player: convert_schema::obj_from_flatbuffer_struct(&fb.player).map_err(|e| {
             TaskConversionError::DecodingError(format!("Error decoding player: {e}"))
         })?,

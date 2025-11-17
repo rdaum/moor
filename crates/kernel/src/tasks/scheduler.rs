@@ -256,25 +256,6 @@ impl Scheduler {
                 continue;
             }
 
-            // Check for tasks that need to be woken (timer wheel handles timing internally)
-            if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
-                for sr in to_wake {
-                    let task_id = sr.task.task_id;
-                    if let Err(e) = self.task_q.wake_task_thread(
-                        sr.task,
-                        ResumeAction::Return(v_int(0)),
-                        sr.session,
-                        sr.result_sender,
-                        &self.task_control_sender,
-                        self.database.as_ref(),
-                        self.builtin_registry.clone(),
-                        self.config.clone(),
-                    ) {
-                        error!(?task_id, ?e, "Error resuming task");
-                    }
-                }
-            }
-
             // Define an enum to handle different message types
             enum SchedulerMessage {
                 Task(TaskId, TaskControlMsg),
@@ -320,6 +301,7 @@ impl Scheduler {
                 .scheduler_tick_duration
                 .unwrap_or(Duration::from_millis(50));
 
+            // Process first message from selector (blocking with timeout)
             match selector.wait_timeout(tick_duration) {
                 Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
                     self.handle_task_msg(task_id, msg);
@@ -335,6 +317,61 @@ impl Scheduler {
                 }
                 Ok(None) | Err(_) => {
                     // Timeout or channel disconnected, continue
+                }
+            }
+
+            // Drain any additional ready messages (non-blocking) to process them in batch
+            loop {
+                let mut found_message = false;
+
+                // Check task receiver
+                if let Ok((task_id, msg)) = task_receiver.try_recv() {
+                    self.handle_task_msg(task_id, msg);
+                    found_message = true;
+                }
+
+                // Check scheduler receiver
+                if let Ok(msg) = scheduler_receiver.try_recv() {
+                    self.handle_scheduler_msg(msg);
+                    found_message = true;
+                }
+
+                // Check worker receiver if present
+                if let Some(ref wr) = worker_receiver
+                    && let Ok(response) = wr.try_recv()
+                {
+                    self.handle_worker_response(response);
+                    found_message = true;
+                }
+
+                // Check immediate wake receiver
+                if let Ok(task_id) = immediate_wake_receiver.try_recv() {
+                    self.handle_immediate_wake(task_id);
+                    found_message = true;
+                }
+
+                // If no messages were found, exit the drain loop
+                if !found_message {
+                    break;
+                }
+            }
+
+            // Check for tasks that need to be woken (timer wheel handles timing internally)
+            if let Some(to_wake) = self.task_q.collect_wake_tasks(self.gc_sweep_in_progress) {
+                for sr in to_wake {
+                    let task_id = sr.task.task_id;
+                    if let Err(e) = self.task_q.wake_task_thread(
+                        sr.task,
+                        ResumeAction::Return(v_int(0)),
+                        sr.session,
+                        sr.result_sender,
+                        &self.task_control_sender,
+                        self.database.as_ref(),
+                        self.builtin_registry.clone(),
+                        self.config.clone(),
+                    ) {
+                        error!(?task_id, ?e, "Error resuming task");
+                    }
                 }
             }
         }
@@ -2040,6 +2077,14 @@ impl TaskQ {
     ) -> Result<(), SchedulerError> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.resume_task);
+
+        // Record wakeup latency from creation to now
+        let wakeup_latency_nanos = task.creation_time.elapsed().as_nanos() as isize;
+        perfc.task_wakeup_latency.invocations().add(1);
+        perfc
+            .task_wakeup_latency
+            .cumulative_duration_nanos()
+            .add(wakeup_latency_nanos);
 
         // Take a task out of a suspended state and start running it again.
         // For Created tasks, we need to call setup_task_start first.

@@ -109,6 +109,8 @@ impl TaskState {
 pub struct Task {
     /// My unique task id.
     pub task_id: TaskId,
+    /// When I was first instantiated (not necessarily) started
+    pub creation_time: minstant::Instant,
     /// What I was asked to do and current lifecycle state.
     pub(crate) state: TaskState,
     /// The player on behalf of whom this task is running. Who owns this task.
@@ -191,8 +193,10 @@ impl Task {
             }
         }
 
+        let creation_time = minstant::Instant::now();
         Box::new(Self {
             task_id,
+            creation_time,
             player,
             state,
             vm_host,
