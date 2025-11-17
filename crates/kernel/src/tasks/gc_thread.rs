@@ -17,7 +17,7 @@ use std::{collections::HashSet, sync::Arc, thread, time::Instant};
 
 use flume::{self, Sender};
 use moor_var::Obj;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::{
     config::Config,
@@ -104,11 +104,17 @@ fn run_gc_mark_phase(
         .collect();
 
     let mark_duration = start_time.elapsed();
-    info!(
-        "GC mark: {} unreachable objects identified in {:.2}ms",
-        unreachable_objects.len(),
-        mark_duration.as_secs_f64() * 1000.0
-    );
-
+    if unreachable_objects.is_empty() {
+        debug!(
+            "GC mark: no unreachable objects identified in {:.2}ms",
+            mark_duration.as_millis()
+        );
+    } else {
+        info!(
+            "GC mark: {} unreachable objects identified in {:.2}ms",
+            unreachable_objects.len(),
+            mark_duration.as_millis()
+        );
+    }
     Ok(unreachable_objects)
 }
