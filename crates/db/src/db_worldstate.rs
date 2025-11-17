@@ -177,12 +177,10 @@ impl WorldState for DbWorldState {
     }
 
     fn owner_of(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().owner_of);
         self.get_tx().get_object_owner(obj)
     }
 
     fn controls(&self, who: &Obj, what: &Obj) -> Result<bool, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().controls);
         let flags = self.flags_of(who)?;
         if flags.contains(ObjFlag::Wizard) {
             return Ok(true);
@@ -198,7 +196,6 @@ impl WorldState for DbWorldState {
     }
 
     fn flags_of(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().flags_of);
         self.get_tx().get_object_flags(obj)
     }
 
@@ -217,7 +214,6 @@ impl WorldState for DbWorldState {
     }
 
     fn location_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().location_of);
         // MOO permits location query even if the object is unreadable!
         self.get_tx().get_object_location(obj)
     }
@@ -279,7 +275,6 @@ impl WorldState for DbWorldState {
     }
 
     fn max_object(&self, _perms: &Obj) -> Result<Obj, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().max_object);
         self.get_tx().get_max_object()
     }
 
@@ -307,7 +302,6 @@ impl WorldState for DbWorldState {
     }
 
     fn contents_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().contents_of);
         // MOO does not do any perms checks on contents, pretty sure:
         // https://github.com/wrog/lambdamoo/blob/master/db_properties.c#L351
         self.get_tx().get_object_contents(obj)
@@ -323,7 +317,6 @@ impl WorldState for DbWorldState {
     }
 
     fn properties(&self, perms: &Obj, obj: &Obj) -> Result<PropDefs, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().properties);
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Read.into())?;
@@ -564,7 +557,6 @@ impl WorldState for DbWorldState {
         obj: &Obj,
         pname: Symbol,
     ) -> Result<bool, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().is_property_clear);
         let (_, _, propperms, clear) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
@@ -844,7 +836,6 @@ impl WorldState for DbWorldState {
     }
 
     fn parent_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().parent_of);
         self.get_tx().get_object_parent(obj)
     }
 
@@ -906,19 +897,16 @@ impl WorldState for DbWorldState {
     }
 
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().valid);
         self.get_tx().object_valid(obj)
     }
 
     fn name_of(&self, _perms: &Obj, obj: &Obj) -> Result<String, WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().names_of);
         let name = self.get_tx().get_object_name(obj)?;
 
         Ok(name)
     }
 
     fn names_of(&self, perms: &Obj, obj: &Obj) -> Result<(String, Vec<String>), WorldStateError> {
-        let _t = PerfTimerGuard::new(&db_counters().names_of);
         let name = self.get_tx().get_object_name(obj)?;
 
         // Then grab aliases property.
