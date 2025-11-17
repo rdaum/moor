@@ -240,31 +240,15 @@ impl WorldStateTransaction {
         };
 
         let owner = attrs.owner().unwrap_or(id);
-        if id.is_anonymous() || id.is_uuobjid() {
-            // Use guaranteed unique insertion for anonymous and UUID objects
-            insert_guaranteed_unique(&mut self.object_owner, id, owner)
-                .expect("Unable to insert initial owner");
-        } else {
-            // For new non-anonymous, non-UUID objects, we can use regular insert since we know the ID doesn't exist
-            self.object_owner
-                .insert(id, owner)
-                .expect("Unable to insert initial owner");
-        }
+        insert_guaranteed_unique(&mut self.object_owner, id, owner)
+            .expect("Unable to insert initial owner");
 
         self.has_mutations = true;
 
         // Set initial name
         let name = attrs.name().unwrap_or_default();
-        if id.is_anonymous() || id.is_uuobjid() {
-            // Use guaranteed unique insertion for anonymous and UUID objects
-            insert_guaranteed_unique(&mut self.object_name, id, StringHolder(name))
-                .expect("Unable to insert initial name");
-        } else {
-            // For new non-anonymous, non-UUID objects, we can use regular insert since we know the ID doesn't exist
-            self.object_name
-                .insert(id, StringHolder(name))
-                .expect("Unable to insert initial name");
-        }
+        insert_guaranteed_unique(&mut self.object_name, id, StringHolder(name))
+            .expect("Unable to insert initial name");
 
         // Set initial parent using optimized method for new objects
         if let Some(parent) = attrs.parent() {
@@ -272,20 +256,12 @@ impl WorldStateTransaction {
                 .expect("Unable to set parent");
         }
         if let Some(location) = attrs.location() {
-            self.set_object_location(&id, &location)
+            self.set_initial_object_location(&id, &location)
                 .expect("Unable to set location");
         }
 
-        if id.is_anonymous() || id.is_uuobjid() {
-            // Use guaranteed unique insertion for anonymous and UUID objects
-            insert_guaranteed_unique(&mut self.object_flags, id, attrs.flags())
-                .expect("Unable to insert initial flags");
-        } else {
-            // For new non-anonymous, non-UUID objects, we can use regular insert since we know the ID doesn't exist
-            self.object_flags
-                .insert(id, attrs.flags())
-                .expect("Unable to insert initial flags");
-        }
+        insert_guaranteed_unique(&mut self.object_flags, id, attrs.flags())
+            .expect("Unable to insert initial flags");
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
@@ -293,16 +269,6 @@ impl WorldStateTransaction {
         if !id.is_uuobjid() && !id.is_anonymous() {
             self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
         }
-
-        // No GC metadata needed for mark & sweep - anonymous objects are tracked by intrinsic property
-
-        self.verb_resolution_cache.flush();
-        self.ancestry_cache.flush();
-        self.prop_resolution_cache.flush();
-
-        // Refill ancestry cache for this object, at least.
-        // TODO: We could probably be more aggressive here, and fill ancestry for our ancestors.
-        self.ancestors(&id, false).ok();
 
         Ok(id)
     }
@@ -373,9 +339,9 @@ impl WorldStateTransaction {
         // We may or may not have propdefs yet...
         self.object_propdefs.delete(obj).ok();
 
-        self.verb_resolution_cache.flush();
-        self.ancestry_cache.flush();
-        self.prop_resolution_cache.flush();
+        self.invalidate_verb_cache_for_objects(&[*obj]);
+        self.invalidate_prop_cache_for_objects(&[*obj]);
+        self.invalidate_ancestry_cache_for_objects(&[*obj]);
 
         Ok(())
     }
@@ -422,8 +388,8 @@ impl WorldStateTransaction {
         }
 
         // Bulk update parent relationships directly on the relation
-        for (child, new_parent) in children_to_reparent {
-            upsert(&mut self.object_parent, child, new_parent).map_err(|e| {
+        for (child, new_parent) in &children_to_reparent {
+            upsert(&mut self.object_parent, *child, *new_parent).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error updating object parent: {e:?}"))
             })?;
         }
@@ -471,10 +437,21 @@ impl WorldStateTransaction {
 
         self.has_mutations = true;
 
-        // Single cache flush at the end instead of per-object
-        self.verb_resolution_cache.flush();
-        self.ancestry_cache.flush();
-        self.prop_resolution_cache.flush();
+        // Update caches for reparented children and removed objects
+        {
+            let reparented_children: HashSet<Obj> = children_to_reparent
+                .iter()
+                .map(|(child, _)| *child)
+                .collect();
+            for child in reparented_children {
+                self.invalidate_all_caches_for_branch(&child)?;
+            }
+        }
+
+        let removed: Vec<Obj> = objects.iter().copied().collect();
+        self.invalidate_verb_cache_for_objects(&removed);
+        self.invalidate_prop_cache_for_objects(&removed);
+        self.invalidate_ancestry_cache_for_objects(&removed);
 
         Ok(())
     }
@@ -493,18 +470,15 @@ impl WorldStateTransaction {
             return Ok(());
         };
 
-        // In lazy property inheritance, we only need to:
-        // 1. Update the parent relationship
-        // 2. Flush caches so property resolution will see the new ancestry
-        // All property resolution happens at runtime by walking the ancestry chain
+        // Update the parent relationship and invalidate caches for the affected subtree.
+        // Property and verb resolution will rebuild lazily against the new ancestry.
 
         self.has_mutations = true;
-        self.ancestry_cache.flush();
-        self.verb_resolution_cache.flush();
-        self.prop_resolution_cache.flush();
 
         // Update the parent relationship
         upsert(&mut self.object_parent, *o, *new_parent).expect("Unable to update parent");
+
+        self.invalidate_all_caches_for_branch(o)?;
 
         Ok(())
     }
@@ -514,10 +488,6 @@ impl WorldStateTransaction {
     /// Uses guaranteed unique insertion for anonymous objects.
     fn set_initial_object_parent(&mut self, o: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
         self.has_mutations = true;
-
-        // TODO: Fairly certain We can skip cache flushes for brand new objects, since they are
-        //   known to not be participating in any cached resolution, so far. But if this raises
-        //   problems in the future, we can look into it.
 
         // Use optimized insertion for anonymous and UUID objects, regular insert for new traditional objects
         if o.is_anonymous() || o.is_uuobjid() {
@@ -652,6 +622,18 @@ impl WorldStateTransaction {
             return Ok(());
         }
 
+        Ok(())
+    }
+
+    fn set_initial_object_location(
+        &mut self,
+        what: &Obj,
+        new_location: &Obj,
+    ) -> Result<(), WorldStateError> {
+        upsert(&mut self.object_location, *what, *new_location).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting initial object location: {e:?}"))
+        })?;
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -831,7 +813,6 @@ impl WorldStateTransaction {
             return Err(WorldStateError::VerbNotFound(*obj, format!("{uuid}")));
         };
 
-        self.verb_resolution_cache.flush();
         upsert(&mut self.object_verbdefs, *obj, verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {e:?}"))
         })?;
@@ -847,6 +828,7 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error setting verb binary: {e:?}"))
             })?;
         }
+        self.invalidate_verb_cache_for_branch(obj)?;
         Ok(())
     }
 
@@ -865,8 +847,6 @@ impl WorldStateTransaction {
         let uuid = Uuid::new_v4();
         let verbdef = VerbDef::new(uuid, *oid, *owner, names, flags, args);
 
-        self.verb_resolution_cache.flush();
-
         let verbdefs = verbdefs.with_added(verbdef);
         upsert(&mut self.object_verbdefs, *oid, verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {e:?}"))
@@ -880,6 +860,7 @@ impl WorldStateTransaction {
         )
         .map_err(|e| WorldStateError::DatabaseError(format!("Error setting verb binary: {e:?}")))?;
 
+        self.invalidate_verb_cache_for_branch(oid)?;
         Ok(())
     }
 
@@ -891,7 +872,6 @@ impl WorldStateTransaction {
         upsert(&mut self.object_verbdefs, *location, verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {e:?}"))
         })?;
-        self.verb_resolution_cache.flush();
         self.has_mutations = true;
 
         self.object_verbs
@@ -899,6 +879,7 @@ impl WorldStateTransaction {
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error deleting verb binary: {e:?}"))
             })?;
+        self.invalidate_verb_cache_for_branch(location)?;
         Ok(())
     }
 
@@ -986,7 +967,6 @@ impl WorldStateTransaction {
             WorldStateError::DatabaseError(format!("Error setting property definition: {e:?}"))
         })?;
         self.has_mutations = true;
-        self.prop_resolution_cache.flush();
 
         // Always create propflags entry for the defining location (canonical permissions)
         upsert(
@@ -1002,6 +982,8 @@ impl WorldStateTransaction {
         if let Some(value) = value {
             self.set_property(location, u, value)?;
         }
+
+        self.invalidate_prop_cache_for_branch(location)?;
 
         Ok(u)
     }
@@ -1033,7 +1015,6 @@ impl WorldStateTransaction {
             })?;
         }
         self.has_mutations = true;
-        self.prop_resolution_cache.flush();
 
         // If flags or perms updated, do that.
         if new_flags.is_some() || new_owner.is_some() {
@@ -1057,6 +1038,7 @@ impl WorldStateTransaction {
             })?;
         }
 
+        self.invalidate_prop_cache_for_branch(obj)?;
         Ok(())
     }
 
@@ -1068,7 +1050,7 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error clearing property value: {e:?}"))
             })?;
         self.has_mutations = true;
-        self.prop_resolution_cache.flush();
+        self.invalidate_prop_cache_for_objects(&[*obj]);
         Ok(())
     }
 
@@ -1085,7 +1067,7 @@ impl WorldStateTransaction {
             }
         }
         self.has_mutations = true;
-        self.prop_resolution_cache.flush();
+        self.invalidate_prop_cache_for_branch(obj)?;
         Ok(())
     }
 
@@ -1778,10 +1760,11 @@ impl WorldStateTransaction {
             }
         }
 
-        // Flush caches to ensure resolution changes are visible
-        self.verb_resolution_cache.flush();
-        self.prop_resolution_cache.flush();
-        self.ancestry_cache.flush();
+        // Ensure caches reflect the new object identifier
+        self.invalidate_verb_cache_for_objects(&[*old_obj]);
+        self.invalidate_prop_cache_for_objects(&[*old_obj]);
+        self.invalidate_ancestry_cache_for_objects(&[*old_obj]);
+        self.invalidate_all_caches_for_branch(&new_obj)?;
 
         Ok(new_obj)
     }
@@ -1897,5 +1880,53 @@ impl WorldStateTransaction {
         }
 
         Ok(collected)
+    }
+}
+
+impl WorldStateTransaction {
+    fn branch_objects(&self, root: &Obj) -> Result<Vec<Obj>, WorldStateError> {
+        let branch = self.descendants(root, true)?;
+        Ok(branch.iter().collect())
+    }
+
+    fn invalidate_verb_cache_for_objects(&self, objects: &[Obj]) {
+        if objects.is_empty() {
+            return;
+        }
+        self.verb_resolution_cache.invalidate_objects(objects);
+    }
+
+    fn invalidate_prop_cache_for_objects(&self, objects: &[Obj]) {
+        if objects.is_empty() {
+            return;
+        }
+        self.prop_resolution_cache.invalidate_objects(objects);
+    }
+
+    fn invalidate_ancestry_cache_for_objects(&self, objects: &[Obj]) {
+        if objects.is_empty() {
+            return;
+        }
+        self.ancestry_cache.invalidate_objects(objects);
+    }
+
+    fn invalidate_verb_cache_for_branch(&self, root: &Obj) -> Result<(), WorldStateError> {
+        let objects = self.branch_objects(root)?;
+        self.invalidate_verb_cache_for_objects(&objects);
+        Ok(())
+    }
+
+    fn invalidate_prop_cache_for_branch(&self, root: &Obj) -> Result<(), WorldStateError> {
+        let objects = self.branch_objects(root)?;
+        self.invalidate_prop_cache_for_objects(&objects);
+        Ok(())
+    }
+
+    fn invalidate_all_caches_for_branch(&self, root: &Obj) -> Result<(), WorldStateError> {
+        let objects = self.branch_objects(root)?;
+        self.invalidate_verb_cache_for_objects(&objects);
+        self.invalidate_prop_cache_for_objects(&objects);
+        self.invalidate_ancestry_cache_for_objects(&objects);
+        Ok(())
     }
 }

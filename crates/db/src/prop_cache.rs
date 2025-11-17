@@ -17,12 +17,28 @@ use arc_swap::ArcSwap;
 use lazy_static::lazy_static;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
-use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::BuildHasherDefault,
+    sync::Arc,
+};
 
 /// Create an optimized cache key by packing Obj and Symbol into a single u64.
 /// Upper 32 bits: obj.id(), Lower 32 bits: symbol.compare_id()
 fn make_cache_key(obj: &Obj, symbol: &Symbol) -> u64 {
     (obj.as_u64() << 32) | (symbol.compare_id() as u64)
+}
+
+fn remove_entries_for_objects(
+    entries: &mut HashMap<u64, Option<PropDef>, BuildHasherDefault<AHasher>>,
+    obj_ids: &HashSet<u64>,
+) -> usize {
+    let before = entries.len();
+    entries.retain(|key, _| {
+        let obj_id = key >> 32;
+        !obj_ids.contains(&obj_id)
+    });
+    before - entries.len()
 }
 
 lazy_static! {
@@ -165,6 +181,37 @@ impl PropResolutionCache {
             let mut new_inner = (**inner).clone();
             new_inner.version += 1;
             new_inner.first_parent_cache_mut().insert(*obj, parent);
+            Arc::new(new_inner)
+        });
+    }
+
+    pub fn invalidate_objects(&self, objects: &[Obj]) {
+        if objects.is_empty() {
+            return;
+        }
+        let obj_ids: HashSet<u64> = objects.iter().map(|o| o.as_u64()).collect();
+        self.inner.rcu(|inner| {
+            let mut new_inner = (**inner).clone();
+            let mut changed = false;
+
+            let removed = remove_entries_for_objects(new_inner.entries_mut(), &obj_ids);
+            if removed > 0 {
+                changed = true;
+                PROP_CACHE_STATS.remove_entries(removed as isize);
+            }
+
+            let first_parent_cache = new_inner.first_parent_cache_mut();
+            let before = first_parent_cache.len();
+            first_parent_cache.retain(|obj, _| !obj_ids.contains(&obj.as_u64()));
+            if before != first_parent_cache.len() {
+                changed = true;
+            }
+
+            if !changed {
+                return inner.clone();
+            }
+
+            new_inner.version += 1;
             Arc::new(new_inner)
         });
     }
