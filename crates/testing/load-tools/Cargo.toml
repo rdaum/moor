@@ -82,6 +82,7 @@ csv.workspace = true
 futures.workspace = true
 planus.workspace = true
 semver.workspace = true
+tabled.workspace = true
 tmq.workspace = true
 tokio.workspace = true
 tracing.workspace = true

@@ -58,7 +58,7 @@ pub struct TaskQ {
     ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
     ///     Suspended tasks waiting for input from the player or a task id to complete
     pub(crate) suspended: SuspensionQ,
-    /// Thread pool for task execution instead of creating new threads for each task
+    /// Thread pool for task execution
     pub(crate) thread_pool: ThreadPool,
 }
 

@@ -16,14 +16,18 @@ use std::{sync::Arc, time::Duration};
 use uuid::Uuid;
 
 use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
+use moor_common::tasks::{SchedulerError, SchedulerError::CompilationError, Session};
+use moor_common::util::PerfTimerGuard;
 use moor_compiler::{Program, compile};
 use moor_var::{List, Obj, Symbol, Var};
 
 use crate::tasks::world_state_action::{
     WorldStateAction, WorldStateRequest, WorldStateResponse, WorldStateResult,
 };
-use crate::{config::FeaturesConfig, tasks::TaskHandle};
-use moor_common::tasks::{SchedulerError, SchedulerError::CompilationError, Session};
+use crate::{
+    config::FeaturesConfig,
+    tasks::{TaskHandle, sched_counters},
+};
 
 /// Garbage collection statistics
 #[derive(Debug, Clone)]
@@ -53,6 +57,8 @@ impl SchedulerClient {
         command: &str,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().submit_command_task_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitCommandTask {
@@ -84,6 +90,8 @@ impl SchedulerClient {
         perms: &Obj,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().submit_verb_task_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitVerbTask {
@@ -136,6 +144,8 @@ impl SchedulerClient {
         argstr: String,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().submit_oob_task_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitOobTask {
@@ -162,6 +172,8 @@ impl SchedulerClient {
         sessions: Arc<dyn Session>,
         config: Arc<FeaturesConfig>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().submit_eval_task_latency);
+
         // Compile the text into a verb.
         let program = match compile(code.as_str(), config.compile_options()) {
             Ok(b) => b,
@@ -269,6 +281,8 @@ impl SchedulerClient {
     /// If `blocking` is true, waits for the textdump generation to complete.
     /// If false, returns immediately after initiating the checkpoint.
     pub fn request_checkpoint_with_blocking(&self, blocking: bool) -> Result<(), SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().checkpoint_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::Checkpoint(blocking, reply))
@@ -477,6 +491,8 @@ impl SchedulerClient {
         options: moor_objdef::ObjDefLoaderOptions,
         return_conflicts: bool,
     ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().load_object_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::LoadObject {
@@ -502,6 +518,8 @@ impl SchedulerClient {
         args: Vec<Var>,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().submit_system_handler_task_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitSystemHandlerTask {
@@ -525,6 +543,8 @@ impl SchedulerClient {
         constants: Option<moor_objdef::Constants>,
         target_obj: Option<Obj>,
     ) -> Result<moor_objdef::ObjDefLoaderResults, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().reload_object_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::ReloadObject {

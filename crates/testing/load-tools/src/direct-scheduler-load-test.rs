@@ -27,12 +27,34 @@ use moor_common::{
     },
     util::BitEnum,
 };
+use tabled::{Table, Tabled};
+
+fn calculate_percentiles(mut latencies: Vec<Duration>) -> (Duration, Duration, Duration, Duration) {
+    if latencies.is_empty() {
+        return (
+            Duration::ZERO,
+            Duration::ZERO,
+            Duration::ZERO,
+            Duration::ZERO,
+        );
+    }
+
+    latencies.sort();
+    let len = latencies.len();
+
+    let p50 = latencies[len / 2];
+    let p95 = latencies[(len * 95) / 100];
+    let p99 = latencies[(len * 99) / 100];
+    let max = latencies[len - 1];
+
+    (p50, p95, p99, max)
+}
 use moor_compiler::compile;
-use moor_db::{Database, TxDB};
+use moor_db::{Database, TxDB, db_worldstate::db_counters};
 use moor_kernel::{
     SchedulerClient,
     config::{Config, FeaturesConfig},
-    tasks::{NoopTasksDb, TaskNotification, scheduler::Scheduler},
+    tasks::{NoopTasksDb, TaskNotification, sched_counters, scheduler::Scheduler},
 };
 use moor_model_checker::{DirectSession, DirectSessionFactory, NoopSystemControl};
 use moor_var::{List, NOTHING, Obj, Symbol, program::ProgramType, v_int, v_list, v_obj};
@@ -119,6 +141,32 @@ return 1;
 const LOAD_TEST_VERB: &str = r#"
 return 1;
 "#;
+
+#[derive(Tabled)]
+struct BenchmarkRow {
+    #[tabled(rename = "Conc")]
+    concurrency: usize,
+    #[tabled(rename = "Tasks")]
+    tasks: usize,
+    #[tabled(rename = "Per-Verb")]
+    per_verb_call: String,
+    #[tabled(rename = "Wall Time")]
+    wall_time: String,
+    #[tabled(rename = "submit p50")]
+    submit_p50: String,
+    #[tabled(rename = "submit p95")]
+    submit_p95: String,
+    #[tabled(rename = "submit p99")]
+    submit_p99: String,
+    #[tabled(rename = "submit max")]
+    submit_max: String,
+    #[tabled(rename = "setup avg")]
+    setup_avg: String,
+    #[tabled(rename = "find avg")]
+    find_avg: String,
+    #[tabled(rename = "sched_msg avg")]
+    sched_msg_avg: String,
+}
 
 fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre::Error> {
     let mut loader = database.loader_client()?;
@@ -269,13 +317,15 @@ async fn workload(
     args: Args,
     scheduler_client: &SchedulerClient,
     player: Obj,
-) -> Result<Duration, eyre::Error> {
+) -> Result<(Duration, Vec<Duration>), eyre::Error> {
     let session = Arc::new(DirectSession::new(player));
     let start_time = Instant::now();
 
-    // Submit all tasks concurrently first
+    // Submit all tasks concurrently first, collecting latencies
     let mut task_handles = Vec::new();
+    let mut submit_latencies = Vec::new();
     for _ in 0..args.num_verb_invocations {
+        let submit_start = Instant::now();
         let task_handle = scheduler_client.submit_verb_task(
             &player,
             &ObjectRef::Id(player),
@@ -285,6 +335,7 @@ async fn workload(
             &player,
             session.clone(),
         )?;
+        submit_latencies.push(submit_start.elapsed());
         task_handles.push(task_handle);
     }
 
@@ -325,7 +376,7 @@ async fn workload(
         }
     }
 
-    Ok(start_time.elapsed())
+    Ok((start_time.elapsed(), submit_latencies))
 }
 
 async fn continuous_workload(
@@ -333,14 +384,16 @@ async fn continuous_workload(
     scheduler_client: &SchedulerClient,
     player: Obj,
     stop_time: Instant,
-) -> Result<(Duration, usize), eyre::Error> {
+) -> Result<(Duration, usize, Vec<Duration>), eyre::Error> {
     let session = Arc::new(DirectSession::new(player));
     let start_time = Instant::now();
     let mut task_handles = Vec::new();
+    let mut submit_latencies = Vec::new();
     let mut request_count = 0;
 
     // Submit tasks continuously until time limit
     while Instant::now() < stop_time {
+        let submit_start = Instant::now();
         let task_handle = scheduler_client.submit_verb_task(
             &player,
             &ObjectRef::Id(player),
@@ -350,6 +403,7 @@ async fn continuous_workload(
             &player,
             session.clone(),
         )?;
+        submit_latencies.push(submit_start.elapsed());
 
         task_handles.push(task_handle);
         request_count += 1;
@@ -381,7 +435,7 @@ async fn continuous_workload(
         }
     }
 
-    Ok((start_time.elapsed(), request_count))
+    Ok((start_time.elapsed(), request_count, submit_latencies))
 }
 
 struct Results {
@@ -431,10 +485,12 @@ async fn swamp_mode_workload(
     // Wait for all tasks to complete
     let mut times = vec![];
     let mut total_requests = 0;
+    let mut all_submit_latencies = vec![];
     while let Some(result) = all_tasks.next().await {
-        let (time, requests) = result?;
+        let (time, requests, latencies) = result?;
         times.push(time);
         total_requests += requests;
+        all_submit_latencies.extend(latencies);
     }
 
     let cumulative_time = times.iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
@@ -452,13 +508,81 @@ async fn swamp_mode_workload(
         ),
     };
 
+    // Get scheduler metrics
+    let counters = sched_counters();
+    let submit_count = counters.submit_verb_task_latency.invocations().sum();
+    let submit_avg_micros = if submit_count > 0 {
+        let total_nanos = counters
+            .submit_verb_task_latency
+            .cumulative_duration_nanos()
+            .sum();
+        (total_nanos / submit_count) / 1000
+    } else {
+        0
+    };
+
+    // Calculate submit overhead relative to total execution
+    let total_submit_nanos = counters
+        .submit_verb_task_latency
+        .cumulative_duration_nanos()
+        .sum();
+    let cumulative_time_nanos = result.cumulative_time.as_nanos() as u64;
+
+    let submit_overhead_pct = if cumulative_time_nanos > 0 {
+        (total_submit_nanos as f64 / cumulative_time_nanos as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    // Amortize submit overhead across all verb calls (including interior calls)
+    let amortized_submit_nanos = if result.total_verb_calls > 0 {
+        (total_submit_nanos as u64) / (result.total_verb_calls as u64)
+    } else {
+        0
+    };
+
+    // Calculate histogram percentiles from collected latencies
+    let (p50, p95, p99, max) = calculate_percentiles(all_submit_latencies);
+
     info!(
-        "Swamp mode completed: {} concurrent threads, {} total requests, Total Time: {:?}, Cumulative: {:?}, Per Verb: {:?}",
+        "Swamp mode completed: {} concurrent threads, {} total requests, Total Time: {:?}, Cumulative: {:?}, Amortized Per Verb: {:?}",
         result.concurrency,
         result.total_invocations,
         result.total_time,
         result.cumulative_time,
         result.per_verb_call
+    );
+    info!(
+        "  submit_verb_task: avg {}µs ({:.1}% of cumulative time, {}ns amortized per dispatch)",
+        submit_avg_micros, submit_overhead_pct, amortized_submit_nanos
+    );
+    info!(
+        "  submit_verb_task latency distribution: p50={:?}, p95={:?}, p99={:?}, max={:?}",
+        p50, p95, p99, max
+    );
+
+    // Report additional per-operation metrics
+    let setup_task_count = counters.setup_task.invocations().sum();
+    let setup_task_avg_nanos = if setup_task_count > 0 {
+        counters.setup_task.cumulative_duration_nanos().sum() / setup_task_count
+    } else {
+        0
+    };
+
+    let find_verb_count = db_counters().find_method_verb_on.invocations().sum();
+    let find_verb_avg_nanos = if find_verb_count > 0 {
+        db_counters()
+            .find_method_verb_on
+            .cumulative_duration_nanos()
+            .sum()
+            / find_verb_count
+    } else {
+        0
+    };
+
+    info!(
+        "  setup_task: {} calls, avg {}ns | find_method_verb_on: {} calls, avg {}ns",
+        setup_task_count, setup_task_avg_nanos, find_verb_count, find_verb_avg_nanos
     );
 
     Ok(vec![result])
@@ -475,6 +599,7 @@ async fn load_test_workload(
     info!("Load-test workload session initialized, starting load test");
 
     let mut results = vec![];
+    let mut table_rows = vec![];
 
     // Do one throw-away workload run to warm up the system.
     info!("Running warm-up workload run...");
@@ -499,10 +624,17 @@ async fn load_test_workload(
         let num_concurrent_workload = concurrency as usize;
         let start_time = Instant::now();
 
-        info!(
-            "Starting {num_concurrent_workload} threads workloads, calling load test {} times, which does {} dispatch iterations...",
-            args.num_verb_invocations, args.num_verb_iterations
-        );
+        // Capture counter baselines before this iteration
+        let counters = sched_counters();
+        let baseline_setup_task_count = counters.setup_task.invocations().sum();
+        let baseline_setup_task_nanos = counters.setup_task.cumulative_duration_nanos().sum();
+        let baseline_sched_msg_count = counters.handle_scheduler_msg.invocations().sum();
+        let baseline_sched_msg_nanos = counters.handle_scheduler_msg.cumulative_duration_nanos().sum();
+        let baseline_find_verb_count = db_counters().find_method_verb_on.invocations().sum();
+        let baseline_find_verb_nanos = db_counters()
+            .find_method_verb_on
+            .cumulative_duration_nanos()
+            .sum();
 
         let mut workload_futures = FuturesUnordered::new();
         for _i in 0..num_concurrent_workload {
@@ -512,10 +644,37 @@ async fn load_test_workload(
             workload_futures.push(async move { workload(args, &scheduler_client, player).await });
         }
 
+        // Spinner animation
+        const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        let mut spinner_idx = 0;
+        let total_workloads = num_concurrent_workload;
+
+        eprint!("  {} Running {} workloads... ", SPINNER[0], total_workloads);
+        std::io::Write::flush(&mut std::io::stderr()).ok();
+
         let mut times = vec![];
+        let mut all_submit_latencies = vec![];
         while let Some(h) = workload_futures.next().await {
-            times.push(h?);
+            let (duration, latencies) = h?;
+            times.push(duration);
+            all_submit_latencies.extend(latencies);
+
+            // Update spinner
+            spinner_idx = (spinner_idx + 1) % SPINNER.len();
+            let completed = times.len();
+            eprint!(
+                "\r  {} Running {}/{} workloads... ",
+                SPINNER[spinner_idx], completed, total_workloads
+            );
+            std::io::Write::flush(&mut std::io::stderr()).ok();
         }
+
+        eprintln!(
+            "\r  ✓ Completed {}/{} workloads in {:?}",
+            total_workloads,
+            total_workloads,
+            start_time.elapsed()
+        );
 
         let cumulative_time = times.iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
         let total_time = start_time.elapsed();
@@ -533,10 +692,62 @@ async fn load_test_workload(
                 cumulative_time.as_secs_f64() / total_verb_calls as f64,
             ),
         };
-        info!(
-            "@ Concurrency: {} w/ total invocations: {}, ({total_verb_calls} total verb calls): Total Time: {:?}, Cumulative: {:?}, Per Verb Dispatch: {:?} ",
-            r.concurrency, r.total_invocations, r.total_time, r.cumulative_time, r.per_verb_call
-        );
+
+        // Get scheduler metrics for this iteration (compute deltas from baseline)
+        let counters = sched_counters();
+
+        // Calculate histogram percentiles from collected latencies
+        let (p50, p95, p99, max) = calculate_percentiles(all_submit_latencies);
+
+        // Report additional per-operation metrics (using deltas)
+        let setup_task_count = counters.setup_task.invocations().sum() - baseline_setup_task_count;
+        let setup_task_total_nanos =
+            counters.setup_task.cumulative_duration_nanos().sum() - baseline_setup_task_nanos;
+        let setup_task_avg_nanos = if setup_task_count > 0 {
+            (setup_task_total_nanos / setup_task_count) as u64
+        } else {
+            0
+        };
+
+        let find_verb_count =
+            db_counters().find_method_verb_on.invocations().sum() - baseline_find_verb_count;
+        let find_verb_total_nanos = db_counters()
+            .find_method_verb_on
+            .cumulative_duration_nanos()
+            .sum()
+            - baseline_find_verb_nanos;
+        let find_verb_avg_nanos = if find_verb_count > 0 {
+            (find_verb_total_nanos / find_verb_count) as u64
+        } else {
+            0
+        };
+
+        let sched_msg_count = counters.handle_scheduler_msg.invocations().sum() - baseline_sched_msg_count;
+        let sched_msg_total_nanos = counters.handle_scheduler_msg.cumulative_duration_nanos().sum() - baseline_sched_msg_nanos;
+        let sched_msg_avg_nanos = if sched_msg_count > 0 {
+            (sched_msg_total_nanos / sched_msg_count) as u64
+        } else {
+            0
+        };
+
+        table_rows.push(BenchmarkRow {
+            concurrency: r.concurrency,
+            tasks: r.total_invocations,
+            per_verb_call: format!("{:.0?}", r.per_verb_call),
+            wall_time: format!("{:.2?}", r.total_time),
+            submit_p50: format!("{:.2?}", p50),
+            submit_p95: format!("{:.2?}", p95),
+            submit_p99: format!("{:.2?}", p99),
+            submit_max: format!("{:.2?}", max),
+            setup_avg: format!("{}ns", setup_task_avg_nanos),
+            find_avg: format!("{}ns", find_verb_avg_nanos),
+            sched_msg_avg: format!("{}ns", sched_msg_avg_nanos),
+        });
+
+        // Clear screen and redraw table
+        eprint!("\x1B[2J\x1B[1;1H"); // ANSI clear screen and move to top
+        eprintln!("{}", Table::new(&table_rows).to_string());
+
         results.push(r);
 
         // Scale up by 25% or 1, whichever is larger, so we don't get stuck on lower values.
@@ -546,6 +757,8 @@ async fn load_test_workload(
         }
         concurrency = next_concurrency;
     }
+
+    // Final table is already displayed from last iteration
     Ok(results)
 }
 

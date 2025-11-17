@@ -154,9 +154,7 @@ pub struct SchedulerPerfCounters {
     start_task: PerfCounter,
     retry_task: PerfCounter,
     kill_task: PerfCounter,
-    vm_dispatch: PerfCounter,
-    post_vm_dispatch: PerfCounter,
-    setup_task: PerfCounter,
+    pub setup_task: PerfCounter,
     start_command: PerfCounter,
     parse_command: PerfCounter,
     find_verb_for_command: PerfCounter,
@@ -166,10 +164,28 @@ pub struct SchedulerPerfCounters {
     fork_task: PerfCounter,
     suspend_task: PerfCounter,
     task_exception: PerfCounter,
-    handle_scheduler_msg: PerfCounter,
+    pub handle_scheduler_msg: PerfCounter,
     handle_task_msg: PerfCounter,
     gc_mark_phase: PerfCounter,
     gc_sweep_phase: PerfCounter,
+
+    // SchedulerClient latency counters (end-to-end from send to reply)
+    pub submit_command_task_latency: PerfCounter,
+    pub submit_verb_task_latency: PerfCounter,
+    pub submit_eval_task_latency: PerfCounter,
+    pub submit_oob_task_latency: PerfCounter,
+    pub submit_system_handler_task_latency: PerfCounter,
+    pub checkpoint_latency: PerfCounter,
+    pub load_object_latency: PerfCounter,
+    pub reload_object_latency: PerfCounter,
+
+    // TaskSchedulerClient latency counters (from running tasks)
+    pub task_request_fork_latency: PerfCounter,
+    pub task_kill_task_latency: PerfCounter,
+    pub task_resume_task_latency: PerfCounter,
+    pub task_checkpoint_latency: PerfCounter,
+    pub task_active_tasks_latency: PerfCounter,
+    pub task_begin_transaction_latency: PerfCounter,
 }
 
 impl Default for SchedulerPerfCounters {
@@ -185,8 +201,6 @@ impl SchedulerPerfCounters {
             start_task: PerfCounter::new("start_task"),
             retry_task: PerfCounter::new("retry_task"),
             kill_task: PerfCounter::new("kill_task"),
-            vm_dispatch: PerfCounter::new("vm_dispatch"),
-            post_vm_dispatch: PerfCounter::new("post_vm_dispatch"),
             setup_task: PerfCounter::new("setup_task"),
             start_command: PerfCounter::new("start_command"),
             parse_command: PerfCounter::new("parse_command"),
@@ -201,6 +215,24 @@ impl SchedulerPerfCounters {
             handle_task_msg: PerfCounter::new("handle_task_msg"),
             gc_mark_phase: PerfCounter::new("gc_mark_phase"),
             gc_sweep_phase: PerfCounter::new("gc_sweep_phase"),
+
+            submit_command_task_latency: PerfCounter::new("submit_command_task_latency"),
+            submit_verb_task_latency: PerfCounter::new("submit_verb_task_latency"),
+            submit_eval_task_latency: PerfCounter::new("submit_eval_task_latency"),
+            submit_oob_task_latency: PerfCounter::new("submit_oob_task_latency"),
+            submit_system_handler_task_latency: PerfCounter::new(
+                "submit_system_handler_task_latency",
+            ),
+            checkpoint_latency: PerfCounter::new("checkpoint_latency"),
+            load_object_latency: PerfCounter::new("load_object_latency"),
+            reload_object_latency: PerfCounter::new("reload_object_latency"),
+
+            task_request_fork_latency: PerfCounter::new("task_request_fork_latency"),
+            task_kill_task_latency: PerfCounter::new("task_kill_task_latency"),
+            task_resume_task_latency: PerfCounter::new("task_resume_task_latency"),
+            task_checkpoint_latency: PerfCounter::new("task_checkpoint_latency"),
+            task_active_tasks_latency: PerfCounter::new("task_active_tasks_latency"),
+            task_begin_transaction_latency: PerfCounter::new("task_begin_transaction_latency"),
         }
     }
 
@@ -210,8 +242,6 @@ impl SchedulerPerfCounters {
             &self.start_task,
             &self.retry_task,
             &self.kill_task,
-            &self.vm_dispatch,
-            &self.post_vm_dispatch,
             &self.setup_task,
             &self.start_command,
             &self.parse_command,
@@ -226,6 +256,20 @@ impl SchedulerPerfCounters {
             &self.handle_task_msg,
             &self.gc_mark_phase,
             &self.gc_sweep_phase,
+            &self.submit_command_task_latency,
+            &self.submit_verb_task_latency,
+            &self.submit_eval_task_latency,
+            &self.submit_oob_task_latency,
+            &self.submit_system_handler_task_latency,
+            &self.checkpoint_latency,
+            &self.load_object_latency,
+            &self.reload_object_latency,
+            &self.task_request_fork_latency,
+            &self.task_kill_task_latency,
+            &self.task_resume_task_latency,
+            &self.task_checkpoint_latency,
+            &self.task_active_tasks_latency,
+            &self.task_begin_transaction_latency,
         ]
     }
 }

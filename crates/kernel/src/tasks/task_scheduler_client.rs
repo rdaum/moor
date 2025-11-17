@@ -17,7 +17,7 @@ use std::time::{Duration, SystemTime};
 use flume::Sender;
 
 use crate::{
-    tasks::{TaskDescription, TaskStart, task::Task},
+    tasks::{TaskDescription, TaskStart, sched_counters, task::Task},
     vm::{Fork, TaskSuspend},
 };
 use moor_common::{
@@ -26,6 +26,7 @@ use moor_common::{
         AbortLimitReason, CommandError, EventLogPurgeResult, EventLogStats, Exception,
         NarrativeEvent, SchedulerError, TaskId,
     },
+    util::PerfTimerGuard,
 };
 use moor_var::{Error, Obj, Symbol, Var};
 
@@ -96,6 +97,8 @@ impl TaskSchedulerClient {
 
     /// Send a message to the scheduler that the task is requesting to fork itself.
     pub fn request_fork(&self, fork: Box<Fork>) -> TaskId {
+        let _timer = PerfTimerGuard::new(&sched_counters().task_request_fork_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskRequestFork(fork, reply)))
@@ -162,6 +165,8 @@ impl TaskSchedulerClient {
 
     /// Request that the scheduler abort another task.
     pub fn kill_task(&self, victim_task_id: TaskId, sender_permissions: Perms) -> Var {
+        let _timer = PerfTimerGuard::new(&sched_counters().task_kill_task_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((
@@ -185,6 +190,8 @@ impl TaskSchedulerClient {
         sender_permissions: Perms,
         return_value: Var,
     ) -> Var {
+        let _timer = PerfTimerGuard::new(&sched_counters().task_resume_task_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((
@@ -220,6 +227,8 @@ impl TaskSchedulerClient {
     /// If `blocking` is true, waits for textdump generation to complete.
     /// Returns an error if the checkpoint fails or times out.
     pub fn checkpoint_with_blocking(&self, blocking: bool) -> Result<(), SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().task_checkpoint_latency);
+
         if blocking {
             let (reply, receive) = oneshot::channel();
             self.scheduler_sender
@@ -385,6 +394,8 @@ impl TaskSchedulerClient {
     }
 
     pub fn active_tasks(&self) -> Result<ActiveTaskDescriptions, Error> {
+        let _timer = PerfTimerGuard::new(&sched_counters().task_active_tasks_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::ActiveTasks { reply }))
@@ -431,6 +442,8 @@ impl TaskSchedulerClient {
     /// This is used for optimizing suspend(0) and commit-only suspensions
     /// to avoid the full suspend/resume cycle through the scheduler.
     pub fn begin_new_transaction(&self) -> Result<Box<dyn WorldState>, SchedulerError> {
+        let _timer = PerfTimerGuard::new(&sched_counters().task_begin_transaction_latency);
+
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::RequestNewTransaction(reply)))

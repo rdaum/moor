@@ -529,7 +529,7 @@ impl Scheduler {
                 session,
                 reply,
             } => {
-                // We need to translate Vloc and any of of the arguments into valid references
+                // We need to translate Vloc and any of the arguments into valid references
                 // before we can start the task.
                 // If they're all just plain object references, we can just use them as-is, without
                 // starting a transaction. Otherwise, we need to start a transaction to resolve them.
