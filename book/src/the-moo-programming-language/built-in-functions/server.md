@@ -63,14 +63,14 @@ If only the first two arguments are provided, the client should "unpresent" the 
 - `id`: A unique identifier for this presentation (used to update or remove it later)
 - `content_type`: (Optional) Content type for the presentation (e.g., "text/html", "text/markdown", "text/djot")
 - `target`: (Optional) Target UI element type. Supported values:
-  - `"window"`: Floating window
-  - `"navigation"`: Navigation panel (left dock on desktop, top on mobile)
-  - `"inventory"`: Inventory panel (right dock on desktop, bottom on mobile)
-  - `"status"`: Status panel (right dock on desktop, top on mobile)
-  - `"tools"`: Tools panel (right dock on desktop, bottom on mobile)
-  - `"communication"`: Communication panel (left dock on desktop, top on mobile)
-  - `"help"`: Help panel (right dock by default)
-  - `"verb-editor"`: Verb editor window
+    - `"window"`: Floating window
+    - `"navigation"`: Navigation panel (left dock on desktop, top on mobile)
+    - `"inventory"`: Inventory panel (right dock on desktop, bottom on mobile)
+    - `"status"`: Status panel (right dock on desktop, top on mobile)
+    - `"tools"`: Tools panel (right dock on desktop, bottom on mobile)
+    - `"communication"`: Communication panel (left dock on desktop, top on mobile)
+    - `"help"`: Help panel (right dock by default)
+    - `"verb-editor"`: Verb editor window
 - `content`: (Optional) The actual content to display
 - `attributes`: (Optional) Additional attributes as a list of {key, value} pairs or a map
 
@@ -223,15 +223,13 @@ purge_player_event_log(player, time() - 7 * 86400, 0);
 
 ### `caller_perms`
 
-**Description:** Returns the object representing the permissions of the calling task. This is the object whose
-permissions are being used to execute the current code, which may differ from the object that defined the verb being
-executed.
+**Description:** Returns the object representing the permissions of the code that directly called the current verb.
 
 **Syntax:** `obj caller_perms()`
 
 **Arguments:** None
 
-**Returns:** An object representing the current task's permissions
+**Returns:** An object representing the caller's permissions
 
 **Permission Requirements:** None - available to all users
 
@@ -249,21 +247,23 @@ server_log("Verb called by: " + tostr(caller_perms()));
 
 **Notes:**
 
-- The caller permissions determine what operations the current task can perform
-- This may be different from `this` (the object the verb is defined on)
-- Use `set_task_perms()` to change the task permissions if you have appropriate privileges
-- Commonly used for permission checks in verbs that need to validate caller identity
+- Returns the identity of the code that called this verb, not the current task's effective permissions
+- The current task's permissions are initially determined by the owner of the verb being executed
+- Use `set_task_perms()` to temporarily change the task's permissions for subsequent operations
+- Commonly used for permission checks in verbs that need to validate or restrict access based on who called them
+- Different from `this` (the object the verb is defined on)
 
 ### `set_task_perms`
 
-**Description:** Sets the permissions for the current task to those of the specified object. This changes which object's
-permissions are used for subsequent operations within the current task.
+**Description:** Changes the effective permissions of the current task for subsequent operations. The task's initial
+permissions are determined by the owner of the verb, but this function allows temporary elevation or downgrade of
+permissions.
 
 **Syntax:** `none set_task_perms(obj perms)`
 
 **Arguments:**
 
-- `perms`: The object whose permissions should be adopted by the current task
+- `perms`: The object whose permissions should be used for subsequent operations in this task
 
 **Returns:** None
 
@@ -275,22 +275,30 @@ permissions are used for subsequent operations within the current task.
 **Examples:**
 
 ```moo
-// Wizard changing task permissions to another object
-if (caller_perms() in wizards())
-    set_task_perms(#100);  // Now running with #100's permissions
-    // Subsequent operations use #100's permissions
-endif
+// Downgrade permissions to caller after initial privileged check
+verb "@create" (any any any) owner: #2 flags: "rd"
+    // Initial permissions are from the verb owner (#2, a wizard)
+    // Do something privileged first (e.g., validate arguments)
 
-// Non-wizard can only set permissions to themselves (redundant but valid)
-set_task_perms(caller_perms());
+    // Now downgrade to the caller's permissions for safety
+    set_task_perms(caller_perms());
+    // Subsequent operations will use the caller's permissions
+endverb
 
-// Typical pattern: temporarily elevate permissions
-old_perms = caller_perms();
-if (old_perms in wizards())
-    set_task_perms(system_object);  // Use system permissions
-    // Do privileged operations...
-    set_task_perms(old_perms);      // Restore original permissions
-endif
+// Check if caller is a wizard before allowing privileged operation
+verb init_for_core (this none this) owner: #2 flags: "rxd"
+    if (caller_perms().wizard)
+        // Only wizards can perform this initialization
+        this.privileged_data = 42;
+    endif
+endverb
+
+// Downgrade to a specific restricted object for sandbox execution
+verb dangerous_utility () owner: #2 flags: "rd"
+    set_task_perms($hacker);  // Downgrade to object with minimal permissions
+    // Execute user-provided code or external operations safely...
+    // Note: cannot call set_task_perms() again from here
+endverb
 ```
 
 **Errors:**
@@ -301,10 +309,13 @@ endif
 
 **Notes:**
 
-- This affects all subsequent permission checks within the current task
+- This affects permission checks in subsequent operations called within this task
 - The change persists until the task completes or `set_task_perms()` is called again
-- Commonly used by system verbs to temporarily elevate or change permissions
-- Use `caller_perms()` to check current task permissions after calling this function
+- Only affects the active stack frame's effective permissions; does not change what `caller_perms()` returns, and does
+  not alter what happens in subsequent verb calls
+- `caller_perms()` always returns the identity of the original caller, regardless of `set_task_perms()` calls
+- Commonly used in wizard-owned verbs to safely downgrade permissions or temporarily elevate them for privileged
+  operations
 
 ### `callers`
 
@@ -566,19 +577,22 @@ connections()
 
 - `program`: String containing MOO code to evaluate
 - `verbosity`: (Optional) Controls error output detail level (default: 0)
-  - `0` - Summary: Brief error message only (default for eval)
-  - `1` - Context: Message with error location (graphical display when output_mode > 0)
-  - `2` - Detailed: Message, location, and diagnostic hints
-  - `3` - Structured: Returns error data as a map for programmatic handling
+    - `0` - Summary: Brief error message only (default for eval)
+    - `1` - Context: Message with error location (graphical display when output_mode > 0)
+    - `2` - Detailed: Message, location, and diagnostic hints
+    - `3` - Structured: Returns error data as a map for programmatic handling
 - `output_mode`: (Optional) Controls error formatting style (default: 0)
-  - `0` - Plain text without special characters
-  - `1` - Graphics characters for visual clarity
-  - `2` - Graphics with ANSI color codes
+    - `0` - Plain text without special characters
+    - `1` - Graphics characters for visual clarity
+    - `2` - Graphics with ANSI color codes
 
 **Returns:**
+
 - On success: list containing `{result, ...}` where `result` is the value produced by evaluating the code
-- On compilation failure with `verbosity` 0-2: list where first element is error object, followed by formatted error strings
-- On compilation failure with `verbosity` 3: list where first element is error object, second is map containing structured error data (use `format_compile_error()` to format)
+- On compilation failure with `verbosity` 0-2: list where first element is error object, followed by formatted error
+  strings
+- On compilation failure with `verbosity` 3: list where first element is error object, second is map containing
+  structured error data (use `format_compile_error()` to format)
 
 **Note:** Requires programmer bit. The evaluated code runs with the permissions of the current task.
 
@@ -630,6 +644,7 @@ endif
 **Returns:** A list of strings containing the documentation extracted from the builtin's implementation.
 
 **Errors:**
+
 - `E_INVARG`: Raised if the builtin doesn't exist or has no documentation
 - `E_TYPE`: Raised if the argument is not a string
 - `E_ARGS`: Raised if the wrong number of arguments is provided
@@ -646,7 +661,8 @@ help = function_help("min");
 
 **Notes:**
 
-Documentation is extracted at compile time from the doc-comments of each builtin's Rust implementation, ensuring it always matches the running program.
+Documentation is extracted at compile time from the doc-comments of each builtin's Rust implementation, ensuring it
+always matches the running program.
 
 ### `wait_task`
 
