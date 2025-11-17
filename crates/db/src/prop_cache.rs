@@ -119,10 +119,10 @@ impl PropResolutionCache {
         let key = make_cache_key(obj, prop);
         let result = inner.entries.get(&key).cloned();
 
-        if result.is_some() {
-            PROP_CACHE_STATS.hit();
-        } else {
-            PROP_CACHE_STATS.miss();
+        match &result {
+            Some(Some(_)) => PROP_CACHE_STATS.hit(),
+            Some(None) => PROP_CACHE_STATS.negative_hit(),
+            None => PROP_CACHE_STATS.miss(),
         }
 
         result

@@ -1019,27 +1019,27 @@ fn bf_purge_player_event_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfE
 /// Helper function to convert cache statistics to a LambdaMOO-compatible list.
 fn make_cache_stats_list(cache_stats: &moor_db::CacheStats) -> Var {
     // Return a LambdaMOO-compatible list: [hits, negative_hits, misses, generation, histogram]
-    // For our implementation:
-    // - hits: direct cache hits
-    // - negative_hits: 0 (we don't track this separately)
-    // - misses: cache misses
+    // - hits: cache hits where a value was found
+    // - negative_hits: cache hits where we cached "not found"
+    // - misses: actual cache misses (not in cache at all)
     // - generation: flush count (closest analog)
     // - histogram: simplified - just [0, total_entries] since we don't track chain depths
 
     let hits = cache_stats.hit_count() as i64;
+    let negative_hits = cache_stats.negative_hit_count() as i64;
     let misses = cache_stats.miss_count() as i64;
     let flushes = cache_stats.flush_count() as i64;
-    let total_entries = hits + misses;
+    let num_entries = cache_stats.num_entries() as i64;
 
     // Create histogram - simplified to just show total cache entries
-    let histogram = v_list(&[v_int(0), v_int(total_entries)]);
+    let histogram = v_list(&[v_int(0), v_int(num_entries)]);
 
     v_list(&[
-        v_int(hits),    // hits
-        v_int(0),       // negative hits (not tracked separately)
-        v_int(misses),  // misses
+        v_int(hits),
+        v_int(negative_hits),
+        v_int(misses),
         v_int(flushes), // generation (using flush count)
-        histogram,      // histogram
+        histogram,
     ])
 }
 

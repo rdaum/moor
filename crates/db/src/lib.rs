@@ -396,6 +396,7 @@ enum CommitSet {
 /// Unified cache statistics structure
 pub struct CacheStats {
     hits: ConcurrentCounter,
+    negative_hits: ConcurrentCounter,
     misses: ConcurrentCounter,
     flushes: ConcurrentCounter,
     num_entries: ConcurrentCounter,
@@ -411,6 +412,7 @@ impl CacheStats {
     pub fn new() -> Self {
         Self {
             hits: ConcurrentCounter::new(0),
+            negative_hits: ConcurrentCounter::new(0),
             misses: ConcurrentCounter::new(0),
             flushes: ConcurrentCounter::new(0),
             num_entries: ConcurrentCounter::new(0),
@@ -419,6 +421,9 @@ impl CacheStats {
 
     pub fn hit(&self) {
         self.hits.add(1);
+    }
+    pub fn negative_hit(&self) {
+        self.negative_hits.add(1);
     }
     pub fn miss(&self) {
         self.misses.add(1);
@@ -438,6 +443,9 @@ impl CacheStats {
     pub fn hit_count(&self) -> isize {
         self.hits.sum()
     }
+    pub fn negative_hit_count(&self) -> isize {
+        self.negative_hits.sum()
+    }
     pub fn miss_count(&self) -> isize {
         self.misses.sum()
     }
@@ -451,10 +459,11 @@ impl CacheStats {
 
     pub fn hit_rate(&self) -> f64 {
         let hits = self.hits.sum() as f64;
+        let negative_hits = self.negative_hits.sum() as f64;
         let misses = self.misses.sum() as f64;
-        let total = hits + misses;
+        let total = hits + negative_hits + misses;
         if total > 0.0 {
-            (hits / total) * 100.0
+            ((hits + negative_hits) / total) * 100.0
         } else {
             0.0
         }

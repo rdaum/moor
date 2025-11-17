@@ -124,10 +124,10 @@ impl VerbResolutionCache {
         let key = make_cache_key(obj, verb);
         let result = inner.entries.get(&key).cloned();
 
-        if result.is_some() {
-            VERB_CACHE_STATS.hit();
-        } else {
-            VERB_CACHE_STATS.miss();
+        match &result {
+            Some(Some(_)) => VERB_CACHE_STATS.hit(),
+            Some(None) => VERB_CACHE_STATS.negative_hit(),
+            None => VERB_CACHE_STATS.miss(),
         }
 
         result
@@ -257,6 +257,7 @@ impl AncestryCache {
         let inner = self.inner.load();
         let result = inner.entries.get(obj).cloned();
 
+        // Ancestry cache doesn't use Option wrapping, so we only have hits and misses
         if result.is_some() {
             ANCESTRY_CACHE_STATS.hit();
         } else {
