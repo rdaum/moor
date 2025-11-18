@@ -17,6 +17,8 @@ enhancements.
 > **⚠️ 1.0-Beta Release:** mooR is now in 1.0-beta! This is a significant milestone with stable
 > database formats and APIs. We're in feature freeze mode and focusing on bug fixes, documentation,
 > and performance. See the [Status](#status) section below for details.
+>
+> See the [full announcement blog post for more...](https://timbran.org/announcing-moor-1-0-beta1.html)
 
 > **📦 Repository Migration Notice (August 2025):** We've recently moved our primary repository from
 > GitHub to [Codeberg](https://codeberg.org/timbran/moor). If you're viewing this on GitHub, please
