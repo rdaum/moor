@@ -15,6 +15,7 @@ description = "WebSocket and REST API server for the mooR system"
 depends = "$auto, systemd"
 extended-description = "WebSocket and REST API server for the mooR system."
 section = "net"
+license = "GPL-3.0"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [

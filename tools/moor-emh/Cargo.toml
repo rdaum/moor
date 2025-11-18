@@ -18,6 +18,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)
 depends = "$auto"
 extended-description = "Emergency database administration tool for mooR. Provides direct database access and management when normal login methods are unavailable."
 section = "admin"
+license = "GPL-3.0"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
