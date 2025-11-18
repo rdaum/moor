@@ -15,7 +15,6 @@ description = "A server which presents a classic LambdaMOO-style line-based TCP 
 depends = "$auto, systemd"
 extended-description = "Process for listening for telnet sessions and forwarding them to a mooR daemon."
 section = "net"
-license = "GPL-3.0"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [

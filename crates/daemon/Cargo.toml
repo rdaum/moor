@@ -15,7 +15,6 @@ description = "The actual moor binary that runs as an RPC-accessible daemon that
 depends = "$auto, systemd, openssl"
 extended-description = "Daemon for the Moor virtual machine. This is the main process that runs the Moor VM and provides an RPC interface for clients to connect to."
 section = "net"
-license = "GPL-3.0"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
