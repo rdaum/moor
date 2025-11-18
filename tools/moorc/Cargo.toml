@@ -21,7 +21,7 @@ section = "devel"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
-    ["target/release-fast/moorc", "/usr/bin/moorc", "755"],
+    ["target/release/moorc", "/usr/bin/moorc", "755"],
 ]
 
 [dependencies]

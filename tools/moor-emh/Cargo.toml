@@ -21,7 +21,7 @@ section = "admin"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
-    ["target/release-fast/moor-emh", "/usr/bin/moor-emh", "755"],
+    ["target/release/moor-emh", "/usr/bin/moor-emh", "755"],
 ]
 
 [dependencies]
