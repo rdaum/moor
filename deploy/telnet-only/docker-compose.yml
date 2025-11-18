@@ -13,12 +13,16 @@ volumes:
 services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
-    build:
-      context: ../..
-      target: backend
-      network: host
-      args:
-        BUILD_PROFILE: release
+    # Use pre-built image from Codeberg registry
+    image: codeberg.org/timbran/moor:latest-x86_64
+    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
+    # build:
+    #   context: ../..
+    #   target: backend
+    #   network: host
+    #   args:
+    #     BUILD_PROFILE: release
+    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
     container_name: "moor-daemon"
     user: "${USER_ID}:${GROUP_ID}"
     environment:
@@ -43,12 +47,16 @@ services:
 
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
-    build:
-      context: ../..
-      target: backend
-      network: host
-      args:
-        BUILD_PROFILE: release
+    # Use pre-built image from Codeberg registry
+    image: codeberg.org/timbran/moor:latest-x86_64
+    # To use locally-built images instead, replace the 'image:' line above with the 'build:' section below:
+    # build:
+    #   context: ../..
+    #   target: backend
+    #   network: host
+    #   args:
+    #     BUILD_PROFILE: release
+    # For aarch64 systems, change 'latest-x86_64' to 'latest-aarch64'
     container_name: "moor-telnet-host"
     user: "${USER_ID}:${GROUP_ID}"
     environment:

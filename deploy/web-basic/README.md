@@ -35,6 +35,11 @@ This configuration runs:
 
 ## Quick Start
 
+### Using Pre-built Images (Recommended)
+
+The `docker-compose.yml` is configured to use pre-built Docker images from the Codeberg container
+registry:
+
 1. **Copy this directory** to your deployment location:
    ```bash
    cp -r deploy/web-basic /path/to/deployment
@@ -52,15 +57,37 @@ This configuration runs:
    docker compose up -d
    ```
 
-4. **Check logs** to verify startup:
+That's it! Docker Compose will pull the latest pre-built images from Codeberg.
+
+### Using Locally-Built Images
+
+If you prefer to build images locally on your machine:
+
+1. Follow steps 1-2 above
+2. Edit `docker-compose.yml` and uncomment the `build:` sections for services (replacing `image:`
+   lines)
+3. Ensure you're in the mooR source directory (parent of `deploy/`)
+4. Run: `docker compose up -d`
+
+Note: Both backend and frontend images are pre-built and available from Codeberg. Local builds are
+only necessary if you're developing or need to customize the deployment.
+
+### For ARM64 Systems
+
+If running on aarch64 systems, change the image tag from `latest-x86_64` to `latest-aarch64` in
+`docker-compose.yml`, or use local builds instead.
+
+## Verifying Your Setup
+
+1. **Check logs** to verify startup:
    ```bash
    docker compose logs -f
    ```
 
-5. **Access the web interface**:
+2. **Access the web interface**:
    - Open your browser to `http://localhost:8080`
 
-6. **Or connect via telnet**:
+3. **Or connect via telnet**:
    ```bash
    telnet localhost 8888
    ```
@@ -200,17 +227,17 @@ To upgrade to a newer version of mooR:
    tar czf moor-data-backup-$(date +%Y%m%d).tar.gz moor-data/
    ```
 
-2. **Pull latest changes** (if using git clone):
+2. **Pull latest images** (if using pre-built images):
    ```bash
-   git pull
+   docker compose pull
    ```
 
-3. **Rebuild containers**:
+   Or **rebuild containers** (if using local builds):
    ```bash
    docker compose build --no-cache
    ```
 
-4. **Restart services**:
+3. **Restart services**:
    ```bash
    docker compose down
    docker compose up -d

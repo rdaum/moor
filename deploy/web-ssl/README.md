@@ -62,6 +62,21 @@ This configuration runs:
 
    Replace `YOUR_DOMAIN_HERE` and `YOUR_DOMAIN` with your actual domain name.
 
+### Using Pre-built Images or Local Builds
+
+The `docker-compose.yml` is configured to use pre-built Docker images from the Codeberg container
+registry.
+
+- **For x86_64 systems** (default): Images are automatically pulled from Codeberg
+- **For ARM64 systems**: Change the image tag from `latest-x86_64` to `latest-aarch64` in
+  `docker-compose.yml`
+- **For local builds**: Edit `docker-compose.yml` and uncomment the `build:` sections for services
+  (replacing `image:` lines), then ensure you're in the mooR source directory before running
+  commands
+
+Note: Both backend and frontend images are pre-built and available from Codeberg. Local builds are
+only necessary if you're developing or need to customize the deployment.
+
 ### Step 2: Obtain SSL Certificate
 
 Before starting the main services, you need to obtain an SSL certificate from Let's Encrypt:
@@ -354,23 +369,23 @@ To upgrade to a newer version of mooR:
    tar czf moor-full-backup-$(date +%Y%m%d).tar.gz moor-data/ letsencrypt/
    ```
 
-2. **Pull latest changes**:
+2. **Pull latest images** (if using pre-built images):
    ```bash
-   git pull
+   docker compose pull
    ```
 
-3. **Rebuild containers**:
+   Or **rebuild containers** (if using local builds):
    ```bash
    docker compose build --no-cache
    ```
 
-4. **Restart services**:
+3. **Restart services**:
    ```bash
    docker compose down
    docker compose up -d
    ```
 
-5. **Check logs for issues**:
+4. **Check logs for issues**:
    ```bash
    docker compose logs -f
    ```
