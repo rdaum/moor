@@ -67,3 +67,15 @@ jobs:
         with:
           name: packages-${{ matrix.arch }}
           path: target/debian/*.deb
+
+      - name: Publish packages to Codeberg Debian repository
+        run: |
+          for deb_file in target/debian/*.deb; do
+            if [ -f "$deb_file" ]; then
+              echo "Uploading $deb_file to Codeberg Debian repository..."
+              curl --user timbran:${{ secrets.CODEBERG_TOKEN }} \
+                   --upload-file "$deb_file" \
+                   https://codeberg.org/api/packages/timbran/debian/pool/bookworm/main/upload
+              echo "Uploaded: $deb_file"
+            fi
+          done
