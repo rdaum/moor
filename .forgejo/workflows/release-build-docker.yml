@@ -24,6 +24,7 @@ jobs:
             runs-on: linux-arm64
             dockerfile: Dockerfile.arm64-cross
     runs-on: ${{ matrix.runs-on }}
+    container: moor-ci:1.90.0
     steps:
       - uses: actions/checkout@v4
         with:
