@@ -17,7 +17,7 @@ set -e
 # Build script for moor-web-client debian package
 # This script creates a debian package containing the built web client static files
 
-VERSION="0.9.0-alpha-1"
+VERSION="1.0.0~beta1-1"
 PACKAGE_NAME="moor-web-client"
 BUILD_DIR="debian-pkg-web-client"
 
