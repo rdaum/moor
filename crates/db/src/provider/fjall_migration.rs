@@ -36,35 +36,35 @@
 //!   - Fully backward and forward compatible
 //!   - No migration needed
 //!
-//! ## Migration Strategy
+//! ## Migration Strategy (1.0-beta)
 //!
-//! - Migrations are triggered only on MAJOR version changes
-//! - Each major version has a dedicated migration function (e.g., `fjall_migrate_v1_to_v2`)
-//! - Migrations run sequentially: v1→v2→v3 if needed
-//! - The database version marker is stored as a UTF-8 string in the sequences partition
+//! For the 1.0-beta release, we support migration from:
+//! - **3.0.0** (pre-beta format) → **release-1.0.0** (stable 1.0 format)
 //!
-//! ## Version History
+//! This is a simple version marker update with no data format changes.
+//! Older pre-beta formats (1.0.0, 2.0.0) are no longer supported for migration.
 //!
-//! - **1.0.0**: A pre-release format with u128 UUIDv7 timestamps
-//! - **2.0.0**: Changed to u64 monotonic timestamps
-//! - **3.0.0**: Fixed error_operands to preserve custom error symbols (current)
+//! ## Supported Database Versions
+//!
+//! - **3.0.0**: Pre-beta development format (can be migrated to release-1.0.0)
+//! - **release-1.0.0**: Stable database format for mooR 1.0 (current)
 //!
 //! *Note* that the DB version is separate from the main mooR project version, which has its own
 //! sem-versioning.
 
 use crate::provider::Migrator;
-use byteview::ByteView;
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
-use moor_var::program::stored_program::StoredProgram;
 use semver::Version;
 use std::{fs, path::Path};
 use tracing::{error, info, warn};
 
-/// Current database format version using semver
-/// 1.0.0 = Original format with u128 timestamps
-/// 2.0.0 = Changed to u64 monotonic timestamps
-/// 3.0.0 = Fixed error_operands to preserve custom error symbols
-const CURRENT_DB_VERSION: &str = "3.0.0";
+/// Current database format version using semver with release prefix
+/// Note: Database versions are independent of mooR release versions to avoid confusion
+///
+/// Supported database versions:
+/// - 3.0.0 = Pre-beta development format (will be migrated to release-1.0.0)
+/// - release-1.0.0 = Stable database format for mooR 1.0 (current)
+const CURRENT_DB_VERSION: &str = "release-1.0.0";
 
 /// Database version marker key in sequences partition
 const VERSION_KEY: &[u8] = b"__db_version__";
@@ -96,25 +96,46 @@ pub fn fjall_check_and_migrate(db_path: &Path) -> Result<(), String> {
         .open_partition("sequences", PartitionCreateOptions::default())
         .map_err(|e| format!("Failed to open sequences partition: {e}"))?;
 
-    // Check version
-    let current_version = get_db_version_static(&sequences_partition).unwrap_or_else(|_| {
-        // No version marker = version 1.0.0
-        Version::parse("1.0.0").unwrap()
-    });
-
-    let target_version = Version::parse(CURRENT_DB_VERSION).unwrap();
+    // Check version (read the full version string from database)
+    let current_version_str = sequences_partition
+        .get(VERSION_KEY)
+        .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok());
 
     // Drop handles before any file operations
     drop(sequences_partition);
     drop(keyspace);
 
-    if current_version >= target_version {
-        // No migration needed
-        info!(
-            "Database at {db_path:?} is up to date with {target_version} and needs no migrations..."
-        );
-        return Ok(());
+    // If database already has the current release version, no migration needed
+    if let Some(ref version_str) = current_version_str {
+        info!("Database version marker: {version_str:?}, current: {CURRENT_DB_VERSION:?}");
+        if version_str == CURRENT_DB_VERSION {
+            info!(
+                "Database at {db_path:?} is already at {CURRENT_DB_VERSION} and needs no migrations..."
+            );
+            return Ok(());
+        }
     }
+
+    // For 1.0-beta, only support migration from 3.0.0 to release-1.0.0
+    // If no version marker, assume it's 3.0.0 (pre-beta format)
+    let current_version_str = current_version_str.unwrap_or_else(|| "3.0.0".to_string());
+
+    // Validate that we're migrating from a supported version
+    if current_version_str != "3.0.0" {
+        return Err(format!(
+            "Unsupported database version '{}': Only version 3.0.0 can be migrated to {}",
+            current_version_str, CURRENT_DB_VERSION
+        ));
+    }
+
+    // Parse versions for logging
+    let (_current_prefix, current_version) = parse_version_string(&current_version_str)
+        .unwrap_or_else(|_| (None, Version::parse("3.0.0").unwrap()));
+
+    let (_target_prefix, target_version) = parse_version_string(CURRENT_DB_VERSION)
+        .unwrap_or_else(|_| (None, Version::parse("1.0.0").unwrap()));
 
     warn!("Database at {db_path:?} needs migration from {current_version} to {target_version}");
 
@@ -172,7 +193,7 @@ fn fjall_migrate_via_copy(
         return Err(format!("Migration failed: {e}"));
     }
 
-    // Close the migrated copy
+    // Close the migrated copy and ensure all writes are flushed to disk
     drop(migrator);
 
     info!("Migration successful, swapping directories");
@@ -221,21 +242,32 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Get database version from a sequences partition (static version for pre-open checks)
-fn get_db_version_static(sequences_partition: &PartitionHandle) -> Result<Version, String> {
-    let version_bytes = sequences_partition
-        .get(VERSION_KEY)
-        .map_err(|e| format!("Failed to read version: {e}"))?
-        .ok_or_else(|| "No version marker found".to_string())?;
+/// Parse a version string to extract the numeric semver part
+/// For "1.0.0" returns (None, Version 1.0.0)
+/// For "release-1.0.0" returns (Some("release"), Version 1.0.0)
+fn parse_version_string(version_str: &str) -> Result<(Option<&str>, Version), String> {
+    let (prefix, version_part) = if let Some(pos) = version_str.rfind('-') {
+        let (prefix_part, version) = version_str.split_at(pos + 1);
+        let prefix_without_dash = &prefix_part[..prefix_part.len() - 1];
+        // If the prefix part contains only alphabetic characters, it's a release prefix
+        if prefix_without_dash.chars().all(|c| c.is_alphabetic()) {
+            (Some(prefix_without_dash), version)
+        } else {
+            (None, version_str)
+        }
+    } else {
+        (None, version_str)
+    };
 
-    let version_str = String::from_utf8(version_bytes.to_vec())
-        .map_err(|e| format!("Invalid UTF-8 in version string: {e}"))?;
+    let version = Version::parse(version_part)
+        .map_err(|e| format!("Invalid semver version '{version_str}': {e}"))?;
 
-    Version::parse(&version_str).map_err(|e| format!("Invalid semver version '{version_str}': {e}"))
+    Ok((prefix, version))
 }
 
 /// Fjall-specific migration handler
 pub struct FjallMigrator {
+    #[allow(dead_code)]
     keyspace: Keyspace,
     sequences_partition: PartitionHandle,
 }
@@ -248,266 +280,77 @@ impl FjallMigrator {
         }
     }
 
-    /// Get the current database version as a semver Version
-    fn get_db_version(&self) -> Result<Version, String> {
+    /// Get the current database version as a full string (e.g., "3.0.0" or "release-1.0.0")
+    fn get_db_version_string(&self) -> Result<String, String> {
         let version_bytes = self
             .sequences_partition
             .get(VERSION_KEY)
             .map_err(|e| format!("Failed to read version: {e}"))?
             .ok_or_else(|| "No version marker found".to_string())?;
 
-        let version_str = String::from_utf8(version_bytes.to_vec())
-            .map_err(|e| format!("Invalid UTF-8 in version string: {e}"))?;
-
-        Version::parse(&version_str)
-            .map_err(|e| format!("Invalid semver version '{version_str}': {e}"))
+        String::from_utf8(version_bytes.to_vec())
+            .map_err(|e| format!("Invalid UTF-8 in version string: {e}"))
     }
 
-    /// Migration from version 2 to version 3: Fix error_operands to preserve custom error symbols
-    fn fjall_migrate_v2_to_v3(&self) -> Result<(), String> {
-        warn!(
-            "Running Fjall migration v2 -> v3: Migrating verb programs to new error_operands format"
-        );
-
-        if !self.keyspace.partition_exists("object_verbs") {
-            info!("No object_verbs partition found, skipping verb migration");
-            return Ok(());
-        }
-
-        let partition = self
-            .keyspace
-            .open_partition("object_verbs", PartitionCreateOptions::default())
-            .map_err(|e| format!("Failed to open object_verbs partition: {e}"))?;
-
-        Self::fjall_migrate_verb_programs(&partition, "object_verbs")
-    }
-
-    /// Migrate verb programs by re-encoding them with the new error_operands format
-    fn fjall_migrate_verb_programs(
-        partition: &PartitionHandle,
-        partition_name: &str,
-    ) -> Result<(), String> {
-        warn!("Migrating verb programs in partition {}", partition_name);
-
-        let mut entry_count = 0;
-        let mut migrated_count = 0;
-
-        // Collect all entries first to avoid iterator invalidation during writes
-        let entries: Vec<(ByteView, ByteView)> = partition
-            .iter()
-            .map(|result| {
-                let (key, value) = result.map_err(|e| format!("Failed to read entry: {e}"))?;
-                Ok((ByteView::from(key.to_vec()), ByteView::from(value.to_vec())))
-            })
-            .collect::<Result<Vec<_>, String>>()?;
-
-        info!("Found {} verb programs to migrate", entries.len());
-
-        for (key, value_bytes) in entries {
-            entry_count += 1;
-
-            // The value is a (timestamp, StoredProgram) tuple
-            // Skip the timestamp (8 bytes) to get to the StoredProgram bytes
-            if value_bytes.len() < 8 {
-                warn!(
-                    "Skipping entry in {} with value too short: {} bytes",
-                    partition_name,
-                    value_bytes.len()
-                );
-                continue;
-            }
-
-            let program_bytes = value_bytes.slice(8..);
-
-            // Decode the program using the schema conversion
-            let stored_program = StoredProgram::from_bytes(program_bytes.clone());
-
-            // Re-encode the program (this will use the new format with error_operands_full)
-            // This will migrate the program even if it fails to decode custom errors from old format
-            let new_program_bytes = match moor_schema::convert_program::stored_to_program(
-                &stored_program,
-            ) {
-                Ok(program) => {
-                    // Successfully decoded, re-encode
-                    match moor_schema::convert_program::program_to_stored(&program) {
-                        Ok(stored) => stored.as_bytes().to_vec(),
-                        Err(e) => {
-                            warn!("Failed to re-encode program, keeping original: {e}");
-                            continue;
-                        }
-                    }
-                }
-                Err(e) => {
-                    // If it fails to decode, it might have custom errors in old format
-                    warn!("Program failed to decode (may have custom errors): {e}");
-                    warn!(
-                        "This verb may need manual recompilation to preserve custom error symbols"
-                    );
-                    continue;
-                }
-            };
-
-            // Reconstruct the value with timestamp + new program bytes
-            let timestamp_bytes = value_bytes.slice(0..8);
-            let mut new_value = Vec::with_capacity(8 + new_program_bytes.len());
-            new_value.extend_from_slice(&timestamp_bytes);
-            new_value.extend_from_slice(&new_program_bytes);
-
-            partition
-                .insert(key, ByteView::from(new_value))
-                .map_err(|e| format!("Failed to rewrite entry: {e}"))?;
-
-            migrated_count += 1;
-        }
-
+    /// Migration from version 3.0.0 to release-1.0.0
+    /// No format changes required - this is purely a version marker update for the 1.0 release.
+    fn fjall_migrate_v3_to_release_1_0_0(&self) -> Result<(), String> {
         info!(
-            "Successfully migrated {}/{} verb programs in partition {}",
-            migrated_count, entry_count, partition_name
+            "Migrating database from 3.0.0 to release-1.0.0: Version alignment for mooR 1.0 stable release"
         );
-
-        if migrated_count < entry_count {
-            warn!(
-                "{} verb programs could not be migrated and may need recompilation",
-                entry_count - migrated_count
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Migration from version 1 (u128 timestamps) to version 2 (u64 timestamps)
-    fn fjall_migrate_v1_to_v2(&self) -> Result<(), String> {
-        warn!("Running Fjall migration v1 -> v2: Converting u128 timestamps to u64");
-
-        let partition_names = vec![
-            "object_location",
-            "object_parent",
-            "object_flags",
-            "object_owner",
-            "object_name",
-            "object_verbdefs",
-            "object_verbs",
-            "object_propdefs",
-            "object_propvalues",
-            "object_propflags",
-            "object_last_move",
-            "anonymous_object_metadata",
-        ];
-
-        for name in partition_names {
-            if self.keyspace.partition_exists(name) {
-                let partition = self
-                    .keyspace
-                    .open_partition(name, PartitionCreateOptions::default())
-                    .map_err(|e| format!("Failed to open partition {name}: {e}"))?;
-                Self::fjall_migrate_partition_u128_to_u64(&partition, name)?;
-            }
-        }
-
-        // Reset the monotonic transaction counter (sequence #15) to 1
-        // since we've zeroed all timestamps
-        info!("Resetting monotonic transaction counter to 1");
-        self.sequences_partition
-            .insert(15_u64.to_le_bytes(), 1u64.to_le_bytes())
-            .map_err(|e| format!("Failed to reset transaction counter: {e}"))?;
-
-        Ok(())
-    }
-
-    /// Migrate a Fjall partition from u128 timestamps to u64 timestamps
-    /// Simply zeros out all timestamps - ordering doesn't matter since we're resetting the system
-    fn fjall_migrate_partition_u128_to_u64(
-        partition: &PartitionHandle,
-        partition_name: &str,
-    ) -> Result<(), String> {
-        warn!(
-            "Migrating Fjall partition {} from u128 to u64 timestamps (zeroing all timestamps)",
-            partition_name
-        );
-
-        let mut entry_count = 0;
-
-        for entry in partition.iter() {
-            let (key, value) = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
-
-            let value_bytes: ByteView = value.into();
-
-            // Try to read as u128 timestamp (16 bytes)
-            if value_bytes.len() < 16 {
-                warn!(
-                    "Skipping entry in {} with value too short: {} bytes",
-                    partition_name,
-                    value_bytes.len()
-                );
-                continue;
-            }
-
-            // Extract the codomain bytes (everything after the old u128 timestamp)
-            let codomain_bytes = value_bytes.slice(16..);
-
-            // Construct new value: u64 timestamp (set to 0) + codomain bytes
-            let mut new_value = Vec::with_capacity(8 + codomain_bytes.len());
-            new_value.extend_from_slice(&0u64.to_le_bytes());
-            new_value.extend_from_slice(&codomain_bytes);
-
-            partition
-                .insert(ByteView::from(key.to_vec()), ByteView::from(new_value))
-                .map_err(|e| format!("Failed to rewrite entry: {e}"))?;
-
-            entry_count += 1;
-        }
-
-        info!(
-            "Successfully migrated {} entries in partition {}",
-            entry_count, partition_name
-        );
+        // No actual data migration needed, just the version marker will be updated
+        // by mark_current_version() at the end of migrate_if_needed()
         Ok(())
     }
 }
 
 impl Migrator for FjallMigrator {
     fn migrate_if_needed(&self) -> Result<(), String> {
-        let current = self.get_db_version().unwrap_or_else(|_| {
-            // No version marker = version 1.0.0 (original format with u128 timestamps)
-            Version::parse("1.0.0").unwrap()
-        });
+        let current_version_str = self
+            .get_db_version_string()
+            .unwrap_or_else(|_| "3.0.0".to_string());
 
-        let target = Version::parse(CURRENT_DB_VERSION).unwrap();
+        // Parse current version for comparison
+        let (current_prefix, current_version) = parse_version_string(&current_version_str)
+            .unwrap_or_else(|_| (None, Version::parse("3.0.0").unwrap()));
 
-        if current >= target {
-            return Ok(()); // Already up to date
+        // Parse target version
+        let (_target_prefix, target_version) = parse_version_string(CURRENT_DB_VERSION)
+            .map_err(|e| format!("Invalid target database version: {e}"))?;
+
+        // If not prefixed by "release-", treat unprefixed version 3.0.0 as 0.9.0 for comparison
+        let effective_current = if current_prefix.is_none() && current_version_str == "3.0.0" {
+            Version::parse("0.9.0").unwrap()
+        } else {
+            current_version
+        };
+
+        // Check if migration is needed
+        if effective_current >= target_version {
+            info!("Database is already at {CURRENT_DB_VERSION}, no migration needed");
+            return Ok(());
+        }
+
+        // For 1.0-beta, we only support migration from 3.0.0 (treated as 0.9.0)
+        if current_version_str != "3.0.0" {
+            return Err(format!(
+                "Unsupported database version '{}': Only version 3.0.0 can be migrated to {}",
+                current_version_str, CURRENT_DB_VERSION
+            ));
         }
 
         warn!(
-            "Fjall database version {} needs migration to version {}",
-            current, target
+            "Fjall database version {} needs migration to {}",
+            effective_current, target_version
         );
 
-        // Run migrations based on major version changes
-        // Each migration handles moving from one major version to the next
-        let mut from_version = current.major;
-        while from_version < target.major {
-            match from_version {
-                1 => {
-                    self.fjall_migrate_v1_to_v2()?;
-                    from_version = 2;
-                }
-                2 => {
-                    self.fjall_migrate_v2_to_v3()?;
-                    from_version = 3;
-                }
-                _ => {
-                    return Err(format!(
-                        "Unknown Fjall migration path from version {from_version}"
-                    ));
-                }
-            }
-        }
+        // Migration from 3.0.0 to release-1.0.0
+        self.fjall_migrate_v3_to_release_1_0_0()?;
 
         // Mark migration complete
         self.mark_current_version()?;
 
-        info!("Fjall database migration completed to version {}", target);
+        info!("Fjall database migration completed to version {}", target_version);
         Ok(())
     }
 
