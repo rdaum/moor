@@ -1,4 +1,4 @@
-name: Release - Build aarch64 Debian packages
+name: Release - Build Debian packages
 
 on:
   workflow_dispatch:
@@ -12,14 +12,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_aarch64_packages:
-    runs-on: ubuntu-latest
-    container: moor-ci:1.90.0
+  build_packages:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: x86-lan-runner
+          - arch: aarch64
+            runs-on: arm64-lan-runner
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
           submodules: 'true'
+
+      - name: Build binaries with release profile (4 cores)
+        run: CARGO_BUILD_JOBS=4 cargo build --release -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh -j 4
 
       - name: Check prerequisites
         run: |
@@ -27,9 +36,6 @@ jobs:
           command -v cargo-deb || cargo install cargo-deb
           echo "Checking for npm..."
           command -v npm || echo "WARNING: npm not found, skipping web client"
-
-      - name: Build binaries with release profile (4 cores)
-        run: CARGO_BUILD_JOBS=4 cargo build --release -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh -j 4
 
       - name: Build Debian packages
         run: |
@@ -55,8 +61,8 @@ jobs:
           echo "Built .deb packages:"
           ls -lh target/debian/*.deb
 
-      - name: Upload aarch64 packages as artifacts
+      - name: Upload packages as artifacts
         uses: https://code.forgejo.org/forgejo/upload-artifact@v4
         with:
-          name: aarch64-packages
+          name: packages-${{ matrix.arch }}
           path: target/debian/*.deb
