@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import React, { useCallback, useId, useMemo, useState, useRef } from "react";
+import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 import { renderDjot, renderPlainText } from "../lib/djot-renderer";
 import { InputMetadata } from "../types/input";
 
@@ -147,12 +147,21 @@ export const RichInputPrompt: React.FC<RichInputPromptProps> = ({
                             Cancel
                         </button>
                     </div>
-                    <div className="rich_input_alternative_container" role="group" aria-labelledby={`${baseId}-alternative-label`}>
-                        <label htmlFor={alternativeInputId} className="rich_input_prompt_text" id={`${baseId}-alternative-label`}>
+                    <div
+                        className="rich_input_alternative_container"
+                        role="group"
+                        aria-labelledby={`${baseId}-alternative-label`}
+                    >
+                        <label
+                            htmlFor={alternativeInputId}
+                            className="rich_input_prompt_text"
+                            id={`${baseId}-alternative-label`}
+                        >
                             {renderPrompt(metadata.alternative_label || "Describe your alternative:")}
                         </label>
                         <div id={alternativeDescriptionId} className="sr-only">
-                            {metadata.alternative_placeholder || "Enter your alternative suggestion in the text area below. Press Ctrl+Enter to submit."}
+                            {metadata.alternative_placeholder
+                                || "Enter your alternative suggestion in the text area below. Press Ctrl+Enter to submit."}
                         </div>
                         <div className="rich_input_text_container">
                             <textarea
