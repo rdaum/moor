@@ -18,7 +18,6 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)
 depends = "$auto"
 extended-description = "Command-line compiler and core management tool for mooR. Allows importing, compiling, and exporting MOO cores without running the full daemon."
 section = "devel"
-license = "GPL-3.0"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
