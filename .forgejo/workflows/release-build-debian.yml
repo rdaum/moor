@@ -17,10 +17,11 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runs-on: x86-lan-runner
+            runs-on: linux-x86
           - arch: aarch64
-            runs-on: arm64-lan-runner
+            runs-on: linux-arm64
     runs-on: ${{ matrix.runs-on }}
+    container: moor-ci:1.90.0
     steps:
       - uses: actions/checkout@v4
         with:
