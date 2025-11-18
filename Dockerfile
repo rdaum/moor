@@ -31,6 +31,7 @@ COPY ./.git ./.git
 ARG BUILD_PROFILE=debug
 ARG CARGO_BUILD_FLAGS=""
 ARG TRACE_EVENTS=false
+ARG CARGO_BUILD_JOBS=6
 
 # Build flags here if you want optimal performance for your *particular* CPU,
 # at the expense of portability.
@@ -43,18 +44,18 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/moor-build/target,sharing=locked \
     if [ "$BUILD_PROFILE" = "release" ]; then \
         if [ "$TRACE_EVENTS" = "true" ]; then \
-            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release --features trace_events -j 6 $CARGO_BUILD_FLAGS && \
+            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release --features trace_events -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
             cp -r target/release /moor-build/target-final; \
         else \
-            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release -j 6 $CARGO_BUILD_FLAGS && \
+            CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
             cp -r target/release /moor-build/target-final; \
         fi \
     else \
         if [ "$TRACE_EVENTS" = "true" ]; then \
-            cargo build --features trace_events -j 6 $CARGO_BUILD_FLAGS && \
+            cargo build --features trace_events -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
             cp -r target/debug /moor-build/target-final; \
         else \
-            cargo build -j 6 $CARGO_BUILD_FLAGS && \
+            cargo build -j $CARGO_BUILD_JOBS $CARGO_BUILD_FLAGS && \
             cp -r target/debug /moor-build/target-final; \
         fi \
     fi

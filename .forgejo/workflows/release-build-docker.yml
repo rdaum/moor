@@ -41,12 +41,15 @@ jobs:
             --file ${{ matrix.dockerfile }} \
             --target default \
             --build-arg BUILD_PROFILE=release \
+            --build-arg CARGO_BUILD_JOBS=2 \
             -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.ref }}-${{ matrix.arch }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }} \
             .
 
       - name: Push Docker image (${{ matrix.arch }})
         run: |
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.ref }}-${{ matrix.arch }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
 
       - name: Log out from Codeberg Container Registry
         run: docker logout ${{ env.REGISTRY }}
