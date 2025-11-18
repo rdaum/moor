@@ -383,15 +383,19 @@ mod tests {
 
         let migrator = FjallMigrator::new(keyspace.clone(), sequences_partition.clone());
 
-        // Fresh database should have no version marker (version 1)
-        assert!(migrator.get_db_version().is_err());
+        // Fresh database should have no version marker
+        assert!(migrator.get_db_version_string().is_err());
 
         // Mark as current version
         migrator.mark_current_version().unwrap();
 
-        // Should now have current version (3.0.0)
-        let version = migrator.get_db_version().unwrap();
-        assert_eq!(version, Version::parse("3.0.0").unwrap());
+        // Should now have current version (release-1.0.0)
+        let version_str = migrator.get_db_version_string().unwrap();
+        assert_eq!(version_str, "release-1.0.0");
+
+        // Parse and verify it's version 1.0.0
+        let (_prefix, version) = parse_version_string(&version_str).unwrap();
+        assert_eq!(version, Version::parse("1.0.0").unwrap());
     }
 
     #[test]
@@ -423,118 +427,14 @@ mod tests {
         // Run migration
         migrator.migrate_if_needed().unwrap();
 
-        // Verify version is updated to 3.0.0
-        let version = migrator.get_db_version().unwrap();
-        assert_eq!(version, Version::parse("3.0.0").unwrap());
+        // Verify version is updated to release-1.0.0
+        let version_str = migrator.get_db_version_string().unwrap();
+        assert_eq!(version_str, "release-1.0.0");
 
         // Running migration again should be a no-op
         migrator.migrate_if_needed().unwrap();
     }
 
-    #[test]
-    fn test_fjall_u128_to_u64_migration() {
-        let tmpdir = TempDir::new().unwrap();
-        let keyspace = Config::new(tmpdir.path()).open().unwrap();
-        let test_partition = keyspace
-            .open_partition("test", PartitionCreateOptions::default())
-            .unwrap();
-
-        // Create some test data with u128 timestamps (16 bytes)
-        let entries = vec![
-            (b"key1".as_slice(), 1000u128, b"value1".as_slice()),
-            (b"key2".as_slice(), 2000u128, b"value2".as_slice()),
-            (b"key3".as_slice(), 1500u128, b"value3".as_slice()),
-        ];
-
-        // Write old format (u128 timestamp + value)
-        for (key, ts, value) in &entries {
-            let mut old_format = Vec::with_capacity(16 + value.len());
-            old_format.extend_from_slice(&ts.to_le_bytes());
-            old_format.extend_from_slice(value);
-            test_partition
-                .insert(ByteView::from(*key), ByteView::from(old_format))
-                .unwrap();
-        }
-
-        // Perform migration
-        FjallMigrator::fjall_migrate_partition_u128_to_u64(&test_partition, "test").unwrap();
-
-        // Verify all entries are migrated to u64 format (8 bytes)
-        for (key, _, expected_value) in &entries {
-            let result = test_partition.get(*key).unwrap().unwrap();
-            let result_bytes: ByteView = result.into();
-
-            // Should now have 8-byte timestamp
-            assert!(result_bytes.len() >= 8 + expected_value.len());
-
-            // Extract timestamp (should be u64 now)
-            let _ts = u64::from_le_bytes(result_bytes[0..8].try_into().unwrap());
-
-            // Extract value
-            let value_bytes = &result_bytes[8..];
-            assert_eq!(value_bytes, *expected_value);
-        }
-
-        // Verify all timestamps are now zero (migration zeros all timestamps)
-        let mut timestamps = Vec::new();
-        for entry in test_partition.iter() {
-            let (_, value) = entry.unwrap();
-            let value_bytes: ByteView = value.into();
-            let ts = u64::from_le_bytes(value_bytes[0..8].try_into().unwrap());
-            timestamps.push(ts);
-        }
-
-        // All timestamps should be zero after migration
-        assert_eq!(timestamps, vec![0, 0, 0]);
-    }
-
-    #[test]
-    fn test_fjall_migration_timestamp_consistency() {
-        let tmpdir = TempDir::new().unwrap();
-        let keyspace = Config::new(tmpdir.path()).open().unwrap();
-        let test_partition = keyspace
-            .open_partition("test", PartitionCreateOptions::default())
-            .unwrap();
-
-        // Create entries where multiple keys share the same timestamp
-        // This tests that all entries with the same old timestamp get the same new timestamp
-        let entries = vec![
-            (b"a".as_slice(), 100u128, b"first".as_slice()),
-            (b"b".as_slice(), 100u128, b"also_first".as_slice()), // Same timestamp as 'a'
-            (b"c".as_slice(), 200u128, b"second".as_slice()),
-        ];
-
-        // Write old format
-        for (key, ts, value) in &entries {
-            let mut old_format = Vec::with_capacity(16 + value.len());
-            old_format.extend_from_slice(&ts.to_le_bytes());
-            old_format.extend_from_slice(value);
-            test_partition
-                .insert(ByteView::from(*key), ByteView::from(old_format))
-                .unwrap();
-        }
-
-        // Perform migration
-        FjallMigrator::fjall_migrate_partition_u128_to_u64(&test_partition, "test").unwrap();
-
-        // Read back and verify consistency
-        let a_result = test_partition.get(b"a").unwrap().unwrap();
-        let a_bytes: ByteView = a_result.into();
-        let a_ts = u64::from_le_bytes(a_bytes[0..8].try_into().unwrap());
-
-        let b_result = test_partition.get(b"b").unwrap().unwrap();
-        let b_bytes: ByteView = b_result.into();
-        let b_ts = u64::from_le_bytes(b_bytes[0..8].try_into().unwrap());
-
-        let c_result = test_partition.get(b"c").unwrap().unwrap();
-        let c_bytes: ByteView = c_result.into();
-        let c_ts = u64::from_le_bytes(c_bytes[0..8].try_into().unwrap());
-
-        // All timestamps should now be zero after migration
-        assert_eq!(a_ts, 0, "All timestamps should be zero after migration");
-        assert_eq!(b_ts, 0, "All timestamps should be zero after migration");
-        assert_eq!(c_ts, 0, "All timestamps should be zero after migration");
-    }
 
     #[test]
     fn test_fjall_semver_version_comparison() {
@@ -574,7 +474,11 @@ mod tests {
             .unwrap();
 
         // Read it back
-        let version = migrator.get_db_version().unwrap();
+        let version_str = migrator.get_db_version_string().unwrap();
+        assert_eq!(version_str, "2.0.0");
+
+        // Parse and verify version components
+        let (_prefix, version) = parse_version_string(&version_str).unwrap();
         assert_eq!(version, Version::parse("2.0.0").unwrap());
         assert_eq!(version.major, 2);
         assert_eq!(version.minor, 0);
