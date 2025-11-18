@@ -60,15 +60,17 @@ has overall served the project well, and allowed me to develop with
 confidence.
 
 It is now the winter of 2025, and the project that I began over two
-years ago is circling around to its first major, public, 1.0
-release. Many hundreds of hours have gone into development -- not just
+years ago is in its 1.0-beta phase, with the 1.0 stable release coming
+soon. Many hundreds of hours have gone into development -- not just
 by myself, but by others who have put immense effort into developing and
-testing and suggesting. Thanks goes not just to them, but to the
-original authors and users of LambdaMOO, Stunt, ToastStunt, and to the
-adjacent projects and communities I (and others) was a part of over
-the years, in particular Stephen White's CoolMUD and Greg Hudson's
-ColdMUD -- ideas from those systems have made their way into mooR as
-well.
+testing and suggesting. The core runtime and database formats are now
+stable, and we've entered a feature-freeze period focused on bug fixes,
+documentation, and performance optimization. Thanks goes not just to
+those contributors, but to the original authors and users of LambdaMOO,
+Stunt, ToastStunt, and to the adjacent projects and communities I (and
+others) was a part of over the years, in particular Stephen White's
+CoolMUD and Greg Hudson's ColdMUD -- ideas from those systems have made
+their way into mooR as well.
 
 I hope you, the reader, enjoy the system we've put together. Even more
 so I welcome your contributions and suggestions. If you find value in

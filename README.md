@@ -14,6 +14,10 @@ enhancements.
 
 📖 **For comprehensive documentation, see our [mooR Book](https://timbran.org/book/html/).**
 
+> **⚠️ 1.0-Beta Release:** mooR is now in 1.0-beta! This is a significant milestone with stable
+> database formats and APIs. We're in feature freeze mode and focusing on bug fixes, documentation,
+> and performance. See the [Status](#status) section below for details.
+
 > **📦 Repository Migration Notice (August 2025):** We've recently moved our primary repository from
 > GitHub to [Codeberg](https://codeberg.org/timbran/moor). If you're viewing this on GitHub, please
 > consider switching to Codeberg for the latest updates, issue tracking, and contributions.
@@ -42,12 +46,17 @@ modern technology.
 
 ## Status
 
-mooR is approaching its 1.0 release and is currently in late alpha, with a focus on documentation,
-testing and performance tuning. It successfully runs databases imported from LambdaMOO, with real
-world workloads, and lives through our cruel stress and performance testing regimen.
+mooR is in **1.0-beta** development, focusing on stability, bug fixes, and documentation. The core
+runtime and database formats are considered "stable" but churn may still happen. It successfully
+runs databases imported from LambdaMOO with real-world workloads and has passed extensive stress and
+performance testing.
 
-Database formats and APIs may still change before the stable release, and we reserve the right to
-keep adding features right up until the last minute.
+**Beta phase** means:
+
+- Feature freeze: No new features will be added before the 1.0 stable release
+- Focus on bug fixes, documentation, and performance optimization
+- Database formats and APIs are now stable
+- Ready for testing and feedback from users
 
 **Repository**: The primary mooR repository is hosted on
 [Codeberg](https://codeberg.org/timbran/moor) with a mirror on GitHub.
