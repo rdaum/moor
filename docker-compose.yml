@@ -27,9 +27,16 @@
 
 # The first time the system starts, it will import cores/lambda-moor from the cores directory.
 # This is a fork of LambdaCore, reconstituted in mooR's `objdef` format, with some modifications.
-# To import an existing LambdaMOO 1.8.x DB, change --import to point to it, and change --import-format to textdump
-# After import, `moor-data` will contain the database that resulted.
-# To re-import simply delete this directory.
+#
+# To import an existing LambdaMOO 1.8.x textdump database instead:
+#   1. Change the --import argument to point to your textdump file
+#      Example: --import=/db/cores/JHCore-DEV-2.db
+#   2. Change --import-format to textdump (it defaults to objdef)
+#      Example: --import-format=textdump
+#   3. Remove or comment out the --export line (optional)
+#
+# After import, `moor-data` will contain the resulting database.
+# To re-import simply delete this directory and restart the container.
 
 # After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
 # system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
