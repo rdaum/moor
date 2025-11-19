@@ -94,8 +94,7 @@ impl RpcTransport {
             // Set ZAP domain for authentication
             publish
                 .set_zap_domain("moor")
-                .context("Failed to set ZAP domain on PUB socket")?;
-
+                .context("Failed to set ZAP domain on PUB socket in `moor` domain")?;
             publish
                 .set_curve_server(true)
                 .context("Failed to enable CURVE server on PUB socket")?;
@@ -110,7 +109,7 @@ impl RpcTransport {
 
         publish
             .bind(narrative_endpoint)
-            .context("Unable to bind ZMQ PUB socket")?;
+            .with_context(|| format!("Unable to bind ZMQ PUB socket @ {narrative_endpoint})"))?;
 
         let events_publish = Arc::new(Mutex::new(publish));
 
