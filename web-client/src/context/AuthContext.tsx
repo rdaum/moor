@@ -20,6 +20,7 @@ interface AuthContextType {
     disconnect: () => void;
     setPlayerConnected: (connected: boolean) => void;
     setPlayerFlags: (flags: number) => void;
+    clearInitialAttach: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

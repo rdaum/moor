@@ -27,6 +27,7 @@ export interface Player {
     flags: number;
     clientToken?: string | null;
     clientId?: string | null;
+    isInitialAttach?: boolean;
 }
 
 export interface AuthState {
@@ -58,23 +59,42 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
             const oidToRestore = playerOid || oauth2PlayerOid;
             const flagsToRestore = playerFlags || localStorage.getItem("oauth2_player_flags");
 
-            if (!tokenToValidate || !oidToRestore) {
-                // No stored credentials
+            // Must have all components: auth token, player OID, and client credentials
+            if (!tokenToValidate || !oidToRestore || !storedClientToken || !storedClientId) {
+                // Incomplete session - need fresh login
+                console.log("Incomplete session credentials - requiring fresh login");
+                localStorage.removeItem("auth_token");
+                localStorage.removeItem("player_oid");
+                localStorage.removeItem("player_flags");
+                localStorage.removeItem("oauth2_auth_token");
+                localStorage.removeItem("oauth2_player_oid");
+                localStorage.removeItem("oauth2_player_flags");
+                localStorage.removeItem("client_token");
+                localStorage.removeItem("client_id");
+                localStorage.setItem("client_session_active", "false");
                 return;
             }
 
-            // Validate the auth token with the server
+            // Check if event log encryption is set up for this player
+            const eventLogEncryptionKey = localStorage.getItem(`moor_event_log_identity_${oidToRestore}`);
+            const hasEventLogEncryption = eventLogEncryptionKey !== null;
+
+            // Validate the stored session with the server
             try {
+                const headers: Record<string, string> = {
+                    "X-Moor-Auth-Token": tokenToValidate,
+                    "X-Moor-Client-Token": storedClientToken,
+                    "X-Moor-Client-Id": storedClientId,
+                };
+
                 const response = await fetch("/auth/validate", {
                     method: "GET",
-                    headers: {
-                        "X-Moor-Auth-Token": tokenToValidate,
-                    },
+                    headers,
                 });
 
                 if (!response.ok) {
-                    // Token is invalid or expired - clear localStorage
-                    console.log("Stored auth token is invalid or expired - clearing");
+                    // Validation failed - stored connection is a zombie or token expired
+                    console.log("Stored session validation failed - clearing stale credentials");
                     localStorage.removeItem("auth_token");
                     localStorage.removeItem("player_oid");
                     localStorage.removeItem("player_flags");
@@ -87,7 +107,7 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                     return;
                 }
 
-                // Token is valid - restore the session
+                // Stored session is valid - restore it
                 const flags = flagsToRestore ? parseInt(flagsToRestore, 10) : 0;
 
                 setAuthState({
@@ -98,6 +118,9 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                         flags,
                         clientToken: storedClientToken,
                         clientId: storedClientId,
+                        // If no event log encryption is set up, treat as initial attach to trigger :user_connected
+                        // Otherwise reattach silently since they can restore their history
+                        isInitialAttach: !hasEventLogEncryption,
                     },
                     isConnecting: false,
                     error: null,
@@ -277,6 +300,7 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
                 flags: playerFlags,
                 clientToken: clientToken ?? null,
                 clientId: clientId ?? null,
+                isInitialAttach: true,
             };
 
             setAuthState({
@@ -339,11 +363,19 @@ export const useAuth = (onSystemMessage: (message: string, duration?: number) =>
         }));
     }, []);
 
+    const clearInitialAttach = useCallback(() => {
+        setAuthState(prev => ({
+            ...prev,
+            player: prev.player ? { ...prev.player, isInitialAttach: false } : null,
+        }));
+    }, []);
+
     return {
         authState,
         connect,
         disconnect,
         setPlayerConnected,
         setPlayerFlags,
+        clearInitialAttach,
     };
 };

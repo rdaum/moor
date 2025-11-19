@@ -24,7 +24,7 @@ use axum::{
 };
 use moor_schema::rpc as moor_rpc;
 use rpc_async_client::rpc_client::RpcClient;
-use rpc_common::{AuthToken, ClientToken, mk_detach_msg, mk_login_command_msg};
+use rpc_common::{AuthToken, ClientToken, mk_login_command_msg};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
@@ -155,14 +155,8 @@ async fn auth_handler(
         }
     };
 
-    // We're done with this RPC connection, so we detach it.
-    let detach_msg = moor_rpc::HostClientToDaemonMessage {
-        message: mk_detach_msg(&client_token, false).message,
-    };
-    let _ = rpc_client
-        .make_client_rpc_call(client_id, detach_msg)
-        .await
-        .expect("Unable to send detach to RPC server");
+    // Don't detach - keep the connection open so the WebSocket can reattach to it.
+    // The connection will be cleaned up when the user logs out or the session times out.
 
     // Return the entire ReplyResult FlatBuffer which includes player_flags
     Response::builder()
@@ -228,6 +222,7 @@ pub fn stateless_rpc_client(
 }
 
 /// Validate an auth token without establishing a full session
+/// Also optionally validates stored client credentials if provided
 pub async fn validate_auth_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(host): State<WebHost>,
@@ -240,30 +235,41 @@ pub async fn validate_auth_handler(
 
     debug!("Validating auth token");
 
-    // Try to attach with the token - this validates it can create a session
+    // Client credentials are required - validate the stored session
+    let (client_id, client_token) = match extract_client_credentials(&header_map) {
+        Some(creds) => creds,
+        None => {
+            debug!("No client credentials provided - cannot validate");
+            return Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Body::empty())
+                .unwrap();
+        }
+    };
+
+    debug!("Validating stored session with client credentials");
+
+    // Try to reattach with stored credentials to verify the session still exists
     match host
-        .attach_authenticated(auth_token, Some(moor_rpc::ConnectType::NoConnect), addr)
+        .reattach_authenticated(auth_token, client_id, client_token, addr)
         .await
     {
-        Ok((_player, client_id, client_token, rpc_client)) => {
-            // Token is valid - immediately detach since we were just testing
-            let detach_msg = mk_detach_msg(&client_token, false);
-            let _ = rpc_client.make_client_rpc_call(client_id, detach_msg).await;
-
+        Ok(_) => {
+            debug!("Stored session validated successfully");
             Response::builder()
                 .status(StatusCode::OK)
                 .body(Body::empty())
                 .unwrap()
         }
         Err(WsHostError::AuthenticationFailed) => {
-            debug!("Auth token validation failed - token is invalid or expired");
+            debug!("Stored session invalid - connection no longer exists in daemon");
             Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
                 .body(Body::empty())
                 .unwrap()
         }
         Err(e) => {
-            error!("Error validating auth token: {}", e);
+            error!("Error validating stored session: {}", e);
             Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::empty())

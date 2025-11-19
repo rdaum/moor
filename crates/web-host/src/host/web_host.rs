@@ -184,6 +184,8 @@ pub struct ReattachQuery {
     client_token: Option<String>,
     #[serde(default)]
     client_id: Option<String>,
+    #[serde(default)]
+    is_initial_attach: bool,
 }
 
 #[derive(Clone)]
@@ -948,12 +950,14 @@ async fn attach(
     host: &WebHost,
     auth_token: String,
     client_hint: Option<(Uuid, ClientToken)>,
+    is_initial_attach: bool,
 ) -> impl IntoResponse + use<> {
     debug!("Connection from {}", addr);
 
     let auth_token = AuthToken(auth_token);
 
-    let reattach_details = if let Some((hint_id, hint_token)) = client_hint.clone() {
+    let reattach_details = if !is_initial_attach && client_hint.is_some() {
+        let (hint_id, hint_token) = client_hint.clone().unwrap();
         match host
             .reattach_authenticated(auth_token.clone(), hint_id, hint_token.clone(), addr)
             .await
@@ -1047,6 +1051,7 @@ pub async fn ws_connect_attach_handler(
         &ws_host,
         token,
         client_hint,
+        query.is_initial_attach,
     )
     .await
 }
@@ -1081,6 +1086,7 @@ pub async fn ws_create_attach_handler(
         &ws_host,
         token,
         client_hint,
+        query.is_initial_attach,
     )
     .await
 }

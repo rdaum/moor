@@ -350,7 +350,10 @@ impl Migrator for FjallMigrator {
         // Mark migration complete
         self.mark_current_version()?;
 
-        info!("Fjall database migration completed to version {}", target_version);
+        info!(
+            "Fjall database migration completed to version {}",
+            target_version
+        );
         Ok(())
     }
 
@@ -434,7 +437,6 @@ mod tests {
         // Running migration again should be a no-op
         migrator.migrate_if_needed().unwrap();
     }
-
 
     #[test]
     fn test_fjall_semver_version_comparison() {

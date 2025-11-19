@@ -40,6 +40,7 @@ export const useWebSocket = (
     onPresentMessage?: (presentData: PresentationData) => void,
     onUnpresentMessage?: (id: string) => void,
     onAuthFailure?: () => void,
+    onInitialAttachComplete?: () => void,
 ) => {
     const [wsState, setWsState] = useState<WebSocketState>({
         socket: null,
@@ -139,11 +140,23 @@ export const useWebSocket = (
 
             // Add tokens as query params if available
             let wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${player.authToken}`;
+            const queryParams: string[] = [];
+
+            if (player.isInitialAttach) {
+                queryParams.push("is_initial_attach=true");
+                console.log("[WebSocket] Initial attach after fresh login");
+            }
+
             if (sessionActive && clientToken && clientId) {
-                wsUrl += `?client_token=${encodeURIComponent(clientToken)}&client_id=${encodeURIComponent(clientId)}`;
+                queryParams.push(`client_token=${encodeURIComponent(clientToken)}`);
+                queryParams.push(`client_id=${encodeURIComponent(clientId)}`);
                 console.log("[WebSocket] Reconnecting with existing client_id:", clientId);
             } else {
                 console.log("[WebSocket] New connection (no stored tokens)");
+            }
+
+            if (queryParams.length > 0) {
+                wsUrl += `?${queryParams.join("&")}`;
             }
 
             console.log("[WebSocket] Creating new WebSocket to:", wsUrl);
@@ -166,6 +179,11 @@ export const useWebSocket = (
                 // Update player connection status
                 if (onPlayerConnectedChange) {
                     onPlayerConnectedChange(true);
+                }
+
+                // Clear initial attach flag after first successful connection
+                if (player?.isInitialAttach && onInitialAttachComplete) {
+                    onInitialAttachComplete();
                 }
 
                 // Clear any reconnection timeout
@@ -236,7 +254,7 @@ export const useWebSocket = (
                 5,
             );
         }
-    }, [handleMessage, onPlayerConnectedChange, onSystemMessage, player]);
+    }, [handleMessage, onPlayerConnectedChange, onSystemMessage, player, onInitialAttachComplete]);
 
     // Disconnect from WebSocket
     const disconnect = useCallback((reason?: string) => {
