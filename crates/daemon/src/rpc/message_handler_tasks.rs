@@ -273,7 +273,7 @@ impl RpcMessageHandler {
             Ok(t) => t,
             Err(e) => {
                 error!(error = ?e, "Error submitting eval task");
-                return Err(RpcMessageError::InternalError(e.to_string()));
+                return Err(RpcMessageError::TaskError(e));
             }
         };
         let receiver = task_handle.into_receiver();

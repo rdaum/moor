@@ -35,7 +35,10 @@ use moor_schema::{
     rpc as moor_rpc,
 };
 use moor_var::Obj;
-use rpc_common::{CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError};
+use rpc_common::{
+    CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC, RpcMessageError,
+    scheduler_error_to_flatbuffer_struct,
+};
 /// Trait for the transport layer that handles communication between hosts and the daemon
 pub trait Transport: Send + Sync {
     /// Start the request processing loop with ZMQ proxy architecture
@@ -292,12 +295,72 @@ impl RpcTransport {
                 Ok(finished.to_vec())
             }
             Err(e) => {
-                // TODO: Convert RpcMessageError to FlatBuffer properly
                 let mut builder = planus::Builder::new();
+
+                // Convert RpcMessageError to FlatBuffer format
+                let (error_code, message, scheduler_error) = match &e {
+                    RpcMessageError::AlreadyConnected => (
+                        moor_rpc::RpcMessageErrorCode::AlreadyConnected,
+                        Some("Already connected".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::InvalidRequest(msg) => (
+                        moor_rpc::RpcMessageErrorCode::InvalidRequest,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::NoConnection => (
+                        moor_rpc::RpcMessageErrorCode::NoConnection,
+                        Some("No connection for client".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::ErrorCouldNotRetrieveSysProp(msg) => (
+                        moor_rpc::RpcMessageErrorCode::ErrorCouldNotRetrieveSysProp,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::LoginTaskFailed(msg) => (
+                        moor_rpc::RpcMessageErrorCode::LoginTaskFailed,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::CreateSessionFailed => (
+                        moor_rpc::RpcMessageErrorCode::CreateSessionFailed,
+                        Some("Could not create session".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::PermissionDenied => (
+                        moor_rpc::RpcMessageErrorCode::PermissionDenied,
+                        Some("Permission denied".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::TaskError(scheduler_error) => {
+                        let scheduler_error_fb =
+                            scheduler_error_to_flatbuffer_struct(scheduler_error)
+                                .ok()
+                                .map(Box::new);
+                        (
+                            moor_rpc::RpcMessageErrorCode::TaskError,
+                            None,
+                            scheduler_error_fb,
+                        )
+                    }
+                    RpcMessageError::EntityRetrievalError(msg) => (
+                        moor_rpc::RpcMessageErrorCode::EntityRetrievalError,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::InternalError(msg) => (
+                        moor_rpc::RpcMessageErrorCode::InternalError,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                };
+
                 let error_fb = moor_rpc::RpcMessageError {
-                    error_code: moor_rpc::RpcMessageErrorCode::InternalError,
-                    message: Some(format!("{e:?}")),
-                    scheduler_error: None,
+                    error_code,
+                    message,
+                    scheduler_error,
                 };
                 let reply_result = moor_rpc::ReplyResult {
                     result: moor_rpc::ReplyResultUnion::Failure(Box::new(moor_rpc::Failure {
@@ -327,12 +390,72 @@ impl RpcTransport {
                 Ok(finished.to_vec())
             }
             Err(e) => {
-                // TODO: Convert RpcMessageError to FlatBuffer properly
                 let mut builder = planus::Builder::new();
+
+                // Convert RpcMessageError to FlatBuffer format
+                let (error_code, message, scheduler_error) = match &e {
+                    RpcMessageError::AlreadyConnected => (
+                        moor_rpc::RpcMessageErrorCode::AlreadyConnected,
+                        Some("Already connected".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::InvalidRequest(msg) => (
+                        moor_rpc::RpcMessageErrorCode::InvalidRequest,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::NoConnection => (
+                        moor_rpc::RpcMessageErrorCode::NoConnection,
+                        Some("No connection for client".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::ErrorCouldNotRetrieveSysProp(msg) => (
+                        moor_rpc::RpcMessageErrorCode::ErrorCouldNotRetrieveSysProp,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::LoginTaskFailed(msg) => (
+                        moor_rpc::RpcMessageErrorCode::LoginTaskFailed,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::CreateSessionFailed => (
+                        moor_rpc::RpcMessageErrorCode::CreateSessionFailed,
+                        Some("Could not create session".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::PermissionDenied => (
+                        moor_rpc::RpcMessageErrorCode::PermissionDenied,
+                        Some("Permission denied".to_string()),
+                        None,
+                    ),
+                    RpcMessageError::TaskError(scheduler_error) => {
+                        let scheduler_error_fb =
+                            scheduler_error_to_flatbuffer_struct(scheduler_error)
+                                .ok()
+                                .map(Box::new);
+                        (
+                            moor_rpc::RpcMessageErrorCode::TaskError,
+                            None,
+                            scheduler_error_fb,
+                        )
+                    }
+                    RpcMessageError::EntityRetrievalError(msg) => (
+                        moor_rpc::RpcMessageErrorCode::EntityRetrievalError,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                    RpcMessageError::InternalError(msg) => (
+                        moor_rpc::RpcMessageErrorCode::InternalError,
+                        Some(msg.clone()),
+                        None,
+                    ),
+                };
+
                 let error_fb = moor_rpc::RpcMessageError {
-                    error_code: moor_rpc::RpcMessageErrorCode::InternalError,
-                    message: Some(format!("{e:?}")),
-                    scheduler_error: None,
+                    error_code,
+                    message,
+                    scheduler_error,
                 };
                 let reply_result = moor_rpc::ReplyResult {
                     result: moor_rpc::ReplyResultUnion::Failure(Box::new(moor_rpc::Failure {

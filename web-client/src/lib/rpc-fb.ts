@@ -15,11 +15,13 @@
 // Proof of concept for direct FlatBuffer communication
 
 import * as flatbuffers from "flatbuffers";
+import { CompileErrorUnion, unionToCompileErrorUnion } from "../generated/moor-common/compile-error-union.js";
 import { CompileError } from "../generated/moor-common/compile-error.js";
 import { ErrorCode } from "../generated/moor-common/error-code.js";
 import { EventUnion, unionToEventUnion } from "../generated/moor-common/event-union.js";
 import { NarrativeEvent } from "../generated/moor-common/narrative-event.js";
 import { NotifyEvent } from "../generated/moor-common/notify-event.js";
+import { ParseError } from "../generated/moor-common/parse-error.js";
 import { PresentEvent } from "../generated/moor-common/present-event.js";
 import { TracebackEvent } from "../generated/moor-common/traceback-event.js";
 import { UnpresentEvent } from "../generated/moor-common/unpresent-event.js";
@@ -29,6 +31,7 @@ import { ClientEvent } from "../generated/moor-rpc/client-event.js";
 import { ClientSuccess } from "../generated/moor-rpc/client-success.js";
 import { CommandErrorUnion } from "../generated/moor-rpc/command-error-union.js";
 import { CommandExecutionError } from "../generated/moor-rpc/command-execution-error.js";
+import { CompilationError } from "../generated/moor-rpc/compilation-error.js";
 import { CurrentPresentations } from "../generated/moor-rpc/current-presentations.js";
 import { unionToDaemonToClientReplyUnion } from "../generated/moor-rpc/daemon-to-client-reply-union.js";
 import {
@@ -129,6 +132,40 @@ function extractFailureError(replyResult: ReplyResult, context: string): never {
                 );
 
                 console.log("SchedulerError type:", SchedulerErrorUnion[errorType]);
+
+                // Handle CompilationError with detailed parse error information
+                if (errorType === SchedulerErrorUnion.CompilationError && errorUnion) {
+                    const compilationError = errorUnion as CompilationError;
+                    const compileError = compilationError.error();
+                    if (compileError) {
+                        const errorType = compileError.errorType();
+                        const errorDetail = unionToCompileErrorUnion(
+                            errorType,
+                            (obj: any) => compileError.error(obj),
+                        );
+
+                        // Special handling for ParseError to show location and message
+                        if (errorType === CompileErrorUnion.ParseError && errorDetail) {
+                            const parseError = errorDetail as ParseError;
+                            const message = parseError.message();
+                            const context = parseError.context();
+                            const position = parseError.errorPosition();
+
+                            if (message && position) {
+                                const line = position.line();
+                                const col = position.col();
+                                throw new Error(
+                                    `${context} failed: Parse error at line ${line}, col ${col}: ${message}`,
+                                );
+                            } else if (message) {
+                                throw new Error(`${context} failed: ${message}`);
+                            }
+                        }
+
+                        // For other compile errors, try to extract a meaningful message
+                        throw new Error(`${context} failed: Compilation error (${CompileErrorUnion[errorType]})`);
+                    }
+                }
 
                 // Handle TaskAbortedException which contains the MOO error
                 if (errorType === SchedulerErrorUnion.TaskAbortedException && errorUnion) {
@@ -282,6 +319,93 @@ export async function performEvalFlatBuffer(authToken: string, expr: string): Pr
 
         // Convert the Var to a JavaScript value using our wrapper
         return new MoorVar(varResult).toJS();
+    } catch (err) {
+        console.error("Exception during FlatBuffer eval:", err);
+        throw err;
+    }
+}
+
+/**
+ * Evaluates a MOO expression and returns the result as a MoorVar for formatted display.
+ * This is useful when you want MOO literal representation instead of JavaScript values.
+ *
+ * @param authToken - Authentication token for the request
+ * @param expr - MOO expression to evaluate
+ * @returns Promise resolving to the evaluated result as MoorVar
+ * @throws Error if the evaluation fails
+ */
+export async function performEvalMoorVar(authToken: string, expr: string): Promise<MoorVar> {
+    try {
+        const headers = buildAuthHeaders(authToken);
+        const response = await fetch("/fb/eval", {
+            method: "POST",
+            body: expr,
+            headers,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Eval failed: ${response.status} ${response.statusText}`);
+        }
+
+        // Get the response as an ArrayBuffer
+        const arrayBuffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+        // Parse the FlatBuffer response
+        const replyResult = ReplyResult.getRootAsReplyResult(
+            new flatbuffers.ByteBuffer(bytes),
+        );
+
+        // Navigate the union structure
+        const resultType = replyResult.resultType();
+
+        // Handle Failure case
+        if (resultType === ReplyResultUnion.Failure) {
+            extractFailureError(replyResult, "Eval");
+        }
+
+        if (resultType !== ReplyResultUnion.ClientSuccess) {
+            throw new Error(`Unexpected result type: ${ReplyResultUnion[resultType]}`);
+        }
+
+        const clientSuccess = unionToReplyResultUnion(
+            resultType,
+            (obj) => replyResult.result(obj),
+        ) as ClientSuccess | null;
+
+        if (!clientSuccess) {
+            throw new Error("Failed to parse ClientSuccess");
+        }
+
+        const daemonReply = clientSuccess.reply();
+        if (!daemonReply) {
+            throw new Error("Missing daemon reply");
+        }
+
+        const replyType = daemonReply.replyType();
+        const replyUnion = unionToDaemonToClientReplyUnion(
+            replyType,
+            (obj: any) => daemonReply.reply(obj),
+        );
+
+        if (!replyUnion) {
+            throw new Error("Failed to parse reply union");
+        }
+
+        // Check if it's an EvalResult
+        if (!(replyUnion instanceof EvalResult)) {
+            throw new Error(`Unexpected reply type: ${replyUnion.constructor.name}`);
+        }
+
+        const evalResult = replyUnion as EvalResult;
+        const varResult = evalResult.result();
+
+        if (!varResult) {
+            throw new Error("Missing result var");
+        }
+
+        // Return the MoorVar wrapper so the caller can decide how to format it
+        return new MoorVar(varResult);
     } catch (err) {
         console.error("Exception during FlatBuffer eval:", err);
         throw err;

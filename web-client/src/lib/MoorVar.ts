@@ -22,6 +22,7 @@ import { VarBinary } from "../generated/moor-var/var-binary.js";
 import { VarBool } from "../generated/moor-var/var-bool.js";
 import { VarErr } from "../generated/moor-var/var-err.js";
 import { VarFloat } from "../generated/moor-var/var-float.js";
+import { VarFlyweight } from "../generated/moor-var/var-flyweight.js";
 import { VarInt } from "../generated/moor-var/var-int.js";
 import { VarList } from "../generated/moor-var/var-list.js";
 import { VarMap } from "../generated/moor-var/var-map.js";
@@ -352,7 +353,23 @@ export class MoorVar {
                 const err = varErr?.error();
                 if (!err) return "E_NONE";
                 const errType = err.errType();
-                return ErrorCode[errType] || "E_NONE";
+                let errName: string;
+
+                // For custom errors, get the symbol name
+                if (errType === 255) { // ErrCustom
+                    const customSym = err.customSymbol();
+                    errName = customSym?.value() || "ErrCustom";
+                } else {
+                    errName = ErrorCode[errType] || "E_NONE";
+                }
+
+                const msg = err.msg();
+                if (msg) {
+                    // Escape quotes in the message
+                    const escaped = msg.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+                    return `${errName}("${escaped}")`;
+                }
+                return errName;
             }
 
             case VarUnion.VarSym: {
@@ -364,6 +381,50 @@ export class MoorVar {
                 const binary = this.asBinary();
                 if (!binary) return "<binary:empty>";
                 return `<binary:${binary.length} bytes>`;
+            }
+
+            case VarUnion.VarFlyweight: {
+                const varFlyweight = this.fb.variant(new VarFlyweight()) as VarFlyweight | null;
+                if (!varFlyweight) return "<flyweight:invalid>";
+
+                const delegate = varFlyweight.delegate();
+                if (!delegate) return "<flyweight:no-delegate>";
+
+                // Format: < delegate, .slot = value, ..., { contents } >
+                const delegateStr = objToString(delegate);
+                const result: string[] = [`<${delegateStr ? `#${delegateStr}` : "#-1"}`];
+
+                // Add slots
+                const slotsLen = varFlyweight.slotsLength();
+                for (let i = 0; i < slotsLen; i++) {
+                    const slot = varFlyweight.slots(i);
+                    if (slot) {
+                        const slotName = slot.name()?.value();
+                        const slotValue = slot.value();
+                        if (slotName && slotValue) {
+                            const valueStr = new MoorVar(slotValue).toLiteral();
+                            result.push(`.${slotName} = ${valueStr}`);
+                        }
+                    }
+                }
+
+                // Add contents
+                const contents = varFlyweight.contents();
+                if (contents) {
+                    const contentItems: string[] = [];
+                    const contentsLen = contents.elementsLength();
+                    for (let i = 0; i < contentsLen; i++) {
+                        const item = contents.elements(i);
+                        if (item) {
+                            contentItems.push(new MoorVar(item).toLiteral());
+                        }
+                    }
+                    if (contentItems.length > 0) {
+                        result.push(`{${contentItems.join(", ")}}`);
+                    }
+                }
+
+                return result.join(", ") + ">";
             }
 
             default:

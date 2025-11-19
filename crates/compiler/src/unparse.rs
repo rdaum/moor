@@ -149,11 +149,11 @@ impl<'a> Unparse<'a> {
                 buffer.push(')');
                 Ok(buffer)
             }
-            Expr::Error(code, value) => {
+            Expr::Error(code, msg) => {
                 let mut buffer: String = (*code).into();
-                if let Some(value) = value {
-                    let value = self.unparse_expr(value).unwrap();
-                    buffer.push_str(format!("({value})").as_str());
+                if let Some(msg) = msg {
+                    let msg_str = self.unparse_expr(msg).unwrap();
+                    buffer.push_str(format!("({msg_str})").as_str());
                 }
                 Ok(buffer)
             }
@@ -926,7 +926,15 @@ pub fn to_literal(v: &Var) -> String {
             result.push(']');
             result
         }
-        Variant::Err(e) => e.name().to_string().to_uppercase(),
+        Variant::Err(e) => {
+            let err_name = e.name().to_string().to_uppercase();
+            // If there's a message, format as E_CODE("message")
+            if let Some(msg) = &e.msg {
+                format!("{}({})", err_name, quote_str(msg.as_str()))
+            } else {
+                err_name
+            }
+        }
         Variant::Flyweight(fl) => {
             // Syntax:
             // < delegate, .slot = value, ..., { ... } >

@@ -21,7 +21,7 @@ import { usePersistentState } from "../hooks/usePersistentState";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { registerMooCompletionProvider } from "../lib/monaco-moo-completions";
-import { performEvalFlatBuffer } from "../lib/rpc-fb.js";
+import { performEvalMoorVar } from "../lib/rpc-fb.js";
 import { useTheme } from "./ThemeProvider";
 import { monacoThemeFor } from "./themeSupport";
 
@@ -50,7 +50,9 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     const isTouchDevice = useTouchDevice();
     const [content, setContent] = useState("// Enter MOO code to evaluate\nreturn 1 + 1;");
     const [result, setResult] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<
+        { message: string; span?: { start: number; end: number }; line?: number; col?: number } | null
+    >(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [position, setPosition] = useState({ x: 50, y: 50 });
     const [size, setSize] = useState({ width: 800, height: 600 });
@@ -58,7 +60,10 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     const [isResizing, setIsResizing] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+    const [editorHeight, setEditorHeight] = useState(60); // Percentage of editor pane
+    const [isSplitDragging, setIsSplitDragging] = useState(false);
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+    const errorDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
     const completionProviderRef = useRef<monaco.IDisposable | null>(null);
     const { theme } = useTheme();
     const monacoTheme = React.useMemo(() => monacoThemeFor(theme), [theme]);
@@ -91,35 +96,63 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         monaco.editor.setTheme(monacoTheme);
     }, [monacoTheme]);
 
+    // Update error decorations when error changes
+    useEffect(() => {
+        if (!editorRef.current || !errorDecorationsRef.current) return;
+
+        if (error && error.line && error.col) {
+            const model = editorRef.current.getModel();
+            if (model) {
+                const line = Math.min(error.line, model.getLineCount());
+                const lineMaxColumn = model.getLineMaxColumn(line);
+                const col = Math.min(error.col, lineMaxColumn);
+
+                // Create a range for the error location (highlight the word)
+                const lineContent = model.getLineContent(line);
+                const wordEnd = lineContent.indexOf(" ", col - 1);
+                const endCol = wordEnd !== -1 ? wordEnd + 1 : Math.min(col + 5, lineMaxColumn);
+
+                const range = new monaco.Range(line, col, line, Math.max(col + 1, endCol));
+
+                errorDecorationsRef.current.set([
+                    {
+                        range,
+                        options: {
+                            isWholeLine: false,
+                            className: "moo-error-inline",
+                            glyphMarginClassName: "codicon codicon-error",
+                            glyphMarginHoverMessage: { value: error.message },
+                        },
+                    },
+                ]);
+            }
+        } else {
+            errorDecorationsRef.current.clear();
+        }
+    }, [error]);
+
     const handleEvaluate = useCallback(async () => {
         setIsEvaluating(true);
         setError(null);
         setResult(null);
 
         try {
-            const evalResult = await performEvalFlatBuffer(authToken, content);
+            const moorVar = await performEvalMoorVar(authToken, content);
 
-            // Check if result is an error
-            if (evalResult && typeof evalResult === "object" && "error" in evalResult) {
-                const errorResult = evalResult as { error?: { msg?: string } };
-                const msg = errorResult.error?.msg ?? "Evaluation failed";
-                setError(msg);
-                return;
-            }
-
-            // Format the result nicely
-            let formattedResult: string;
-            if (evalResult === null || evalResult === undefined) {
-                formattedResult = "=> None";
-            } else if (typeof evalResult === "object") {
-                formattedResult = `=> ${JSON.stringify(evalResult, null, 2)}`;
-            } else {
-                formattedResult = `=> ${String(evalResult)}`;
-            }
-
-            setResult(formattedResult);
+            // Use MOO literal representation for display
+            const literal = moorVar.toLiteral();
+            setResult(literal);
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            // Try to extract span information from error message if available
+            // Parse error format: "Eval failed: Parse error at line 2, col 4: message (span info in debug output)"
+            const parseErrorMatch = errorMsg.match(/Parse error at line (\d+), col (\d+)/);
+
+            setError({
+                message: errorMsg,
+                line: parseErrorMatch ? parseInt(parseErrorMatch[1], 10) : undefined,
+                col: parseErrorMatch ? parseInt(parseErrorMatch[2], 10) : undefined,
+            });
         } finally {
             setIsEvaluating(false);
         }
@@ -128,6 +161,26 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
     // Handle keyboard shortcuts
     const handleEditorMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;
+
+        // Create custom decoration collection for error highlighting
+        errorDecorationsRef.current = editor.createDecorationsCollection();
+
+        // Add CSS for error decorations
+        const style = document.createElement("style");
+        style.textContent = `
+            .monaco-editor .moo-error-decoration {
+                background: rgba(255, 0, 0, 0.2) !important;
+                border: 1px solid #ff0000 !important;
+                border-radius: 2px !important;
+            }
+            .monaco-editor .moo-error-inline {
+                background: rgba(255, 0, 0, 0.3) !important;
+                color: #ffffff !important;
+                font-weight: bold !important;
+                text-decoration: underline wavy #ff0000 !important;
+            }
+        `;
+        document.head.appendChild(style);
 
         // Set up MOO language
         registerMooLanguage(monacoInstance);
@@ -206,20 +259,54 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
         e.stopPropagation();
     }, [size]);
 
+    const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
+        if (e.button !== 0) return;
+        setIsSplitDragging(true);
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+    const handleSplitMouseMove = useCallback((e: MouseEvent) => {
+        if (isSplitDragging) {
+            const editor = document.querySelector(".editor-body") as HTMLElement;
+            if (editor) {
+                const rect = editor.getBoundingClientRect();
+                const relativeY = e.clientY - rect.top;
+                const percentage = Math.max(20, Math.min(80, (relativeY / rect.height) * 100));
+                setEditorHeight(percentage);
+            }
+        }
+    }, [isSplitDragging]);
+
+    const handleSplitMouseUp = useCallback(() => {
+        setIsSplitDragging(false);
+    }, []);
+
     // Add global mouse event listeners
     useEffect(() => {
-        if (isDragging || isResizing) {
-            document.addEventListener("mousemove", handleMouseMove);
-            document.addEventListener("mouseup", handleMouseUp);
+        if (isDragging || isResizing || isSplitDragging) {
+            document.addEventListener("mousemove", isDragging || isResizing ? handleMouseMove : handleSplitMouseMove);
+            document.addEventListener("mouseup", isDragging || isResizing ? handleMouseUp : handleSplitMouseUp);
             document.body.style.userSelect = "none";
 
             return () => {
-                document.removeEventListener("mousemove", handleMouseMove);
-                document.removeEventListener("mouseup", handleMouseUp);
+                document.removeEventListener(
+                    "mousemove",
+                    isDragging || isResizing ? handleMouseMove : handleSplitMouseMove,
+                );
+                document.removeEventListener("mouseup", isDragging || isResizing ? handleMouseUp : handleSplitMouseUp);
                 document.body.style.userSelect = "";
             };
         }
-    }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
+    }, [
+        isDragging,
+        isResizing,
+        isSplitDragging,
+        handleMouseMove,
+        handleMouseUp,
+        handleSplitMouseMove,
+        handleSplitMouseUp,
+    ]);
 
     if (!visible) {
         return null;
@@ -333,9 +420,10 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                 </div>
             </div>
 
-            {/* Editor area */}
-            <div className="editor-body">
-                <div className="editor-main">
+            {/* Editor area with horizontal split */}
+            <div className="editor-body" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+                {/* Editor pane */}
+                <div style={{ height: `${editorHeight}%`, overflow: "hidden", flex: "0 0 auto" }}>
                     <Editor
                         height="100%"
                         defaultLanguage="moo"
@@ -354,22 +442,61 @@ export const EvalPanel: React.FC<EvalPanelProps> = ({
                     />
                 </div>
 
-                {/* Result/Error display */}
-                {(result || error) && (
-                    <div className={error ? "editor-error" : "editor-panel-content"}>
-                        {error
-                            ? (
-                                <div className="editor-error-text">
-                                    <strong>Error:</strong> {error}
-                                </div>
-                            )
-                            : (
-                                <pre className="editor-error-text-pre">
-                                {result}
-                                </pre>
-                            )}
-                    </div>
-                )}
+                {/* Draggable splitter bar */}
+                <div
+                    className={`browser-resize-handle ${isSplitDragging ? "dragging" : ""}`}
+                    onMouseDown={handleSplitDragStart}
+                    style={{
+                        zIndex: 10,
+                    }}
+                />
+
+                {/* Results pane */}
+                <div
+                    style={{
+                        height: `${100 - editorHeight}%`,
+                        overflow: "auto",
+                        flex: "1",
+                        minHeight: 0,
+                        backgroundColor: "var(--color-bg-secondary)",
+                    }}
+                >
+                    {result || error
+                        ? (
+                            <div style={{ padding: "12px 16px" }}>
+                                {error
+                                    ? (
+                                        <div className="editor-error-text">
+                                            <strong>Error:</strong> {error.message}
+                                        </div>
+                                    )
+                                    : (
+                                        <pre
+                                            style={{
+                                                margin: 0,
+                                                fontFamily: "var(--font-mono)",
+                                                fontSize: "0.875rem",
+                                                whiteSpace: "pre-wrap",
+                                                wordBreak: "break-word",
+                                            }}
+                                        >
+                                        {result}
+                                        </pre>
+                                    )}
+                            </div>
+                        )
+                        : (
+                            <div
+                                style={{
+                                    padding: "12px 16px",
+                                    color: "var(--color-text-tertiary)",
+                                    fontSize: "0.875rem",
+                                }}
+                            >
+                                Results will appear here
+                            </div>
+                        )}
+                </div>
             </div>
 
             {/* Bottom toolbar */}
